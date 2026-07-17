@@ -18,7 +18,12 @@ export const KaalaDrishtiTheme: ThemeConfig = {
     // Light mode — a warm, professional light variant inspired by the dark palette
     brand: {
       primary:   '#D4911E',  // Warm amber (darkened for light-bg readability)
-      secondary: '#1A1D26',  // Near-black for strong contrast
+      // secondary feeds --gold / --gold-soft / --gold-bg (used ~226× across the
+      // app as a warm gold accent). The reference used near-black here for
+      // "contrast elements", but this repo routes it to the gold tokens, so a
+      // real gold is required or every gold accent washes out. Text contrast is
+      // unaffected — it comes from utility.primaryText, not brand.secondary.
+      secondary: '#9A7B3C',  // Antique gold (readable on the warm-white canvas)
       tertiary:  '#5A6178',  // Muted slate
       alternate: '#F4F3F0',  // Warm off-white surface
     },
@@ -53,8 +58,12 @@ export const KaalaDrishtiTheme: ThemeConfig = {
     colors: {
       // Dark mode — exact colors from the reference design
       brand: {
-        primary:   '#F5A623',  // --amber: golden amber accent
-        secondary: '#E8E6E0',  // --text: light cream for contrast elements
+        primary:   '#F5A623',  // --amber: golden amber accent (→ --accent/--indigo)
+        // secondary → --gold / --gold-soft / --gold-bg. The reference set this to
+        // cream (#E8E6E0) for "contrast elements", but here it drives the gold
+        // accent used ~226× app-wide, so it must be an actual gold — a calmer,
+        // slightly desaturated one so it reads as secondary to the amber primary.
+        secondary: '#C9A24B',  // Warm antique gold (pairs with the amber primary)
         tertiary:  '#3A3F52',  // --faint: subtle borders/dividers
         alternate: '#1C2030',  // --surface2: elevated surface
       },
