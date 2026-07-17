@@ -25,11 +25,11 @@
         try {
           // LAUNCH GATE — mirror of LIGHT_MODE_ENABLED in src/stores/themeStore.ts.
           // Keep the two flags in sync.
-          var LIGHT_MODE_ENABLED = false;
+          var LIGHT_MODE_ENABLED = true;
           var THEMES = {
             'kaaladristi': {
-              light: { bg: '#f7f5f0', fg: '#211d16', primary: '#5b3fb0', card: '#fdfcfa', border: '#e7e2d8' },
-              dark:  { bg: '#0b0b12', fg: '#ece9f5', primary: '#9b8cff', card: '#191626', border: 'rgba(255,255,255,0.1)' }
+              light: { bg: '#fafaf8', fg: '#1a1d26', primary: '#d4911e', card: '#f0efeb', border: '#e8e7e3' },
+              dark:  { bg: '#0d0f14', fg: '#e8e6e0', primary: '#f5a623', card: '#13161d', border: 'rgba(255,255,255,0.1)' }
             },
             'tech-ai': {
               light: { bg: '#f0f9f8', fg: '#0e1c1c', primary: '#06d5cd', card: '#ffffff', border: '#c2eeec' },
@@ -43,10 +43,8 @@
           var themeId = localStorage.getItem('kd-theme');
           if (!THEMES[themeId]) themeId = 'kaaladristi';
           var mode = localStorage.getItem('kd-theme-mode');
-          if (mode !== 'dark' && mode !== 'light' && mode !== 'system') mode = 'dark';
-          var dark = !LIGHT_MODE_ENABLED || (mode === 'system'
-            ? window.matchMedia('(prefers-color-scheme: dark)').matches
-            : mode === 'dark');
+          // System was removed — dark is the default for anything not 'light'.
+          var dark = !LIGHT_MODE_ENABLED || mode !== 'light';
           var c = THEMES[themeId][dark ? 'dark' : 'light'];
           var el = document.documentElement;
           el.style.setProperty('--bg', c.bg);

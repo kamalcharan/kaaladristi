@@ -7,7 +7,8 @@ import { useThemeStore, type ThemeId, type ThemeMode } from '@/stores/themeStore
 function applyProfileTheme(profile: KmProfile | null) {
   if (!profile) return
   const themeId = (profile.theme ?? 'kaaladristi') as ThemeId
-  const mode = (profile.mode ?? 'dark') as ThemeMode
+  // Only 'light'/'dark' remain (System was removed) — coerce legacy 'system'.
+  const mode: ThemeMode = profile.mode === 'light' ? 'light' : 'dark'
   useThemeStore.getState().setTheme(themeId)
   useThemeStore.getState().setMode(mode)
 }
