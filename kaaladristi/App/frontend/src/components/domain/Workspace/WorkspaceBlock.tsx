@@ -578,7 +578,7 @@ export default function WorkspaceBlock({ block, editMode, isDraggable, effective
         position:        'relative',
         border:          isVaNi
           ? '1px solid rgba(124,106,247,.45)'
-          : '1px solid color-mix(in srgb, var(--text-primary) 8%, transparent)',
+          : '1px solid color-mix(in srgb, var(--text-primary) 12%, transparent)',
         borderRadius: 10,
         // VaNi blocks keep their fixed dark identity (their pale purple
         // accent text/badges are calibrated for a dark backdrop, matching
@@ -591,7 +591,7 @@ export default function WorkspaceBlock({ block, editMode, isDraggable, effective
           ? '0 4px 20px rgba(0,0,0,.4)'
           : isVaNi
             ? '0 0 0 1px rgba(124,106,247,.15), 0 0 20px rgba(124,106,247,.08)'
-            : 'none',
+            : 'var(--card-shadow)',
         transition: isDragging ? undefined : 'box-shadow .2s, border-color .2s',
         overflow: 'hidden',
         minWidth: 0,
