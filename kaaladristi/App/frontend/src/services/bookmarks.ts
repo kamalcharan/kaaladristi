@@ -71,11 +71,20 @@ export interface BookmarkEodRow {
   ret_22d: number | null;
   score_5d: number | null;
   score_22d: number | null;
+  rsi_14: number | null;
+  magic_rs: number | null;
+  magic_rs_zone: string | null;
 }
 
 export interface BookmarkMarketData {
   close: number | null;
   pct_chng: number | null;
+  /** Latest-bar signal snapshot (= last5[0], surfaced for the row columns). */
+  rsi_14: number | null;
+  magic_rs: number | null;
+  magic_rs_zone: string | null;
+  score_5d: number | null;
+  score_22d: number | null;
   /** Last up to 5 trading days, newest first — feeds FlowIntensityMap directly. */
   last5: BookmarkEodRow[];
 }
@@ -99,7 +108,7 @@ export async function fetchBookmarkMarketData(
     .toISOString().slice(0, 10);
 
   const { data } = await from('km_equity_eod')
-    .select('equity_id,trade_date,close,pct_chng,value_cr,ret_5d,ret_22d,score_5d,score_22d')
+    .select('equity_id,trade_date,close,pct_chng,value_cr,ret_5d,ret_22d,score_5d,score_22d,rsi_14,magic_rs,magic_rs_zone')
     .in('equity_id', equityIds)
     .gte('trade_date', cutoff)
     .lte('trade_date', latestDate)
@@ -117,9 +126,15 @@ export async function fetchBookmarkMarketData(
 
   for (const [equityId, arr] of byEquity) {
     const last5 = arr.slice(0, 5);
+    const latest = last5[0];
     result.set(equityId, {
-      close: last5[0]?.close ?? null,
-      pct_chng: last5[0]?.pct_chng ?? null,
+      close: latest?.close ?? null,
+      pct_chng: latest?.pct_chng ?? null,
+      rsi_14: latest?.rsi_14 ?? null,
+      magic_rs: latest?.magic_rs ?? null,
+      magic_rs_zone: latest?.magic_rs_zone ?? null,
+      score_5d: latest?.score_5d ?? null,
+      score_22d: latest?.score_22d ?? null,
       last5,
     });
   }
