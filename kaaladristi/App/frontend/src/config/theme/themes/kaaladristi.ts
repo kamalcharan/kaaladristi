@@ -28,14 +28,20 @@ export const KaalaDrishtiTheme: ThemeConfig = {
       alternate: '#F4F3F0',  // Warm off-white surface
     },
     utility: {
-      primaryText:         '#1A1D26',  // Near-black text
-      secondaryText:       '#5A6178',  // Muted slate
-      primaryBackground:   '#FAFAF8',  // Warm white
-      secondaryBackground: '#F0EFEB',  // Warm light gray
+      // Warm charcoal ink on warm-ivory paper (owner-calibrated 2026-07-12):
+      // ink temperature must match paper temperature or it reads as eye strain.
+      primaryText:         '#211d16',  // warm charcoal
+      secondaryText:       '#6f6354',  // warm gray-brown
+      // Warm-ivory canvas + WHITE cards. The card (secondaryBackground) must be
+      // BRIGHTER than the canvas so it lifts off the page; the amber reference
+      // had this inverted (near-white canvas over gray cards → cards sank in),
+      // which read as flat/monochrome in light. Cards are now the bright layer.
+      primaryBackground:   '#f7f5f0',  // warm ivory canvas
+      secondaryBackground: '#ffffff',  // white cards — the bright, raised layer
     },
     accent: {
       accent1: '#D4911E',  // Amber accent
-      accent2: '#1A1D26',  // Dark accent
+      accent2: '#211d16',  // Dark ink accent
       accent3: '#B0B5C5',  // Light slate
       accent4: '#E8E7E3',  // Warm light border
     },
@@ -46,12 +52,12 @@ export const KaalaDrishtiTheme: ThemeConfig = {
       info:    '#3498DB',  // Blue info
     },
     surface: {
-      glass:         'rgba(255,255,255,0.75)',  // Glass UX standard's literal value
-      glassStrong:   '#FDFCFA',                 // warm elevated white
-      glassBorder:   '#E8E7E3',                 // warm hairline (= accent4)
+      glass:         'rgba(255,255,255,0.92)',  // near-solid white card (--kd-card)
+      glassStrong:   '#ffffff',                 // white elevated
+      glassBorder:   '#e7e2d8',                 // warm hairline
       primaryDim:    'rgba(212,145,30,0.16)',   // amber primary, dim
       primaryGlow:   'rgba(212,145,30,0.28)',   // amber primary, glow
-      primarySubtle: 'rgba(212,145,30,0.05)',   // atmosphere bloom
+      primarySubtle: 'rgba(154,123,60,0.05)',   // warm gold atmosphere bloom
     },
   },
   darkMode: {
