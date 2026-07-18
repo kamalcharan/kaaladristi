@@ -12,8 +12,20 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { X } from 'lucide-react'
 import TradingChart from '@/components/charts/TradingChart'
 import type { IndicatorRow } from '@/services/indicatorData'
-import { buildStoryEvents, KIND_COLORS } from '@/services/storyEvents'
+import { buildStoryEvents, KIND_COLORS, type StoryEvent } from '@/services/storyEvents'
+import { narrateVani } from '@/services/vaniNarrate'
 import { buildPillars, type LatestRow, type VerdictMode } from './VerdictHero'
+
+/** Deterministic facts for one story moment — VaNi narrates only these. */
+function eventFacts(name: string, e: StoryEvent): string {
+  return [
+    `Instrument: ${name}`,
+    `Event: ${e.title} on ${e.date}`,
+    `Detail: ${e.detail}`,
+    `Tone: ${e.tone}`,
+    e.reactionPct != null ? `Price reaction over the next 5 bars: ${e.reactionPct >= 0 ? '+' : ''}${e.reactionPct.toFixed(1)}%` : '',
+  ].filter(Boolean).join('\n')
+}
 import SectorThermometer from './SectorThermometer'
 import type { ChartOverlay } from '@/types/framework'
 import type { AstroBand } from '@/services/astroOverlayService'
@@ -84,6 +96,13 @@ export default function StoryMode({ open, onClose, bars, name, latest, snapshot,
 
   // Reset to the first event whenever the overlay opens.
   useEffect(() => { if (open) { setIdx(0); setPlaying(false) } }, [open])
+
+  // VaNi narration of the current moment (Phase 3) — reset when the event changes.
+  const [vaniText, setVaniText] = useState<string | null>(null)
+  const [vaniLoading, setVaniLoading] = useState(false)
+  useEffect(() => { setVaniText(null); setVaniLoading(false) }, [idx])
+  // Playing past events shouldn't leave a stale narration up.
+  useEffect(() => { if (playing) setVaniText(null) }, [playing])
 
   // Esc closes; measure the chart wrapper so the chart truly fills the space.
   useEffect(() => {
@@ -191,6 +210,35 @@ export default function StoryMode({ open, onClose, bars, name, latest, snapshot,
           />
         )}
       </div>
+
+      {/* ── VaNi narrates the current moment (Phase 3) ── */}
+      {cur && (
+        <div
+          className="flex items-center gap-3 px-5 py-2 border-t"
+          style={{ borderColor: 'var(--border)', background: 'linear-gradient(90deg, color-mix(in srgb, var(--vani) 8%, transparent), transparent)' }}
+        >
+          <span style={{ color: 'var(--vani)', fontSize: 14 }}>✦</span>
+          <span className="text-[12px] min-w-0" style={{ color: 'var(--text-secondary)' }}>
+            <b style={{ color: 'var(--vani)' }}>VaNi</b>{' '}
+            <span className="text-muted">— {vaniText ?? `${cur.title}. ${cur.detail}.`}</span>
+          </span>
+          {!vaniText && (
+            <button
+              onClick={async () => {
+                setVaniLoading(true)
+                const text = await narrateVani(name, eventFacts(name, cur))
+                setVaniText(text); setVaniLoading(false)
+              }}
+              disabled={vaniLoading}
+              className="ml-auto shrink-0 text-[10px] font-mono font-semibold px-2.5 py-1 rounded-full border transition-colors"
+              style={{ color: 'var(--vani)', borderColor: 'color-mix(in srgb, var(--vani) 34%, transparent)',
+                background: 'color-mix(in srgb, var(--vani) 10%, transparent)', opacity: vaniLoading ? 0.6 : 1 }}
+            >
+              {vaniLoading ? '✦ reading…' : '✦ Ask VaNi'}
+            </button>
+          )}
+        </div>
+      )}
 
       {/* ── Controls (pinned) ── */}
       <div
