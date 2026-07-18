@@ -9,7 +9,7 @@
 
 import { create } from 'zustand';
 import { useAuthStore } from '@/stores/authStore';
-import { fetchBookmarks, addBookmark, removeBookmark, type BookmarkRow } from '@/services/bookmarks';
+import { fetchBookmarks, addBookmark, removeBookmark, setPosition as apiSetPosition, type BookmarkRow, type PositionEntry } from '@/services/bookmarks';
 
 interface BookmarkState {
   bookmarks: BookmarkRow[];
@@ -21,6 +21,11 @@ interface BookmarkState {
   load: () => Promise<void>;
   toggle: (equityId: number) => Promise<void>;
   isBookmarked: (equityId: number) => boolean;
+  /** Set/replace a position (a bookmark with an entry). Creates the bookmark
+   *  if needed and upserts the row into the list. */
+  setPosition: (equityId: number, entry: PositionEntry) => Promise<void>;
+  /** Clear a position back to a plain watchlist bookmark. */
+  clearPosition: (equityId: number) => Promise<void>;
 }
 
 export const useBookmarkStore = create<BookmarkState>((set, get) => ({
@@ -85,4 +90,38 @@ export const useBookmarkStore = create<BookmarkState>((set, get) => ({
   },
 
   isBookmarked: (equityId: number) => get().bookmarkedIds.has(equityId),
+
+  setPosition: async (equityId: number, entry: PositionEntry) => {
+    const userId = useAuthStore.getState().profile?.id;
+    if (!userId) return;
+    try {
+      const row = await apiSetPosition(userId, equityId, entry);
+      set((s) => {
+        const nextIds = new Set(s.bookmarkedIds);
+        nextIds.add(equityId);
+        return {
+          bookmarkedIds: nextIds,
+          bookmarks: [row, ...s.bookmarks.filter((b) => b.equity_id !== equityId)],
+        };
+      });
+    } catch (e) {
+      set({ error: e instanceof Error ? e.message : 'Failed to save position' });
+    }
+  },
+
+  clearPosition: async (equityId: number) => {
+    const userId = useAuthStore.getState().profile?.id;
+    if (!userId) return;
+    // Optimistic: strip the entry fields on the existing row.
+    set((s) => ({
+      bookmarks: s.bookmarks.map((b) =>
+        b.equity_id === equityId ? { ...b, entry_price: null, entry_date: null, entry_qty: null } : b,
+      ),
+    }));
+    try {
+      await apiSetPosition(userId, equityId, { entry_price: null, entry_date: null, entry_qty: null });
+    } catch (e) {
+      set({ error: e instanceof Error ? e.message : 'Failed to clear position' });
+    }
+  },
 }));

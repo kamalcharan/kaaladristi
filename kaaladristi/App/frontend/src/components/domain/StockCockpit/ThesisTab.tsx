@@ -13,7 +13,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useAuthStore } from '@/stores/authStore'
 import { useBookmarkStore } from '@/stores/bookmarkStore'
-import { usePositionStore } from '@/stores/positionStore'
 import { computeThesis, type Relationship, type ThesisBar } from '@/services/thesis'
 import { KIND_COLORS } from '@/services/storyEvents'
 import type { Pillar } from './VerdictHero'
@@ -35,17 +34,19 @@ export default function ThesisTab({
   onAutoOpened?: () => void
 }) {
   const userId = useAuthStore((s) => s.profile?.id) ?? null
+  const bookmarks = useBookmarkStore((s) => s.bookmarks)
   const bookmarkedIds = useBookmarkStore((s) => s.bookmarkedIds)
   const loadBookmarks = useBookmarkStore((s) => s.load)
-  const positions = usePositionStore((s) => s.positions)
-  const loadPositions = usePositionStore((s) => s.load)
-  const upsert = usePositionStore((s) => s.upsert)
-  const removePosition = usePositionStore((s) => s.remove)
+  const setPositionApi = useBookmarkStore((s) => s.setPosition)
+  const clearPositionApi = useBookmarkStore((s) => s.clearPosition)
 
   useEffect(() => { loadBookmarks() }, [loadBookmarks])
-  useEffect(() => { if (userId) loadPositions(userId) }, [userId, loadPositions])
 
-  const position = positions[equityId] ?? null
+  // A position is a bookmark WITH an entry (migration 153).
+  const bmRow = useMemo(() => bookmarks.find((b) => b.equity_id === equityId) ?? null, [bookmarks, equityId])
+  const position = bmRow?.entry_price != null
+    ? { entryPrice: bmRow.entry_price, entryDate: bmRow.entry_date ?? '', qty: bmRow.entry_qty }
+    : null
   const relationship: Relationship = position ? 'position' : bookmarkedIds.has(equityId) ? 'watchlist' : 'none'
 
   const thesis = useMemo(
@@ -96,7 +97,7 @@ export default function ThesisTab({
             <Kv label="Now" value={currentClose != null ? `₹${currentClose.toFixed(2)}` : '—'} />
             <Kv label="P&L" value={thesis.pnlPct != null ? `${thesis.pnlPct >= 0 ? '+' : ''}${thesis.pnlPct.toFixed(1)}%` : '—'}
               color={thesis.pnlPct != null ? (thesis.pnlPct >= 0 ? 'var(--risk-green)' : 'var(--risk-red)') : undefined} big />
-            <button onClick={() => removePosition(equityId)} title="Remove position"
+            <button onClick={() => clearPositionApi(equityId)} title="Remove position"
               style={{ ...MONO, fontSize: 10, color: 'var(--text-faint)', background: 'none', border: 'none', cursor: 'pointer' }}>
               ✕
             </button>
@@ -125,7 +126,7 @@ export default function ThesisTab({
             onClick={() => {
               const p = Number(entryPrice)
               if (!p || !entryDate) return
-              upsert({ equityId, entryPrice: p, entryDate, qty: qty ? Number(qty) : null })
+              setPositionApi(equityId, { entry_price: p, entry_date: entryDate, entry_qty: qty ? Number(qty) : null })
               setShowForm(false)
             }}
             style={{ ...MONO, fontSize: 13, fontWeight: 650, color: 'var(--accent, var(--gold-soft))',
