@@ -100,7 +100,15 @@ export default function ThesisTab({
   const [vaniText, setVaniText] = useState<string | null>(null)
   const [vaniLoading, setVaniLoading] = useState(false)
   const [vaniTried, setVaniTried] = useState(false)
-  useEffect(() => { setVaniText(null); setVaniTried(false) }, [equityId, relationship])
+  // AskVaNi (Phase 3) — free-form Q&A grounded in the same facts.
+  const [askOpen, setAskOpen] = useState(false)
+  const [question, setQuestion] = useState('')
+  const [answer, setAnswer] = useState<string | null>(null)
+  const [asking, setAsking] = useState(false)
+  useEffect(() => {
+    setVaniText(null); setVaniTried(false)
+    setAskOpen(false); setQuestion(''); setAnswer(null)
+  }, [equityId, relationship])
 
   if (!thesis) {
     return <div className="glass-card rounded-xl p-4 text-[11px] text-muted">No data to read a thesis yet.</div>
@@ -172,7 +180,51 @@ export default function ThesisTab({
                 {vaniLoading ? '✦ VaNi is reading…' : vaniTried ? '✦ VaNi unavailable — retry' : '✦ Ask VaNi to narrate this'}
               </button>
             )}
+            <button
+              onClick={() => setAskOpen((o) => !o)}
+              style={{ ...MONO, fontSize: 10, fontWeight: 600, color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, marginLeft: 12 }}
+            >
+              {askOpen ? '▴ Ask a question' : '▾ Ask a question'}
+            </button>
           </div>
+
+          {askOpen && (
+            <div style={{ marginTop: 8 }}>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <input
+                  value={question}
+                  onChange={(e) => setQuestion(e.target.value)}
+                  onKeyDown={async (e) => {
+                    if (e.key === 'Enter' && question.trim() && !asking) {
+                      setAsking(true)
+                      const a = await narrateVani(name, buildThesisFacts(name, thesis), question.trim())
+                      setAnswer(a); setAsking(false)
+                    }
+                  }}
+                  placeholder="e.g. why is risk rising? is the entry holding up?"
+                  style={{ ...MONO, flex: 1, fontSize: 12, color: 'var(--text-primary)', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 7, padding: '6px 10px' }}
+                />
+                <button
+                  onClick={async () => {
+                    if (!question.trim() || asking) return
+                    setAsking(true)
+                    const a = await narrateVani(name, buildThesisFacts(name, thesis), question.trim())
+                    setAnswer(a); setAsking(false)
+                  }}
+                  disabled={asking || !question.trim()}
+                  style={{ ...MONO, fontSize: 12, fontWeight: 600, color: 'var(--vani)', background: 'color-mix(in srgb, var(--vani) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--vani) 34%, transparent)', borderRadius: 7, padding: '6px 14px', cursor: asking ? 'default' : 'pointer', opacity: asking || !question.trim() ? 0.6 : 1 }}
+                >
+                  {asking ? '…' : 'Ask'}
+                </button>
+              </div>
+              {answer && (
+                <div style={{ marginTop: 7, fontSize: 12, color: 'var(--text-secondary)' }}>
+                  <b style={{ color: 'var(--vani)' }}>VaNi</b> — {answer}
+                </div>
+              )}
+              <div style={{ ...MONO, fontSize: 9, color: 'var(--text-faint)', marginTop: 5 }}>VaNi answers only from this stock's computed facts.</div>
+            </div>
+          )}
         </div>
       </div>
 

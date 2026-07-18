@@ -2819,14 +2819,17 @@ class VaniNarrateRequest(BaseModel):
     # The caller assembles the deterministic facts; VaNi only narrates them.
     subject: str
     facts: str
+    # Optional — when set, VaNi ANSWERS this question using only the facts
+    # (AskVaNi), instead of a general narration.
+    question: Optional[str] = None
 
 
 @app.post('/api/ai/vani-narrate')
 def vani_narrate(req: VaniNarrateRequest):
     """Phase 3 — VaNi as the storyteller. Given a subject + already-computed
     facts (from the client's buildStoryEvents / computeThesis / move-quality),
-    return a grounded 2-3 sentence narration. VaNi never re-derives, so it
-    cannot invent numbers — unlike the raw-snapshot skills."""
+    return a grounded 2-3 sentence narration — or an answer to `question` using
+    only those facts. VaNi never re-derives, so it cannot invent numbers."""
     if not _AI_ENABLED:
         return {"insight": None, "ai": False}
     skill = _AI_SKILLS.get("vani_narrate")
@@ -2835,7 +2838,17 @@ def vani_narrate(req: VaniNarrateRequest):
     facts = (req.facts or "").strip()
     if not facts:
         return {"insight": None, "ai": False}
-    user_msg = f"Subject: {req.subject}\n\nFacts:\n{facts}\n\nNarrate as VaNi."
+    question = (req.question or "").strip()
+    if question:
+        user_msg = (
+            f"Subject: {req.subject}\n\n"
+            f"The practitioner asks: {question}\n"
+            "Answer in 2-3 sentences using ONLY the facts below. If the facts "
+            "don't cover it, say so plainly rather than guessing.\n\n"
+            f"Facts:\n{facts}"
+        )
+    else:
+        user_msg = f"Subject: {req.subject}\n\nFacts:\n{facts}\n\nNarrate as VaNi."
     _t0 = time.monotonic()
     insight = _ai_complete(system=skill.system, user=user_msg, max_tokens=skill.max_tokens, no_think=True)
     _lat = int((time.monotonic() - _t0) * 1000)

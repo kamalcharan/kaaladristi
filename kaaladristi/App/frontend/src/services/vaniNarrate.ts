@@ -7,12 +7,12 @@
 
 const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? '';
 
-export async function narrateVani(subject: string, facts: string): Promise<string | null> {
+export async function narrateVani(subject: string, facts: string, question?: string): Promise<string | null> {
   try {
     const res = await fetch(`${pipelineUrl}/api/ai/vani-narrate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ subject, facts }),
+      body: JSON.stringify({ subject, facts, question: question ?? null }),
     });
     if (!res.ok) return null;
     const data = (await res.json()) as { insight: string | null };
