@@ -82,7 +82,7 @@ function AppRoutes() {
             Could not connect to the authentication service. The Supabase project may be
             paused or unreachable.
           </p>
-          <p className="text-xs text-muted bg-slate-900/60 border border-white/5 rounded-xl p-3 mb-6 mono">
+          <p className="text-xs text-muted bg-kd-card border border-white/5 rounded-xl p-3 mb-6 mono">
             {authError}
           </p>
           <button

@@ -19,9 +19,9 @@ const STATUS_CLASSES: Record<DayCell['status'], string> = {
   ok:       'bg-emerald-500/70 hover:bg-emerald-400',
   partial:  'bg-amber-500/70 hover:bg-amber-400',
   missing:  'bg-rose-500/70 hover:bg-rose-400',
-  holiday:  'bg-slate-700/50 hover:bg-slate-600',
-  no_data:  'bg-slate-700/50 hover:bg-slate-600',
-  future:   'bg-slate-800/40',
+  holiday:  'bg-[var(--panel-recess)] hover:bg-[var(--panel-recess)]',
+  no_data:  'bg-[var(--panel-recess)] hover:bg-[var(--panel-recess)]',
+  future:   'bg-[var(--panel-recess)]',
 };
 
 function cellTooltip(dim: DimensionHealth, cell: DayCell): string {
@@ -226,7 +226,7 @@ export default function HealthGrid({ onCellSelect }: Props) {
                     {dim.latest_ok ? (
                       <span className="text-muted mono">{dim.latest_ok}</span>
                     ) : (
-                      <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-medium bg-rose-500/20 text-rose-300">
+                      <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-medium bg-rose-500/20 text-risk-red">
                         never
                       </span>
                     )}
@@ -243,14 +243,14 @@ export default function HealthGrid({ onCellSelect }: Props) {
         <Legend color="bg-emerald-500/70" label="ok ≥ threshold" />
         <Legend color="bg-amber-500/70"   label="partial" />
         <Legend color="bg-rose-500/70"    label="missing" />
-        <Legend color="bg-slate-700/50"   label="holiday / no_data" />
+        <Legend color="bg-[var(--panel-recess)]"   label="holiday / no_data" />
         <span className="ml-auto">
           click to pre-fill fix · right-click to mark day
           {days > 30 && ' · scroll sideways for full range'}
         </span>
       </div>
       {markErr && (
-        <div className="text-[10px] text-rose-300 bg-rose-500/10 border-t border-rose-500/30 px-3 py-1">
+        <div className="text-[10px] text-risk-red bg-rose-500/10 border-t border-rose-500/30 px-3 py-1">
           Mark failed: {markErr}
         </div>
       )}
@@ -338,7 +338,7 @@ function MenuItem({ icon, label, sub, onClick, danger }: {
       onClick={onClick}
       className={cn(
         'w-full flex items-start gap-2 px-3 py-2 hover:bg-accent-indigo/10 text-left',
-        danger && 'text-rose-300 hover:bg-rose-500/10',
+        danger && 'text-risk-red hover:bg-rose-500/10',
       )}
     >
       <span className="mt-0.5 text-muted">{icon}</span>

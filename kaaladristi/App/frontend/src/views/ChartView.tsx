@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { TrendingUp, TrendingDown, BarChart3, AlertCircle, RefreshCw, ArrowLeft } from 'lucide-react';
@@ -7,6 +7,12 @@ import TradingChart from '@/components/charts/TradingChart';
 import VaNiInsight from '@/components/domain/VaNiInsight';
 import { useInstrumentInsight } from '@/hooks';
 import StatStrip from '@/components/domain/StockCockpit/StatStrip';
+import VerdictHero from '@/components/domain/StockCockpit/VerdictHero';
+import ThesisTab from '@/components/domain/StockCockpit/ThesisTab';
+import type { ThesisBar } from '@/services/thesis';
+import StoryMode from '@/components/domain/StockCockpit/StoryMode';
+import { buildStoryEvents, KIND_COLORS, type StoryEvent } from '@/services/storyEvents';
+import { fetchSectorSeries } from '@/services/sectorSeries';
 import DeliveryVsTraded from '@/components/domain/StockCockpit/DeliveryVsTraded';
 import SectorMembershipCard from '@/components/domain/StockCockpit/SectorMembershipCard';
 import CockpitIndicatorPanels from '@/components/domain/StockCockpit/CockpitIndicatorPanels';
@@ -15,6 +21,7 @@ import CockpitOverlayStrip from '@/components/domain/StockCockpit/CockpitOverlay
 import { detectBigMoneyDays } from '@/services/bigMoney';
 import { useFrameworkStore } from '@/stores/frameworkStore';
 import { useAuthStore } from '@/stores/authStore';
+import { useBookmarkStore } from '@/stores/bookmarkStore';
 import CatalogDrawer from '@/components/domain/Catalog/CatalogDrawer';
 import { useAstroOverlayBands } from '@/hooks/useAstroOverlayBands';
 import type { ChartOverlay } from '@/types/framework';
@@ -28,6 +35,10 @@ import type { TimeRange } from '@/types';
 import { useVisualPulse } from '@/hooks/useVisualPulse';
 import { useEquityVisualPulse } from '@/hooks/useEquityVisualPulse';
 import { useScanPresence } from '@/hooks/useScanPresence';
+import { useIndexBreadth, useConstituentDetails } from '@/hooks/useSectorRotation';
+import { useIndexConstituents } from '@/hooks/useMasterData';
+import { computeMoveQuality } from '@/services/moveQuality';
+import MoveQualityCard from '@/components/domain/MoveQualityCard';
 import { usePipelineStatus } from '@/hooks/usePipelineStatus';
 import {
   computePulseSnapshot,
@@ -59,6 +70,9 @@ import MagicRsSubchart from '@/components/domain/VisualPulse/MagicRsSubchart';
 import RotationGraph, { type RotationPoint } from '@/components/domain/RotationGraph';
 import SignalFlipCard from '@/components/domain/StockCockpit/SignalFlipCard';
 import SignalLineChart from '@/components/domain/StockCockpit/SignalLineChart';
+// Index-native evidence (Breadth chapter) — reused from the sector page.
+import MarketBreadthChart from '@/components/domain/MarketBreadthChart';
+import BreadthRocChart from '@/components/domain/BreadthRocChart';
 
 const TIME_RANGES: TimeRange[] = ['1M', '3M', '6M', '1Y', '5Y', 'MAX'];
 
@@ -143,16 +157,31 @@ export default function ChartView() {
   // see zero overlays, so load it here too.
   const { framework, loadFramework } = useFrameworkStore();
   const { profile } = useAuthStore();
+  const bookmarks = useBookmarkStore((s) => s.bookmarks);
+  const bookmarksHasLoaded = useBookmarkStore((s) => s.hasLoaded);
+  const loadBookmarks = useBookmarkStore((s) => s.load);
   useEffect(() => {
     if (!framework && profile?.id) loadFramework(profile.id);
   }, [framework, profile?.id, loadFramework]);
+  useEffect(() => {
+    if (!bookmarksHasLoaded) loadBookmarks();
+  }, [bookmarksHasLoaded, loadBookmarks]);
   const frameworkOverlays = framework?.chart_overlays ?? NO_OVERLAYS;
   const astroBands = useAstroOverlayBands(frameworkOverlays);
   const [overlayDrawerOpen, setOverlayDrawerOpen] = useState(false);
   // Study reorg (2026-07-12): decision-band prose collapsed by default;
   // Member-Of pills demoted to a closed accordion.
   const [readExpanded, setReadExpanded] = useState(false);
+  // Stock DeepDive tabs: Analysis | Chart & Replay | Thesis. Deep-linkable via
+  // ?tab= so bookmarks / positions / scanners can land straight on Thesis.
+  const tabParam = searchParams.get('tab');
+  const [dvTab, setDvTab] = useState<'analysis' | 'chart' | 'thesis'>(
+    tabParam === 'thesis' ? 'thesis' : tabParam === 'chart' ? 'chart' : 'analysis',
+  );
   const [membershipOpen, setMembershipOpen] = useState(false);
+  // Add-position from the chart hero (equity only). Switches to the Thesis tab
+  // and pops its "I hold this" form.
+  const [wantPositionForm, setWantPositionForm] = useState(false);
 
   const numId = Number(id);
   const rawName = searchParams.get('name') ?? `${type} #${id}`;
@@ -182,6 +211,26 @@ export default function ChartView() {
   const equityPulse = useEquityVisualPulse(isEquity ? numId : null);
   const scanPresence = useScanPresence(isEquity ? numId : null);
 
+  // Index breadth — the cockpit's 4th verdict pillar for indices (% of
+  // constituents participating). Equities read Liquidity instead.
+  const { data: indexBreadth, isLoading: breadthLoading } = useIndexBreadth(isIndex ? numId : null, 66);
+  const breadthPct = useMemo(
+    () => (isIndex ? indexBreadth?.data?.at(-1)?.breadth_score ?? null : null),
+    [isIndex, indexBreadth],
+  );
+  // Breadth-over-time → the index story's thermometer (the index-native analog
+  // of a stock's sector thermometer). percentile = breadth score; "broad" (top
+  // band) when participation is in the upper third.
+  const breadthByDate = useMemo(() => {
+    if (!isIndex || !indexBreadth?.data) return undefined;
+    const m = new Map<string, { percentile: number; leading: boolean }>();
+    for (const d of indexBreadth.data) {
+      if (d.breadth_score == null) continue;
+      m.set(d.trade_date, { percentile: d.breadth_score, leading: d.breadth_score >= 66 });
+    }
+    return m.size > 0 ? m : undefined;
+  }, [isIndex, indexBreadth]);
+
   // VaNi narrative for the Decision Band (slim read, not the full panel).
   const { data: aiData, isLoading: aiLoading } = useInstrumentInsight(numId, type ?? 'index');
 
@@ -210,6 +259,20 @@ export default function ChartView() {
   const change = currentClose - prevClose;
   const changePct = prevClose ? (change / prevClose) * 100 : 0;
   const isPositive = change >= 0;
+
+  // Index move-quality (Phase 2b) — the compact anti-trap verdict for the
+  // cockpit, reusing the SAME constituent data the sector page fetches (the
+  // full card lives on /sector-rotation/:id; here it's a summary chip).
+  const idxConstituents = useIndexConstituents(isIndex ? numId : undefined);
+  const idxEquityIds = useMemo(
+    () => (idxConstituents.data ?? []).map((c) => c.equity_id),
+    [idxConstituents.data],
+  );
+  const { data: idxConstDetails } = useConstituentDetails(idxEquityIds, isIndex ? (latest?.trade_date ?? '') : '');
+  const indexMoveQuality = useMemo(
+    () => (isIndex ? computeMoveQuality(idxConstDetails, indexBreadth?.data?.at(-1)?.pct_above_20 ?? null) : null),
+    [isIndex, idxConstDetails, indexBreadth],
+  );
 
   const last252 = rows.slice(-252);
   const high52w = last252.length > 0 ? Math.max(...last252.map(r => r.high)) : 0;
@@ -305,6 +368,61 @@ export default function ChartView() {
     [bigMoneyEvents],
   );
 
+  // ── Story mode (Chart & Replay) — timed price-vs-signal events ──
+  const [storyOpen, setStoryOpen] = useState(false);
+  const bigMoneyDates = useMemo(() => new Set(bigMoneyEvents.map((e) => e.trade_date)), [bigMoneyEvents]);
+  const { data: sectorByDate } = useQuery({
+    queryKey: ['sector-series', equityPulse.meta?.industry],
+    queryFn: () => fetchSectorSeries(equityPulse.meta?.industry ?? null),
+    enabled: isEquity && !!equityPulse.meta?.industry,
+    staleTime: 300_000,
+  });
+  // Story works for equities AND indices on the daily timeframe. Indices carry
+  // score/magic_rs/flow columns (conviction · magic-RS flip · flow flip fire);
+  // equity-only signals (stage/scan/big-money/sector) simply don't trigger when
+  // their columns are absent.
+  const storyEvents = useMemo(
+    () => ((isEquity || isIndex) && tf === 'daily' ? buildStoryEvents(rows, bigMoneyDates, sectorByDate) : []),
+    [isEquity, isIndex, tf, rows, bigMoneyDates, sectorByDate],
+  );
+  // Events are indexed against `rows` (the chart's data) but the playhead
+  // indexes `pulseBars` — different arrays. Bridge them by DATE, not index.
+  const eventDates = useMemo(() => new Set(storyEvents.map((e) => e.date)), [storyEvents]);
+  const playheadDate = pulseBars[effectiveIdx]?.trade_date ?? null;
+  const storyBubble = useMemo(() => {
+    // Equities gate the bubble to the Chart & Replay tab; indices have no tab
+    // strip (single chart-centric view) so the bubble is always live there.
+    if ((isEquity && dvTab !== 'chart') || !playheadDate) return null;
+    let best: StoryEvent | null = null;
+    for (const e of storyEvents) {
+      if (e.date === playheadDate && (!best || e.priority > best.priority)) best = e;
+    }
+    return best ? { date: best.date, tone: best.tone, color: KIND_COLORS[best.kind], title: best.title, detail: best.detail, reactionPct: best.reactionPct } : null;
+  }, [storyEvents, playheadDate, dvTab, isEquity]);
+
+  // Replay playback — walk the playhead forward, dwelling on event bars so the
+  // on-candle bubble is readable, then gliding to the next.
+  const [playing, setPlaying] = useState(false);
+  const playIdxRef = useRef(effectiveIdx);
+  useEffect(() => { playIdxRef.current = effectiveIdx; }, [effectiveIdx]);
+  useEffect(() => {
+    if (!playing || pulseBars.length === 0) return;
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout>;
+    const loop = () => {
+      if (cancelled) return;
+      const cur = playIdxRef.current;
+      if (cur >= pulseBars.length - 1) { setPlaying(false); return; }
+      const next = cur + 1;
+      playIdxRef.current = next;
+      setActiveIndex(next);
+      const isEvent = eventDates.has(pulseBars[next]?.trade_date ?? '');
+      timer = setTimeout(loop, isEvent ? 2200 : 380);
+    };
+    timer = setTimeout(loop, 380);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [playing, pulseBars, eventDates, setActiveIndex]);
+
   // Chart block, extracted so the decision-first layout can place it in its own
   // tier (equity: beside Magic RS / RSI / Divergence; index: full width).
   const chartArea = (
@@ -399,6 +517,7 @@ export default function ChartView() {
             bigMoneyEvents={bigMoneyChartLines}
             benchmarkIndexId={isIndex && id ? Number(id) : null}
             benchmarkName={isIndex ? name : null}
+            storyBubble={storyBubble}
           />
         )}
       </div>
@@ -410,168 +529,287 @@ export default function ChartView() {
     </>
   );
 
+  // ── Chart & Replay tab (SHARED — equity + index) ──────────────────────────
+  // ChartView is the one cockpit universe: story controls, the chart with its
+  // on-candle bubble + VaNi robot, the Magic RS / indicators / divergence side
+  // column, and the timeline scrubber. Both instrument types flow through this
+  // single block — no per-type duplication.
+  const replayTab = (
+    <>
+      {storyEvents.length > 0 && (
+        <div className="flex items-center gap-3 mb-2">
+          <button
+            onClick={() => {
+              if (!playing) {
+                // Start the story at the first signal event in the window.
+                const pbIdx = new Map(pulseBars.map((b, i) => [b.trade_date, i]));
+                const firstEv = storyEvents.find((e) => pbIdx.has(e.date));
+                const startIdx = firstEv ? (pbIdx.get(firstEv.date) as number) : 0;
+                setActiveIndex(startIdx);
+                playIdxRef.current = startIdx;
+              }
+              setPlaying((p) => !p);
+            }}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border border-[var(--accent)] text-[var(--accent)] hover:bg-[var(--accent-glow)] transition-colors"
+          >
+            {playing ? '❚❚ Pause' : '▷ Play story'}
+          </button>
+          <button
+            onClick={() => setStoryOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border border-kd-border text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-[var(--accent)] transition-colors"
+          >
+            ⤢ Story mode
+          </button>
+          <span className="text-[11px] text-muted font-mono">
+            {storyEvents.length} signal events · price × data story
+          </span>
+        </div>
+      )}
+      <div id="study-chart" style={{ scrollMarginTop: 118 }} className="grid grid-cols-1 lg:grid-cols-[7fr_3fr] gap-3 mb-3">
+        <div className="min-w-0">{chartArea}</div>
+        <div className="flex flex-col gap-3 min-w-0">
+          {snapshot && (hasRsData ? (
+            <SignalFlipCard
+              title="Magic RS"
+              minHeight={180}
+              widget={<MagicRsSubchart data={magicRsData} activeIndex={effectiveIdx} benchmarkLabel="NIFTY 500" />}
+              chart={
+                <SignalLineChart
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  data={pulseBars as any}
+                  series={[
+                    { key: 'magic_rs', color: 'var(--gold, #d4a84b)', label: 'Magic RS' },
+                    { key: 'magic_ma', color: 'var(--text-faint, #64748b)', label: 'MA', dashed: true },
+                  ]}
+                  refLines={[{ y: 0 }]}
+                />
+              }
+            />
+          ) : (
+            <div className="rounded-lg bg-kd-card border border-kd-border p-3">
+              <div className="text-[11px] font-serif font-semibold text-primary mb-1">Magic RS</div>
+              <div className="text-[10px] text-muted leading-snug">Not computed (RS vs NIFTY 500 needs a benchmark series — absent for many BSE/thin names).</div>
+            </div>
+          ))}
+          {!isLoading && !isError && rows.length > 0 && tf === 'daily' && (
+            <CockpitIndicatorPanels rows={rows} />
+          )}
+          {snapshot && (
+            <DivergenceCard
+              divergence={snapshot.divergence}
+              rsiHistory={rsiHistory}
+              priceHistory={priceHistory}
+            />
+          )}
+        </div>
+      </div>
+      {pulseBars.length > 0 && (
+        <div className="mt-1">
+          <TimelineSlider
+            total={pulseBars.length}
+            activeIndex={effectiveIdx}
+            bars={pulseBars}
+            corrHistory={corrHistory}
+            onChange={setActiveIndex}
+          />
+        </div>
+      )}
+    </>
+  );
+
   return (
     <ErrorBoundary>
       <div className="animate-fade-in">
-        {/* ═══ Sticky command header: Back + Name + Verdict + Price + Stats + jump rail ═══
-            Sticky below the Layout topbar (48px) so identity/verdict/navigation
-            stay visible on this long page (Study reorg, owner-approved wireframe). */}
-        <div
-          className="sticky z-30 -mx-1 px-1 mb-3"
-          style={{
-            top: 48,
-            background: 'color-mix(in srgb, var(--bg) 90%, transparent)',
-            backdropFilter: 'blur(10px)',
-            borderBottom: '1px solid var(--border)',
-            paddingBottom: 6,
-          }}
-        >
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 pt-1">
-          <button
-            onClick={() => navigate(-1)}
-            className="flex items-center gap-1 text-xs text-muted hover:text-[var(--text-primary)] transition-colors"
-          >
-            <ArrowLeft className="w-3.5 h-3.5" />
-          </button>
-          <span className={cn(
-            'text-[9px] font-bold uppercase tracking-widest px-2 py-0.5 rounded border',
-            isIndex
-              ? 'text-accent-cyan border-accent-cyan/30 bg-accent-cyan/8'
-              : 'text-accent-violet border-accent-violet/30 bg-accent-violet/8',
-          )}>
-            {isIndex ? 'INDEX' : 'EQUITY'}
-          </span>
-          <h1 className="text-xl font-bold tracking-tight text-[var(--text-primary)]">{name}</h1>
-          {isEquity && <BookmarkToggle equityId={numId} size={16} />}
-          {/* Pulse/Study toggle hidden (2026-07-09): Study is the single merged
-              stock view. Pulse route still exists but is no longer linked from
-              here. */}
-          {/* Verdict chip — the ONLY decision-layer element allowed on Study
-              (POA Phase 0.2): the Pulse verdict travels with the user. */}
-          {snapshot && (
-            <span
-              title={`${snapshot.corrState.tagline} — open Pulse for the full verdict`}
-              onClick={() => navigate(isEquity ? `/pulse/equity/${numId}` : `/pulse/${numId}`)}
-              className="text-[9px] font-mono font-bold uppercase tracking-widest px-2 py-0.5 rounded border cursor-pointer"
-              style={{
-                color: snapshot.corrState.color,
-                borderColor: `color-mix(in srgb, ${snapshot.corrState.color} 40%, transparent)`,
-                background: `color-mix(in srgb, ${snapshot.corrState.color} 12%, transparent)`,
-              }}
+        {/* ═══ Hero — exact-replica 2-column top (Stock DeepDive): identity ·
+            price · stat pills · VaNi read (left) and the verdict card (right,
+            equity). Replaces the old sticky command bar. ═══ */}
+        <div className="mb-4">
+          {/* Back · type badge · bookmark */}
+          <div className="flex items-center gap-2 mb-3">
+            <button
+              onClick={() => navigate(-1)}
+              className="flex items-center gap-1 text-xs text-muted hover:text-[var(--text-primary)] transition-colors"
             >
-              ● Pulse: {snapshot.corrState.state}
+              <ArrowLeft className="w-3.5 h-3.5" />
+            </button>
+            <span className={cn(
+              'text-[9px] font-bold uppercase tracking-widest px-2 py-0.5 rounded border',
+              isIndex
+                ? 'text-accent-cyan border-accent-cyan/30 bg-accent-cyan/8'
+                : 'text-accent-violet border-accent-violet/30 bg-accent-violet/8',
+            )}>
+              {isIndex ? 'INDEX' : 'EQUITY'}
             </span>
-          )}
-          {isEquity && equityPulse.meta?.industry && (
-            <span className="text-[10px] font-mono text-muted px-1.5 py-0.5 rounded bg-kd-elevated">
-              {equityPulse.meta.industry}
-            </span>
-          )}
-          {!isLoading && latest && (
-            <>
-              <span className="text-xl font-bold mono text-[var(--text-primary)]">
-                {currentClose.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-              </span>
-              <div className={cn('flex items-center gap-1', isPositive ? 'text-risk-green' : 'text-risk-red')}>
-                {isPositive ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
-                <span className="text-xs font-bold mono">
-                  {isPositive ? '+' : ''}{changePct.toFixed(2)}%
-                </span>
+            {isEquity && <BookmarkToggle equityId={numId} size={16} />}
+            {/* Add / show position — equity only (positions are equity-scoped) */}
+            {isEquity && !isLoading && rows.length > 0 && (() => {
+              const bmRow = bookmarks.find((b) => b.equity_id === numId);
+              const pos = bmRow?.entry_price != null ? bmRow : null;
+              if (pos) {
+                const pnl = currentClose && pos.entry_price ? ((currentClose - pos.entry_price) / pos.entry_price) * 100 : null;
+                return (
+                  <button
+                    onClick={() => setDvTab('thesis')}
+                    title="View your position thesis"
+                    className={cn(
+                      'text-[10px] font-mono font-bold px-2 py-0.5 rounded-full border transition-colors',
+                      pnl != null && pnl < 0
+                        ? 'text-risk-red border-risk-red/40 bg-risk-red/10'
+                        : 'text-risk-green border-risk-green/40 bg-risk-green/10',
+                    )}
+                  >
+                    ● POSITION{pnl != null ? ` ${pnl >= 0 ? '+' : ''}${pnl.toFixed(1)}%` : ''}
+                  </button>
+                );
+              }
+              return (
+                <button
+                  onClick={() => { setWantPositionForm(true); setDvTab('thesis'); }}
+                  title="Add a position — track entry, P&L and thesis health"
+                  className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded-full border border-kd-border text-[var(--text-muted)] hover:text-[var(--accent)] hover:border-[var(--accent)] transition-colors"
+                >
+                  ＋ Position
+                </button>
+              );
+            })()}
+          </div>
+
+          <div className={cn('grid gap-4 items-start', 'grid-cols-1 lg:grid-cols-[1.35fr_1fr]')}>
+            {/* LEFT — identity · price · stats · read */}
+            <div className="min-w-0 flex flex-col gap-3">
+              <div>
+                <h1 className="inline text-2xl font-bold tracking-tight text-[var(--text-primary)]">{name}</h1>
+                {isEquity && equityPulse.meta?.industry && (
+                  <span className="ml-2 text-xs text-muted">NSE · {equityPulse.meta.industry}</span>
+                )}
               </div>
-              <div className="flex flex-wrap gap-2 text-xs ml-auto">
-                <StatPill label="H/L" value={`${fmt(latest.high)} / ${fmt(latest.low)}`} />
-                <StatPill label="52W" value={`${fmt(low52w)} – ${fmt(high52w)}`} />
-                {latest.rsi_14 != null && <StatPill label="RSI" value={latest.rsi_14.toFixed(1)} />}
-                {latest.magic_rs_zone && <StatPill label="RS" value={latest.magic_rs_zone} />}
-              </div>
-              {/* Equity edge-case badges */}
-              {isEquity && equityPulse.meta && !equityPulse.meta.is_active && (
-                <span className="text-[10px] font-mono text-risk-amber bg-risk-amber/10 px-1.5 py-0.5 rounded">
-                  Inactive — last traded {latest.trade_date}
-                </span>
-              )}
-              {isEquity && (() => {
-                const todayStr = new Date().toISOString().split('T')[0];
-                const daysSince = Math.round((new Date(todayStr).getTime() - new Date(latest.trade_date).getTime()) / 86400000);
-                return daysSince > 1 && equityPulse.meta?.is_active ? (
-                  <span className="text-[10px] font-mono text-muted">
-                    Last updated: {latest.trade_date} ({daysSince}d ago)
-                  </span>
-                ) : null;
+
+              {!isLoading && latest && (() => {
+                const r5 = (latest as { ret_5d?: number | null }).ret_5d ?? null;
+                const chg = r5 ?? changePct;
+                const pos = chg >= 0;
+                return (
+                  <div className="flex items-baseline gap-3 flex-wrap">
+                    <span className="text-3xl font-bold mono text-[var(--text-primary)]">
+                      {currentClose.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                    </span>
+                    <span className={cn('flex items-center gap-1 text-sm font-bold mono', pos ? 'text-risk-green' : 'text-risk-red')}>
+                      {pos ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
+                      {pos ? '+' : ''}{chg.toFixed(2)}%
+                      <span className="text-muted font-normal ml-1">/ {r5 != null ? '5D' : '1D'}</span>
+                    </span>
+                  </div>
+                );
               })()}
-            </>
-          )}
+
+              {!isLoading && latest && (
+                <div className="flex flex-wrap gap-2 text-xs items-center">
+                  <StatPill label="H/L" value={`${fmt(latest.high)} / ${fmt(latest.low)}`} />
+                  <StatPill label="52W" value={`${fmt(low52w)} – ${fmt(high52w)}`} />
+                  {latest.rsi_14 != null && <StatPill label="RSI" value={latest.rsi_14.toFixed(1)} />}
+                  {latest.magic_rs_zone && <StatPill label="RS" value={latest.magic_rs_zone} />}
+                  {isEquity && equityPulse.meta && !equityPulse.meta.is_active && (
+                    <span className="text-[10px] font-mono text-risk-amber bg-risk-amber/10 px-1.5 py-0.5 rounded">
+                      Inactive — last traded {latest.trade_date}
+                    </span>
+                  )}
+                  {isEquity && (() => {
+                    const todayStr = new Date().toISOString().split('T')[0];
+                    const daysSince = Math.round((new Date(todayStr).getTime() - new Date(latest.trade_date).getTime()) / 86400000);
+                    return daysSince > 1 && equityPulse.meta?.is_active ? (
+                      <span className="text-[10px] font-mono text-muted">Last updated: {latest.trade_date} ({daysSince}d ago)</span>
+                    ) : null;
+                  })()}
+                </div>
+              )}
+
+              {/* VaNi Read — now in the hero's left column */}
+              {!isLoading && !isError && rows.length > 0 && (aiLoading || aiData?.insight) && (
+                <div id="study-read" style={{ scrollMarginTop: 118 }}>
+                  {!isEquity && snapshot?.corrState.tagline && (
+                    <div className="text-[11px] mb-1.5" style={{ color: snapshot.corrState.color }}>
+                      ● <span className="font-semibold">{snapshot.corrState.state}</span>
+                      <span className="text-muted"> — {snapshot.corrState.tagline}</span>
+                    </div>
+                  )}
+                  <div className="relative overflow-hidden" style={!readExpanded ? { maxHeight: 130 } : undefined}>
+                    <VaNiInsight insight={aiData?.insight} isLoading={aiLoading} highlightChips className="mt-0" />
+                    {!readExpanded && !aiLoading && (
+                      <div className="absolute inset-x-0 bottom-0 h-10 pointer-events-none" style={{ background: 'linear-gradient(transparent, var(--bg))' }} />
+                    )}
+                  </div>
+                  {!aiLoading && aiData?.insight && (
+                    <button
+                      onClick={() => setReadExpanded((e) => !e)}
+                      className="mt-1 text-[10px] font-mono text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
+                    >
+                      {readExpanded ? '▴ Collapse' : '▾ Read full VaNi analysis'}
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* RIGHT — verdict card (equity + index; index swaps Liquidity→Breadth) */}
+            {!isLoading && latest && (
+              <div className="min-w-0">
+                <VerdictHero
+                  latest={latest}
+                  snapshot={snapshot}
+                  mode={isIndex ? 'index' : 'equity'}
+                  breadthPct={breadthPct}
+                />
+              </div>
+            )}
+          </div>
+
         </div>
 
-        {/* Jump rail — anchors into the page's chapters (equity Study only) */}
-        {isEquity && !isLoading && rows.length > 0 && (
-          <div className="flex items-center gap-1.5 mt-1.5">
-            {([['read', 'Read'], ['strength', 'Strength'], ['flow', 'Money Flow'], ['chart', 'Chart']] as const).map(([anchor, label]) => (
+        {/* ═══ Tabs — Analysis · Chart & Replay · Data · Results (Stock DeepDive
+            Slice 3). SHARED by equity + index. Data/Results are placeholders. ═══ */}
+        {(isEquity || isIndex) && !isLoading && rows.length > 0 && (
+          <div className="flex items-center gap-1 mb-3 border-b border-kd-border">
+            {([['analysis', 'Analysis'], ['chart', 'Chart & Replay'], ['thesis', 'Thesis']] as const)
+              .filter(([id]) => id !== 'thesis' || isEquity)
+              .map(([id, label]) => (
               <button
-                key={anchor}
-                onClick={() => document.getElementById(`study-${anchor}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
-                className="px-2.5 py-0.5 rounded-full text-[10px] font-mono uppercase tracking-wider border border-kd-border text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:border-[var(--accent)] transition-colors"
+                key={id}
+                onClick={() => setDvTab(id)}
+                className={cn(
+                  'px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors',
+                  dvTab === id
+                    ? 'border-[var(--accent)] text-[var(--text-primary)]'
+                    : 'border-transparent text-muted hover:text-[var(--text-primary)]',
+                )}
               >
                 {label}
               </button>
             ))}
-          </div>
-        )}
-        </div>
-
-        {/* ═══ Decision Band — 4-second read: verdict lives ONCE in the sticky
-            header chip; the VaNi prose is clamped behind an expander so the
-            band scans instead of walling (Study reorg 2026-07-12). ═══ */}
-        {!isLoading && !isError && rows.length > 0 && (aiLoading || aiData?.insight) && (
-          <div id="study-read" style={{ scrollMarginTop: 118 }} className="mb-3">
-            {snapshot?.corrState.tagline && (
-              <div className="text-[11px] mb-1.5" style={{ color: snapshot.corrState.color }}>
-                ● <span className="font-semibold">{snapshot.corrState.state}</span>
-                <span className="text-muted"> — {snapshot.corrState.tagline}</span>
-              </div>
-            )}
-            <div className="relative overflow-hidden" style={!readExpanded ? { maxHeight: 96 } : undefined}>
-              {/* VaNiInsight brings its own indigo panel styling + chip highlights */}
-              <VaNiInsight insight={aiData?.insight} isLoading={aiLoading} highlightChips className="mt-0" />
-              {!readExpanded && !aiLoading && (
-                <div
-                  className="absolute inset-x-0 bottom-0 h-10 pointer-events-none"
-                  style={{ background: 'linear-gradient(transparent, var(--bg))' }}
-                />
-              )}
-            </div>
-            {!aiLoading && aiData?.insight && (
-              <button
-                onClick={() => setReadExpanded((e) => !e)}
-                className="mt-1 text-[10px] font-mono text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
-              >
-                {readExpanded ? '▴ Collapse' : '▾ Read full VaNi analysis'}
-              </button>
-            )}
+            <span className="px-3 py-2 text-sm text-[var(--text-faint)] cursor-default">Data · soon</span>
+            <span className="px-3 py-2 text-sm text-[var(--text-faint)] cursor-default">Results · soon</span>
           </div>
         )}
 
-        {/* ═══ Snapshot — Conviction · Momentum · Liquidity · Returns ═══ */}
-        {!isLoading && latest && (
-          <StatStrip
-            latest={latest}
-            mcapCr={equityPulse.meta?.mcap_cr ?? scanPresence.stock?.mcap_cr ?? null}
-            isEquity={isEquity}
-          />
-        )}
+        {/* ═══ ANALYSIS TAB ═══ Sections gate by CAPABILITY, not by a hard
+            equity/index fork: Strength is shared (RS reads the common magic_rs
+            columns); the industry/scan/membership right column + Money Flow +
+            the Order/Smart/Big/Delivery grid are equity-only; Breadth is
+            index-native. ═══ */}
 
-        {/* ═══ Equity: Pump/Dump Banner + Magic RS Pills ═══ */}
-        {isEquity && pumpDumpResult && (
+        {/* Pump/Dump Banner — equity only */}
+        {isEquity && dvTab === 'analysis' && pumpDumpResult && (
           <div className="mb-2">
             <PumpDumpBanner result={pumpDumpResult} />
           </div>
         )}
-        {/* ═══ Chapter: Relative Strength — pills + rotation quadrant + industry
-            context together: everything answering "how strong vs market/peers?"
-            (RS-Rotation moved DOWN from its provisional prime spot.) ═══ */}
-        {isEquity && (hasRsData || equityPulse.industryContext) && (
+
+        {/* ═══ Chapter: Strength — SHARED (equity + index). RS pills + rotation
+            quadrant read the shared magic_rs columns; the right-column context
+            (industry / scan presence / index membership) is equity-only; the
+            detailed snapshot (StatStrip) closes the chapter for both. ═══ */}
+        {dvTab === 'analysis' && !isLoading && latest && (
           <section id="study-strength" style={{ scrollMarginTop: 118 }} className="mb-3">
-            <SectionLabel>Relative Strength</SectionLabel>
+            <SectionLabel>Strength</SectionLabel>
             {hasRsData && (
               <div className="mb-2">
                 <MultiTimeframePills
@@ -584,173 +822,157 @@ export default function ChartView() {
               </div>
             )}
             {/* 2fr/1fr + a STACKED right column (industry + scan presence +
-                membership) so the tall quadrant doesn't leave a blank column
-                (owner QA 2026-07-12). */}
-            <div className="grid grid-cols-1 lg:grid-cols-[2fr_1fr] gap-3">
+                membership) for equities so the tall quadrant doesn't leave a
+                blank column (owner QA 2026-07-12); indices drop the right
+                column (no per-stock context) and let the quadrant run full. */}
+            <div className={cn('grid grid-cols-1 gap-3', isEquity && 'lg:grid-cols-[2fr_1fr]')}>
               <div className="min-w-0">
                 {tf === 'daily' && hasRsData ? (
                   <RotationGraph points={rotationPoints} benchmark="NIFTY 500" autoPlay playSeconds={7} />
                 ) : (
                   <div className="glass-card rounded-xl p-3 text-[10px] text-muted">
-                    RS-Rotation is available on the daily timeframe{hasRsData ? '' : ' (RS not computed for this stock)'}.
+                    RS-Rotation is available on the daily timeframe{hasRsData ? '' : ' (RS not computed here)'}.
                   </div>
                 )}
               </div>
-              <div className="min-w-0 flex flex-col gap-3">
-                <IndustryContextCard
-                  industry={equityPulse.meta?.industry ?? null}
-                  context={equityPulse.industryContext}
-                />
-                <ScanPresenceCard stock={scanPresence.stock} matchedScans={scanPresence.matchedScans} />
-                <div className="glass-card rounded-xl">
-                  <button
-                    onClick={() => setMembershipOpen((o) => !o)}
-                    className="w-full flex items-center justify-between px-3 py-2.5 text-left"
-                  >
-                    <span className="text-[10px] font-mono uppercase tracking-wider text-[var(--text-muted)]">
-                      Index membership
-                    </span>
-                    <span className="text-[10px] text-[var(--text-faint)]">{membershipOpen ? '▴' : '▾'}</span>
-                  </button>
-                  {membershipOpen && (
-                    <div className="px-1 pb-1">
-                      <SectorMembershipCard equityId={numId} />
-                    </div>
-                  )}
+              {isEquity && (
+                <div className="min-w-0 flex flex-col gap-3">
+                  <IndustryContextCard
+                    industry={equityPulse.meta?.industry ?? null}
+                    context={equityPulse.industryContext}
+                  />
+                  <ScanPresenceCard stock={scanPresence.stock} matchedScans={scanPresence.matchedScans} />
+                  <div className="glass-card rounded-xl">
+                    <button
+                      onClick={() => setMembershipOpen((o) => !o)}
+                      className="w-full flex items-center justify-between px-3 py-2.5 text-left"
+                    >
+                      <span className="text-[10px] font-mono uppercase tracking-wider text-[var(--text-muted)]">
+                        Index membership
+                      </span>
+                      <span className="text-[10px] text-[var(--text-faint)]">{membershipOpen ? '▴' : '▾'}</span>
+                    </button>
+                    {membershipOpen && (
+                      <div className="px-1 pb-1">
+                        <SectorMembershipCard equityId={numId} />
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
+              )}
+            </div>
+            {/* Momentum & Returns evidence — the detailed snapshot (StatStrip,
+                reused) closes the Strength chapter for both types. */}
+            <div className="mt-3">
+              <StatStrip
+                latest={latest}
+                mcapCr={equityPulse.meta?.mcap_cr ?? scanPresence.stock?.mcap_cr ?? null}
+                isEquity={isEquity}
+              />
             </div>
           </section>
         )}
 
-        {/* ═══ Evidence tiers (equity) · chart-centric (index) ═══ */}
-        {isEquity ? (
-          <>
-            {/* ═══ Chapter: Money Flow — one question ("is real money entering?"),
-                one frame: heatmap leads full-width, state cards beneath. ═══ */}
-            {!isLoading && !isError && rows.length > 0 && (
-              <section id="study-flow" style={{ scrollMarginTop: 118 }} className="mb-3">
-                <SectionLabel>Money Flow</SectionLabel>
-                {tf === 'daily' ? (
-                  <StockFlowHeatmap label={name} rows={rows} />
-                ) : (
-                  <div className="glass-card rounded-xl p-3 text-[10px] text-muted">
-                    Flow heatmap is available on the daily timeframe.
-                  </div>
-                )}
-              </section>
-            )}
-
-            {/* Rows B/C — Order Flow · Smart Money · Big Money(spans) / Delivery(wide) */}
-            {snapshot && (
-              <div className="grid grid-cols-1 lg:grid-cols-[37fr_38fr_25fr] gap-3 mb-3">
-                <OrderFlowCard
-                  bar={snapshot.bar}
-                  rss={snapshot.rss}
-                  rssHistory={rssHistory}
-                  narrative={flowNarrative}
-                />
-                <SignalFlipCard
-                  title="Smart Money"
-                  widget={
-                    <SmartMoneyCard
-                      smHistory={smHistory}
-                      sm={snapshot.sm}
-                      dots={[snapshot.dots]}
-                      narrative={smNarrative}
-                    />
-                  }
-                  chart={
-                    <SignalLineChart
-                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                      data={pulseBars as any}
-                      series={[
-                        { key: 'sniper_inst', color: 'var(--accent-indigo, #6366f1)', label: 'Institution' },
-                        { key: 'sniper_hot', color: 'var(--caution, #f59e0b)', label: 'Hot Money' },
-                      ]}
-                      refLines={[{ y: 35 }]}
-                      domain={[0, 50]}
-                    />
-                  }
-                />
-                <div className="lg:row-span-2">
-                  <BigMoneyCard events={bigMoneyEvents} />
-                </div>
-                <div className="lg:col-span-2">
-                  <DeliveryVsTraded rows={rows} />
-                </div>
+        {/* ═══ Chapter: Breadth — INDEX only (index-native: % of constituents
+            participating). Reuses the market-breadth chart + ROC. Deliberately
+            NOT volume — km_index_eod volume has a scale discontinuity. ═══ */}
+        {isIndex && dvTab === 'analysis' && !isLoading && (
+          <section id="study-breadth" style={{ scrollMarginTop: 118 }} className="mb-3">
+            <SectionLabel>Breadth</SectionLabel>
+            {indexMoveQuality && (
+              <div className="mb-2">
+                <MoveQualityCard mq={indexMoveQuality} compact />
               </div>
             )}
-
-            {/* ═══ RESERVED CHAPTERS (Study reorg 2026-07-12) — render nothing
-                until their data pipelines land; they have addresses so the next
-                data drop slots in without another page re-org:
-                · #study-fundamentals — revenue/EBITDA sparklines, D/E, promoter
-                  Δ + pledge, dividends (quarterly results / yfinance ingest —
-                  the Waking Giants Layer-0 fields reused per-stock)
-                · #study-events — filings timeline (results, SHP, corporate
-                  actions, concalls) + FPB setup/burst + WG phase markers with
-                  astro-window shading ═══ */}
-
-            {/* (Scan Presence + Index membership moved INTO the Strength
-                chapter's right-column stack — owner QA 2026-07-12.) */}
-
-            {/* Chart tier — Chart 70% · (Magic RS / RSI-MFI / Divergence) 30% */}
-            <div id="study-chart" style={{ scrollMarginTop: 118 }} className="grid grid-cols-1 lg:grid-cols-[7fr_3fr] gap-3 mb-3">
-              <div className="min-w-0">{chartArea}</div>
-              <div className="flex flex-col gap-3 min-w-0">
-                {snapshot && (hasRsData ? (
-                  <SignalFlipCard
-                    title="Magic RS"
-                    minHeight={180}
-                    widget={<MagicRsSubchart data={magicRsData} activeIndex={effectiveIdx} benchmarkLabel="NIFTY 500" />}
-                    chart={
-                      <SignalLineChart
-                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                        data={pulseBars as any}
-                        series={[
-                          { key: 'magic_rs', color: 'var(--gold, #d4a84b)', label: 'Magic RS' },
-                          { key: 'magic_ma', color: 'var(--text-faint, #64748b)', label: 'MA', dashed: true },
-                        ]}
-                        refLines={[{ y: 0 }]}
-                      />
-                    }
-                  />
-                ) : (
-                  <div className="rounded-lg bg-kd-card border border-kd-border p-3">
-                    <div className="text-[11px] font-serif font-semibold text-primary mb-1">Magic RS</div>
-                    <div className="text-[10px] text-muted leading-snug">Not computed for this stock (RS vs NIFTY 500 needs a benchmark series — absent for many BSE/thin names).</div>
-                  </div>
-                ))}
-                {!isLoading && !isError && rows.length > 0 && tf === 'daily' && (
-                  <CockpitIndicatorPanels rows={rows} />
-                )}
-                {snapshot && (
-                  <DivergenceCard
-                    divergence={snapshot.divergence}
-                    rsiHistory={rsiHistory}
-                    priceHistory={priceHistory}
-                  />
-                )}
-              </div>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 items-start">
+              <MarketBreadthChart
+                data={indexBreadth?.data}
+                isLoading={breadthLoading}
+                zoneMode={indexBreadth?.zoneMode}
+                percentileRank={indexBreadth?.percentileRank ?? undefined}
+                stockCount={indexBreadth?.stockCount}
+              />
+              <BreadthRocChart
+                data={indexBreadth?.roc}
+                isLoading={breadthLoading}
+                rocBadge={indexBreadth?.rocBadge}
+              />
             </div>
+          </section>
+        )}
 
-            {/* Player — timeline scrubber (Smart Money / Magic RS follow it) */}
-            {pulseBars.length > 0 && (
-              <div className="mt-1">
-                <TimelineSlider
-                  total={pulseBars.length}
-                  activeIndex={effectiveIdx}
-                  bars={pulseBars}
-                  corrHistory={corrHistory}
-                  onChange={setActiveIndex}
-                />
+        {/* ═══ Chapter: Money Flow — EQUITY only ("is real money entering?") ═══ */}
+        {isEquity && dvTab === 'analysis' && !isLoading && !isError && rows.length > 0 && (
+          <section id="study-flow" style={{ scrollMarginTop: 118 }} className="mb-3">
+            <SectionLabel>Money Flow</SectionLabel>
+            {tf === 'daily' ? (
+              <StockFlowHeatmap label={name} rows={rows} />
+            ) : (
+              <div className="glass-card rounded-xl p-3 text-[10px] text-muted">
+                Flow heatmap is available on the daily timeframe.
               </div>
             )}
-          </>
-        ) : (
-          /* Index — chart-centric (equity evidence cards don't apply) */
-          <div className="min-w-0">{chartArea}</div>
+          </section>
+        )}
+
+        {/* Order Flow · Smart Money · Big Money / Delivery — EQUITY only */}
+        {isEquity && dvTab === 'analysis' && snapshot && (
+          <div className="grid grid-cols-1 lg:grid-cols-[37fr_38fr_25fr] gap-3 mb-3">
+            <OrderFlowCard
+              bar={snapshot.bar}
+              rss={snapshot.rss}
+              rssHistory={rssHistory}
+              narrative={flowNarrative}
+            />
+            <SignalFlipCard
+              title="Smart Money"
+              widget={
+                <SmartMoneyCard
+                  smHistory={smHistory}
+                  sm={snapshot.sm}
+                  dots={[snapshot.dots]}
+                  narrative={smNarrative}
+                />
+              }
+              chart={
+                <SignalLineChart
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  data={pulseBars as any}
+                  series={[
+                    { key: 'sniper_inst', color: 'var(--accent-indigo, #6366f1)', label: 'Institution' },
+                    { key: 'sniper_hot', color: 'var(--caution, #f59e0b)', label: 'Hot Money' },
+                  ]}
+                  refLines={[{ y: 35 }]}
+                  domain={[0, 50]}
+                />
+              }
+            />
+            <div className="lg:row-span-2">
+              <BigMoneyCard events={bigMoneyEvents} />
+            </div>
+            <div className="lg:col-span-2">
+              <DeliveryVsTraded rows={rows} />
+            </div>
+          </div>
+        )}
+
+        {/* ═══ RESERVED CHAPTERS (Study reorg 2026-07-12) — #study-fundamentals,
+            #study-events — render nothing until their data pipelines land. ═══ */}
+
+        {/* ═══ CHART & REPLAY TAB — SHARED (equity + index), rendered once ═══ */}
+        {dvTab === 'chart' && replayTab}
+
+        {/* ═══ THESIS TAB — equity only (Phase 2a). The verification cockpit:
+            adapts to position / watchlist / cold. Deep-linked via ?tab=thesis. ═══ */}
+        {isEquity && dvTab === 'thesis' && !isLoading && rows.length > 0 && (
+          <ThesisTab
+            bars={rows as unknown as ThesisBar[]}
+            equityId={numId}
+            name={name}
+            currentClose={currentClose}
+            autoOpenForm={wantPositionForm}
+            onAutoOpened={() => setWantPositionForm(false)}
+          />
         )}
 
       </div>
@@ -761,6 +983,25 @@ export default function ChartView() {
         onClose={() => setOverlayDrawerOpen(false)}
         context="overlay"
       />
+
+      {/* Focused single-view story replay (equity + index) */}
+      {(isEquity || isIndex) && (
+        <StoryMode
+          open={storyOpen}
+          onClose={() => setStoryOpen(false)}
+          bars={rows}
+          name={name}
+          latest={latest ?? null}
+          snapshot={snapshot}
+          bigMoneyDates={bigMoneyDates}
+          sectorByDate={sectorByDate}
+          breadthByDate={breadthByDate}
+          mode={isIndex ? 'index' : 'equity'}
+          breadthPct={breadthPct}
+          overlays={frameworkOverlays}
+          astroBands={astroBands}
+        />
+      )}
     </ErrorBoundary>
   );
 }

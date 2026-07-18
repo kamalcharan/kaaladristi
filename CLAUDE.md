@@ -382,7 +382,7 @@ AI_MODEL=claude-haiku-4-5      # any model the provider supports
 
 New migrations go in `App/DBscripts/km_migration_NNN_description.sql`.
 Run them directly in pgAdmin, DBeaver, or `psql` — **no Python wrapper scripts**.
-Next migration number: **152**.
+Next migration number: **153**. (152 = `km_migration_152_custom_index_return_chain.sql` — return-chained custom-index synthesis, replaces the raw-price `AVG(close)` that jumped the level whenever a constituent listed; adds `v_custom_index_health`.)
 
 **Target database**: most migrations target `kaala_dristi_db`. Migrations that target `vani_db` must say so explicitly in the file header (example: migration 092).
 

@@ -82,6 +82,64 @@
   --caution-bg: rgba(224,160,64,0.1);
   --atmosphere-primary: rgba(155,140,255,0.08);
   --atmosphere-accent:  rgba(201,178,140,0.1);
+
+  /* Card elevation shadow. Dark mode reads elevation from the lighter glass
+     fill over a near-black page, so it needs NO shadow (kept none). Light mode
+     has nothing to lift a pale card off a pale canvas, so it gets a soft
+     shadow — the piece the flat/monochrome light look was missing. Colour via
+     color-mix(black) rather than an rgba/hex literal (ratchet-neutral). */
+  --card-shadow: none;
+}
+
+/* Light-only card shadow (data-mode is stamped on <html> by applyTheme and the
+   index.html FOUC script). Two layers: a tight contact shadow + a soft ambient
+   one, the standard "raised card on paper" recipe. */
+:root[data-mode="light"] {
+  --card-shadow:
+    0 1px 2px color-mix(in srgb, black 8%, transparent),
+    0 10px 28px -8px color-mix(in srgb, black 14%, transparent);
+}
+
+/* Verdict-hero surface (StockCockpit VerdictHero). A deliberately dark, high-
+   contrast decision card in BOTH modes: in light it's near-black to pop off the
+   ivory canvas; in dark it's a touch lighter than the page so it still reads as
+   an elevated hero. Text/tiles are light in both modes. Defined here (not a
+   theme file) so it is intentionally fixed, not theme-flipped. */
+:root {
+  --verdict-hero-bg: #191d29;
+  --verdict-hero-border: rgba(255,255,255,0.08);
+  --verdict-hero-tile: rgba(255,255,255,0.05);
+  --verdict-hero-tile-border: rgba(255,255,255,0.07);
+  --verdict-hero-text: #e8e6e0;
+  --verdict-hero-muted: rgba(232,230,224,0.55);
+}
+:root[data-mode="light"] {
+  --verdict-hero-bg: #17191f;
+}
+
+/* Story-event identity colors (Chart & Replay story mode) — one signature hue
+   per event kind, referenced by var() from services/storyEvents so no hex lands
+   in the .ts (ratchet-safe). Two-tone rendering (fill + color-mix ring) happens
+   in the components; direction (bull/bear) reads from a ▲/▼ + reaction colour. */
+:root {
+  --story-bigmoney: #f5a623;   --story-magicrs: #10b981;   --story-flow: #38bdf8;
+  --story-stage: #a855f7;      --story-scan: #06b6d4;      --story-conviction: #eab308;
+  --story-fpb: #fb923c;        --story-sector: #22c55e;
+}
+
+/* Rule-tag identity hues. Referenced by var() from constants/ruleTagColors so
+   tag chips carry no hardcoded hex in component code and render theme-aware
+   (a soft color-mix tint of the hue + a hue dot + neutral theme-token text),
+   reading cleanly in BOTH light and dark. The hue itself is mode-independent —
+   only the chip composition adapts. */
+:root {
+  --tag-panchak: #6366f1;   --tag-mercury: #3b82f6;     --tag-retrograde: #f97316;
+  --tag-conjunction: #a855f7; --tag-nakshatra: #14b8a6; --tag-manifestation: #eab308;
+  --tag-yoga: #22c55e;      --tag-transit: #f43f5e;     --tag-tithi: #f59e0b;
+  --tag-vedh: #06b6d4;      --tag-eclipse: #ef4444;     --tag-seasonal: #84cc16;
+  --tag-signposition: #8b5cf6; --tag-lunar: #94a3b8;    --tag-specialday: #ec4899;
+  --tag-majortransit: #e11d55; --tag-bayer: #d97706;    --tag-gandanta: #dc2626;
+  --tag-neptune: #2563eb;   --tag-default: #94a3b8;
 }
 
 body {
@@ -129,6 +187,12 @@ body::before {
 @keyframes kd-modal-in {
   from { opacity: 0; transform: scale(0.96); }
   to   { opacity: 1; transform: scale(1); }
+}
+
+/* VaNi story-teller mascot — a gentle bob while it walks the chart. */
+@keyframes vani-bob {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-4px); }
 }
 
 @tailwind base;
@@ -205,12 +269,20 @@ body::before {
     background: var(--kd-card);
     border: 1px solid var(--border);
     backdrop-filter: blur(16px);
+    box-shadow: var(--card-shadow);
   }
 
   .glass-elevated {
     background: var(--kd-elevated);
     border: 1px solid var(--border);
     backdrop-filter: blur(16px);
+    box-shadow: var(--card-shadow);
+  }
+
+  /* Shared hook for the <Card> component (components/ui/Card.tsx) so every Card
+     gets the light-mode elevation shadow without touching each call site. */
+  .kd-card-shadow {
+    box-shadow: var(--card-shadow);
   }
 }
 

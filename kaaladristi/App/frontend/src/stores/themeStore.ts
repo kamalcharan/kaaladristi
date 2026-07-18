@@ -5,29 +5,24 @@ const THEME_KEY = 'kd-theme'
 const MODE_KEY = 'kd-theme-mode'
 
 export const THEMES = [
-  { id: 'kaaladristi', label: 'Vikuna Black', dot: '#9b8cff' },
-  { id: 'tech-ai',     label: 'Tech AI',      dot: '#06d5cd' },
+  { id: 'kaaladristi', label: 'Vikuna Black', dot: '#f5a623' },
   { id: 'jade-thorn',  label: 'Jade Thorn',   dot: '#3aad7e' },
 ] as const
 
 export type ThemeId = typeof THEMES[number]['id']
-export type ThemeMode = 'dark' | 'light' | 'system'
+// 'system' was removed (owner decision 2026-07-17). Legacy stored/profile
+// values of 'system' are coerced to dark by resolveDark() (anything !== 'light').
+export type ThemeMode = 'dark' | 'light'
 
 export const MODES: { id: ThemeMode; label: string; glyph: string }[] = [
   { id: 'dark',   label: 'Dark',   glyph: '☾' },
   { id: 'light',  label: 'Light',  glyph: '☀' },
-  { id: 'system', label: 'System', glyph: '◐' },
 ]
 
 // ── LAUNCH GATE ─────────────────────────────────────────────────────────────
-// Light mode is fully built and owner-calibrated (warm ivory + warm charcoal
-// ink — see docs/claude/glass-ux-status.md §3) but NOT cleared for release
-// (owner decision 2026-07-12: "not confident with light theme, can't release
-// it"). This flag hard-locks the app to dark: resolveDark() always returns
-// true and the Settings mode toggle is hidden. index.html's FOUC script
-// carries its own copy of this flag — keep the two in sync.
-// Re-enabling light = flip both flags to true. Nothing else to change.
-export const LIGHT_MODE_ENABLED = false
+// Light mode is enabled (owner decision 2026-07-17). Both themeStore and
+// index.html's FOUC script carry a copy of this flag — keep the two in sync.
+export const LIGHT_MODE_ENABLED = true
 
 // Themes with no designed light palette yet (their darkMode mirrors colors).
 // The mode toggle is disabled for these — honest dark-only, not a broken flip.
@@ -40,17 +35,13 @@ export function isDarkOnly(id: ThemeId): boolean {
   return DARK_ONLY_THEMES.includes(id)
 }
 
-function systemPrefersDark(): boolean {
-  return window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? true
-}
-
 /** Resolve the effective dark/light for a theme+mode pair. Dark-only themes
- * always resolve dark regardless of the stored mode. */
+ * always resolve dark regardless of the stored mode. Dark is the default for
+ * anything that isn't explicitly 'light' (so a legacy 'system' value → dark). */
 export function resolveDark(themeId: ThemeId, mode: ThemeMode): boolean {
   if (!LIGHT_MODE_ENABLED) return true
   if (isDarkOnly(themeId)) return true
-  if (mode === 'system') return systemPrefersDark()
-  return mode === 'dark'
+  return mode !== 'light'
 }
 
 function applyResolved(themeId: ThemeId, mode: ThemeMode): void {
@@ -103,10 +94,3 @@ export function initTheme(): void {
   const { activeTheme, mode } = useThemeStore.getState()
   applyResolved(activeTheme, mode)
 }
-
-// mode === 'system': follow OS changes live
-window.matchMedia?.('(prefers-color-scheme: dark)')
-  .addEventListener?.('change', () => {
-    const { activeTheme, mode } = useThemeStore.getState()
-    if (mode === 'system') applyResolved(activeTheme, mode)
-  })

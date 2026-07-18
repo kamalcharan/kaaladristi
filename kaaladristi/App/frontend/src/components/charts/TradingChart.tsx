@@ -95,6 +95,16 @@ interface TradingChartProps {
    *  aggregate when unset or when no per-benchmark row exists yet. */
   benchmarkIndexId?: number | null;
   benchmarkName?: string | null;
+  /** Story-mode on-candle bubble: the current replay event, anchored by X to
+   *  its candle. Null hides it. Observational annotation only. */
+  storyBubble?: {
+    date: string;
+    tone: 'bull' | 'bear' | 'neutral';
+    color: string;
+    title: string;
+    detail: string;
+    reactionPct: number | null;
+  } | null;
 }
 
 function hexToRgba(hex: string, alpha: number): string {
@@ -151,7 +161,11 @@ function getThemeColors() {
   const s = getComputedStyle(document.documentElement);
   const v = (name: string, fallback: string) => s.getPropertyValue(name).trim() || fallback;
   return {
-    bg:         v('--kd-bg',            '#030712'),
+    // Paint the plot from the CARD surface, not the page (--kd-bg). In light
+    // mode the page is warm ivory; a chart painted with it blended into the
+    // canvas and read as "intertwined". --card is the raised white card surface
+    // the chart actually sits on, so the plot now matches its container.
+    bg:         v('--card',              '#030712'),
     grid:       v('--kd-border',        'color-mix(in srgb, var(--text-primary) 6%, transparent)'),
     text:       v('--text-muted',       '#64748b'),
     crosshair:  v('--kd-border-active', 'rgba(99,102,241,0.4)'),
@@ -207,7 +221,7 @@ const DEFAULT_OVERLAYS: NonNullable<TradingChartProps['overlays']> = [];
 const DEFAULT_BANDS: NonNullable<TradingChartProps['astroBands']> = [];
 const DEFAULT_BM_EVENTS: NonNullable<TradingChartProps['bigMoneyEvents']> = [];
 
-export default function TradingChart({ data, height = 900, compact = false, workspaceMode = false, highlightDate = null, overlays = DEFAULT_OVERLAYS, astroBands = DEFAULT_BANDS, bigMoneyEvents = DEFAULT_BM_EVENTS, onVisibleRangeChange, onCrosshairMove, onZoneClick, benchmarkIndexId = null, benchmarkName = null }: TradingChartProps) {
+export default function TradingChart({ data, height = 900, compact = false, workspaceMode = false, highlightDate = null, overlays = DEFAULT_OVERLAYS, astroBands = DEFAULT_BANDS, bigMoneyEvents = DEFAULT_BM_EVENTS, onVisibleRangeChange, onCrosshairMove, onZoneClick, benchmarkIndexId = null, benchmarkName = null, storyBubble = null }: TradingChartProps) {
   const mainRef      = useRef<HTMLDivElement>(null);
   const rsiRef       = useRef<HTMLDivElement>(null);
   const sniperRef    = useRef<HTMLDivElement>(null);
@@ -218,8 +232,32 @@ export default function TradingChart({ data, height = 900, compact = false, work
   // # of leading whitespace points prepended to the candle series (workspace
   // mode only). Logical indices are offset by this vs. the `data` array.
   const leadOffsetRef = useRef(0);
+  // Read astroBands inside buildCharts WITHOUT adding it to buildCharts' deps —
+  // toggling an astro rule must NOT rebuild the whole chart (it redraws on the
+  // bands canvas instead). The ±90-day axis padding is only worth its wasted
+  // whitespace when astro zones (which can sit in the future) are present, so
+  // buildCharts consults this ref to decide whether to pad or fit-to-data.
+  const astroBandsRef = useRef(astroBands);
+  useEffect(() => { astroBandsRef.current = astroBands; }, [astroBands]);
 
   const chartsRef = useRef<IChartApi[]>([]);
+
+  // Story-mode bubble: track the current event candle's X (pixel) so the bubble
+  // stays anchored to it as the event changes or the chart pans/zooms.
+  const [bubbleX, setBubbleX] = useState<number | null>(null);
+  useEffect(() => {
+    const chart = mainChartRef.current;
+    if (!chart || !storyBubble) { setBubbleX(null); return; }
+    const ts = chart.timeScale();
+    const compute = () => {
+      const x = ts.timeToCoordinate(storyBubble.date as Time);
+      setBubbleX(x != null ? x : null);
+    };
+    compute();
+    ts.subscribeVisibleLogicalRangeChange(compute);
+    return () => ts.unsubscribeVisibleLogicalRangeChange(compute);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [storyBubble?.date]);
 
   // Tooltip state for astro band hover — bands: ALL events under the cursor
   // (coincident point markers list together instead of only the topmost).
@@ -361,7 +399,14 @@ export default function TradingChart({ data, height = 900, compact = false, work
     let leadOffset = 0;
     let padFrom: string | null = null;
     let padTo: string | null = null;
-    if (workspaceMode) {
+    // Only pad the axis when astro zones are present — they can sit in the
+    // future, so the ±90-day whitespace makes those dates addressable. Without
+    // astro, the padding just squeezes the candles into the middle and forces a
+    // manual zoom-out (owner feedback) — so we fit the candles to the width
+    // instead, which also lines the chart's right edge up with the scrubber's
+    // NOW.
+    const padAxis = workspaceMode && astroBandsRef.current.length > 0;
+    if (padAxis) {
       const firstDate = data[0].trade_date;
       const lastDate  = data[data.length - 1].trade_date;
       const todayStr  = new Date().toISOString().slice(0, 10);
@@ -684,9 +729,11 @@ export default function TradingChart({ data, height = 900, compact = false, work
       }
     });
 
-    // Workspace mode: pin the view to the full padded window (±3mo) so future
-    // and pre-data overlay zones are visible. Otherwise fit to data.
-    if (workspaceMode && padFrom && padTo) {
+    // When padding is on (astro zones present), pin the view to the full padded
+    // window so future/pre-data overlay zones are visible. Otherwise fit the
+    // candles to the width — a relaxed default that fills the pane and aligns
+    // the right edge with the scrubber's NOW.
+    if (padAxis && padFrom && padTo) {
       mainChart.timeScale().setVisibleRange({ from: padFrom as Time, to: padTo as Time });
     } else {
       mainChart.timeScale().fitContent();
@@ -1130,6 +1177,68 @@ export default function TradingChart({ data, height = 900, compact = false, work
         onMouseLeave={() => { setBandTooltip(null); setHoverBar(null); }}
       >
         <div ref={mainRef} className="rounded-xl overflow-hidden" />
+
+        {/* Story-mode on-candle bubble — anchored by X to the current event's
+            candle, near the top of the pane with a downward caret. */}
+        {storyBubble && bubbleX != null && (() => {
+          const c = storyBubble.color;
+          const dir = storyBubble.tone === 'bull' ? { g: '▲', col: 'var(--risk-green)' }
+            : storyBubble.tone === 'bear' ? { g: '▼', col: 'var(--risk-red)' }
+            : { g: '•', col: 'var(--verdict-hero-muted)' };
+          return (
+            <div style={{ position: 'absolute', top: 8, left: bubbleX, transform: 'translateX(-50%)', zIndex: 20, pointerEvents: 'none', width: 220 }}>
+              <div style={{
+                background: 'var(--verdict-hero-bg)', color: 'var(--verdict-hero-text)',
+                border: `1px solid color-mix(in srgb, ${c} 55%, transparent)`,
+                borderLeft: `3px solid ${c}`,
+                borderRadius: 10, padding: '8px 11px', boxShadow: 'var(--card-shadow)',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700 }}>
+                  <span style={{ width: 7, height: 7, borderRadius: '50%', background: c, flexShrink: 0 }} />
+                  <span style={{ color: dir.col, fontSize: 11 }}>{dir.g}</span>
+                  <span style={{ color: c }}>{storyBubble.title}</span>
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--verdict-hero-muted)', marginTop: 3, lineHeight: 1.4 }}>{storyBubble.detail}</div>
+                {storyBubble.reactionPct != null && (
+                  <div style={{ fontSize: 11, marginTop: 4, fontFamily: 'var(--font-mono, monospace)' }}>
+                    <span style={{ color: 'var(--verdict-hero-muted)' }}>→ price </span>
+                    <span style={{ color: storyBubble.reactionPct >= 0 ? 'var(--risk-green)' : 'var(--risk-red)', fontWeight: 700 }}>
+                      {storyBubble.reactionPct >= 0 ? '+' : ''}{storyBubble.reactionPct.toFixed(1)}%
+                    </span>
+                    <span style={{ color: 'var(--verdict-hero-muted)' }}> over next 5 bars</span>
+                  </div>
+                )}
+              </div>
+              <div style={{ width: 0, height: 0, margin: '0 auto', borderLeft: '6px solid transparent', borderRight: '6px solid transparent', borderTop: '6px solid var(--verdict-hero-bg)' }} />
+            </div>
+          );
+        })()}
+
+        {/* VaNi story-teller mascot — glides candle→candle as the story advances,
+            so it reads as VaNi walking the chart telling the tale. */}
+        {storyBubble && bubbleX != null && (
+          <div
+            style={{
+              position: 'absolute', left: bubbleX, top: '60%', marginLeft: -16, zIndex: 21,
+              pointerEvents: 'none', transition: 'left 0.6s cubic-bezier(.4,0,.2,1)',
+            }}
+          >
+            <div
+              style={{
+                width: 32, height: 32, borderRadius: '50%',
+                background: 'color-mix(in srgb, var(--vani) 20%, var(--verdict-hero-bg))',
+                border: '1.5px solid var(--vani)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                boxShadow: '0 0 14px color-mix(in srgb, var(--vani) 50%, transparent)',
+                animation: 'vani-bob 2.2s ease-in-out infinite',
+                fontSize: 16, color: 'var(--vani)',
+              }}
+            >
+              ✦
+            </div>
+          </div>
+        )}
+
         {hoverBar != null && (() => {
           const n = (v: unknown, dec = 2) =>
             typeof v === 'number' ? v.toLocaleString('en-IN', { maximumFractionDigits: dec }) : '—';
@@ -1138,7 +1247,14 @@ export default function TradingChart({ data, height = 900, compact = false, work
           return (
             <div style={{
               position: 'absolute', top: 8, left: 8, zIndex: 15, pointerEvents: 'none',
-              background: 'rgba(13,17,23,0.88)', border: '1px solid color-mix(in srgb, var(--text-primary) 8%, transparent)',
+              // Theme-aware panel: was a hardcoded near-black bg, which made the
+              // theme-var text invisible in light mode (dark text on dark box).
+              // color-mix over --bg adapts — dark panel in dark mode, light in
+              // light — so the OHLC readout is legible in both.
+              background: 'color-mix(in srgb, var(--bg) 90%, transparent)',
+              border: '1px solid var(--border)',
+              boxShadow: '0 1px 6px color-mix(in srgb, black 14%, transparent)',
+              backdropFilter: 'blur(3px)',
               borderRadius: 6, padding: '4px 10px',
               fontFamily: 'var(--font-mono, monospace)', fontSize: 10,
               display: 'flex', gap: 10, alignItems: 'baseline', flexWrap: 'wrap',

@@ -40,6 +40,27 @@ async function fetchConstituentIds(indexId: number): Promise<number[]> {
   return ((data ?? []) as { equity_id: number }[]).map((r) => r.equity_id);
 }
 
+// ── Data-health (migration 152) — reads v_custom_index_health so "did the
+//    synthesis produce a clean series?" is a glance, not guesswork. ──
+interface IndexHealth {
+  bars: number;
+  first_bar: string | null;
+  last_bar: string | null;
+  min_close: number | null;
+  max_close: number | null;
+  bad_close_bars: number;
+  suspect_jump_bars: number;
+  constituents: number;
+}
+async function fetchIndexHealth(indexId: number): Promise<IndexHealth | null> {
+  const { data, error } = await from('v_custom_index_health')
+    .select('bars,first_bar,last_bar,min_close,max_close,bad_close_bars,suspect_jump_bars,constituents')
+    .eq('index_id', indexId)
+    .execute();
+  if (error) throw new Error(error.message);
+  return ((data ?? []) as IndexHealth[])[0] ?? null;
+}
+
 // ── Shared row ────────────────────────────────────────────────────────────────
 
 function EquityLine({ row }: { row: EquityRow }) {
@@ -57,6 +78,20 @@ function EquityLine({ row }: { row: EquityRow }) {
         {row.company_name ?? '—'}{row.industry ? ` · ${row.industry}` : ''}
       </div>
     </div>
+  );
+}
+
+function HealthStat({ label, value, tone = 'neutral' }: { label: string; value: string; tone?: 'ok' | 'warn' | 'bad' | 'neutral' }) {
+  const color =
+    tone === 'bad' ? 'var(--risk-red)' :
+    tone === 'warn' ? 'var(--risk-amber)' :
+    tone === 'ok' ? 'var(--risk-green)' :
+    'var(--text-secondary)';
+  return (
+    <span style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
+      <span style={{ ...MONO, fontSize: '8px', letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-faint)' }}>{label}</span>
+      <span style={{ ...MONO, fontSize: '12px', fontWeight: 600, color }}>{value}</span>
+    </span>
   );
 }
 
@@ -85,6 +120,12 @@ export default function CustomIndexManagePage() {
   const { data: constituentIds = [] } = useQuery({
     queryKey: ['custom-index-constituents', indexId],
     queryFn: () => fetchConstituentIds(indexId),
+    enabled: Number.isFinite(indexId),
+  });
+
+  const { data: health } = useQuery({
+    queryKey: ['custom-index-health', indexId, computeMsg],
+    queryFn: () => fetchIndexHealth(indexId),
     enabled: Number.isFinite(indexId),
   });
 
@@ -273,6 +314,32 @@ export default function CustomIndexManagePage() {
       {computeMsg && (
         <div style={{ padding: '10px 24px', background: 'rgba(34,197,94,0.08)', borderBottom: '1px solid rgba(34,197,94,0.2)' }}>
           <p style={{ fontSize: '12px', color: 'var(--risk-green)', margin: 0 }}>{computeMsg}</p>
+        </div>
+      )}
+
+      {/* Data-health strip (migration 152) — synthesis integrity at a glance */}
+      {health && (
+        <div style={{ padding: '8px 24px', borderBottom: '1px solid var(--border)', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '18px', background: 'var(--card)' }}>
+          <span style={{ ...MONO, fontSize: '9px', letterSpacing: '0.09em', textTransform: 'uppercase', color: 'var(--text-faint)' }}>
+            Data Health
+          </span>
+          <HealthStat label="Bars" value={health.bars.toLocaleString('en-IN')} />
+          <HealthStat label="Coverage" value={health.first_bar && health.last_bar ? `${health.first_bar} → ${health.last_bar}` : '—'} />
+          <HealthStat
+            label="Level range"
+            value={health.min_close != null && health.max_close != null ? `${Math.round(health.min_close)} – ${Math.round(health.max_close)}` : '—'}
+          />
+          <HealthStat label="Constituents" value={String(health.constituents)} />
+          <HealthStat
+            label="Bad bars"
+            value={String(health.bad_close_bars)}
+            tone={health.bad_close_bars > 0 ? 'bad' : 'ok'}
+          />
+          <HealthStat
+            label="Suspect jumps"
+            value={String(health.suspect_jump_bars)}
+            tone={health.suspect_jump_bars > 0 ? 'warn' : 'ok'}
+          />
         </div>
       )}
 

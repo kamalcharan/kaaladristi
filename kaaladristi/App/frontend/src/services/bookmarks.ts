@@ -24,6 +24,33 @@ export interface BookmarkRow {
   industry: string | null;
   exchange: string | null;
   created_at: string;
+  // Position (Phase 2a, migration 153) — a bookmark WITH an entry is a held
+  // position; null entry_price = watchlist-only.
+  entry_price: number | null;
+  entry_date: string | null;
+  entry_qty: number | null;
+}
+
+export interface PositionEntry {
+  entry_price: number | null;
+  entry_date: string | null;
+  entry_qty: number | null;
+}
+
+/** Set (or clear, with null entry_price) a position on a stock — creates the
+ *  bookmark row if needed. Returns the full joined bookmark row. */
+export async function setPosition(
+  userId: string,
+  equityId: number,
+  entry: PositionEntry,
+): Promise<BookmarkRow> {
+  const res = await fetch(`${pipelineUrl}/api/bookmarks/${userId}/${equityId}/position`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify(entry),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
 }
 
 export async function fetchBookmarks(userId: string): Promise<BookmarkRow[]> {

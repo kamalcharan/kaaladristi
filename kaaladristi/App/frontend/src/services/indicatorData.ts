@@ -117,6 +117,11 @@ export interface IndicatorRow {
   score_5d: number | null;
   score_22d: number | null;
   delivery_surge_x?: number | null;
+  // Returns — present on km_index_eod (computed by handle_index_returns) and on
+  // km_equity_eod. Optional so resampled W/M bars (which lack them) still type.
+  ret_5d?: number | null;
+  ret_22d?: number | null;
+  ret_66d?: number | null;
 }
 
 export async function fetchIndicatorData(
@@ -159,7 +164,10 @@ export async function fetchIndicatorDataById(
   range: TimeRange,
 ): Promise<IndicatorRow[]> {
   const startDate = getStartDate(range);
-  const cols = `trade_date,open,high,low,close,volume,${INDICATOR_COLS}`;
+  // Index returns (ret_5d/22d/66d) live on km_index_eod (computed by
+  // handle_index_returns) — needed by the index cockpit's Returns pillar +
+  // the story's conviction/returns read. NOT in shared INDICATOR_COLS.
+  const cols = `trade_date,open,high,low,close,volume,${INDICATOR_COLS},ret_5d,ret_22d,ret_66d`;
 
   let query = from('km_index_eod')
     .select(cols)
@@ -319,7 +327,7 @@ export async function fetchEquityEodById(
   // Equity-only extras (NOT in shared INDICATOR_COLS — km_index_eod lacks the
   // delivery columns): the Study cockpit's stat strip + Delivery-vs-Traded
   // widget read these.
-  const EQUITY_EXTRA_COLS = 'pct_chng,value_cr,delivery_pct,delivery_qty,deliv_value_cr,ret_5d,ret_22d,ret_66d,w52_high,w52_low,delivery_surge_x';
+  const EQUITY_EXTRA_COLS = 'pct_chng,value_cr,delivery_pct,delivery_qty,deliv_value_cr,ret_5d,ret_22d,ret_66d,w52_high,w52_low,delivery_surge_x,stage,is_vani_s2,is_vani_smart,is_vani_breakout,is_vani_surge,is_vani_distrib,is_vani_weakness,is_vani_oversold';
   const cols = `trade_date,open,high,low,close,volume,${INDICATOR_COLS},${EQUITY_EXTRA_COLS}`;
 
   let query = from('km_equity_eod')

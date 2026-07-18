@@ -1,18 +1,29 @@
+import { useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { LogOut, Shield, ChevronRight } from 'lucide-react';
+import { LogOut, Shield, ChevronRight, ChevronDown, LayoutGrid } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/authStore';
-import { useThemeStore, THEMES } from '@/stores/themeStore';
 import { signOut } from '@/services/auth';
 
 // ── Nav definition ──────────────────────────────────────────────────────────
 // Glyphs are Fraunces/Unicode characters, matching dashboard-LOCKED.html
 type NavItem = { to: string; glyph: string; label: string; adminOnly?: boolean };
-type NavSection = { heading: string; items: NavItem[]; adminHeading?: boolean };
+type NavSection = {
+  heading: string;
+  items: NavItem[];
+  adminHeading?: boolean;
+  /** Group-header icon (lucide) shown beside the heading in accordion mode. */
+  icon: LucideIcon;
+  /** Whether the accordion group starts expanded. */
+  defaultOpen?: boolean;
+};
 
 const navSections: NavSection[] = [
   {
     heading: 'View',
+    icon: LayoutGrid,
+    defaultOpen: true,
     items: [
       { to: '/workspace',        glyph: '⊞', label: 'Workspace' },
       { to: '/catalog',          glyph: '⊟', label: 'Catalog' },
@@ -21,12 +32,16 @@ const navSections: NavSection[] = [
       { to: '/bookmarks',      glyph: '☆', label: 'My Bookmarks' },
       { to: '/market-structure', glyph: '⊞', label: 'Market Structure' },
       { to: '/account',         glyph: '◯', label: 'Account' },
-      { to: '/settings',        glyph: '⚙', label: 'Settings' },
+      // Settings is hidden from the nav (theme selection moved to Account →
+      // Appearance). The /settings route still resolves by URL for the admin
+      // data cards (Sector Lords / Market Data / Data Pipeline).
     ],
   },
   {
     heading: 'Admin',
     adminHeading: true,
+    icon: Shield,
+    defaultOpen: true,
     items: [
       { to: '/markets',             glyph: '◎', label: 'Markets',             adminOnly: true },
       { to: '/industry-transition', glyph: '⇌', label: 'Industry Transition', adminOnly: true },
@@ -76,47 +91,6 @@ function marketStatus(): string {
   return 'Market closed';
 }
 
-// ── ThemeSwitcher ────────────────────────────────────────────────────────────
-
-function ThemeSwitcher({ collapsed }: { collapsed: boolean }) {
-  const { activeTheme, setTheme } = useThemeStore()
-  const currentTheme = THEMES.find(t => t.id === activeTheme) ?? THEMES[0]
-
-  if (collapsed) {
-    return (
-      <div className="flex flex-col items-center gap-1.5 pb-3">
-        <div
-          title={`Theme: ${currentTheme.label}`}
-          style={{ width: 8, height: 8, borderRadius: '50%', background: currentTheme.dot,
-            boxShadow: `0 0 6px ${currentTheme.dot}`, cursor: 'default' }}
-        />
-      </div>
-    )
-  }
-
-  return (
-    <div style={{ paddingLeft: 12, paddingRight: 12, paddingBottom: 12 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        {THEMES.map(t => (
-          <button
-            key={t.id}
-            onClick={() => setTheme(t.id)}
-            title={t.label}
-            style={{
-              width: 10, height: 10, borderRadius: '50%',
-              background: t.dot,
-              boxShadow: activeTheme === t.id ? `0 0 7px ${t.dot}` : 'none',
-              border: activeTheme === t.id ? `2px solid ${t.dot}` : '2px solid transparent',
-              cursor: 'pointer', flexShrink: 0, padding: 0,
-              outline: 'none', transition: 'box-shadow .15s',
-            }}
-          />
-        ))}
-      </div>
-    </div>
-  )
-}
-
 // ── Component ────────────────────────────────────────────────────────────────
 
 interface SidebarProps {
@@ -128,11 +102,90 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const { profile, isAdmin, clear } = useAuthStore();
   const navigate = useNavigate();
 
+  // Accordion open/closed state per group (ContractNest-style collapsible nav).
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() =>
+    Object.fromEntries(navSections.map(s => [s.heading, s.defaultOpen ?? true]))
+  );
+  const toggleGroup = (heading: string) =>
+    setOpenGroups(prev => ({ ...prev, [heading]: !(prev[heading] ?? true) }));
+
   const handleSignOut = () => {
     clear();
     navigate('/', { replace: true });
     signOut().catch(() => {});
   };
+
+  // ── A single nav row — shared by accordion (expanded) and icon-only modes ──
+  const renderItem = (item: NavItem) => (
+    <NavLink
+      key={item.to}
+      to={item.to}
+      title={item.label}
+      style={({ isActive }) => ({
+        position: 'relative',
+        display: 'flex',
+        alignItems: 'center',
+        gap: collapsed ? 0 : '11px',
+        justifyContent: collapsed ? 'center' : 'flex-start',
+        padding: collapsed ? '9px 0' : '9px 12px',
+        borderRadius: '8px',
+        color: isActive ? 'var(--accent)' : 'var(--text-muted)',
+        fontSize: '13.5px',
+        fontWeight: 500,
+        cursor: 'pointer',
+        transition: 'all 0.18s',
+        marginBottom: '1px',
+        background: isActive ? 'var(--accent-glow)' : 'transparent',
+        textDecoration: 'none',
+      })}
+      onMouseEnter={e => {
+        const el = e.currentTarget as HTMLElement;
+        if (el.getAttribute('aria-current') === 'page') return;
+        el.style.background = 'color-mix(in srgb, var(--text-primary) 4%, transparent)';
+        el.style.color = 'var(--text-secondary)';
+      }}
+      onMouseLeave={e => {
+        const el = e.currentTarget as HTMLElement;
+        if (el.getAttribute('aria-current') === 'page') return;
+        el.style.background = 'transparent';
+        el.style.color = 'var(--text-muted)';
+      }}
+    >
+      {({ isActive }) => (
+        <>
+          {/* Amber left-rail on the active item (matches ContractNest) */}
+          {isActive && !collapsed && (
+            <span
+              aria-hidden
+              style={{
+                position: 'absolute',
+                left: 0,
+                top: '50%',
+                transform: 'translateY(-50%)',
+                width: '3px',
+                height: '18px',
+                borderRadius: '0 3px 3px 0',
+                background: 'var(--accent)',
+              }}
+            />
+          )}
+          <span
+            style={{
+              fontFamily: 'var(--font-display)',
+              fontSize: '14px',
+              width: '16px',
+              textAlign: 'center',
+              opacity: isActive ? 1 : 0.75,
+              flexShrink: 0,
+            }}
+          >
+            {item.glyph}
+          </span>
+          {!collapsed && <span className="truncate leading-none">{item.label}</span>}
+        </>
+      )}
+    </NavLink>
+  );
 
   return (
     <nav
@@ -221,92 +274,72 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
         {navSections.map((section, si) => {
           const visibleItems = section.items.filter(item => !item.adminOnly || isAdmin);
           if (visibleItems.length === 0) return null;
+
+          // Collapsed sidebar: no accordion — flat icon list, groups separated by gap.
+          if (collapsed) {
+            return (
+              <div key={section.heading} style={{ marginTop: si > 0 ? '24px' : '0' }}>
+                {visibleItems.map(renderItem)}
+              </div>
+            );
+          }
+
+          // Expanded sidebar: ContractNest-style collapsible accordion group.
+          const isOpen = openGroups[section.heading] ?? true;
+          const GroupIcon = section.icon;
           return (
-            <div key={section.heading} style={{ marginTop: si > 0 ? '24px' : '0' }}>
-              {/* Section heading */}
-              {!collapsed && (
-                <div
+            <div key={section.heading} style={{ marginTop: si > 0 ? '18px' : '0' }}>
+              {/* Group header — click to expand/collapse */}
+              <button
+                onClick={() => toggleGroup(section.heading)}
+                aria-expanded={isOpen}
+                className="w-full flex items-center transition-colors"
+                style={{
+                  gap: '9px',
+                  padding: '6px 12px 6px 10px',
+                  marginBottom: '4px',
+                  borderRadius: '8px',
+                  background: 'transparent',
+                  cursor: 'pointer',
+                }}
+                onMouseEnter={e => (e.currentTarget.style.background =
+                  'color-mix(in srgb, var(--text-primary) 4%, transparent)')}
+                onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+              >
+                <GroupIcon
+                  className="w-3.5 h-3.5 shrink-0"
+                  style={{ color: section.adminHeading ? 'var(--accent)' : 'var(--text-muted)' }}
+                />
+                <span
                   style={{
-                    padding: '0 12px 8px',
+                    flex: 1,
+                    textAlign: 'left',
                     fontFamily: 'var(--font-mono)',
                     fontSize: '10px',
-                    color: section.adminHeading ? 'var(--indigo)' : 'var(--text-faint)',
+                    color: section.adminHeading ? 'var(--accent)' : 'var(--text-faint)',
                     letterSpacing: '0.12em',
                     textTransform: 'uppercase',
-                    opacity: section.adminHeading ? 0.8 : 1,
+                    opacity: section.adminHeading ? 0.9 : 1,
                   }}
                 >
                   {section.heading}
-                </div>
-              )}
+                </span>
+                <ChevronDown
+                  className="w-3.5 h-3.5 shrink-0"
+                  style={{
+                    color: 'var(--text-faint)',
+                    transform: isOpen ? 'rotate(0deg)' : 'rotate(-90deg)',
+                    transition: 'transform 0.2s',
+                  }}
+                />
+              </button>
 
-              {/* Nav items */}
-              {visibleItems.map(item => (
-                <NavLink
-                  key={item.to}
-                  to={item.to}
-                  title={item.label}
-                  style={({ isActive }) => ({
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: collapsed ? 0 : '11px',
-                    justifyContent: collapsed ? 'center' : 'flex-start',
-                    padding: collapsed ? '9px 0' : '9px 12px',
-                    borderRadius: '8px',
-                    color: isActive
-                      ? (section.adminHeading ? 'var(--indigo)' : 'var(--gold-soft)')
-                      : 'var(--text-muted)',
-                    fontSize: '13.5px',
-                    fontWeight: 500,
-                    cursor: 'pointer',
-                    transition: 'all 0.18s',
-                    marginBottom: '1px',
-                    background: isActive
-                      ? (section.adminHeading ? 'var(--accent-glow)' : 'var(--gold-bg)')
-                      : 'transparent',
-                    textDecoration: 'none',
-                  })}
-                  onMouseEnter={e => {
-                    const el = e.currentTarget as HTMLElement;
-                    el.style.background = section.adminHeading
-                      ? 'var(--accent-glow)'
-                      : 'color-mix(in srgb, var(--text-primary) 4%, transparent)';
-                    el.style.color = 'var(--text-secondary)';
-                  }}
-                  onMouseLeave={e => {
-                    const el = e.currentTarget as HTMLElement;
-                    el.style.background = 'transparent';
-                    el.style.color = 'var(--text-muted)';
-                  }}
-                >
-                  {({ isActive }) => (
-                    <>
-                      <span
-                        style={{
-                          fontFamily: 'var(--font-display)',
-                          fontSize: '14px',
-                          width: '16px',
-                          textAlign: 'center',
-                          opacity: isActive ? 1 : 0.75,
-                          flexShrink: 0,
-                        }}
-                      >
-                        {item.glyph}
-                      </span>
-                      {!collapsed && (
-                        <span className="truncate leading-none">{item.label}</span>
-                      )}
-                    </>
-                  )}
-                </NavLink>
-              ))}
+              {/* Group items */}
+              {isOpen && visibleItems.map(renderItem)}
             </div>
           );
         })}
       </div>
-
-      {/* ── Theme switcher ── */}
-      <ThemeSwitcher collapsed={collapsed} />
 
       {/* ── Footer: user + date ── */}
       <div

@@ -270,15 +270,15 @@ function WidgetCard({
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{
-        border: `1px solid ${active ? 'rgba(45,212,191,0.28)' : 'rgba(124,106,247,0.18)'}`,
+        border: `1px solid ${active ? 'color-mix(in srgb, var(--bull) 28%, transparent)' : 'color-mix(in srgb, var(--accent) 18%, transparent)'}`,
         borderRadius: 12,
-        background: active ? 'rgba(45,212,191,0.04)' : 'color-mix(in srgb, var(--text-primary) 2%, transparent)',
+        background: active ? 'color-mix(in srgb, var(--bull) 4%, transparent)' : 'color-mix(in srgb, var(--text-primary) 2%, transparent)',
         position: 'relative',
         overflow: 'hidden',
         cursor: 'pointer',
         transition: 'border-color 0.2s, transform 0.2s, box-shadow 0.2s',
         ...(hovered && !active ? {
-          borderColor: 'rgba(124,106,247,0.38)',
+          borderColor: 'color-mix(in srgb, var(--accent) 38%, transparent)',
           transform: 'translateY(-2px)',
           boxShadow: '0 8px 28px rgba(0,0,0,0.28)',
         } : {}),
@@ -299,9 +299,9 @@ function WidgetCard({
             position: 'absolute', top: 14, right: 14,
             fontSize: 8, fontFamily: 'var(--font-mono, monospace)',
             padding: '2px 6px',
-            background: locked ? 'color-mix(in srgb, var(--text-primary) 4%, transparent)' : 'rgba(124,106,247,0.10)',
-            border: `1px solid ${locked ? 'color-mix(in srgb, var(--text-primary) 12%, transparent)' : 'rgba(124,106,247,0.28)'}`,
-            color: locked ? 'var(--text-faint)' : '#8b7af8',
+            background: locked ? 'color-mix(in srgb, var(--text-primary) 4%, transparent)' : 'color-mix(in srgb, var(--accent) 10%, transparent)',
+            border: `1px solid ${locked ? 'color-mix(in srgb, var(--text-primary) 12%, transparent)' : 'color-mix(in srgb, var(--accent) 28%, transparent)'}`,
+            color: locked ? 'var(--text-faint)' : 'var(--accent)',
             borderRadius: 3, letterSpacing: '0.06em',
           }}>
             {locked ? 'PAID' : 'PAID ✓'}
@@ -312,7 +312,7 @@ function WidgetCard({
         <div style={{
           fontSize: 22, marginBottom: 10,
           fontFamily: 'var(--font-display)',
-          color: active ? '#2dd4bf' : '#8b7af8',
+          color: active ? 'var(--bull)' : 'var(--accent)',
         }}>
           {icon}
         </div>
@@ -350,7 +350,7 @@ function WidgetCard({
 
           {!locked && (
             active ? (
-              <span style={{ fontSize: 11, fontFamily: 'var(--font-mono, monospace)', color: '#2dd4bf' }}>
+              <span style={{ fontSize: 11, fontFamily: 'var(--font-mono, monospace)', color: 'var(--bull)' }}>
                 ✓ added
               </span>
             ) : (
@@ -358,19 +358,19 @@ function WidgetCard({
                 onClick={onAdd}
                 style={{
                   padding: '5px 13px', borderRadius: 6, fontSize: 11, cursor: 'pointer',
-                  border: '1px solid rgba(124,106,247,0.38)',
-                  background: 'rgba(124,106,247,0.10)',
-                  color: '#8b7af8', fontFamily: 'inherit', transition: 'all 0.15s',
+                  border: '1px solid color-mix(in srgb, var(--accent) 38%, transparent)',
+                  background: 'color-mix(in srgb, var(--accent) 10%, transparent)',
+                  color: 'var(--accent)', fontFamily: 'inherit', transition: 'all 0.15s',
                 }}
                 onMouseEnter={e => {
                   const el = e.currentTarget as HTMLElement
-                  el.style.background = 'rgba(124,106,247,0.18)'
-                  el.style.borderColor = 'rgba(124,106,247,0.55)'
+                  el.style.background = 'color-mix(in srgb, var(--accent) 18%, transparent)'
+                  el.style.borderColor = 'color-mix(in srgb, var(--accent) 55%, transparent)'
                 }}
                 onMouseLeave={e => {
                   const el = e.currentTarget as HTMLElement
-                  el.style.background = 'rgba(124,106,247,0.10)'
-                  el.style.borderColor = 'rgba(124,106,247,0.38)'
+                  el.style.background = 'color-mix(in srgb, var(--accent) 10%, transparent)'
+                  el.style.borderColor = 'color-mix(in srgb, var(--accent) 38%, transparent)'
                 }}
               >
                 + Add to framework
@@ -404,19 +404,19 @@ function WidgetCard({
             onClick={e => { e.stopPropagation(); onSelect() }}
             style={{
               padding: '7px 16px', borderRadius: 6, fontSize: 11, cursor: 'pointer',
-              border: '1px solid rgba(124,106,247,0.4)',
-              background: 'rgba(124,106,247,0.14)',
-              color: '#8b7af8', fontFamily: 'inherit', alignSelf: 'flex-start',
+              border: '1px solid color-mix(in srgb, var(--accent) 40%, transparent)',
+              background: 'color-mix(in srgb, var(--accent) 14%, transparent)',
+              color: 'var(--accent)', fontFamily: 'inherit', alignSelf: 'flex-start',
             }}
             onMouseEnter={e => {
               const el = e.currentTarget as HTMLElement
-              el.style.background = 'rgba(124,106,247,0.22)'
-              el.style.borderColor = 'rgba(124,106,247,0.6)'
+              el.style.background = 'color-mix(in srgb, var(--accent) 22%, transparent)'
+              el.style.borderColor = 'color-mix(in srgb, var(--accent) 60%, transparent)'
             }}
             onMouseLeave={e => {
               const el = e.currentTarget as HTMLElement
-              el.style.background = 'rgba(124,106,247,0.14)'
-              el.style.borderColor = 'rgba(124,106,247,0.4)'
+              el.style.background = 'color-mix(in srgb, var(--accent) 14%, transparent)'
+              el.style.borderColor = 'color-mix(in srgb, var(--accent) 40%, transparent)'
             }}
           >
             Unlock with Trial →

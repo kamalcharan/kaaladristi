@@ -2815,6 +2815,57 @@ def sector_insight(index_id: int, date: str = None):
     return {"index_id": index_id, "date": target_date, "insight": insight, "ai": insight is not None}
 
 
+class VaniNarrateRequest(BaseModel):
+    # The caller assembles the deterministic facts; VaNi only narrates them.
+    subject: str
+    facts: str
+    # Optional — when set, VaNi ANSWERS this question using only the facts
+    # (AskVaNi), instead of a general narration.
+    question: Optional[str] = None
+
+
+@app.post('/api/ai/vani-narrate')
+def vani_narrate(req: VaniNarrateRequest):
+    """Phase 3 — VaNi as the storyteller. Given a subject + already-computed
+    facts (from the client's buildStoryEvents / computeThesis / move-quality),
+    return a grounded 2-3 sentence narration — or an answer to `question` using
+    only those facts. VaNi never re-derives, so it cannot invent numbers."""
+    if not _AI_ENABLED:
+        return {"insight": None, "ai": False}
+    skill = _AI_SKILLS.get("vani_narrate")
+    if not skill:
+        return {"insight": None, "ai": False}
+    facts = (req.facts or "").strip()
+    if not facts:
+        return {"insight": None, "ai": False}
+    question = (req.question or "").strip()
+    if question:
+        user_msg = (
+            f"Subject: {req.subject}\n\n"
+            f"The practitioner asks: {question}\n"
+            "Answer in 2-3 sentences using ONLY the facts below. If the facts "
+            "don't cover it, say so plainly rather than guessing.\n\n"
+            f"Facts:\n{facts}"
+        )
+    else:
+        user_msg = f"Subject: {req.subject}\n\nFacts:\n{facts}\n\nNarrate as VaNi."
+    _t0 = time.monotonic()
+    insight = _ai_complete(system=skill.system, user=user_msg, max_tokens=skill.max_tokens, no_think=True)
+    _lat = int((time.monotonic() - _t0) * 1000)
+    if insight:
+        _log_interaction(
+            product="dristiq",
+            endpoint="/api/ai/vani-narrate",
+            user_input=user_msg,
+            llm_response=insight,
+            system_prompt=skill.system,
+            context_payload={"subject": req.subject},
+            model_version=_AI_MODEL,
+            latency_ms=_lat,
+        )
+    return {"insight": insight, "ai": insight is not None}
+
+
 @app.get('/api/ai/instrument-insight')
 def instrument_insight(id: int, type: str = 'index', date: str = None):
     if not _AI_ENABLED or not _AI_OPTIONAL_OK:
@@ -5318,6 +5369,9 @@ def list_bookmarks(user_id: str, caller_id: str = Depends(_get_current_user_id))
             cur.execute(
                 """
                 SELECT b.id, b.equity_id, b.created_at,
+                       b.entry_price::float8 AS entry_price,
+                       b.entry_date::text    AS entry_date,
+                       b.entry_qty::float8   AS entry_qty,
                        s.symbol, s.company_name, s.industry, s.exchange
                 FROM km_user_bookmarks b
                 JOIN km_equity_symbols s ON s.id = b.equity_id
@@ -5367,6 +5421,9 @@ def add_bookmark(
             cur.execute(
                 """
                 SELECT b.id, b.equity_id, b.created_at,
+                       b.entry_price::float8 AS entry_price,
+                       b.entry_date::text    AS entry_date,
+                       b.entry_qty::float8   AS entry_qty,
                        s.symbol, s.company_name, s.industry, s.exchange
                 FROM km_user_bookmarks b
                 JOIN km_equity_symbols s ON s.id = b.equity_id
@@ -5409,6 +5466,69 @@ def remove_bookmark(
         return {'deleted': deleted}
     except Exception as exc:
         log.error(f'remove_bookmark error: {exc}')
+        raise HTTPException(status_code=500, detail=str(exc))
+    finally:
+        conn.close()
+
+
+class PositionRequest(BaseModel):
+    # All optional: passing values SETS the position (a bookmark with an entry);
+    # passing nulls CLEARS it back to a plain watchlist bookmark (Phase 2a).
+    entry_price: Optional[float] = None
+    entry_date: Optional[str] = None
+    entry_qty: Optional[float] = None
+
+
+@app.put('/api/bookmarks/{user_id}/{equity_id}/position')
+def set_position(
+    user_id: str,
+    equity_id: int,
+    req: PositionRequest,
+    caller_id: str = Depends(_get_current_user_id),
+):
+    """A position is a bookmark with an entry (migration 153). Upsert the row —
+    creating the bookmark if the user only just decided to hold — and set/clear
+    the entry_* columns. Returns the full joined row for the frontend list."""
+    if caller_id != user_id:
+        raise HTTPException(status_code=403, detail='Forbidden')
+
+    conn = _framework_conn()
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            _set_user_context(cur, user_id)
+            cur.execute(
+                """
+                INSERT INTO km_user_bookmarks (user_id, equity_id, entry_price, entry_date, entry_qty)
+                VALUES (%s::uuid, %s, %s, %s, %s)
+                ON CONFLICT (user_id, equity_id) DO UPDATE SET
+                    entry_price = EXCLUDED.entry_price,
+                    entry_date  = EXCLUDED.entry_date,
+                    entry_qty   = EXCLUDED.entry_qty
+                """,
+                (user_id, equity_id, req.entry_price, req.entry_date, req.entry_qty),
+            )
+            conn.commit()
+            cur.execute(
+                """
+                SELECT b.id, b.equity_id, b.created_at,
+                       b.entry_price::float8 AS entry_price,
+                       b.entry_date::text    AS entry_date,
+                       b.entry_qty::float8   AS entry_qty,
+                       s.symbol, s.company_name, s.industry, s.exchange
+                FROM km_user_bookmarks b
+                JOIN km_equity_symbols s ON s.id = b.equity_id
+                WHERE b.user_id = %s::uuid AND b.equity_id = %s
+                """,
+                (user_id, equity_id),
+            )
+            row = cur.fetchone()
+            if row is None:
+                raise HTTPException(status_code=500, detail='Position upsert failed')
+        return dict(row)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        log.error(f'set_position error: {exc}')
         raise HTTPException(status_code=500, detail=str(exc))
     finally:
         conn.close()
