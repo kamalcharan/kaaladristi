@@ -27,7 +27,12 @@ interface Props {
   latest: LatestRow | null
   snapshot?: { corrState?: CorrState } | null
   bigMoneyDates: Set<string>
+  /** Equity: industry percentile over time — drives the thermometer + sector
+   *  story events. */
   sectorByDate?: Map<string, SectorPoint>
+  /** Index: breadth score over time — drives the thermometer only (no sector
+   *  events; an index has no parent sector). */
+  breadthByDate?: Map<string, SectorPoint>
   mode?: VerdictMode
   breadthPct?: number | null
 }
@@ -35,9 +40,14 @@ interface Props {
 const SPEEDS = [0.5, 1, 2] as const
 const BASE_DWELL_MS = 2600
 
-export default function StoryMode({ open, onClose, bars, name, latest, snapshot, bigMoneyDates, sectorByDate, mode, breadthPct }: Props) {
+export default function StoryMode({ open, onClose, bars, name, latest, snapshot, bigMoneyDates, sectorByDate, breadthByDate, mode, breadthPct }: Props) {
   const events = useMemo(() => buildStoryEvents(bars, bigMoneyDates, sectorByDate), [bars, bigMoneyDates, sectorByDate])
   const pillars = useMemo(() => (latest ? buildPillars(latest, { mode, breadthPct }) : []), [latest, mode, breadthPct])
+  // Thermometer source: a stock reads its SECTOR percentile; an index reads its
+  // own BREADTH score. Same vertical card, different feed + label.
+  const thermoByDate = sectorByDate ?? breadthByDate
+  const thermoLabel = sectorByDate ? 'Sector' : 'Breadth'
+  const thermoLeadLabel = sectorByDate ? 'leading' : 'broad'
   const alignedCount = pillars.filter((p) => p.aligned).length
   const corr = snapshot?.corrState
 
@@ -82,7 +92,7 @@ export default function StoryMode({ open, onClose, bars, name, latest, snapshot,
     : null
   const highlightDate = cur ? bars[cur.barIndex]?.trade_date ?? null : null
   const secDate = cur?.date ?? bars[bars.length - 1]?.trade_date
-  const sec = secDate ? sectorByDate?.get(secDate) : undefined
+  const sec = secDate ? thermoByDate?.get(secDate) : undefined
 
   return (
     <div
@@ -145,8 +155,13 @@ export default function StoryMode({ open, onClose, bars, name, latest, snapshot,
             storyBubble={storyBubble}
           />
         </div>
-        {sectorByDate && sectorByDate.size > 0 && (
-          <SectorThermometer percentile={sec?.percentile ?? null} leading={sec?.leading ?? false} />
+        {thermoByDate && thermoByDate.size > 0 && (
+          <SectorThermometer
+            percentile={sec?.percentile ?? null}
+            leading={sec?.leading ?? false}
+            label={thermoLabel}
+            leadingLabel={thermoLeadLabel}
+          />
         )}
       </div>
 
