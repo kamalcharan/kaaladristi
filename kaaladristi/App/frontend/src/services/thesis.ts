@@ -40,12 +40,14 @@ export interface ThesisRead {
   deterioration: StoryEvent[]
   verdict: { label: string; tone: 'bull' | 'bear' | 'neutral'; line: string }
   // Position-only —
-  entry?: { date: string; price: number; qty: number | null; pillars: Pillar[]; aligned: number; label: string }
+  entry?: { date: string; price: number; qty: number | null; pillars: Pillar[]; aligned: number; total: number; label: string }
   pnlPct?: number | null
 }
 
 const BULL_FLOWS = new Set(['FRESH_LONGS', 'SHORT_COVERING'])
 const BEAR_FLOWS = new Set(['FRESH_SHORTS', 'LONG_LIQUIDATION'])
+/** Recent window (~2 months of sessions) for a watchlist/cold stock's warnings. */
+const RECENT_WARN_BARS = 44
 
 /** A loose per-bar shape — the equity IndicatorRow already satisfies it. */
 export interface ThesisBar extends StoryBar {
@@ -79,8 +81,15 @@ export function computeThesis(
   if (!bars || bars.length === 0) return null
   const latest = bars[bars.length - 1]
   const pillars = buildPillars(latest as LatestRow)
+  // A pillar with no data ("—", e.g. delivery/Liquidity absent for many BSE/thin
+  // names) must NOT count as a failure — that wrongly drags the read down (2/4
+  // when it's really 2/3) and makes it clash with a strong single-lens read like
+  // RS. Exclude data-gap pillars from the denominator (same no-fallback hygiene
+  // breadth uses).
+  const withData = pillars.filter((p) => p.value !== '—')
   const alignedNow = pillars.filter((p) => p.aligned).length
-  const total = pillars.length
+  const total = withData.length || pillars.length
+  const ratio = alignedNow / total
 
   // Trend — aligned now vs ~5 bars ago.
   const refIdx = Math.max(0, bars.length - 6)
@@ -92,25 +101,34 @@ export function computeThesis(
   const start = Math.max(0, bars.length - 30)
   const postureTrajectory = bars.slice(start).map((b) => ({ date: b.trade_date, posture: barPosture(b) }))
 
-  // Deterioration — bearish story events, since entry when held.
+  // Deterioration — bearish story events, NEWEST FIRST. For a position, since
+  // entry; otherwise only the recent window (so "warnings" are actually recent,
+  // not 2-month-old events).
   const events = buildStoryEvents(bars)
   let deterioration = events.filter((e) => e.tone === 'bear')
   if (relationship === 'position' && position?.entryDate) {
     deterioration = deterioration.filter((e) => e.date >= position.entryDate)
-  }
-  deterioration = deterioration.slice(-6)
-
-  // Verdict — from alignment + latest posture.
-  const nowPosture = postureTrajectory[postureTrajectory.length - 1]?.posture ?? 0
-  let verdict: ThesisRead['verdict']
-  if (alignedNow <= 1 || nowPosture <= -40) {
-    verdict = { label: relationship === 'position' ? 'Thesis deteriorating' : 'Setup weak', tone: 'bear',
-      line: alignedTrend === 'deteriorating' ? 'risk has risen recently' : 'few pillars holding' }
-  } else if (alignedNow >= 3 && nowPosture >= 30) {
-    verdict = { label: relationship === 'position' ? 'Thesis intact' : 'Setup building', tone: 'bull',
-      line: alignedTrend === 'improving' ? 'strength is broadening' : 'pillars aligned' }
   } else {
-    verdict = { label: 'Mixed', tone: 'neutral', line: 'watch the turn — pillars split' }
+    deterioration = deterioration.filter((e) => e.barIndex >= bars.length - RECENT_WARN_BARS)
+  }
+  deterioration = deterioration.slice(-6).reverse()
+
+  // Verdict — ratio of aligned pillars (data-present) + latest posture. The line
+  // NAMES what's strong vs weak, so a "Mixed" reads as an insight — "leading on
+  // strength, weak on conviction" — not a contradiction of the RS lens.
+  const nowPosture = postureTrajectory[postureTrajectory.length - 1]?.posture ?? 0
+  const strong = pillars.filter((p) => p.aligned).map((p) => p.label)
+  const weak = withData.filter((p) => !p.aligned).map((p) => p.label)
+  const split = strong.length && weak.length ? `strong on ${strong.join(' & ')}, weak on ${weak.join(' & ')}` : ''
+  let verdict: ThesisRead['verdict']
+  if (ratio <= 0.34 || nowPosture <= -40) {
+    verdict = { label: relationship === 'position' ? 'Thesis deteriorating' : 'Setup weak', tone: 'bear',
+      line: alignedTrend === 'deteriorating' ? 'risk has risen recently' : (split || 'few pillars holding') }
+  } else if (ratio >= 0.75 && nowPosture >= 25) {
+    verdict = { label: relationship === 'position' ? 'Thesis intact' : 'Setup building', tone: 'bull',
+      line: alignedTrend === 'improving' ? 'strength is broadening' : (split || 'pillars aligned') }
+  } else {
+    verdict = { label: 'Mixed', tone: 'neutral', line: split || 'watch the turn — pillars split' }
   }
 
   const read: ThesisRead = {
@@ -122,13 +140,15 @@ export function computeThesis(
     const entryBar = bars.find((b) => b.trade_date >= position.entryDate) ?? bars[bars.length - 1]
     const entryPillars = buildPillars(entryBar as LatestRow)
     const entryAligned = entryPillars.filter((p) => p.aligned).length
+    const entryTotal = entryPillars.filter((p) => p.value !== '—').length || entryPillars.length
     read.entry = {
       date: position.entryDate,
       price: position.entryPrice,
       qty: position.qty ?? null,
       pillars: entryPillars,
       aligned: entryAligned,
-      label: entryAligned >= 3 ? 'Strong setup' : entryAligned === 2 ? 'Moderate setup' : 'Weak setup',
+      total: entryTotal,
+      label: entryAligned / entryTotal >= 0.66 ? 'Strong setup' : entryAligned / entryTotal >= 0.5 ? 'Moderate setup' : 'Weak setup',
     }
     const cur = latest.close
     read.pnlPct = cur != null && position.entryPrice > 0
