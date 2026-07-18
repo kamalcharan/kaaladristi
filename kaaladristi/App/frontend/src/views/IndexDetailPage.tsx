@@ -28,6 +28,8 @@ import BreadthRocHeatmap from '@/components/domain/BreadthRocHeatmap';
 import BreadthRocChart from '@/components/domain/BreadthRocChart';
 import VaNiInsight from '@/components/domain/VaNiInsight';
 import { useSectorInsight } from '@/hooks/useDashboardExtras';
+import MoveQualityCard, { type MoveBadge } from '@/components/domain/MoveQualityCard';
+import { computeMoveQuality } from '@/services/moveQuality';
 
 // ── Signal ────────────────────────────────────────────────────────────────────
 
@@ -750,6 +752,19 @@ function OverviewTab({ row, indexId }: { row: SectorIndexRow; indexId: number })
   const inflowCount = useMemo(() => (details ?? []).filter((d) => (d.score_5d ?? 0) > 0).length, [details]);
   const totalCount = details?.length ?? equityIds.length;
 
+  // Move-quality (Phase 2b) — summarises the constituents table below into a
+  // broad/mixed/narrow verdict, and flags the trap when the index's own signal
+  // is bullish while the population isn't. Pure derivation of data already here.
+  const moveQuality = useMemo(
+    () => computeMoveQuality(details, breadthData?.data?.at(-1)?.pct_above_20 ?? null),
+    [details, breadthData],
+  );
+  const moveBadge = useMemo<MoveBadge | null>(() => {
+    const sig = computeSignal(row);
+    if (!sig) return null;
+    return { label: FLOW_LABELS[sig]?.label ?? sig, bullish: sig === 'flow_entering' || sig === 'sustained_flow' };
+  }, [row]);
+
   const goToChart = useCallback(
     (equityId: number, name: string) => navigate(`/chart/equity/${equityId}?name=${encodeURIComponent(name)}`),
     [navigate],
@@ -760,6 +775,14 @@ function OverviewTab({ row, indexId }: { row: SectorIndexRow; indexId: number })
 
       {/* 1. Synthesis strip — verdict or auto-composed read */}
       <SynthesisStrip row={row} breadth={breadthData} inflowCount={inflowCount} totalCount={totalCount} />
+
+      {/* 1b. Move-quality verdict (Phase 2b) — the "is this move real?" read,
+             directly above the constituents it summarises. */}
+      {moveQuality && (
+        <div style={{ marginBottom: 16 }}>
+          <MoveQualityCard mq={moveQuality} badge={moveBadge} />
+        </div>
+      )}
 
       {/* 2. Hero tiles — top movers by Score 5D → stock chart on click */}
       <HeroTiles details={details} onPick={goToChart} />

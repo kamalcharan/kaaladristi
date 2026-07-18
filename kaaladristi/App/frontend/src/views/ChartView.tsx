@@ -32,7 +32,10 @@ import type { TimeRange } from '@/types';
 import { useVisualPulse } from '@/hooks/useVisualPulse';
 import { useEquityVisualPulse } from '@/hooks/useEquityVisualPulse';
 import { useScanPresence } from '@/hooks/useScanPresence';
-import { useIndexBreadth } from '@/hooks/useSectorRotation';
+import { useIndexBreadth, useConstituentDetails } from '@/hooks/useSectorRotation';
+import { useIndexConstituents } from '@/hooks/useMasterData';
+import { computeMoveQuality } from '@/services/moveQuality';
+import MoveQualityCard from '@/components/domain/MoveQualityCard';
 import { usePipelineStatus } from '@/hooks/usePipelineStatus';
 import {
   computePulseSnapshot,
@@ -240,6 +243,20 @@ export default function ChartView() {
   const change = currentClose - prevClose;
   const changePct = prevClose ? (change / prevClose) * 100 : 0;
   const isPositive = change >= 0;
+
+  // Index move-quality (Phase 2b) — the compact anti-trap verdict for the
+  // cockpit, reusing the SAME constituent data the sector page fetches (the
+  // full card lives on /sector-rotation/:id; here it's a summary chip).
+  const idxConstituents = useIndexConstituents(isIndex ? numId : undefined);
+  const idxEquityIds = useMemo(
+    () => (idxConstituents.data ?? []).map((c) => c.equity_id),
+    [idxConstituents.data],
+  );
+  const { data: idxConstDetails } = useConstituentDetails(idxEquityIds, isIndex ? (latest?.trade_date ?? '') : '');
+  const indexMoveQuality = useMemo(
+    () => (isIndex ? computeMoveQuality(idxConstDetails, indexBreadth?.data?.at(-1)?.pct_above_20 ?? null) : null),
+    [isIndex, idxConstDetails, indexBreadth],
+  );
 
   const last252 = rows.slice(-252);
   const high52w = last252.length > 0 ? Math.max(...last252.map(r => r.high)) : 0;
@@ -813,6 +830,11 @@ export default function ChartView() {
         {isIndex && dvTab === 'analysis' && !isLoading && (
           <section id="study-breadth" style={{ scrollMarginTop: 118 }} className="mb-3">
             <SectionLabel>Breadth</SectionLabel>
+            {indexMoveQuality && (
+              <div className="mb-2">
+                <MoveQualityCard mq={indexMoveQuality} compact />
+              </div>
+            )}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 items-start">
               <MarketBreadthChart
                 data={indexBreadth?.data}
