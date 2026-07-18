@@ -139,16 +139,20 @@ export default function ThesisTab({
               {thesis.alignedNow}<span style={{ color: 'var(--text-faint)', fontSize: 13 }}>/{thesis.total}</span>
             </span>
             <span style={{ ...MONO, fontSize: 10, color: 'var(--text-muted)' }}>
-              {relationship === 'position' && thesis.entry ? `entry ${thesis.entry.aligned}/${thesis.total}` : `trend ${thesis.alignedTrend}`}
+              {relationship === 'position' && thesis.entry ? `entry ${thesis.entry.aligned}/${thesis.entry.total}` : `trend ${thesis.alignedTrend}`}
             </span>
           </div>
           <Meter frac={thesis.alignedNow / thesis.total} color={healthColor(thesis.alignedNow, thesis.total)} />
           <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: '3px 10px' }}>
-            {thesis.pillars.map((p) => (
-              <span key={p.key} style={{ ...MONO, fontSize: 10, color: p.aligned ? 'var(--text-secondary)' : 'var(--text-faint)' }}>
-                {p.aligned ? '✓' : '✗'} {p.label}
-              </span>
-            ))}
+            {thesis.pillars.map((p) => {
+              const gap = p.value === '—'
+              return (
+                <span key={p.key} style={{ ...MONO, fontSize: 10, color: gap ? 'var(--text-faint)' : p.aligned ? 'var(--text-secondary)' : 'var(--text-faint)' }}
+                  title={gap ? 'No data for this pillar — not counted' : undefined}>
+                  {gap ? '·' : p.aligned ? '✓' : '✗'} {p.label}{gap ? ' (no data)' : ''}
+                </span>
+              )
+            })}
           </div>
         </Card>
 
@@ -240,12 +244,15 @@ function Field({ label, value, onChange, type = 'text', placeholder }: { label: 
 function PillarList({ pillars }: { pillars: Pillar[] }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-      {pillars.map((p) => (
-        <div key={p.key} style={{ display: 'flex', justifyContent: 'space-between', ...MONO, fontSize: 11 }}>
-          <span style={{ color: 'var(--text-secondary)' }}>{p.label}</span>
-          <span style={{ color: p.toneColor }}>{p.value} {p.aligned ? '✓' : '✗'}</span>
-        </div>
-      ))}
+      {pillars.map((p) => {
+        const gap = p.value === '—'
+        return (
+          <div key={p.key} style={{ display: 'flex', justifyContent: 'space-between', ...MONO, fontSize: 11 }}>
+            <span style={{ color: 'var(--text-secondary)' }}>{p.label}</span>
+            <span style={{ color: gap ? 'var(--text-faint)' : p.toneColor }}>{p.value}{gap ? '' : p.aligned ? ' ✓' : ' ✗'}</span>
+          </div>
+        )
+      })}
     </div>
   )
 }
