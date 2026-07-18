@@ -10,6 +10,7 @@ import StatStrip from '@/components/domain/StockCockpit/StatStrip';
 import VerdictHero from '@/components/domain/StockCockpit/VerdictHero';
 import StoryMode from '@/components/domain/StockCockpit/StoryMode';
 import { buildStoryEvents, KIND_COLORS, type StoryEvent } from '@/services/storyEvents';
+import { fetchSectorSeries } from '@/services/sectorSeries';
 import DeliveryVsTraded from '@/components/domain/StockCockpit/DeliveryVsTraded';
 import SectorMembershipCard from '@/components/domain/StockCockpit/SectorMembershipCard';
 import CockpitIndicatorPanels from '@/components/domain/StockCockpit/CockpitIndicatorPanels';
@@ -313,9 +314,15 @@ export default function ChartView() {
   // ── Story mode (Chart & Replay) — timed price-vs-signal events ──
   const [storyOpen, setStoryOpen] = useState(false);
   const bigMoneyDates = useMemo(() => new Set(bigMoneyEvents.map((e) => e.trade_date)), [bigMoneyEvents]);
+  const { data: sectorByDate } = useQuery({
+    queryKey: ['sector-series', equityPulse.meta?.industry],
+    queryFn: () => fetchSectorSeries(equityPulse.meta?.industry ?? null),
+    enabled: isEquity && !!equityPulse.meta?.industry,
+    staleTime: 300_000,
+  });
   const storyEvents = useMemo(
-    () => (isEquity && tf === 'daily' ? buildStoryEvents(rows, bigMoneyDates) : []),
-    [isEquity, tf, rows, bigMoneyDates],
+    () => (isEquity && tf === 'daily' ? buildStoryEvents(rows, bigMoneyDates, sectorByDate) : []),
+    [isEquity, tf, rows, bigMoneyDates, sectorByDate],
   );
   // Events are indexed against `rows` (the chart's data) but the playhead
   // indexes `pulseBars` — different arrays. Bridge them by DATE, not index.
@@ -860,6 +867,7 @@ export default function ChartView() {
           latest={latest ?? null}
           snapshot={snapshot}
           bigMoneyDates={bigMoneyDates}
+          sectorByDate={sectorByDate}
         />
       )}
     </ErrorBoundary>

@@ -1169,11 +1169,8 @@ export default function TradingChart({ data, height = 900, compact = false, work
           const dir = storyBubble.tone === 'bull' ? { g: '▲', col: 'var(--risk-green)' }
             : storyBubble.tone === 'bear' ? { g: '▼', col: 'var(--risk-red)' }
             : { g: '•', col: 'var(--verdict-hero-muted)' };
-          // Position above the candle for bearish, below for bullish, so the
-          // bubble sits on the side the move is heading away from.
-          const below = storyBubble.tone === 'bull';
           return (
-            <div style={{ position: 'absolute', ...(below ? { bottom: 8 } : { top: 8 }), left: bubbleX, transform: 'translateX(-50%)', zIndex: 20, pointerEvents: 'none', width: 220 }}>
+            <div style={{ position: 'absolute', top: 8, left: bubbleX, transform: 'translateX(-50%)', zIndex: 20, pointerEvents: 'none', width: 220 }}>
               <div style={{
                 background: 'var(--verdict-hero-bg)', color: 'var(--verdict-hero-text)',
                 border: `1px solid color-mix(in srgb, ${c} 55%, transparent)`,

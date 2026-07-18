@@ -192,7 +192,11 @@ function fpbEvents(bars: StoryBar[]): { i: number; title: string; detail: string
  * Build the ordered story for a stock's bars (ascending by date).
  * @param bigMoneyDates set of trade_date strings flagged as big-money days.
  */
-export function buildStoryEvents(bars: StoryBar[], bigMoneyDates?: Set<string>): StoryEvent[] {
+export function buildStoryEvents(
+  bars: StoryBar[],
+  bigMoneyDates?: Set<string>,
+  sectorByDate?: Map<string, { leading: boolean }>,
+): StoryEvent[] {
   const out: StoryEvent[] = []
   const add = (i: number, kind: StoryKind, title: string, detail: string, tone: StoryTone) =>
     out.push({
@@ -246,6 +250,13 @@ export function buildStoryEvents(bars: StoryBar[], bigMoneyDates?: Set<string>):
 
     // 6) Big money day.
     if (bigMoneyDates?.has(b.trade_date)) add(i, 'big_money', '₹ Big money day', 'Delivered value spiked well above its norm — an institutional footprint', 'bull')
+
+    // 6b) Sector rotating in — the stock's industry crossed into the leading quartile.
+    if (sectorByDate) {
+      const sNow = sectorByDate.get(b.trade_date)
+      const sPrev = sectorByDate.get(p.trade_date)
+      if (sNow?.leading && sPrev && !sPrev.leading) add(i, 'sector', 'Sector rotating in', 'The stock’s sector crossed into the leading quartile', 'bull')
+    }
   }
 
   // 7) FPB — coil forming + burst/shatter release (recomputed from the bars).
