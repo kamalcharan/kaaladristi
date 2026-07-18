@@ -1231,7 +1231,14 @@ export default function TradingChart({ data, height = 900, compact = false, work
           return (
             <div style={{
               position: 'absolute', top: 8, left: 8, zIndex: 15, pointerEvents: 'none',
-              background: 'rgba(13,17,23,0.88)', border: '1px solid color-mix(in srgb, var(--text-primary) 8%, transparent)',
+              // Theme-aware panel: was a hardcoded near-black bg, which made the
+              // theme-var text invisible in light mode (dark text on dark box).
+              // color-mix over --bg adapts — dark panel in dark mode, light in
+              // light — so the OHLC readout is legible in both.
+              background: 'color-mix(in srgb, var(--bg) 90%, transparent)',
+              border: '1px solid var(--border)',
+              boxShadow: '0 1px 6px color-mix(in srgb, black 14%, transparent)',
+              backdropFilter: 'blur(3px)',
               borderRadius: 6, padding: '4px 10px',
               fontFamily: 'var(--font-mono, monospace)', fontSize: 10,
               display: 'flex', gap: 10, alignItems: 'baseline', flexWrap: 'wrap',
