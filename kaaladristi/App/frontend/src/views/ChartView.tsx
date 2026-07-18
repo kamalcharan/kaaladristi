@@ -21,7 +21,7 @@ import CockpitOverlayStrip from '@/components/domain/StockCockpit/CockpitOverlay
 import { detectBigMoneyDays } from '@/services/bigMoney';
 import { useFrameworkStore } from '@/stores/frameworkStore';
 import { useAuthStore } from '@/stores/authStore';
-import { usePositionStore } from '@/stores/positionStore';
+import { useBookmarkStore } from '@/stores/bookmarkStore';
 import CatalogDrawer from '@/components/domain/Catalog/CatalogDrawer';
 import { useAstroOverlayBands } from '@/hooks/useAstroOverlayBands';
 import type { ChartOverlay } from '@/types/framework';
@@ -157,14 +157,15 @@ export default function ChartView() {
   // see zero overlays, so load it here too.
   const { framework, loadFramework } = useFrameworkStore();
   const { profile } = useAuthStore();
-  const positions = usePositionStore((s) => s.positions);
-  const loadPositions = usePositionStore((s) => s.load);
+  const bookmarks = useBookmarkStore((s) => s.bookmarks);
+  const bookmarksHasLoaded = useBookmarkStore((s) => s.hasLoaded);
+  const loadBookmarks = useBookmarkStore((s) => s.load);
   useEffect(() => {
     if (!framework && profile?.id) loadFramework(profile.id);
   }, [framework, profile?.id, loadFramework]);
   useEffect(() => {
-    if (profile?.id) loadPositions(profile.id);
-  }, [profile?.id, loadPositions]);
+    if (!bookmarksHasLoaded) loadBookmarks();
+  }, [bookmarksHasLoaded, loadBookmarks]);
   const frameworkOverlays = framework?.chart_overlays ?? NO_OVERLAYS;
   const astroBands = useAstroOverlayBands(frameworkOverlays);
   const [overlayDrawerOpen, setOverlayDrawerOpen] = useState(false);
@@ -642,9 +643,10 @@ export default function ChartView() {
             {isEquity && <BookmarkToggle equityId={numId} size={16} />}
             {/* Add / show position — equity only (positions are equity-scoped) */}
             {isEquity && !isLoading && rows.length > 0 && (() => {
-              const pos = positions[numId] ?? null;
+              const bmRow = bookmarks.find((b) => b.equity_id === numId);
+              const pos = bmRow?.entry_price != null ? bmRow : null;
               if (pos) {
-                const pnl = currentClose && pos.entryPrice ? ((currentClose - pos.entryPrice) / pos.entryPrice) * 100 : null;
+                const pnl = currentClose && pos.entry_price ? ((currentClose - pos.entry_price) / pos.entry_price) * 100 : null;
                 return (
                   <button
                     onClick={() => setDvTab('thesis')}

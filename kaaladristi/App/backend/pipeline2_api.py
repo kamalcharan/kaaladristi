@@ -5318,6 +5318,9 @@ def list_bookmarks(user_id: str, caller_id: str = Depends(_get_current_user_id))
             cur.execute(
                 """
                 SELECT b.id, b.equity_id, b.created_at,
+                       b.entry_price::float8 AS entry_price,
+                       b.entry_date::text    AS entry_date,
+                       b.entry_qty::float8   AS entry_qty,
                        s.symbol, s.company_name, s.industry, s.exchange
                 FROM km_user_bookmarks b
                 JOIN km_equity_symbols s ON s.id = b.equity_id
@@ -5367,6 +5370,9 @@ def add_bookmark(
             cur.execute(
                 """
                 SELECT b.id, b.equity_id, b.created_at,
+                       b.entry_price::float8 AS entry_price,
+                       b.entry_date::text    AS entry_date,
+                       b.entry_qty::float8   AS entry_qty,
                        s.symbol, s.company_name, s.industry, s.exchange
                 FROM km_user_bookmarks b
                 JOIN km_equity_symbols s ON s.id = b.equity_id
@@ -5409,6 +5415,69 @@ def remove_bookmark(
         return {'deleted': deleted}
     except Exception as exc:
         log.error(f'remove_bookmark error: {exc}')
+        raise HTTPException(status_code=500, detail=str(exc))
+    finally:
+        conn.close()
+
+
+class PositionRequest(BaseModel):
+    # All optional: passing values SETS the position (a bookmark with an entry);
+    # passing nulls CLEARS it back to a plain watchlist bookmark (Phase 2a).
+    entry_price: Optional[float] = None
+    entry_date: Optional[str] = None
+    entry_qty: Optional[float] = None
+
+
+@app.put('/api/bookmarks/{user_id}/{equity_id}/position')
+def set_position(
+    user_id: str,
+    equity_id: int,
+    req: PositionRequest,
+    caller_id: str = Depends(_get_current_user_id),
+):
+    """A position is a bookmark with an entry (migration 153). Upsert the row —
+    creating the bookmark if the user only just decided to hold — and set/clear
+    the entry_* columns. Returns the full joined row for the frontend list."""
+    if caller_id != user_id:
+        raise HTTPException(status_code=403, detail='Forbidden')
+
+    conn = _framework_conn()
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            _set_user_context(cur, user_id)
+            cur.execute(
+                """
+                INSERT INTO km_user_bookmarks (user_id, equity_id, entry_price, entry_date, entry_qty)
+                VALUES (%s::uuid, %s, %s, %s, %s)
+                ON CONFLICT (user_id, equity_id) DO UPDATE SET
+                    entry_price = EXCLUDED.entry_price,
+                    entry_date  = EXCLUDED.entry_date,
+                    entry_qty   = EXCLUDED.entry_qty
+                """,
+                (user_id, equity_id, req.entry_price, req.entry_date, req.entry_qty),
+            )
+            conn.commit()
+            cur.execute(
+                """
+                SELECT b.id, b.equity_id, b.created_at,
+                       b.entry_price::float8 AS entry_price,
+                       b.entry_date::text    AS entry_date,
+                       b.entry_qty::float8   AS entry_qty,
+                       s.symbol, s.company_name, s.industry, s.exchange
+                FROM km_user_bookmarks b
+                JOIN km_equity_symbols s ON s.id = b.equity_id
+                WHERE b.user_id = %s::uuid AND b.equity_id = %s
+                """,
+                (user_id, equity_id),
+            )
+            row = cur.fetchone()
+            if row is None:
+                raise HTTPException(status_code=500, detail='Position upsert failed')
+        return dict(row)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        log.error(f'set_position error: {exc}')
         raise HTTPException(status_code=500, detail=str(exc))
     finally:
         conn.close()

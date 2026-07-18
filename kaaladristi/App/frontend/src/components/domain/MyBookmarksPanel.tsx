@@ -2,9 +2,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Star, Loader2 } from 'lucide-react';
 import { Card, DristiQLoader } from '@/components/ui';
-import { from } from '@/services/postgrest';
-import { useAuthStore } from '@/stores/authStore';
-import { usePositionStore } from '@/stores/positionStore';
 import { displaySymbol, displaySubName, navName as toNavName, bseTooltip } from '@/lib/symbolUtils';
 import { ExchangeBadge } from '@/components/domain/StockCard';
 import FlowIntensityMap, { type CellData } from '@/components/domain/FlowIntensityMap';
@@ -375,11 +372,9 @@ function WatchlistBody() {
 }
 
 // ── Positions tab body (Phase 2a) ───────────────────────────────────────────
-// Held stocks (from the positions store — v0 local, shape mirrors the
-// km_user_bookmarks entry_* columns). Entry · now · P&L · State; row → the
-// stock's Thesis tab (the full cockpit). The State chip reuses watchlistState.
-
-interface PosSym { symbol: string; company_name: string | null }
+// Held stocks = bookmarks WITH an entry (migration 153). Entry · now · P&L ·
+// State; row → the stock's Thesis tab (the full cockpit). Symbol/company come
+// straight off the bookmark row — no extra fetch. State chip reuses watchlistState.
 
 function PosKv({ label, value, color, big }: { label: string; value: string; color?: string; big?: boolean }) {
   return (
@@ -392,26 +387,13 @@ function PosKv({ label, value, color, big }: { label: string; value: string; col
 
 function PositionsBody() {
   const navigate = useNavigate();
-  const positions = usePositionStore((s) => s.positions);
-  const remove = usePositionStore((s) => s.remove);
-  const ids = useMemo(() => Object.keys(positions).map(Number), [positions]);
+  const bookmarks = useBookmarkStore((s) => s.bookmarks);
+  const clearPosition = useBookmarkStore((s) => s.clearPosition);
+  const held = useMemo(() => bookmarks.filter((b) => b.entry_price != null), [bookmarks]);
+  const ids = useMemo(() => held.map((b) => b.equity_id), [held]);
   const { dataByEquity, isLoading } = useBookmarkMarketData(ids);
-  const [syms, setSyms] = useState<Map<number, PosSym>>(new Map());
 
-  useEffect(() => {
-    if (ids.length === 0) { setSyms(new Map()); return; }
-    let cancelled = false;
-    (async () => {
-      const { data } = await from('km_equity_symbols').select('id,symbol,company_name').in('id', ids).execute();
-      if (cancelled) return;
-      const m = new Map<number, PosSym>();
-      for (const r of (data ?? []) as Array<{ id: number } & PosSym>) m.set(r.id, { symbol: r.symbol, company_name: r.company_name });
-      setSyms(m);
-    })();
-    return () => { cancelled = true; };
-  }, [ids]);
-
-  if (ids.length === 0) {
+  if (held.length === 0) {
     return (
       <div style={{ padding: '64px 24px', textAlign: 'center', background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 16 }}>
         <p style={{ fontSize: 14, color: 'var(--text-muted)', marginBottom: 6 }}>No positions yet</p>
@@ -425,25 +407,24 @@ function PositionsBody() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      {ids.map((id) => {
-        const pos = positions[id];
-        const m = dataByEquity.get(id);
-        const sym = syms.get(id);
-        const name = displaySymbol({ symbol: sym?.symbol ?? String(id), company_name: sym?.company_name ?? null });
+      {held.map((b) => {
+        const m = dataByEquity.get(b.equity_id);
+        const name = displaySymbol({ symbol: b.symbol, company_name: b.company_name });
         const close = m?.close ?? null;
-        const pnl = close != null && pos.entryPrice > 0 ? ((close - pos.entryPrice) / pos.entryPrice) * 100 : null;
+        const entry = b.entry_price ?? 0;
+        const pnl = close != null && entry > 0 ? ((close - entry) / entry) * 100 : null;
         const st = watchlistState(m);
-        const openThesis = () => navigate(`/chart/equity/${id}?name=${encodeURIComponent(name)}&tab=thesis`);
+        const openThesis = () => navigate(`/chart/equity/${b.equity_id}?name=${encodeURIComponent(toNavName(b))}&tab=thesis`);
         return (
-          <Card key={id} rounded="xl" className="px-3 py-2.5">
+          <Card key={b.id} rounded="xl" className="px-3 py-2.5">
             <div style={{ display: 'flex', alignItems: 'center', gap: 18, flexWrap: 'wrap' }}>
               <div style={{ minWidth: 150, cursor: 'pointer' }} onClick={openThesis}>
                 <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{name}</span>
-                {sym?.company_name && (
-                  <div style={{ fontSize: 10, color: 'var(--text-faint)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 200 }}>{sym.company_name}</div>
+                {b.company_name && (
+                  <div style={{ fontSize: 10, color: 'var(--text-faint)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 200 }}>{b.company_name}</div>
                 )}
               </div>
-              <PosKv label="Entry" value={`₹${pos.entryPrice} · ${pos.entryDate}${pos.qty ? ` · ${pos.qty}` : ''}`} />
+              <PosKv label="Entry" value={`₹${b.entry_price} · ${b.entry_date ?? '—'}${b.entry_qty ? ` · ${b.entry_qty}` : ''}`} />
               <PosKv label="Now" value={close != null ? `₹${close.toLocaleString('en-IN', { maximumFractionDigits: 2 })}` : '—'} />
               <PosKv label="P&L" value={pnl != null ? `${pnl >= 0 ? '+' : ''}${pnl.toFixed(1)}%` : '—'}
                 color={pnl != null ? (pnl >= 0 ? 'var(--risk-green)' : 'var(--risk-red)') : undefined} big />
@@ -456,7 +437,7 @@ function PositionsBody() {
               <button onClick={openThesis} style={{ marginLeft: 'auto', fontSize: 11, padding: '5px 12px', borderRadius: 6, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer' }}>
                 Study ›
               </button>
-              <button onClick={() => remove(id)} title="Remove position" style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-faint)', background: 'none', border: 'none', cursor: 'pointer' }}>✕</button>
+              <button onClick={() => clearPosition(b.equity_id)} title="Remove position (keeps the bookmark)" style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-faint)', background: 'none', border: 'none', cursor: 'pointer' }}>✕</button>
             </div>
           </Card>
         );
@@ -472,11 +453,11 @@ function PositionsBody() {
 export default function MyBookmarksPanel() {
   const [tab, setTab] = useState<'watchlist' | 'positions'>('watchlist');
   const bookmarks = useBookmarkStore((s) => s.bookmarks);
-  const positions = usePositionStore((s) => s.positions);
-  const userId = useAuthStore((s) => s.profile?.id) ?? null;
-  const loadPositions = usePositionStore((s) => s.load);
-  useEffect(() => { if (userId) loadPositions(userId); }, [userId, loadPositions]);
-  const posCount = Object.keys(positions).length;
+  const hasLoaded = useBookmarkStore((s) => s.hasLoaded);
+  const load = useBookmarkStore((s) => s.load);
+  // Ensure the list is loaded even if the Positions tab is opened first.
+  useEffect(() => { if (!hasLoaded) load(); }, [hasLoaded, load]);
+  const posCount = bookmarks.filter((b) => b.entry_price != null).length;
 
   return (
     <div>
