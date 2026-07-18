@@ -8,6 +8,8 @@ import VaNiInsight from '@/components/domain/VaNiInsight';
 import { useInstrumentInsight } from '@/hooks';
 import StatStrip from '@/components/domain/StockCockpit/StatStrip';
 import VerdictHero from '@/components/domain/StockCockpit/VerdictHero';
+import ThesisTab from '@/components/domain/StockCockpit/ThesisTab';
+import type { ThesisBar } from '@/services/thesis';
 import StoryMode from '@/components/domain/StockCockpit/StoryMode';
 import { buildStoryEvents, KIND_COLORS, type StoryEvent } from '@/services/storyEvents';
 import { fetchSectorSeries } from '@/services/sectorSeries';
@@ -163,8 +165,12 @@ export default function ChartView() {
   // Study reorg (2026-07-12): decision-band prose collapsed by default;
   // Member-Of pills demoted to a closed accordion.
   const [readExpanded, setReadExpanded] = useState(false);
-  // Stock DeepDive tabs (Slice 3): Analysis | Chart & Replay.
-  const [dvTab, setDvTab] = useState<'analysis' | 'chart'>('analysis');
+  // Stock DeepDive tabs: Analysis | Chart & Replay | Thesis. Deep-linkable via
+  // ?tab= so bookmarks / positions / scanners can land straight on Thesis.
+  const tabParam = searchParams.get('tab');
+  const [dvTab, setDvTab] = useState<'analysis' | 'chart' | 'thesis'>(
+    tabParam === 'thesis' ? 'thesis' : tabParam === 'chart' ? 'chart' : 'analysis',
+  );
   const [membershipOpen, setMembershipOpen] = useState(false);
 
   const numId = Number(id);
@@ -722,7 +728,9 @@ export default function ChartView() {
             Slice 3). SHARED by equity + index. Data/Results are placeholders. ═══ */}
         {(isEquity || isIndex) && !isLoading && rows.length > 0 && (
           <div className="flex items-center gap-1 mb-3 border-b border-kd-border">
-            {([['analysis', 'Analysis'], ['chart', 'Chart & Replay']] as const).map(([id, label]) => (
+            {([['analysis', 'Analysis'], ['chart', 'Chart & Replay'], ['thesis', 'Thesis']] as const)
+              .filter(([id]) => id !== 'thesis' || isEquity)
+              .map(([id, label]) => (
               <button
                 key={id}
                 onClick={() => setDvTab(id)}
@@ -912,6 +920,17 @@ export default function ChartView() {
 
         {/* ═══ CHART & REPLAY TAB — SHARED (equity + index), rendered once ═══ */}
         {dvTab === 'chart' && replayTab}
+
+        {/* ═══ THESIS TAB — equity only (Phase 2a). The verification cockpit:
+            adapts to position / watchlist / cold. Deep-linked via ?tab=thesis. ═══ */}
+        {isEquity && dvTab === 'thesis' && !isLoading && rows.length > 0 && (
+          <ThesisTab
+            bars={rows as unknown as ThesisBar[]}
+            equityId={numId}
+            name={name}
+            currentClose={currentClose}
+          />
+        )}
 
       </div>
 
