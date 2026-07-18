@@ -21,6 +21,7 @@ import CockpitOverlayStrip from '@/components/domain/StockCockpit/CockpitOverlay
 import { detectBigMoneyDays } from '@/services/bigMoney';
 import { useFrameworkStore } from '@/stores/frameworkStore';
 import { useAuthStore } from '@/stores/authStore';
+import { usePositionStore } from '@/stores/positionStore';
 import CatalogDrawer from '@/components/domain/Catalog/CatalogDrawer';
 import { useAstroOverlayBands } from '@/hooks/useAstroOverlayBands';
 import type { ChartOverlay } from '@/types/framework';
@@ -156,9 +157,14 @@ export default function ChartView() {
   // see zero overlays, so load it here too.
   const { framework, loadFramework } = useFrameworkStore();
   const { profile } = useAuthStore();
+  const positions = usePositionStore((s) => s.positions);
+  const loadPositions = usePositionStore((s) => s.load);
   useEffect(() => {
     if (!framework && profile?.id) loadFramework(profile.id);
   }, [framework, profile?.id, loadFramework]);
+  useEffect(() => {
+    if (profile?.id) loadPositions(profile.id);
+  }, [profile?.id, loadPositions]);
   const frameworkOverlays = framework?.chart_overlays ?? NO_OVERLAYS;
   const astroBands = useAstroOverlayBands(frameworkOverlays);
   const [overlayDrawerOpen, setOverlayDrawerOpen] = useState(false);
@@ -172,6 +178,9 @@ export default function ChartView() {
     tabParam === 'thesis' ? 'thesis' : tabParam === 'chart' ? 'chart' : 'analysis',
   );
   const [membershipOpen, setMembershipOpen] = useState(false);
+  // Add-position from the chart hero (equity only). Switches to the Thesis tab
+  // and pops its "I hold this" form.
+  const [wantPositionForm, setWantPositionForm] = useState(false);
 
   const numId = Number(id);
   const rawName = searchParams.get('name') ?? `${type} #${id}`;
@@ -631,6 +640,36 @@ export default function ChartView() {
               {isIndex ? 'INDEX' : 'EQUITY'}
             </span>
             {isEquity && <BookmarkToggle equityId={numId} size={16} />}
+            {/* Add / show position — equity only (positions are equity-scoped) */}
+            {isEquity && !isLoading && rows.length > 0 && (() => {
+              const pos = positions[numId] ?? null;
+              if (pos) {
+                const pnl = currentClose && pos.entryPrice ? ((currentClose - pos.entryPrice) / pos.entryPrice) * 100 : null;
+                return (
+                  <button
+                    onClick={() => setDvTab('thesis')}
+                    title="View your position thesis"
+                    className={cn(
+                      'text-[10px] font-mono font-bold px-2 py-0.5 rounded-full border transition-colors',
+                      pnl != null && pnl < 0
+                        ? 'text-risk-red border-risk-red/40 bg-risk-red/10'
+                        : 'text-risk-green border-risk-green/40 bg-risk-green/10',
+                    )}
+                  >
+                    ● POSITION{pnl != null ? ` ${pnl >= 0 ? '+' : ''}${pnl.toFixed(1)}%` : ''}
+                  </button>
+                );
+              }
+              return (
+                <button
+                  onClick={() => { setWantPositionForm(true); setDvTab('thesis'); }}
+                  title="Add a position — track entry, P&L and thesis health"
+                  className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded-full border border-kd-border text-[var(--text-muted)] hover:text-[var(--accent)] hover:border-[var(--accent)] transition-colors"
+                >
+                  ＋ Position
+                </button>
+              );
+            })()}
           </div>
 
           <div className={cn('grid gap-4 items-start', 'grid-cols-1 lg:grid-cols-[1.35fr_1fr]')}>
@@ -929,6 +968,8 @@ export default function ChartView() {
             equityId={numId}
             name={name}
             currentClose={currentClose}
+            autoOpenForm={wantPositionForm}
+            onAutoOpened={() => setWantPositionForm(false)}
           />
         )}
 

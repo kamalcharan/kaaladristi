@@ -24,12 +24,15 @@ const TONE: Record<'bull' | 'bear' | 'neutral', string> = {
 }
 
 export default function ThesisTab({
-  bars, equityId, name, currentClose,
+  bars, equityId, name, currentClose, autoOpenForm, onAutoOpened,
 }: {
   bars: ThesisBar[]
   equityId: number
   name: string
   currentClose: number | null
+  /** Open the "I hold this" form on mount (triggered from the chart hero). */
+  autoOpenForm?: boolean
+  onAutoOpened?: () => void
 }) {
   const userId = useAuthStore((s) => s.profile?.id) ?? null
   const bookmarkedIds = useBookmarkStore((s) => s.bookmarkedIds)
@@ -63,6 +66,11 @@ export default function ThesisTab({
       setQty('')
     }
   }, [showForm, currentClose, lastDate])
+
+  // Opened from the chart hero's "＋ Position" — pop the form straight away.
+  useEffect(() => {
+    if (autoOpenForm && !position) { setShowForm(true); onAutoOpened?.() }
+  }, [autoOpenForm, position, onAutoOpened])
 
   if (!thesis) {
     return <div className="glass-card rounded-xl p-4 text-[11px] text-muted">No data to read a thesis yet.</div>

@@ -1,7 +1,10 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Star, Loader2 } from 'lucide-react';
 import { Card, DristiQLoader } from '@/components/ui';
+import { from } from '@/services/postgrest';
+import { useAuthStore } from '@/stores/authStore';
+import { usePositionStore } from '@/stores/positionStore';
 import { displaySymbol, displaySubName, navName as toNavName, bseTooltip } from '@/lib/symbolUtils';
 import { ExchangeBadge } from '@/components/domain/StockCard';
 import FlowIntensityMap, { type CellData } from '@/components/domain/FlowIntensityMap';
@@ -37,8 +40,22 @@ function fmtDate(d: string): string {
 // Column widths — shared between the header row and each data row so they align.
 const W = {
   star: 26, stock: 150, price: 88, sector: 190,
-  rsi: 46, rs: 58, s5: 56, s22: 58, scanners: 150,
+  rsi: 46, rs: 58, s5: 56, s22: 58, scanners: 150, state: 116,
 } as const;
+
+// Watchlist State chip (Phase 2a, additive) — reads the TURN from the row's own
+// signals: is relative strength + money-flow conviction building or fading?
+function watchlistState(m: BookmarkMarketData | undefined): { label: string; color: string } {
+  if (!m || m.magic_rs == null || m.score_5d == null || m.score_22d == null) {
+    return { label: 'Watch', color: 'var(--text-faint)' };
+  }
+  const rsUp = m.magic_rs > 0;
+  const scoreUp = m.score_5d > m.score_22d;
+  if (rsUp && scoreUp) return { label: '▲ Improving', color: 'var(--risk-green)' };
+  if (!rsUp && scoreUp) return { label: '▲ Turning', color: 'color-mix(in srgb, var(--risk-green) 72%, transparent)' };
+  if (rsUp && !scoreUp) return { label: '~ Cooling', color: 'var(--risk-amber)' };
+  return { label: '▼ Fading', color: 'var(--risk-red)' };
+}
 
 function num(v: number | null | undefined, digits = 1): string {
   return v == null ? '—' : v.toFixed(digits);
@@ -72,6 +89,7 @@ function HeaderRow() {
       <div style={{ ...HEAD, width: W.s5, textAlign: 'right' }}>Score 5D</div>
       <div style={{ ...HEAD, width: W.s22, textAlign: 'right' }}>Score 22D</div>
       <div style={{ ...HEAD, width: W.scanners }}>Scanners</div>
+      <div style={{ ...HEAD, width: W.state, color: 'var(--accent, var(--gold-soft))' }}>State</div>
       <div style={{ ...HEAD, flex: 1, minWidth: 200 }}>5D Money Flow</div>
       <div style={{ width: 76, flexShrink: 0 }} />
     </div>
@@ -225,6 +243,23 @@ function BookmarkRowCard({
           ))}
         </div>
 
+        {/* State — the turn (additive; Option B) */}
+        <div style={{ width: W.state, flexShrink: 0 }}>
+          {(() => {
+            const st = watchlistState(market);
+            return (
+              <span style={{
+                fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 600, whiteSpace: 'nowrap',
+                padding: '2px 8px', borderRadius: 100, color: st.color,
+                background: `color-mix(in srgb, ${st.color} 12%, transparent)`,
+                border: `1px solid color-mix(in srgb, ${st.color} 32%, transparent)`,
+              }}>
+                {st.label}
+              </span>
+            );
+          })()}
+        </div>
+
         {/* 5D flow heatmap */}
         <div style={{ flex: 1, minWidth: 200 }}>
           {last5.length > 0 ? (
@@ -256,11 +291,8 @@ function BookmarkRowCard({
   );
 }
 
-/**
- * "My Bookmarks" content — the Workspace tab body (WorkspacePage.tsx).
- * Also reused standalone by views/MyBookmarksPage.tsx (deep-link route).
- */
-export default function MyBookmarksPanel() {
+/** Watchlist tab body — the original bookmarks table (now + a State chip). */
+function WatchlistBody() {
   const { bookmarks, isLoading, hasLoaded, load, toggle } = useBookmarkStore();
 
   // Reload from the server on every mount — a bookmark added elsewhere (scanner
@@ -338,6 +370,134 @@ export default function MyBookmarksPanel() {
           );
         })}
       </div>
+    </div>
+  );
+}
+
+// ── Positions tab body (Phase 2a) ───────────────────────────────────────────
+// Held stocks (from the positions store — v0 local, shape mirrors the
+// km_user_bookmarks entry_* columns). Entry · now · P&L · State; row → the
+// stock's Thesis tab (the full cockpit). The State chip reuses watchlistState.
+
+interface PosSym { symbol: string; company_name: string | null }
+
+function PosKv({ label, value, color, big }: { label: string; value: string; color?: string; big?: boolean }) {
+  return (
+    <span style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 8.5, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-faint)' }}>{label}</span>
+      <span style={{ fontFamily: 'var(--font-mono)', fontSize: big ? 15 : 13, fontWeight: big ? 700 : 600, color: color ?? 'var(--text-primary)' }}>{value}</span>
+    </span>
+  );
+}
+
+function PositionsBody() {
+  const navigate = useNavigate();
+  const positions = usePositionStore((s) => s.positions);
+  const remove = usePositionStore((s) => s.remove);
+  const ids = useMemo(() => Object.keys(positions).map(Number), [positions]);
+  const { dataByEquity, isLoading } = useBookmarkMarketData(ids);
+  const [syms, setSyms] = useState<Map<number, PosSym>>(new Map());
+
+  useEffect(() => {
+    if (ids.length === 0) { setSyms(new Map()); return; }
+    let cancelled = false;
+    (async () => {
+      const { data } = await from('km_equity_symbols').select('id,symbol,company_name').in('id', ids).execute();
+      if (cancelled) return;
+      const m = new Map<number, PosSym>();
+      for (const r of (data ?? []) as Array<{ id: number } & PosSym>) m.set(r.id, { symbol: r.symbol, company_name: r.company_name });
+      setSyms(m);
+    })();
+    return () => { cancelled = true; };
+  }, [ids]);
+
+  if (ids.length === 0) {
+    return (
+      <div style={{ padding: '64px 24px', textAlign: 'center', background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 16 }}>
+        <p style={{ fontSize: 14, color: 'var(--text-muted)', marginBottom: 6 }}>No positions yet</p>
+        <p style={{ fontSize: 12, color: 'var(--text-faint)' }}>
+          Open a stock and hit <span style={{ color: 'var(--accent, var(--gold-soft))' }}>＋ Position</span> to track entry, P&amp;L and thesis health here.
+        </p>
+      </div>
+    );
+  }
+  if (isLoading) return <DristiQLoader message="Loading positions…" />;
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      {ids.map((id) => {
+        const pos = positions[id];
+        const m = dataByEquity.get(id);
+        const sym = syms.get(id);
+        const name = displaySymbol({ symbol: sym?.symbol ?? String(id), company_name: sym?.company_name ?? null });
+        const close = m?.close ?? null;
+        const pnl = close != null && pos.entryPrice > 0 ? ((close - pos.entryPrice) / pos.entryPrice) * 100 : null;
+        const st = watchlistState(m);
+        const openThesis = () => navigate(`/chart/equity/${id}?name=${encodeURIComponent(name)}&tab=thesis`);
+        return (
+          <Card key={id} rounded="xl" className="px-3 py-2.5">
+            <div style={{ display: 'flex', alignItems: 'center', gap: 18, flexWrap: 'wrap' }}>
+              <div style={{ minWidth: 150, cursor: 'pointer' }} onClick={openThesis}>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{name}</span>
+                {sym?.company_name && (
+                  <div style={{ fontSize: 10, color: 'var(--text-faint)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 200 }}>{sym.company_name}</div>
+                )}
+              </div>
+              <PosKv label="Entry" value={`₹${pos.entryPrice} · ${pos.entryDate}${pos.qty ? ` · ${pos.qty}` : ''}`} />
+              <PosKv label="Now" value={close != null ? `₹${close.toLocaleString('en-IN', { maximumFractionDigits: 2 })}` : '—'} />
+              <PosKv label="P&L" value={pnl != null ? `${pnl >= 0 ? '+' : ''}${pnl.toFixed(1)}%` : '—'}
+                color={pnl != null ? (pnl >= 0 ? 'var(--risk-green)' : 'var(--risk-red)') : undefined} big />
+              <span style={{
+                fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 600, whiteSpace: 'nowrap',
+                padding: '2px 8px', borderRadius: 100, color: st.color,
+                background: `color-mix(in srgb, ${st.color} 12%, transparent)`,
+                border: `1px solid color-mix(in srgb, ${st.color} 32%, transparent)`,
+              }}>{st.label}</span>
+              <button onClick={openThesis} style={{ marginLeft: 'auto', fontSize: 11, padding: '5px 12px', borderRadius: 6, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer' }}>
+                Study ›
+              </button>
+              <button onClick={() => remove(id)} title="Remove position" style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-faint)', background: 'none', border: 'none', cursor: 'pointer' }}>✕</button>
+            </div>
+          </Card>
+        );
+      })}
+    </div>
+  );
+}
+
+/**
+ * "My Stocks" — Watchlist + Positions tabs (Phase 2a). The Workspace tab body
+ * (WorkspacePage.tsx) and the /bookmarks deep-link route both render this.
+ */
+export default function MyBookmarksPanel() {
+  const [tab, setTab] = useState<'watchlist' | 'positions'>('watchlist');
+  const bookmarks = useBookmarkStore((s) => s.bookmarks);
+  const positions = usePositionStore((s) => s.positions);
+  const userId = useAuthStore((s) => s.profile?.id) ?? null;
+  const loadPositions = usePositionStore((s) => s.load);
+  useEffect(() => { if (userId) loadPositions(userId); }, [userId, loadPositions]);
+  const posCount = Object.keys(positions).length;
+
+  return (
+    <div>
+      <div style={{ display: 'flex', gap: 2, borderBottom: '1px solid var(--border)', marginBottom: 16 }}>
+        {([['watchlist', 'Watchlist', bookmarks.length], ['positions', 'Positions', posCount]] as const).map(([id, label, n]) => (
+          <button
+            key={id}
+            onClick={() => setTab(id)}
+            style={{
+              fontSize: 14, fontWeight: 600, padding: '9px 16px', cursor: 'pointer', marginBottom: -1,
+              background: 'none', border: 'none', borderBottom: `2px solid ${tab === id ? 'var(--accent, var(--gold-soft))' : 'transparent'}`,
+              color: tab === id ? 'var(--text-primary)' : 'var(--text-muted)',
+              display: 'inline-flex', alignItems: 'center', gap: 7,
+            }}
+          >
+            {label}
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: tab === id ? 'var(--accent, var(--gold-soft))' : 'var(--text-faint)', background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)', borderRadius: 999, padding: '1px 7px' }}>{n}</span>
+          </button>
+        ))}
+      </div>
+      {tab === 'watchlist' ? <WatchlistBody /> : <PositionsBody />}
     </div>
   );
 }
