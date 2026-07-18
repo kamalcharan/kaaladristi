@@ -15,6 +15,8 @@ import type { IndicatorRow } from '@/services/indicatorData'
 import { buildStoryEvents, KIND_COLORS } from '@/services/storyEvents'
 import { buildPillars, type LatestRow, type VerdictMode } from './VerdictHero'
 import SectorThermometer from './SectorThermometer'
+import type { ChartOverlay } from '@/types/framework'
+import type { AstroBand } from '@/services/astroOverlayService'
 
 interface CorrState { state: string; color: string; tagline?: string }
 interface SectorPoint { percentile: number; leading: boolean }
@@ -35,12 +37,35 @@ interface Props {
   breadthByDate?: Map<string, SectorPoint>
   mode?: VerdictMode
   breadthPct?: number | null
+  /** Framework chart overlays (SuperTrend / SMAs / Pivots / astro zones) so
+   *  story mode matches the analysis chart instead of stripping them. */
+  overlays?: ChartOverlay[]
+  astroBands?: AstroBand[]
+}
+
+/** Breadth/sector reading at (or nearest on-or-before) a date. The breadth
+ *  series only covers recent sessions, so an exact-date miss falls back to the
+ *  latest available reading up to that date — else the earliest — so the
+ *  thermometer always shows a real value instead of a blank "—". */
+function readAtDate(map: Map<string, SectorPoint> | undefined, date: string): SectorPoint | undefined {
+  if (!map || map.size === 0) return undefined
+  const exact = map.get(date)
+  if (exact) return exact
+  let best: SectorPoint | undefined
+  let bestDate = ''
+  let earliest: SectorPoint | undefined
+  let earliestDate = '￿'
+  for (const [d, v] of map) {
+    if (d <= date && d > bestDate) { bestDate = d; best = v }
+    if (d < earliestDate) { earliestDate = d; earliest = v }
+  }
+  return best ?? earliest
 }
 
 const SPEEDS = [0.5, 1, 2] as const
 const BASE_DWELL_MS = 2600
 
-export default function StoryMode({ open, onClose, bars, name, latest, snapshot, bigMoneyDates, sectorByDate, breadthByDate, mode, breadthPct }: Props) {
+export default function StoryMode({ open, onClose, bars, name, latest, snapshot, bigMoneyDates, sectorByDate, breadthByDate, mode, breadthPct, overlays, astroBands }: Props) {
   const events = useMemo(() => buildStoryEvents(bars, bigMoneyDates, sectorByDate), [bars, bigMoneyDates, sectorByDate])
   const pillars = useMemo(() => (latest ? buildPillars(latest, { mode, breadthPct }) : []), [latest, mode, breadthPct])
   // Thermometer source: a stock reads its SECTOR percentile; an index reads its
@@ -92,7 +117,7 @@ export default function StoryMode({ open, onClose, bars, name, latest, snapshot,
     : null
   const highlightDate = cur ? bars[cur.barIndex]?.trade_date ?? null : null
   const secDate = cur?.date ?? bars[bars.length - 1]?.trade_date
-  const sec = secDate ? thermoByDate?.get(secDate) : undefined
+  const sec = secDate ? readAtDate(thermoByDate, secDate) : undefined
 
   return (
     <div
@@ -153,6 +178,8 @@ export default function StoryMode({ open, onClose, bars, name, latest, snapshot,
             height={chartH}
             highlightDate={highlightDate}
             storyBubble={storyBubble}
+            overlays={overlays}
+            astroBands={astroBands}
           />
         </div>
         {thermoByDate && thermoByDate.size > 0 && (
