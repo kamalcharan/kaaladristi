@@ -2815,6 +2815,44 @@ def sector_insight(index_id: int, date: str = None):
     return {"index_id": index_id, "date": target_date, "insight": insight, "ai": insight is not None}
 
 
+class VaniNarrateRequest(BaseModel):
+    # The caller assembles the deterministic facts; VaNi only narrates them.
+    subject: str
+    facts: str
+
+
+@app.post('/api/ai/vani-narrate')
+def vani_narrate(req: VaniNarrateRequest):
+    """Phase 3 — VaNi as the storyteller. Given a subject + already-computed
+    facts (from the client's buildStoryEvents / computeThesis / move-quality),
+    return a grounded 2-3 sentence narration. VaNi never re-derives, so it
+    cannot invent numbers — unlike the raw-snapshot skills."""
+    if not _AI_ENABLED:
+        return {"insight": None, "ai": False}
+    skill = _AI_SKILLS.get("vani_narrate")
+    if not skill:
+        return {"insight": None, "ai": False}
+    facts = (req.facts or "").strip()
+    if not facts:
+        return {"insight": None, "ai": False}
+    user_msg = f"Subject: {req.subject}\n\nFacts:\n{facts}\n\nNarrate as VaNi."
+    _t0 = time.monotonic()
+    insight = _ai_complete(system=skill.system, user=user_msg, max_tokens=skill.max_tokens, no_think=True)
+    _lat = int((time.monotonic() - _t0) * 1000)
+    if insight:
+        _log_interaction(
+            product="dristiq",
+            endpoint="/api/ai/vani-narrate",
+            user_input=user_msg,
+            llm_response=insight,
+            system_prompt=skill.system,
+            context_payload={"subject": req.subject},
+            model_version=_AI_MODEL,
+            latency_ms=_lat,
+        )
+    return {"insight": insight, "ai": insight is not None}
+
+
 @app.get('/api/ai/instrument-insight')
 def instrument_insight(id: int, type: str = 'index', date: str = None):
     if not _AI_ENABLED or not _AI_OPTIONAL_OK:
