@@ -10,9 +10,24 @@
  * Observational, never advice.
  */
 
+import { useState } from 'react'
 import type { MoveQuality, MoveVerdict } from '@/services/moveQuality'
+import { narrateVani } from '@/services/vaniNarrate'
 
 const MONO: React.CSSProperties = { fontFamily: 'var(--font-mono)' }
+
+/** Deterministic facts VaNi narrates for an index's move quality. */
+function moveFacts(subject: string, mq: MoveQuality): string {
+  const lines = [
+    `Index: ${subject}`,
+    `Move quality verdict: ${mq.headline}`,
+    `Breadth: ${mq.upCount} of ${mq.total} constituents up on the day`,
+    `Consensus: ${mq.bullFlowCount} of ${mq.total} confirm with bullish flow${mq.bearFlowCount ? `, ${mq.bearFlowCount} turning bearish` : ''}`,
+  ]
+  if (mq.topSharePct != null && mq.topName) lines.push(`Concentration: top name ${mq.topName} is ${mq.topSharePct}% of the positive score`)
+  if (mq.aboveTrendPct != null) lines.push(`Constituents above their 20-EMA: ${Math.round(mq.aboveTrendPct)}%`)
+  return lines.join('\n')
+}
 
 const VERDICT_COLOR: Record<MoveVerdict, string> = {
   broad: 'var(--risk-green)',
@@ -47,11 +62,16 @@ export default function MoveQualityCard({
   mq,
   badge = null,
   compact = false,
+  subject,
 }: {
   mq: MoveQuality
   badge?: MoveBadge | null
   compact?: boolean
+  /** Index name — when set (full mode), enables the grounded VaNi read. */
+  subject?: string
 }) {
+  const [vaniText, setVaniText] = useState<string | null>(null)
+  const [vaniLoading, setVaniLoading] = useState(false)
   const color = VERDICT_COLOR[mq.verdict]
   const icon = VERDICT_ICON[mq.verdict]
   // The trap: a bullish badge contradicted by a non-broad population.
@@ -114,6 +134,30 @@ export default function MoveQualityCard({
           </span>
         ))}
       </div>
+
+      {/* VaNi grounded read (Phase 3) */}
+      {subject && (
+        <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', marginTop: 10, paddingTop: 9, borderTop: '1px solid var(--border)' }}>
+          <span style={{ color: 'var(--vani)', fontSize: 13 }}>✦</span>
+          <span style={{ fontSize: 12, color: 'var(--text-secondary)', flex: 1, minWidth: 0 }}>
+            {vaniText ? (
+              <><b style={{ color: 'var(--vani)' }}>VaNi</b> — {vaniText}</>
+            ) : (
+              <button
+                onClick={async () => {
+                  setVaniLoading(true)
+                  const text = await narrateVani(subject, moveFacts(subject, mq))
+                  setVaniText(text); setVaniLoading(false)
+                }}
+                disabled={vaniLoading}
+                style={{ ...MONO, fontSize: 10, fontWeight: 600, color: 'var(--vani)', background: 'none', border: 'none', cursor: vaniLoading ? 'default' : 'pointer', padding: 0, opacity: vaniLoading ? 0.6 : 1 }}
+              >
+                {vaniLoading ? '✦ VaNi is reading…' : '✦ Ask VaNi to read this move'}
+              </button>
+            )}
+          </span>
+        </div>
+      )}
     </div>
   )
 }

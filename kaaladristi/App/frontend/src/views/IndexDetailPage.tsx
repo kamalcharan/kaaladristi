@@ -780,7 +780,7 @@ function OverviewTab({ row, indexId }: { row: SectorIndexRow; indexId: number })
              directly above the constituents it summarises. */}
       {moveQuality && (
         <div style={{ marginBottom: 16 }}>
-          <MoveQualityCard mq={moveQuality} badge={moveBadge} />
+          <MoveQualityCard mq={moveQuality} badge={moveBadge} subject={row.name} />
         </div>
       )}
 
