@@ -13,9 +13,32 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useAuthStore } from '@/stores/authStore'
 import { useBookmarkStore } from '@/stores/bookmarkStore'
-import { computeThesis, type Relationship, type ThesisBar } from '@/services/thesis'
+import { computeThesis, type Relationship, type ThesisBar, type ThesisRead } from '@/services/thesis'
 import { KIND_COLORS } from '@/services/storyEvents'
+import { narrateVani } from '@/services/vaniNarrate'
 import type { Pillar } from './VerdictHero'
+
+/** Assemble the deterministic facts VaNi will narrate — nothing derived here. */
+function buildThesisFacts(name: string, t: ThesisRead): string {
+  const lines: string[] = [`Instrument: ${name}`, `Relationship: ${t.relationship}`]
+  if (t.relationship === 'position' && t.positionRisk) {
+    const r = t.positionRisk
+    lines.push(`P&L since entry: ${r.currentPct >= 0 ? '+' : ''}${r.currentPct.toFixed(1)}%`)
+    lines.push(`Peak since entry: ${r.peakPct >= 0 ? '+' : ''}${r.peakPct.toFixed(1)}%; given back ${Math.abs(r.drawdownFromPeak).toFixed(1)}% from the peak`)
+    lines.push(`Worst drawdown since entry: ${r.maxAdversePct.toFixed(1)}%`)
+    lines.push(`Risk trend: ${r.riskTrend}`)
+    if (t.entry) lines.push(`Entry setup was: ${t.entry.label} (${t.entry.aligned}/${t.entry.total} pillars)`)
+  }
+  const strong = t.pillars.filter((p) => p.aligned).map((p) => p.label)
+  const weak = t.pillars.filter((p) => !p.aligned && p.value !== '—').map((p) => p.label)
+  lines.push(`Pillars aligned now: ${t.alignedNow} of ${t.total}${strong.length ? ` (strong on ${strong.join(', ')})` : ''}${weak.length ? `; weak on ${weak.join(', ')}` : ''}`)
+  lines.push(`Alignment trend: ${t.alignedTrend}`)
+  lines.push(`Verdict: ${t.verdict.label} — ${t.verdict.line}`)
+  if (t.deterioration.length) {
+    lines.push('Recent warnings: ' + t.deterioration.slice(0, 4).map((e) => `${e.title} (${e.date})`).join('; '))
+  }
+  return lines.join('\n')
+}
 
 const MONO: React.CSSProperties = { fontFamily: 'var(--font-mono)' }
 const TONE: Record<'bull' | 'bear' | 'neutral', string> = {
@@ -73,6 +96,12 @@ export default function ThesisTab({
     if (autoOpenForm && !position) { setShowForm(true); onAutoOpened?.() }
   }, [autoOpenForm, position, onAutoOpened])
 
+  // VaNi narration (Phase 3) — an LLM read of the SAME deterministic facts.
+  const [vaniText, setVaniText] = useState<string | null>(null)
+  const [vaniLoading, setVaniLoading] = useState(false)
+  const [vaniTried, setVaniTried] = useState(false)
+  useEffect(() => { setVaniText(null); setVaniTried(false) }, [equityId, relationship])
+
   if (!thesis) {
     return <div className="glass-card rounded-xl p-4 text-[11px] text-muted">No data to read a thesis yet.</div>
   }
@@ -114,16 +143,36 @@ export default function ThesisTab({
         )}
       </div>
 
-      {/* ── VaNi read — grounded narration of the computed thesis/risk ── */}
+      {/* ── VaNi read — grounded narration of the computed thesis/risk. The
+          instant line is deterministic; "Ask VaNi" gets a richer LLM read of the
+          SAME facts (grounded — it can't invent numbers). ── */}
       <div style={{
         display: 'flex', gap: 10, alignItems: 'flex-start', fontSize: 13, color: 'var(--text-secondary)',
         background: 'linear-gradient(90deg, color-mix(in srgb, var(--vani) 12%, transparent), transparent)',
         border: '1px solid color-mix(in srgb, var(--vani) 24%, transparent)', borderRadius: 10, padding: '11px 13px',
       }}>
         <span style={{ color: 'var(--vani)', fontSize: 14, lineHeight: 1.3 }}>✦</span>
-        <div>
-          <b style={{ color: 'var(--vani)' }}>VaNi</b> <span style={{ color: 'var(--text-faint)' }}>· वाणी</span> — {thesis.vaniLine}{' '}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <b style={{ color: 'var(--vani)' }}>VaNi</b> <span style={{ color: 'var(--text-faint)' }}>· वाणी</span> — {vaniText ?? thesis.vaniLine}{' '}
           <i style={{ color: 'var(--text-faint)' }}>Observational, not advice.</i>
+          <div style={{ marginTop: 5 }}>
+            {vaniText ? (
+              <span style={{ ...MONO, fontSize: 9, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-faint)' }}>✦ VaNi · grounded narration</span>
+            ) : (
+              <button
+                onClick={async () => {
+                  setVaniLoading(true)
+                  const text = await narrateVani(name, buildThesisFacts(name, thesis))
+                  setVaniText(text); setVaniTried(true); setVaniLoading(false)
+                }}
+                disabled={vaniLoading}
+                style={{ ...MONO, fontSize: 10, fontWeight: 600, color: 'var(--vani)', background: 'none',
+                  border: 'none', cursor: vaniLoading ? 'default' : 'pointer', padding: 0, opacity: vaniLoading ? 0.6 : 1 }}
+              >
+                {vaniLoading ? '✦ VaNi is reading…' : vaniTried ? '✦ VaNi unavailable — retry' : '✦ Ask VaNi to narrate this'}
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
