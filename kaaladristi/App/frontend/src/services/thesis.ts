@@ -29,6 +29,20 @@ export interface PosturePoint {
   posture: number
 }
 
+/** Entry-anchored position risk — the risk of YOUR position, not the stock. */
+export interface PositionRisk {
+  /** % from entry, per session since entry. */
+  pnlPath: number[]
+  currentPct: number
+  peakPct: number
+  /** currentPct − peakPct (≤ 0): how much you've given back from the best. */
+  drawdownFromPeak: number
+  /** worst % below entry seen since entry. */
+  maxAdversePct: number
+  riskTrend: 'rising' | 'easing' | 'flat'
+  line: string
+}
+
 export interface ThesisRead {
   relationship: Relationship
   pillars: Pillar[]
@@ -39,9 +53,13 @@ export interface ThesisRead {
   /** Bearish story events, most recent last (since entry when a position). */
   deterioration: StoryEvent[]
   verdict: { label: string; tone: 'bull' | 'bear' | 'neutral'; line: string }
+  /** VaNi's grounded one-line narration of the read (deterministic — spoken
+   *  from the computed facts, not a raw LLM guess). */
+  vaniLine: string
   // Position-only —
   entry?: { date: string; price: number; qty: number | null; pillars: Pillar[]; aligned: number; total: number; label: string }
   pnlPct?: number | null
+  positionRisk?: PositionRisk
 }
 
 const BULL_FLOWS = new Set(['FRESH_LONGS', 'SHORT_COVERING'])
@@ -132,10 +150,10 @@ export function computeThesis(
   }
 
   const read: ThesisRead = {
-    relationship, pillars, alignedNow, total, alignedTrend, postureTrajectory, deterioration, verdict,
+    relationship, pillars, alignedNow, total, alignedTrend, postureTrajectory, deterioration, verdict, vaniLine: '',
   }
 
-  // Position layer — entry scorecard + P&L.
+  // Position layer — entry scorecard + P&L + entry-anchored risk.
   if (relationship === 'position' && position) {
     const entryBar = bars.find((b) => b.trade_date >= position.entryDate) ?? bars[bars.length - 1]
     const entryPillars = buildPillars(entryBar as LatestRow)
@@ -151,9 +169,41 @@ export function computeThesis(
       label: entryAligned / entryTotal >= 0.66 ? 'Strong setup' : entryAligned / entryTotal >= 0.5 ? 'Moderate setup' : 'Weak setup',
     }
     const cur = latest.close
-    read.pnlPct = cur != null && position.entryPrice > 0
-      ? ((cur - position.entryPrice) / position.entryPrice) * 100
-      : null
+    read.pnlPct = cur != null && position.entryPrice > 0 ? ((cur - position.entryPrice) / position.entryPrice) * 100 : null
+
+    // Position risk — anchored to YOUR entry, over the bars since you entered.
+    const sinceEntry = bars.filter((b) => b.trade_date >= position.entryDate)
+    const pnlPath = sinceEntry.map((b) => (b.close != null && position.entryPrice > 0 ? ((b.close - position.entryPrice) / position.entryPrice) * 100 : 0))
+    if (pnlPath.length > 0) {
+      const currentPct = pnlPath[pnlPath.length - 1]
+      const peakPct = Math.max(...pnlPath)
+      const maxAdversePct = Math.min(...pnlPath)
+      const drawdownFromPeak = currentPct - peakPct
+      const postureEntry = barPosture(entryBar)
+      const riskTrend: PositionRisk['riskTrend'] =
+        nowPosture < postureEntry - 15 ? 'rising' : nowPosture > postureEntry + 15 ? 'easing' : 'flat'
+      const line =
+        `${currentPct < 0 ? 'Down' : 'Up'} ${Math.abs(currentPct).toFixed(1)}% since entry` +
+        (drawdownFromPeak < -0.5 ? ` · ${Math.abs(drawdownFromPeak).toFixed(1)}% off the peak` : '') +
+        ` · risk ${riskTrend}`
+      read.positionRisk = { pnlPath, currentPct, peakPct, drawdownFromPeak, maxAdversePct, riskTrend, line }
+    }
+  }
+
+  // VaNi's grounded narration — spoken from the computed facts above (the
+  // Phase-3 principle: narrate the deterministic stream, never invent numbers).
+  if (relationship === 'position' && read.positionRisk) {
+    const r = read.positionRisk
+    read.vaniLine =
+      `You're ${r.currentPct < 0 ? 'down' : 'up'} ${Math.abs(r.currentPct).toFixed(1)}% since entry. ` +
+      `${r.drawdownFromPeak < -1 ? `You've given back ${Math.abs(r.drawdownFromPeak).toFixed(1)}% from the peak and ` : ''}` +
+      `${read.alignedNow}/${read.total} pillars hold — ${verdict.line}. Risk is ${r.riskTrend}.`
+  } else if (relationship === 'watchlist') {
+    read.vaniLine = `On your watchlist — ${verdict.label.toLowerCase()}: ${verdict.line}.` +
+      (deterioration.length ? ` Latest flag: ${deterioration[0].title.toLowerCase()} on ${deterioration[0].date}.` : '')
+  } else {
+    read.vaniLine = `${verdict.label} — ${verdict.line}.` +
+      (deterioration.length ? ` Recent warning: ${deterioration[0].title.toLowerCase()}.` : '')
   }
 
   return read

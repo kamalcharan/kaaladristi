@@ -114,6 +114,19 @@ export default function ThesisTab({
         )}
       </div>
 
+      {/* ── VaNi read — grounded narration of the computed thesis/risk ── */}
+      <div style={{
+        display: 'flex', gap: 10, alignItems: 'flex-start', fontSize: 13, color: 'var(--text-secondary)',
+        background: 'linear-gradient(90deg, color-mix(in srgb, var(--vani) 12%, transparent), transparent)',
+        border: '1px solid color-mix(in srgb, var(--vani) 24%, transparent)', borderRadius: 10, padding: '11px 13px',
+      }}>
+        <span style={{ color: 'var(--vani)', fontSize: 14, lineHeight: 1.3 }}>✦</span>
+        <div>
+          <b style={{ color: 'var(--vani)' }}>VaNi</b> <span style={{ color: 'var(--text-faint)' }}>· वाणी</span> — {thesis.vaniLine}{' '}
+          <i style={{ color: 'var(--text-faint)' }}>Observational, not advice.</i>
+        </div>
+      </div>
+
       {/* ── Add-position form ── */}
       {showForm && relationship !== 'position' && (
         <div style={{ display: 'flex', gap: 14, alignItems: 'flex-end', flexWrap: 'wrap',
@@ -165,13 +178,32 @@ export default function ThesisTab({
           </div>
         </Card>
 
-        {/* Posture trajectory */}
+        {/* Position risk (entry-anchored) — or generic posture for watch/cold */}
         <Card>
-          <Label>Risk ↔ reward · 30 bars</Label>
-          <PostureChart points={thesis.postureTrajectory.map((p) => p.posture)} />
-          <div style={{ display: 'flex', justifyContent: 'space-between', ...MONO, fontSize: 9, color: 'var(--text-faint)', marginTop: 2 }}>
-            <span>{thesis.postureTrajectory[0]?.date}</span><span>now</span>
-          </div>
+          {relationship === 'position' && thesis.positionRisk ? (() => {
+            const pr = thesis.positionRisk!
+            const trendColor = pr.riskTrend === 'rising' ? 'var(--risk-red)' : pr.riskTrend === 'easing' ? 'var(--risk-green)' : 'var(--risk-amber)'
+            return (
+              <>
+                <Label>Position Risk · since entry</Label>
+                <PnlChart points={pr.pnlPath} />
+                <div style={{ display: 'flex', gap: 14, marginTop: 8, flexWrap: 'wrap' }}>
+                  <Kv label="Peak" value={`${pr.peakPct >= 0 ? '+' : ''}${pr.peakPct.toFixed(1)}%`} />
+                  <Kv label="Off peak" value={`${pr.drawdownFromPeak.toFixed(1)}%`} color={pr.drawdownFromPeak < -0.5 ? 'var(--risk-red)' : 'var(--text-primary)'} />
+                  <Kv label="Worst" value={`${pr.maxAdversePct.toFixed(1)}%`} color={pr.maxAdversePct < 0 ? 'var(--risk-red)' : 'var(--text-primary)'} />
+                  <Kv label="Risk" value={pr.riskTrend} color={trendColor} />
+                </div>
+              </>
+            )
+          })() : (
+            <>
+              <Label>Risk ↔ reward · 30 bars</Label>
+              <PostureChart points={thesis.postureTrajectory.map((p) => p.posture)} />
+              <div style={{ display: 'flex', justifyContent: 'space-between', ...MONO, fontSize: 9, color: 'var(--text-faint)', marginTop: 2 }}>
+                <span>{thesis.postureTrajectory[0]?.date}</span><span>now</span>
+              </div>
+            </>
+          )}
         </Card>
 
         {/* Entry scorecard (position) OR setup read (watchlist/cold) */}
@@ -265,6 +297,37 @@ function PillarList({ pillars }: { pillars: Pillar[] }) {
     </div>
   )
 }
+/** P&L% since entry — area filled between the price path and the entry line (0%). */
+function PnlChart({ points }: { points: number[] }) {
+  if (points.length < 2) {
+    return <div style={{ height: 60, display: 'flex', alignItems: 'center', ...MONO, fontSize: 10, color: 'var(--text-faint)' }}>Not enough history since entry.</div>
+  }
+  const W = 240, H = 60
+  const min = Math.min(0, ...points), max = Math.max(0, ...points)
+  const range = (max - min) || 1
+  const y = (v: number) => H - 4 - ((v - min) / range) * (H - 8)
+  const zeroY = y(0)
+  const step = W / (points.length - 1)
+  const line = points.map((v, i) => `${i * step},${y(v)}`).join(' ')
+  const last = points[points.length - 1]
+  const col = last >= 0 ? 'var(--risk-green)' : 'var(--risk-red)'
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} style={{ marginTop: 6 }} aria-label="P&L since entry">
+      <defs>
+        <linearGradient id="pnlg" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor={col} stopOpacity="0.22" />
+          <stop offset="1" stopColor={col} stopOpacity="0.04" />
+        </linearGradient>
+      </defs>
+      <line x1="0" y1={zeroY} x2={W} y2={zeroY} stroke="var(--text-faint)" strokeDasharray="3 3" />
+      <text x="2" y={Math.max(9, zeroY - 3)} fill="var(--text-faint)" fontSize="8" fontFamily="var(--font-mono)">entry</text>
+      <polygon points={`${line} ${W},${zeroY} 0,${zeroY}`} fill="url(#pnlg)" />
+      <polyline points={line} fill="none" stroke={col} strokeWidth="2" />
+      <circle cx={W} cy={y(last)} r="3.5" fill={col} />
+    </svg>
+  )
+}
+
 /** −100..+100 posture as an area line crossing a neutral midline. */
 function PostureChart({ points }: { points: number[] }) {
   if (points.length < 2) return <div style={{ height: 60 }} />
