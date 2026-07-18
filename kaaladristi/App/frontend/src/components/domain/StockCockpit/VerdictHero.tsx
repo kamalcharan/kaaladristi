@@ -26,9 +26,16 @@ interface CorrState {
   tagline?: string
 }
 
+export type VerdictMode = 'equity' | 'index'
+
 interface Props {
   latest: LatestRow
   snapshot?: { corrState?: CorrState } | null
+  /** 'index' swaps the Liquidity pillar (delivery — indices have none) for
+   *  Breadth (% constituents participating). Defaults to equity. */
+  mode?: VerdictMode
+  /** Latest breadth score (0–100), used for the index Breadth pillar. */
+  breadthPct?: number | null
 }
 
 export interface Pillar {
@@ -50,7 +57,12 @@ function pct(v: number | null | undefined): string {
   return v == null ? '—' : `${v >= 0 ? '+' : ''}${v.toFixed(1)}%`
 }
 
-export function buildPillars(l: LatestRow): Pillar[] {
+export function buildPillars(
+  l: LatestRow,
+  opts?: { mode?: VerdictMode; breadthPct?: number | null },
+): Pillar[] {
+  const isIndex = opts?.mode === 'index'
+  const breadth = opts?.breadthPct ?? null
   const s5 = l.score_5d ?? null
   const s22 = l.score_22d ?? null
   const rsi = l.rsi_14 ?? null
@@ -69,6 +81,30 @@ export function buildPillars(l: LatestRow): Pillar[] {
   // Liquidity — delivery conviction via the recent-vs-baseline surge.
   const liqTone =
     surge == null ? (dp == null ? '—' : 'Deliv') : surge >= 1.2 ? 'Deliv · Strong' : 'Deliv · Soft'
+
+  // Third pillar splits by instrument: equities read Liquidity (delivery
+  // conviction); indices — which have no delivery — read Breadth instead
+  // (% of constituents participating). Volume is deliberately NOT used for
+  // indices: km_index_eod volume has a documented scale discontinuity.
+  const thirdPillar: Pillar = isIndex
+    ? {
+        key: 'breadth',
+        label: 'Breadth',
+        value: breadth != null ? `${Math.round(breadth)}%` : '—',
+        tone: breadth == null ? '—' : breadth >= 55 ? 'Broad' : breadth >= 40 ? 'Mixed' : 'Narrow',
+        toneColor: breadth == null ? MUTED : breadth >= 55 ? GREEN : breadth >= 40 ? AMBER : RED,
+        aligned: breadth != null && breadth >= 50,
+        anchor: 'flow',
+      }
+    : {
+        key: 'liquidity',
+        label: 'Liquidity',
+        value: dp != null ? `${Math.round(dp)}%` : '—',
+        tone: liqTone,
+        toneColor: surge != null && surge >= 1.2 ? GREEN : MUTED,
+        aligned: surge != null && surge >= 1.2,
+        anchor: 'flow',
+      }
 
   return [
     {
@@ -89,15 +125,7 @@ export function buildPillars(l: LatestRow): Pillar[] {
       aligned: above20 === true || (rsi != null && rsi >= 50),
       anchor: 'strength',
     },
-    {
-      key: 'liquidity',
-      label: 'Liquidity',
-      value: dp != null ? `${Math.round(dp)}%` : '—',
-      tone: liqTone,
-      toneColor: surge != null && surge >= 1.2 ? GREEN : MUTED,
-      aligned: surge != null && surge >= 1.2,
-      anchor: 'flow',
-    },
+    thirdPillar,
     {
       key: 'returns',
       label: 'Returns',
@@ -114,9 +142,9 @@ function jumpTo(anchor: string) {
   document.getElementById(`study-${anchor}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
 
-export default function VerdictHero({ latest, snapshot }: Props) {
+export default function VerdictHero({ latest, snapshot, mode, breadthPct }: Props) {
   if (!latest) return null
-  const pillars = buildPillars(latest)
+  const pillars = buildPillars(latest, { mode, breadthPct })
   const alignedCount = pillars.filter((p) => p.aligned).length
   const corr = snapshot?.corrState
   const verdictColor = corr?.color ?? 'var(--text-primary)'

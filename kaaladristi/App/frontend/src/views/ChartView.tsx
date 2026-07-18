@@ -32,6 +32,7 @@ import type { TimeRange } from '@/types';
 import { useVisualPulse } from '@/hooks/useVisualPulse';
 import { useEquityVisualPulse } from '@/hooks/useEquityVisualPulse';
 import { useScanPresence } from '@/hooks/useScanPresence';
+import { useIndexBreadth } from '@/hooks/useSectorRotation';
 import { usePipelineStatus } from '@/hooks/usePipelineStatus';
 import {
   computePulseSnapshot,
@@ -188,6 +189,14 @@ export default function ChartView() {
   const equityPulse = useEquityVisualPulse(isEquity ? numId : null);
   const scanPresence = useScanPresence(isEquity ? numId : null);
 
+  // Index breadth — the cockpit's 4th verdict pillar for indices (% of
+  // constituents participating). Equities read Liquidity instead.
+  const { data: indexBreadth } = useIndexBreadth(isIndex ? numId : null, 66);
+  const breadthPct = useMemo(
+    () => (isIndex ? indexBreadth?.data?.at(-1)?.breadth_score ?? null : null),
+    [isIndex, indexBreadth],
+  );
+
   // VaNi narrative for the Decision Band (slim read, not the full panel).
   const { data: aiData, isLoading: aiLoading } = useInstrumentInsight(numId, type ?? 'index');
 
@@ -320,22 +329,28 @@ export default function ChartView() {
     enabled: isEquity && !!equityPulse.meta?.industry,
     staleTime: 300_000,
   });
+  // Story works for equities AND indices on the daily timeframe. Indices carry
+  // score/magic_rs/flow columns (conviction · magic-RS flip · flow flip fire);
+  // equity-only signals (stage/scan/big-money/sector) simply don't trigger when
+  // their columns are absent.
   const storyEvents = useMemo(
-    () => (isEquity && tf === 'daily' ? buildStoryEvents(rows, bigMoneyDates, sectorByDate) : []),
-    [isEquity, tf, rows, bigMoneyDates, sectorByDate],
+    () => ((isEquity || isIndex) && tf === 'daily' ? buildStoryEvents(rows, bigMoneyDates, sectorByDate) : []),
+    [isEquity, isIndex, tf, rows, bigMoneyDates, sectorByDate],
   );
   // Events are indexed against `rows` (the chart's data) but the playhead
   // indexes `pulseBars` — different arrays. Bridge them by DATE, not index.
   const eventDates = useMemo(() => new Set(storyEvents.map((e) => e.date)), [storyEvents]);
   const playheadDate = pulseBars[effectiveIdx]?.trade_date ?? null;
   const storyBubble = useMemo(() => {
-    if (dvTab !== 'chart' || !playheadDate) return null;
+    // Equities gate the bubble to the Chart & Replay tab; indices have no tab
+    // strip (single chart-centric view) so the bubble is always live there.
+    if ((isEquity && dvTab !== 'chart') || !playheadDate) return null;
     let best: StoryEvent | null = null;
     for (const e of storyEvents) {
       if (e.date === playheadDate && (!best || e.priority > best.priority)) best = e;
     }
     return best ? { date: best.date, tone: best.tone, color: KIND_COLORS[best.kind], title: best.title, detail: best.detail, reactionPct: best.reactionPct } : null;
-  }, [storyEvents, playheadDate, dvTab]);
+  }, [storyEvents, playheadDate, dvTab, isEquity]);
 
   // Replay playback — walk the playhead forward, dwelling on event bars so the
   // on-candle bubble is readable, then gliding to the next.
@@ -492,7 +507,7 @@ export default function ChartView() {
             {isEquity && <BookmarkToggle equityId={numId} size={16} />}
           </div>
 
-          <div className={cn('grid gap-4 items-start', isEquity ? 'grid-cols-1 lg:grid-cols-[1.35fr_1fr]' : 'grid-cols-1')}>
+          <div className={cn('grid gap-4 items-start', 'grid-cols-1 lg:grid-cols-[1.35fr_1fr]')}>
             {/* LEFT — identity · price · stats · read */}
             <div className="min-w-0 flex flex-col gap-3">
               <div>
@@ -568,10 +583,15 @@ export default function ChartView() {
               )}
             </div>
 
-            {/* RIGHT — verdict card (equity only) */}
-            {isEquity && !isLoading && latest && (
+            {/* RIGHT — verdict card (equity + index; index swaps Liquidity→Breadth) */}
+            {!isLoading && latest && (
               <div className="min-w-0">
-                <VerdictHero latest={latest} snapshot={snapshot} />
+                <VerdictHero
+                  latest={latest}
+                  snapshot={snapshot}
+                  mode={isIndex ? 'index' : 'equity'}
+                  breadthPct={breadthPct}
+                />
               </div>
             )}
           </div>
@@ -844,8 +864,51 @@ export default function ChartView() {
             </>)}
           </>
         ) : (
-          /* Index — chart-centric (equity evidence cards don't apply) */
-          <div className="min-w-0">{chartArea}</div>
+          /* Index — the same cockpit as equities: chart + replay + scrubber.
+             Equity-only evidence cards (Smart Money / delivery / big money /
+             scan presence) don't apply, but the price × signal story does. */
+          <>
+            {storyEvents.length > 0 && (
+              <div className="flex items-center gap-3 mb-2">
+                <button
+                  onClick={() => {
+                    if (!playing) {
+                      const pbIdx = new Map(pulseBars.map((b, i) => [b.trade_date, i]));
+                      const firstEv = storyEvents.find((e) => pbIdx.has(e.date));
+                      const startIdx = firstEv ? (pbIdx.get(firstEv.date) as number) : 0;
+                      setActiveIndex(startIdx);
+                      playIdxRef.current = startIdx;
+                    }
+                    setPlaying((p) => !p);
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border border-[var(--accent)] text-[var(--accent)] hover:bg-[var(--accent-glow)] transition-colors"
+                >
+                  {playing ? '❚❚ Pause' : '▷ Play story'}
+                </button>
+                <button
+                  onClick={() => setStoryOpen(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border border-kd-border text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-[var(--accent)] transition-colors"
+                >
+                  ⤢ Story mode
+                </button>
+                <span className="text-[11px] text-muted font-mono">
+                  {storyEvents.length} signal events · price × data story
+                </span>
+              </div>
+            )}
+            <div className="min-w-0">{chartArea}</div>
+            {pulseBars.length > 0 && (
+              <div className="mt-1">
+                <TimelineSlider
+                  total={pulseBars.length}
+                  activeIndex={effectiveIdx}
+                  bars={pulseBars}
+                  corrHistory={corrHistory}
+                  onChange={setActiveIndex}
+                />
+              </div>
+            )}
+          </>
         )}
 
       </div>
@@ -857,8 +920,8 @@ export default function ChartView() {
         context="overlay"
       />
 
-      {/* Focused single-view story replay */}
-      {isEquity && (
+      {/* Focused single-view story replay (equity + index) */}
+      {(isEquity || isIndex) && (
         <StoryMode
           open={storyOpen}
           onClose={() => setStoryOpen(false)}
@@ -868,6 +931,8 @@ export default function ChartView() {
           snapshot={snapshot}
           bigMoneyDates={bigMoneyDates}
           sectorByDate={sectorByDate}
+          mode={isIndex ? 'index' : 'equity'}
+          breadthPct={breadthPct}
         />
       )}
     </ErrorBoundary>

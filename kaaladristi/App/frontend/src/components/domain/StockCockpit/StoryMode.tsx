@@ -13,7 +13,7 @@ import { X } from 'lucide-react'
 import TradingChart from '@/components/charts/TradingChart'
 import type { IndicatorRow } from '@/services/indicatorData'
 import { buildStoryEvents, KIND_COLORS } from '@/services/storyEvents'
-import { buildPillars, type LatestRow } from './VerdictHero'
+import { buildPillars, type LatestRow, type VerdictMode } from './VerdictHero'
 import SectorThermometer from './SectorThermometer'
 
 interface CorrState { state: string; color: string; tagline?: string }
@@ -28,14 +28,16 @@ interface Props {
   snapshot?: { corrState?: CorrState } | null
   bigMoneyDates: Set<string>
   sectorByDate?: Map<string, SectorPoint>
+  mode?: VerdictMode
+  breadthPct?: number | null
 }
 
 const SPEEDS = [0.5, 1, 2] as const
 const BASE_DWELL_MS = 2600
 
-export default function StoryMode({ open, onClose, bars, name, latest, snapshot, bigMoneyDates, sectorByDate }: Props) {
+export default function StoryMode({ open, onClose, bars, name, latest, snapshot, bigMoneyDates, sectorByDate, mode, breadthPct }: Props) {
   const events = useMemo(() => buildStoryEvents(bars, bigMoneyDates, sectorByDate), [bars, bigMoneyDates, sectorByDate])
-  const pillars = useMemo(() => (latest ? buildPillars(latest) : []), [latest])
+  const pillars = useMemo(() => (latest ? buildPillars(latest, { mode, breadthPct }) : []), [latest, mode, breadthPct])
   const alignedCount = pillars.filter((p) => p.aligned).length
   const corr = snapshot?.corrState
 

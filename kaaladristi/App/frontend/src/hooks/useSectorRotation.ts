@@ -121,12 +121,14 @@ export function useConstituentDetails(equityIds: number[], tradeDate: string) {
   });
 }
 
-/** Latest EOD row + symbol metadata for a single index. */
-export function useIndexDetail(indexId: number | undefined) {
+/** Latest EOD row + symbol metadata for a single index. Pass `forDate` to pin a
+ *  historical session (Overview date picker); omit it to track the latest. */
+export function useIndexDetail(indexId: number | undefined, forDate?: string) {
   const dateKey = useDateKey();
   return useQuery<SectorIndexRow | null, Error>({
-    queryKey: ['index-detail', indexId, dateKey],
-    queryFn: () => fetchIndexDetail(indexId!),
+    // A pinned forDate is a deliberate snapshot — no freshness dimension.
+    queryKey: ['index-detail', indexId, forDate ?? `latest:${dateKey}`],
+    queryFn: () => fetchIndexDetail(indexId!, forDate),
     enabled: indexId != null,
     staleTime: STALE,
     retry: 1,
