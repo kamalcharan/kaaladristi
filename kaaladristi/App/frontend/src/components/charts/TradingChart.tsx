@@ -100,6 +100,7 @@ interface TradingChartProps {
   storyBubble?: {
     date: string;
     tone: 'bull' | 'bear' | 'neutral';
+    color: string;
     title: string;
     detail: string;
     reactionPct: number | null;
@@ -1164,17 +1165,24 @@ export default function TradingChart({ data, height = 900, compact = false, work
         {/* Story-mode on-candle bubble — anchored by X to the current event's
             candle, near the top of the pane with a downward caret. */}
         {storyBubble && bubbleX != null && (() => {
-          const c = storyBubble.tone === 'bull' ? 'var(--risk-green)'
-            : storyBubble.tone === 'bear' ? 'var(--risk-red)' : 'var(--text-secondary)';
+          const c = storyBubble.color;
+          const dir = storyBubble.tone === 'bull' ? { g: '▲', col: 'var(--risk-green)' }
+            : storyBubble.tone === 'bear' ? { g: '▼', col: 'var(--risk-red)' }
+            : { g: '•', col: 'var(--verdict-hero-muted)' };
+          // Position above the candle for bearish, below for bullish, so the
+          // bubble sits on the side the move is heading away from.
+          const below = storyBubble.tone === 'bull';
           return (
-            <div style={{ position: 'absolute', top: 8, left: bubbleX, transform: 'translateX(-50%)', zIndex: 20, pointerEvents: 'none', width: 220 }}>
+            <div style={{ position: 'absolute', ...(below ? { bottom: 8 } : { top: 8 }), left: bubbleX, transform: 'translateX(-50%)', zIndex: 20, pointerEvents: 'none', width: 220 }}>
               <div style={{
                 background: 'var(--verdict-hero-bg)', color: 'var(--verdict-hero-text)',
-                border: `1px solid color-mix(in srgb, ${c} 45%, transparent)`,
+                border: `1px solid color-mix(in srgb, ${c} 55%, transparent)`,
+                borderLeft: `3px solid ${c}`,
                 borderRadius: 10, padding: '8px 11px', boxShadow: 'var(--card-shadow)',
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700 }}>
                   <span style={{ width: 7, height: 7, borderRadius: '50%', background: c, flexShrink: 0 }} />
+                  <span style={{ color: dir.col, fontSize: 11 }}>{dir.g}</span>
                   <span style={{ color: c }}>{storyBubble.title}</span>
                 </div>
                 <div style={{ fontSize: 11, color: 'var(--verdict-hero-muted)', marginTop: 3, lineHeight: 1.4 }}>{storyBubble.detail}</div>

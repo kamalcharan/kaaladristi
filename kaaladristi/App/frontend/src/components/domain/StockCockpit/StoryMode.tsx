@@ -12,7 +12,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { X } from 'lucide-react'
 import TradingChart from '@/components/charts/TradingChart'
 import type { IndicatorRow } from '@/services/indicatorData'
-import { buildStoryEvents } from '@/services/storyEvents'
+import { buildStoryEvents, KIND_COLORS } from '@/services/storyEvents'
 import { buildPillars, type LatestRow } from './VerdictHero'
 
 interface CorrState { state: string; color: string; tagline?: string }
@@ -73,10 +73,9 @@ export default function StoryMode({ open, onClose, bars, name, latest, snapshot,
 
   const cur = events[idx] ?? null
   const storyBubble = cur
-    ? { date: cur.date, tone: cur.tone, title: cur.title, detail: cur.detail, reactionPct: cur.reactionPct }
+    ? { date: cur.date, tone: cur.tone, color: KIND_COLORS[cur.kind], title: cur.title, detail: cur.detail, reactionPct: cur.reactionPct }
     : null
   const highlightDate = cur ? bars[cur.barIndex]?.trade_date ?? null : null
-  const toneColor = (t: string) => (t === 'bull' ? 'var(--risk-green)' : t === 'bear' ? 'var(--risk-red)' : 'var(--text-muted)')
 
   return (
     <div
@@ -184,7 +183,7 @@ export default function StoryMode({ open, onClose, bars, name, latest, snapshot,
               style={{
                 width: i === idx ? 11 : 7,
                 height: i === idx ? 11 : 7,
-                background: toneColor(e.tone),
+                background: KIND_COLORS[e.kind],
                 opacity: i === idx ? 1 : 0.45,
               }}
             />
@@ -195,7 +194,7 @@ export default function StoryMode({ open, onClose, bars, name, latest, snapshot,
         <div className="shrink-0 text-right min-w-[180px]">
           {cur ? (
             <>
-              <div className="text-xs font-semibold" style={{ color: toneColor(cur.tone) }}>{cur.title}</div>
+              <div className="text-xs font-semibold" style={{ color: KIND_COLORS[cur.kind] }}>{cur.title}</div>
               <div className="text-[10px] text-muted font-mono">
                 {cur.date}
                 {cur.reactionPct != null && (
