@@ -189,6 +189,12 @@ body::before {
   to   { opacity: 1; transform: scale(1); }
 }
 
+/* VaNi story-teller mascot — a gentle bob while it walks the chart. */
+@keyframes vani-bob {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-4px); }
+}
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;

@@ -1198,6 +1198,31 @@ export default function TradingChart({ data, height = 900, compact = false, work
           );
         })()}
 
+        {/* VaNi story-teller mascot — glides candle→candle as the story advances,
+            so it reads as VaNi walking the chart telling the tale. */}
+        {storyBubble && bubbleX != null && (
+          <div
+            style={{
+              position: 'absolute', left: bubbleX, top: '60%', marginLeft: -16, zIndex: 21,
+              pointerEvents: 'none', transition: 'left 0.6s cubic-bezier(.4,0,.2,1)',
+            }}
+          >
+            <div
+              style={{
+                width: 32, height: 32, borderRadius: '50%',
+                background: 'color-mix(in srgb, var(--vani) 20%, var(--verdict-hero-bg))',
+                border: '1.5px solid var(--vani)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                boxShadow: '0 0 14px color-mix(in srgb, var(--vani) 50%, transparent)',
+                animation: 'vani-bob 2.2s ease-in-out infinite',
+                fontSize: 16, color: 'var(--vani)',
+              }}
+            >
+              ✦
+            </div>
+          </div>
+        )}
+
         {hoverBar != null && (() => {
           const n = (v: unknown, dec = 2) =>
             typeof v === 'number' ? v.toLocaleString('en-IN', { maximumFractionDigits: dec }) : '—';
