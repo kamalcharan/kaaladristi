@@ -914,6 +914,8 @@ export default function ChartView() {
           breadthByDate={breadthByDate}
           mode={isIndex ? 'index' : 'equity'}
           breadthPct={breadthPct}
+          overlays={frameworkOverlays}
+          astroBands={astroBands}
         />
       )}
     </ErrorBoundary>
