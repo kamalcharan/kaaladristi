@@ -321,17 +321,18 @@ const INDEX_DETAIL_COLS =
   'ret_5d,ret_22d,ret_66d,rsi_14,magic_rs,magic_rs_zone,flow_type,sniper_inst,' +
   'avg_amt_5d,avg_amt_22d,avg_amt_66d,score_5d,score_22d';
 
-export async function fetchIndexDetail(indexId: number): Promise<SectorIndexRow | null> {
-  // Resolve the latest INDICATOR-complete date globally (ema_20-gated, anchored
-  // by standard indices), then read THIS index's row at that date. Do NOT gate
-  // the per-row read on ema_20: custom (category='custom') indices synthesize
-  // close/returns/score but do not reliably compute ema_20 (B78) — a per-row
-  // ema_20 gate silently drops every row of such an index and 404s the page
-  // (hit on CPaaS / other thinly-synthesized curated indices, 2026-07-16).
+export async function fetchIndexDetail(indexId: number, forDate?: string): Promise<SectorIndexRow | null> {
+  // Resolve the date to read this index at. Default: the latest
+  // INDICATOR-complete date globally (ema_20-gated, anchored by standard
+  // indices). A pinned `forDate` (Overview date picker) reads that day instead.
+  // Do NOT gate the per-row read on ema_20: custom (category='custom') indices
+  // synthesize close/returns/score but do not reliably compute ema_20 (B78) — a
+  // per-row ema_20 gate silently drops every row of such an index and 404s the
+  // page (hit on CPaaS / other thinly-synthesized curated indices, 2026-07-16).
   // This mirrors fetchSectorIndices, which gates the DATE, not each row.
-  const [symRes, latestDate] = await Promise.all([
+  const [symRes, resolvedDate] = await Promise.all([
     from('km_index_symbols').select('id,name,category').eq('id', indexId).limit(1).execute(),
-    fetchLatestIndexDate(),
+    forDate ? Promise.resolve(forDate) : fetchLatestIndexDate(),
   ]);
 
   if (symRes.error) return null;
@@ -341,13 +342,13 @@ export async function fetchIndexDetail(indexId: number): Promise<SectorIndexRow 
   type EodOnly = Omit<SectorIndexRow, 'name' | 'category' | 'stock_count'>;
   let eod: EodOnly | undefined;
 
-  if (latestDate) {
-    const r = await from('km_index_eod')
-      .select(INDEX_DETAIL_COLS)
-      .eq('index_id', indexId)
-      .eq('trade_date', latestDate)
-      .limit(1)
-      .execute();
+  if (resolvedDate) {
+    // For a pinned date, read the latest row ON OR BEFORE it (holidays / an
+    // index that didn't trade that exact session still resolve to a real bar).
+    const q = from('km_index_eod').select(INDEX_DETAIL_COLS).eq('index_id', indexId);
+    const r = forDate
+      ? await q.lte('trade_date', resolvedDate).order('trade_date', { ascending: false }).limit(1).execute()
+      : await q.eq('trade_date', resolvedDate).limit(1).execute();
     if (r.error) return null;
     eod = ((r.data ?? []) as EodOnly[])[0];
   }

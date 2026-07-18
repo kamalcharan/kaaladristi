@@ -7,11 +7,11 @@
 
 import React, { useState, useMemo, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, ArrowUp, ArrowDown, ChevronUp, ChevronDown } from 'lucide-react';
+import { ArrowLeft, ArrowUp, ArrowDown, ChevronUp, ChevronDown, LineChart as LineChartIcon } from 'lucide-react';
 import { DristiQLoader } from '@/components/ui';
 import { LineChart, Line, ResponsiveContainer, Tooltip } from 'recharts';
 import { FLOW_LABELS, ZONE_LABELS } from '@/constants/signalScale';
-import { useIndexDetail, useIndexSparkline, useConstituentDetails, useConstituentFlowMap, useIndexBreadth } from '@/hooks/useSectorRotation';
+import { useIndexDetail, useIndexSparkline, useConstituentDetails, useConstituentFlowMap, useIndexBreadth, useIndexDateRange } from '@/hooks/useSectorRotation';
 import WorkspaceChart from '@/components/workspace/WorkspaceChart';
 import type { ChartOverlay } from '@/types/framework';
 
@@ -1050,9 +1050,12 @@ export default function IndexDetailPage() {
   const { indexId: indexIdStr } = useParams<{ indexId: string }>();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<DetailTab>('overview');
+  // Date picker — null tracks the latest session; a pinned date reads history.
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
   const indexId = indexIdStr ? parseInt(indexIdStr, 10) : undefined;
-  const { data: row, isLoading, error } = useIndexDetail(indexId);
+  const { data: row, isLoading, error } = useIndexDetail(indexId, selectedDate ?? undefined);
+  const { earliestDate, latestDate } = useIndexDateRange();
 
   if (isLoading) {
     return (
@@ -1141,9 +1144,59 @@ export default function IndexDetailPage() {
               {row.stock_count} stocks
             </span>
           )}
-          <span style={{ ...MONO, fontSize: 10, color: 'var(--text-faint)', marginLeft: 'auto' }}>
-            {row.trade_date}
-          </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginLeft: 'auto' }}>
+            {/* Date picker — view this index on any past session (Overview data
+                follows the pinned date). */}
+            <input
+              type="date"
+              value={selectedDate ?? latestDate ?? row.trade_date}
+              min={earliestDate ?? undefined}
+              max={latestDate ?? undefined}
+              onChange={(e) => {
+                const v = e.target.value;
+                setSelectedDate(!v || v === latestDate ? null : v);
+              }}
+              style={{
+                ...MONO,
+                fontSize: 11,
+                color: 'var(--text-secondary)',
+                background: 'var(--bg)',
+                border: '1px solid var(--border)',
+                borderRadius: 4,
+                padding: '3px 7px',
+                colorScheme: 'dark light',
+              }}
+              title="View this index on a past session"
+            />
+            {selectedDate && (
+              <button
+                onClick={() => setSelectedDate(null)}
+                style={{
+                  ...MONO, fontSize: 10, color: 'var(--gold-soft)', background: 'none',
+                  border: 'none', cursor: 'pointer', padding: 0,
+                }}
+              >
+                latest
+              </button>
+            )}
+            {/* Study — open the shared cockpit (verdict pillars + price × signal
+                replay) for this index, same as a stock's Study page. */}
+            <button
+              onClick={() => navigate(`/chart/index/${indexId}?name=${encodeURIComponent(row.name)}`)}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 5,
+                ...MONO, fontSize: 11, fontWeight: 600, letterSpacing: '0.04em',
+                color: 'var(--accent, var(--gold-soft))',
+                background: 'color-mix(in srgb, var(--accent, var(--gold-soft)) 10%, transparent)',
+                border: '1px solid color-mix(in srgb, var(--accent, var(--gold-soft)) 35%, transparent)',
+                borderRadius: 5, padding: '4px 11px', cursor: 'pointer',
+              }}
+              title="Open Study — verdict pillars + price × signal replay"
+            >
+              <LineChartIcon size={12} />
+              Study
+            </button>
+          </div>
         </div>
       </div>
 

@@ -117,6 +117,11 @@ export interface IndicatorRow {
   score_5d: number | null;
   score_22d: number | null;
   delivery_surge_x?: number | null;
+  // Returns — present on km_index_eod (computed by handle_index_returns) and on
+  // km_equity_eod. Optional so resampled W/M bars (which lack them) still type.
+  ret_5d?: number | null;
+  ret_22d?: number | null;
+  ret_66d?: number | null;
 }
 
 export async function fetchIndicatorData(
@@ -159,7 +164,10 @@ export async function fetchIndicatorDataById(
   range: TimeRange,
 ): Promise<IndicatorRow[]> {
   const startDate = getStartDate(range);
-  const cols = `trade_date,open,high,low,close,volume,${INDICATOR_COLS}`;
+  // Index returns (ret_5d/22d/66d) live on km_index_eod (computed by
+  // handle_index_returns) — needed by the index cockpit's Returns pillar +
+  // the story's conviction/returns read. NOT in shared INDICATOR_COLS.
+  const cols = `trade_date,open,high,low,close,volume,${INDICATOR_COLS},ret_5d,ret_22d,ret_66d`;
 
   let query = from('km_index_eod')
     .select(cols)
