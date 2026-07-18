@@ -14,8 +14,10 @@ import TradingChart from '@/components/charts/TradingChart'
 import type { IndicatorRow } from '@/services/indicatorData'
 import { buildStoryEvents, KIND_COLORS } from '@/services/storyEvents'
 import { buildPillars, type LatestRow } from './VerdictHero'
+import SectorThermometer from './SectorThermometer'
 
 interface CorrState { state: string; color: string; tagline?: string }
+interface SectorPoint { percentile: number; leading: boolean }
 
 interface Props {
   open: boolean
@@ -25,13 +27,14 @@ interface Props {
   latest: LatestRow | null
   snapshot?: { corrState?: CorrState } | null
   bigMoneyDates: Set<string>
+  sectorByDate?: Map<string, SectorPoint>
 }
 
 const SPEEDS = [0.5, 1, 2] as const
 const BASE_DWELL_MS = 2600
 
-export default function StoryMode({ open, onClose, bars, name, latest, snapshot, bigMoneyDates }: Props) {
-  const events = useMemo(() => buildStoryEvents(bars, bigMoneyDates), [bars, bigMoneyDates])
+export default function StoryMode({ open, onClose, bars, name, latest, snapshot, bigMoneyDates, sectorByDate }: Props) {
+  const events = useMemo(() => buildStoryEvents(bars, bigMoneyDates, sectorByDate), [bars, bigMoneyDates, sectorByDate])
   const pillars = useMemo(() => (latest ? buildPillars(latest) : []), [latest])
   const alignedCount = pillars.filter((p) => p.aligned).length
   const corr = snapshot?.corrState
@@ -76,6 +79,8 @@ export default function StoryMode({ open, onClose, bars, name, latest, snapshot,
     ? { date: cur.date, tone: cur.tone, color: KIND_COLORS[cur.kind], title: cur.title, detail: cur.detail, reactionPct: cur.reactionPct }
     : null
   const highlightDate = cur ? bars[cur.barIndex]?.trade_date ?? null : null
+  const secDate = cur?.date ?? bars[bars.length - 1]?.trade_date
+  const sec = secDate ? sectorByDate?.get(secDate) : undefined
 
   return (
     <div
@@ -128,14 +133,19 @@ export default function StoryMode({ open, onClose, bars, name, latest, snapshot,
       </div>
 
       {/* ── Chart (fills the height) ── */}
-      <div ref={chartWrapRef} className="flex-1 min-h-0 px-3 pt-3">
-        <TradingChart
-          data={bars}
-          workspaceMode
-          height={chartH}
-          highlightDate={highlightDate}
-          storyBubble={storyBubble}
-        />
+      <div ref={chartWrapRef} className="flex-1 min-h-0 px-3 pt-3 flex gap-2">
+        <div className="flex-1 min-w-0">
+          <TradingChart
+            data={bars}
+            workspaceMode
+            height={chartH}
+            highlightDate={highlightDate}
+            storyBubble={storyBubble}
+          />
+        </div>
+        {sectorByDate && sectorByDate.size > 0 && (
+          <SectorThermometer percentile={sec?.percentile ?? null} leading={sec?.leading ?? false} />
+        )}
       </div>
 
       {/* ── Controls (pinned) ── */}
