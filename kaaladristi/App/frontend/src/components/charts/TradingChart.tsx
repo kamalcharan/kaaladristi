@@ -232,6 +232,13 @@ export default function TradingChart({ data, height = 900, compact = false, work
   // # of leading whitespace points prepended to the candle series (workspace
   // mode only). Logical indices are offset by this vs. the `data` array.
   const leadOffsetRef = useRef(0);
+  // Read astroBands inside buildCharts WITHOUT adding it to buildCharts' deps —
+  // toggling an astro rule must NOT rebuild the whole chart (it redraws on the
+  // bands canvas instead). The ±90-day axis padding is only worth its wasted
+  // whitespace when astro zones (which can sit in the future) are present, so
+  // buildCharts consults this ref to decide whether to pad or fit-to-data.
+  const astroBandsRef = useRef(astroBands);
+  useEffect(() => { astroBandsRef.current = astroBands; }, [astroBands]);
 
   const chartsRef = useRef<IChartApi[]>([]);
 
@@ -392,7 +399,14 @@ export default function TradingChart({ data, height = 900, compact = false, work
     let leadOffset = 0;
     let padFrom: string | null = null;
     let padTo: string | null = null;
-    if (workspaceMode) {
+    // Only pad the axis when astro zones are present — they can sit in the
+    // future, so the ±90-day whitespace makes those dates addressable. Without
+    // astro, the padding just squeezes the candles into the middle and forces a
+    // manual zoom-out (owner feedback) — so we fit the candles to the width
+    // instead, which also lines the chart's right edge up with the scrubber's
+    // NOW.
+    const padAxis = workspaceMode && astroBandsRef.current.length > 0;
+    if (padAxis) {
       const firstDate = data[0].trade_date;
       const lastDate  = data[data.length - 1].trade_date;
       const todayStr  = new Date().toISOString().slice(0, 10);
@@ -715,9 +729,11 @@ export default function TradingChart({ data, height = 900, compact = false, work
       }
     });
 
-    // Workspace mode: pin the view to the full padded window (±3mo) so future
-    // and pre-data overlay zones are visible. Otherwise fit to data.
-    if (workspaceMode && padFrom && padTo) {
+    // When padding is on (astro zones present), pin the view to the full padded
+    // window so future/pre-data overlay zones are visible. Otherwise fit the
+    // candles to the width — a relaxed default that fills the pane and aligns
+    // the right edge with the scrubber's NOW.
+    if (padAxis && padFrom && padTo) {
       mainChart.timeScale().setVisibleRange({ from: padFrom as Time, to: padTo as Time });
     } else {
       mainChart.timeScale().fitContent();

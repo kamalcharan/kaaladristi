@@ -199,6 +199,18 @@ export default function ChartView() {
     () => (isIndex ? indexBreadth?.data?.at(-1)?.breadth_score ?? null : null),
     [isIndex, indexBreadth],
   );
+  // Breadth-over-time → the index story's thermometer (the index-native analog
+  // of a stock's sector thermometer). percentile = breadth score; "broad" (top
+  // band) when participation is in the upper third.
+  const breadthByDate = useMemo(() => {
+    if (!isIndex || !indexBreadth?.data) return undefined;
+    const m = new Map<string, { percentile: number; leading: boolean }>();
+    for (const d of indexBreadth.data) {
+      if (d.breadth_score == null) continue;
+      m.set(d.trade_date, { percentile: d.breadth_score, leading: d.breadth_score >= 66 });
+    }
+    return m.size > 0 ? m : undefined;
+  }, [isIndex, indexBreadth]);
 
   // VaNi narrative for the Decision Band (slim read, not the full panel).
   const { data: aiData, isLoading: aiLoading } = useInstrumentInsight(numId, type ?? 'index');
@@ -899,6 +911,7 @@ export default function ChartView() {
           snapshot={snapshot}
           bigMoneyDates={bigMoneyDates}
           sectorByDate={sectorByDate}
+          breadthByDate={breadthByDate}
           mode={isIndex ? 'index' : 'equity'}
           breadthPct={breadthPct}
         />

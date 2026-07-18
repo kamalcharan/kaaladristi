@@ -1,16 +1,23 @@
 /**
- * SectorThermometer — a slim vertical CARD of the stock's SECTOR strength
- * (industry percentile, 0–100). Sits as a column beside the chart (outside the
- * plot) so it never collides with the astro background overlays. The fill
- * animates red→amber→green as the story's playhead moves through time.
+ * SectorThermometer — a slim vertical CARD of a 0–100 strength reading. Sits as
+ * a column beside the chart (outside the plot) so it never collides with the
+ * astro background overlays. The fill animates red→amber→green as the story's
+ * playhead moves through time. Reused for two sources: a stock's SECTOR
+ * percentile (label "Sector") and an index's BREADTH score (label "Breadth").
  */
 
 export default function SectorThermometer({
   percentile,
   leading,
+  label = 'Sector',
+  leadingLabel = 'leading',
 }: {
   percentile: number | null
   leading: boolean
+  /** Header caption (e.g. "Sector" for a stock, "Breadth" for an index). */
+  label?: string
+  /** Pill text when in the top band (e.g. "leading" / "broad"). */
+  leadingLabel?: string
 }) {
   const pct = percentile == null ? null : Math.max(0, Math.min(100, percentile))
   const col =
@@ -32,7 +39,7 @@ export default function SectorThermometer({
         padding: '14px 8px',
       }}
     >
-      <div className="text-[9px] font-mono uppercase tracking-[0.14em] text-muted">Sector</div>
+      <div className="text-[9px] font-mono uppercase tracking-[0.14em] text-muted">{label}</div>
 
       <div
         className="relative"
@@ -79,7 +86,7 @@ export default function SectorThermometer({
             border: '1px solid color-mix(in srgb, var(--risk-green) 30%, transparent)',
           }}
         >
-          ★ leading
+          ★ {leadingLabel}
         </div>
       ) : (
         <div className="text-[8px] font-mono uppercase tracking-wide text-muted">percentile</div>
