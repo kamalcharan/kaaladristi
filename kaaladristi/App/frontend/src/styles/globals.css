@@ -117,6 +117,16 @@
   --verdict-hero-bg: #17191f;
 }
 
+/* Story-event identity colors (Chart & Replay story mode) — one signature hue
+   per event kind, referenced by var() from services/storyEvents so no hex lands
+   in the .ts (ratchet-safe). Two-tone rendering (fill + color-mix ring) happens
+   in the components; direction (bull/bear) reads from a ▲/▼ + reaction colour. */
+:root {
+  --story-bigmoney: #f5a623;   --story-magicrs: #10b981;   --story-flow: #38bdf8;
+  --story-stage: #a855f7;      --story-scan: #06b6d4;      --story-conviction: #eab308;
+  --story-fpb: #fb923c;        --story-sector: #22c55e;
+}
+
 /* Rule-tag identity hues. Referenced by var() from constants/ruleTagColors so
    tag chips carry no hardcoded hex in component code and render theme-aware
    (a soft color-mix tint of the hue + a hue dot + neutral theme-token text),

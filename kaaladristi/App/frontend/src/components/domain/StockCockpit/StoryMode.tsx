@@ -8,11 +8,11 @@
  * "only frequent events show" window problem). Observational, not predictive.
  */
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { X } from 'lucide-react'
 import TradingChart from '@/components/charts/TradingChart'
 import type { IndicatorRow } from '@/services/indicatorData'
-import { buildStoryEvents } from '@/services/storyEvents'
+import { buildStoryEvents, KIND_COLORS } from '@/services/storyEvents'
 import { buildPillars, type LatestRow } from './VerdictHero'
 
 interface CorrState { state: string; color: string; tagline?: string }
@@ -39,19 +39,26 @@ export default function StoryMode({ open, onClose, bars, name, latest, snapshot,
   const [idx, setIdx] = useState(0)
   const [playing, setPlaying] = useState(false)
   const [speed, setSpeed] = useState<(typeof SPEEDS)[number]>(1)
-  const [vh, setVh] = useState(() => (typeof window !== 'undefined' ? window.innerHeight : 800))
+  const chartWrapRef = useRef<HTMLDivElement>(null)
+  const [chartH, setChartH] = useState(420)
 
   // Reset to the first event whenever the overlay opens.
   useEffect(() => { if (open) { setIdx(0); setPlaying(false) } }, [open])
 
-  // Viewport height (chart fills the remaining space) + Esc to close.
+  // Esc closes; measure the chart wrapper so the chart truly fills the space.
   useEffect(() => {
     if (!open) return
-    const onResize = () => setVh(window.innerHeight)
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
-    window.addEventListener('resize', onResize)
     window.addEventListener('keydown', onKey)
-    return () => { window.removeEventListener('resize', onResize); window.removeEventListener('keydown', onKey) }
+    const el = chartWrapRef.current
+    let ro: ResizeObserver | null = null
+    if (el) {
+      const measure = () => setChartH(Math.max(280, el.clientHeight - 6))
+      measure()
+      ro = new ResizeObserver(measure)
+      ro.observe(el)
+    }
+    return () => { window.removeEventListener('keydown', onKey); ro?.disconnect() }
   }, [open, onClose])
 
   // Playback — advance one event per dwell (speed-scaled).
@@ -65,12 +72,10 @@ export default function StoryMode({ open, onClose, bars, name, latest, snapshot,
   if (!open) return null
 
   const cur = events[idx] ?? null
-  const chartH = Math.max(280, vh - 210)
   const storyBubble = cur
-    ? { date: cur.date, tone: cur.tone, title: cur.title, detail: cur.detail, reactionPct: cur.reactionPct }
+    ? { date: cur.date, tone: cur.tone, color: KIND_COLORS[cur.kind], title: cur.title, detail: cur.detail, reactionPct: cur.reactionPct }
     : null
   const highlightDate = cur ? bars[cur.barIndex]?.trade_date ?? null : null
-  const toneColor = (t: string) => (t === 'bull' ? 'var(--risk-green)' : t === 'bear' ? 'var(--risk-red)' : 'var(--text-muted)')
 
   return (
     <div
@@ -123,7 +128,7 @@ export default function StoryMode({ open, onClose, bars, name, latest, snapshot,
       </div>
 
       {/* ── Chart (fills the height) ── */}
-      <div className="flex-1 min-h-0 px-3 pt-3">
+      <div ref={chartWrapRef} className="flex-1 min-h-0 px-3 pt-3">
         <TradingChart
           data={bars}
           workspaceMode
@@ -178,7 +183,7 @@ export default function StoryMode({ open, onClose, bars, name, latest, snapshot,
               style={{
                 width: i === idx ? 11 : 7,
                 height: i === idx ? 11 : 7,
-                background: toneColor(e.tone),
+                background: KIND_COLORS[e.kind],
                 opacity: i === idx ? 1 : 0.45,
               }}
             />
@@ -189,7 +194,7 @@ export default function StoryMode({ open, onClose, bars, name, latest, snapshot,
         <div className="shrink-0 text-right min-w-[180px]">
           {cur ? (
             <>
-              <div className="text-xs font-semibold" style={{ color: toneColor(cur.tone) }}>{cur.title}</div>
+              <div className="text-xs font-semibold" style={{ color: KIND_COLORS[cur.kind] }}>{cur.title}</div>
               <div className="text-[10px] text-muted font-mono">
                 {cur.date}
                 {cur.reactionPct != null && (

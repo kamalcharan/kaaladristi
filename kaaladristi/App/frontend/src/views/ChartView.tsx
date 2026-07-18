@@ -9,7 +9,7 @@ import { useInstrumentInsight } from '@/hooks';
 import StatStrip from '@/components/domain/StockCockpit/StatStrip';
 import VerdictHero from '@/components/domain/StockCockpit/VerdictHero';
 import StoryMode from '@/components/domain/StockCockpit/StoryMode';
-import { buildStoryEvents, type StoryEvent } from '@/services/storyEvents';
+import { buildStoryEvents, KIND_COLORS, type StoryEvent } from '@/services/storyEvents';
 import DeliveryVsTraded from '@/components/domain/StockCockpit/DeliveryVsTraded';
 import SectorMembershipCard from '@/components/domain/StockCockpit/SectorMembershipCard';
 import CockpitIndicatorPanels from '@/components/domain/StockCockpit/CockpitIndicatorPanels';
@@ -327,7 +327,7 @@ export default function ChartView() {
     for (const e of storyEvents) {
       if (e.date === playheadDate && (!best || e.priority > best.priority)) best = e;
     }
-    return best ? { date: best.date, tone: best.tone, title: best.title, detail: best.detail, reactionPct: best.reactionPct } : null;
+    return best ? { date: best.date, tone: best.tone, color: KIND_COLORS[best.kind], title: best.title, detail: best.detail, reactionPct: best.reactionPct } : null;
   }, [storyEvents, playheadDate, dvTab]);
 
   // Replay playback — walk the playhead forward, dwelling on event bars so the

@@ -18,6 +18,11 @@ export type StoryTone = 'bull' | 'bear' | 'neutral'
 export interface StoryBar {
   trade_date: string
   close: number
+  high?: number | null
+  low?: number | null
+  volume?: number | null
+  magic_rs?: number | null
+  delivery_pct?: number | null
   score_5d?: number | null
   score_22d?: number | null
   magic_rs_zone?: string | null
@@ -32,11 +37,25 @@ export interface StoryBar {
 
 export type StoryKind =
   | 'big_money'
+  | 'fpb'
   | 'magic_rs'
   | 'stage'
   | 'scan'
+  | 'sector'
   | 'conviction'
   | 'flow'
+
+/** One signature colour per kind (→ globals.css --story-* vars). */
+export const KIND_COLORS: Record<StoryKind, string> = {
+  big_money: 'var(--story-bigmoney)',
+  fpb: 'var(--story-fpb)',
+  magic_rs: 'var(--story-magicrs)',
+  stage: 'var(--story-stage)',
+  scan: 'var(--story-scan)',
+  sector: 'var(--story-sector)',
+  conviction: 'var(--story-conviction)',
+  flow: 'var(--story-flow)',
+}
 
 export interface StoryEvent {
   barIndex: number
@@ -57,9 +76,11 @@ const REACTION_BARS = 5
 
 // Kind priority — when multiple events share a bar, the replay surfaces the top.
 const PRIORITY: Record<StoryKind, number> = {
-  big_money: 6,
-  magic_rs: 5,
-  stage: 4,
+  big_money: 8,
+  fpb: 7,
+  magic_rs: 6,
+  stage: 5,
+  sector: 4,
   scan: 3,
   conviction: 2,
   flow: 1,
@@ -96,6 +117,75 @@ function reactionPct(bars: StoryBar[], i: number): number | null {
   const b = bars[j].close
   if (!a || !b) return null
   return ((b - a) / a) * 100
+}
+
+// ── FPB (energy compression → release) — thresholds calibrated to live NSE
+// (mirrors services/scanEngine.ts). Recomputed per-bar from the loaded candles;
+// no is_vani_fpb flag exists, so we detect coil-start + burst/shatter here. ──
+const FPB = {
+  ATR_MAX: 0.8, RANGE_MAX: 0.08, VOL_DEATH: 0.6, RS_FLAT: 2,
+  MIN_CLOSE: 20, MIN_BARS: 60, PRIOR: 22,
+  VOL_BURST: 3.0, RANGE_EXP: 2.0, CLOSE_STR: 0.70, DELIV_MIN: 45,
+} as const
+
+function fpbEvents(bars: StoryBar[]): { i: number; title: string; detail: string; tone: StoryTone }[] {
+  const n = bars.length
+  const out: { i: number; title: string; detail: string; tone: StoryTone }[] = []
+  if (n < FPB.MIN_BARS + 1) return out
+  const high = bars.map((b) => b.high ?? b.close)
+  const low = bars.map((b) => b.low ?? b.close)
+  const close = bars.map((b) => b.close)
+  const vol = bars.map((b) => b.volume ?? 0)
+  const mrs = bars.map((b) => (b.magic_rs != null ? b.magic_rs : NaN))
+  const range = bars.map((_, i) => high[i] - low[i])
+  const tr = bars.map((_, i) => {
+    const pc = i > 0 ? close[i - 1] : close[i]
+    return Math.max(high[i] - low[i], Math.abs(high[i] - pc), Math.abs(low[i] - pc))
+  })
+  const mean = (arr: number[], end: number, len: number) => {
+    let s = 0, c = 0
+    for (let k = Math.max(0, end - len + 1); k <= end; k++) { const v = arr[k]; if (v != null && !Number.isNaN(v)) { s += v; c++ } }
+    return c ? s / c : NaN
+  }
+  const maxIn = (arr: number[], a: number, b: number) => { let m = -Infinity; for (let k = Math.max(0, a); k <= b; k++) if (arr[k] > m) m = arr[k]; return m }
+  const minIn = (arr: number[], a: number, b: number) => { let m = Infinity; for (let k = Math.max(0, a); k <= b; k++) if (arr[k] < m) m = arr[k]; return m }
+
+  const compressed = (idx: number): boolean => {
+    if (idx < FPB.MIN_BARS - 1 || close[idx] <= FPB.MIN_CLOSE) return false
+    const stg = bars[idx].stage
+    if (stg === 'S3' || stg === 'S4') return false
+    const atr15 = mean(tr, idx, 15), atr60 = mean(tr, idx, 60)
+    if (!(atr60 > 0) || atr15 / atr60 >= FPB.ATR_MAX) return false
+    if ((maxIn(high, idx - 9, idx) - minIn(low, idx - 9, idx)) / close[idx] >= FPB.RANGE_MAX) return false
+    const vol5 = mean(vol, idx, 5), vol22 = mean(vol, idx, 22)
+    if (!(vol22 > 0) || vol5 / vol22 >= FPB.VOL_DEATH) return false
+    const rsNow = mrs[idx], rsPrev = mrs[idx - 5]
+    if (Number.isNaN(rsNow) || Number.isNaN(rsPrev) || Math.abs(rsNow - rsPrev) >= FPB.RS_FLAT) return false
+    return true
+  }
+
+  for (let i = FPB.MIN_BARS; i < n; i++) {
+    if (compressed(i) && !compressed(i - 1)) {
+      out.push({ i, title: 'Coil forming', detail: 'Volatility compressing — range tight, volume dying, RS flat', tone: 'neutral' })
+    }
+    let setupPrior = false
+    for (let k = Math.max(0, i - FPB.PRIOR); k <= i - 1; k++) { if (compressed(k)) { setupPrior = true; break } }
+    if (!setupPrior) continue
+    const vol22Prior = mean(vol, i - 1, 22)
+    const volBurst = vol22Prior > 0 ? vol[i] / vol22Prior : NaN
+    const avgRange15Prior = mean(range, i - 1, 15)
+    const rangeExp = avgRange15Prior > 0 ? range[i] / avgRange15Prior : NaN
+    const dayRange = high[i] - low[i]
+    const closeStr = dayRange > 0 ? (close[i] - low[i]) / dayRange : 0
+    const deliv = bars[i].delivery_pct ?? 0
+    const energy = close[i] > FPB.MIN_CLOSE && volBurst >= FPB.VOL_BURST && rangeExp >= FPB.RANGE_EXP && deliv > FPB.DELIV_MIN
+    if (energy && closeStr >= FPB.CLOSE_STR && close[i] > maxIn(high, i - 10, i - 1)) {
+      out.push({ i, title: 'Coil released — Burst ↑', detail: `Explosive release: ${volBurst.toFixed(1)}× volume, ${rangeExp.toFixed(1)}× range, closed above the 10-day range`, tone: 'bull' })
+    } else if (energy && closeStr <= 1 - FPB.CLOSE_STR && close[i] < minIn(low, i - 10, i - 1)) {
+      out.push({ i, title: 'Coil released — Shatter ↓', detail: `Downside release: ${volBurst.toFixed(1)}× volume, ${rangeExp.toFixed(1)}× range, broke below the 10-day range`, tone: 'bear' })
+    }
+  }
+  return out
 }
 
 /**
@@ -158,6 +248,10 @@ export function buildStoryEvents(bars: StoryBar[], bigMoneyDates?: Set<string>):
     if (bigMoneyDates?.has(b.trade_date)) add(i, 'big_money', '₹ Big money day', 'Delivered value spiked well above its norm — an institutional footprint', 'bull')
   }
 
+  // 7) FPB — coil forming + burst/shatter release (recomputed from the bars).
+  for (const f of fpbEvents(bars)) add(f.i, 'fpb', f.title, f.detail, f.tone)
+
+  out.sort((a, b) => a.barIndex - b.barIndex)
   return out
 }
 
