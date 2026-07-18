@@ -1,8 +1,8 @@
 /**
- * SectorThermometer — a slim vertical gauge of the stock's SECTOR strength
- * (industry percentile, 0–100). Lives as a column beside the chart (outside the
+ * SectorThermometer — a slim vertical CARD of the stock's SECTOR strength
+ * (industry percentile, 0–100). Sits as a column beside the chart (outside the
  * plot) so it never collides with the astro background overlays. The fill
- * animates as the story's playhead moves through time.
+ * animates red→amber→green as the story's playhead moves through time.
  */
 
 export default function SectorThermometer({
@@ -20,21 +20,37 @@ export default function SectorThermometer({
       : 'var(--risk-red)'
 
   return (
-    <div className="shrink-0 flex flex-col items-center justify-center gap-1.5" style={{ width: 54 }}>
-      <div className="text-[8.5px] font-mono uppercase tracking-wider text-muted">Sector</div>
+    <div
+      className="shrink-0 flex flex-col items-center gap-2 self-center"
+      style={{
+        width: 66,
+        maxHeight: '94%',
+        background: 'linear-gradient(180deg, color-mix(in srgb, var(--text-primary) 3%, var(--card)), var(--card))',
+        border: '1px solid var(--border)',
+        borderRadius: 14,
+        boxShadow: 'var(--card-shadow)',
+        padding: '14px 8px',
+      }}
+    >
+      <div className="text-[9px] font-mono uppercase tracking-[0.14em] text-muted">Sector</div>
+
       <div
+        className="relative"
         style={{
-          position: 'relative',
-          width: 12,
-          height: '58%',
+          width: 14,
+          flex: '1 1 auto',
           minHeight: 120,
-          maxHeight: 320,
-          borderRadius: 6,
-          background: 'color-mix(in srgb, var(--text-primary) 8%, transparent)',
+          borderRadius: 8,
+          background: 'color-mix(in srgb, var(--text-primary) 9%, transparent)',
           border: '1px solid var(--border)',
           overflow: 'hidden',
+          boxShadow: 'inset 0 1px 3px color-mix(in srgb, black 15%, transparent)',
         }}
       >
+        {/* quartile ticks */}
+        {[25, 50, 75].map((t) => (
+          <div key={t} style={{ position: 'absolute', left: 0, right: 0, bottom: `${t}%`, height: 1, background: 'color-mix(in srgb, var(--text-primary) 9%, transparent)' }} />
+        ))}
         <div
           style={{
             position: 'absolute',
@@ -43,18 +59,30 @@ export default function SectorThermometer({
             right: 0,
             height: `${pct ?? 0}%`,
             background: col,
-            borderRadius: 6,
+            borderRadius: 8,
             transition: 'height 0.6s ease, background 0.4s ease',
+            boxShadow: `0 0 10px ${col}`,
           }}
         />
       </div>
-      <div className="text-[11px] font-mono font-bold" style={{ color: col }}>
+
+      <div className="text-sm font-mono font-bold" style={{ color: col }}>
         {pct == null ? '—' : `${pct}%`}
       </div>
-      {leading && (
-        <div className="text-[8px] font-mono uppercase tracking-wide" style={{ color: 'var(--risk-green)' }}>
-          leading
+
+      {leading ? (
+        <div
+          className="text-[8px] font-mono uppercase tracking-wide px-1.5 py-0.5 rounded-full"
+          style={{
+            color: 'var(--risk-green)',
+            background: 'color-mix(in srgb, var(--risk-green) 12%, transparent)',
+            border: '1px solid color-mix(in srgb, var(--risk-green) 30%, transparent)',
+          }}
+        >
+          ★ leading
         </div>
+      ) : (
+        <div className="text-[8px] font-mono uppercase tracking-wide text-muted">percentile</div>
       )}
     </div>
   )
