@@ -220,6 +220,49 @@ def _daily_gap_sweep(dsn: str) -> None:
     )
 
 
+def _tier_expiry_sweep(dsn: str):
+    """00:15 IST daily — server-side entitlement enforcement.
+
+    Demotes paid tiers (trial/quarterly/annual) whose expires_at has passed
+    and marks their user_subscriptions rows expired. Without this sweep,
+    expiry exists only as an unread column: gating checks the tier string,
+    so a lapsed trial keeps paid access forever (2026-07-19 payments audit).
+
+    Demotion target comes from km_config key 'tier_expiry_demote_to'
+    (default 'free'). 'beta' and 'admin'-style tiers are never touched —
+    the demotable set is an explicit allowlist, not a NOT-IN guess.
+    """
+    conn = psycopg2.connect(dsn)
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT value FROM km_config WHERE key = 'tier_expiry_demote_to'")
+            row = cur.fetchone()
+            demote_to = row[0] if row and row[0] else 'free'
+
+            cur.execute(
+                """UPDATE km_profiles
+                   SET tier = %s, expires_at = NULL, updated_at = now()
+                   WHERE tier IN ('trial', 'quarterly', 'annual')
+                     AND expires_at IS NOT NULL AND expires_at < now()""",
+                (demote_to,),
+            )
+            demoted = cur.rowcount
+
+            cur.execute(
+                """UPDATE user_subscriptions SET status = 'expired'
+                   WHERE status = 'active' AND expires_at < now()"""
+            )
+            sub_rows = cur.rowcount
+        conn.commit()
+        if demoted or sub_rows:
+            log.info(f'tier expiry sweep: {demoted} profile(s) demoted to {demote_to}, '
+                     f'{sub_rows} subscription row(s) marked expired')
+    except Exception as e:
+        log.error(f'tier expiry sweep failed: {e}')
+    finally:
+        conn.close()
+
+
 def start_scheduler(dsn: str) -> BackgroundScheduler:
     """Start APScheduler with the 18:00 IST daily run and 19:30 IST gap sweep."""
     sched = BackgroundScheduler(timezone=IST)
@@ -256,8 +299,20 @@ def start_scheduler(dsn: str) -> BackgroundScheduler:
         replace_existing=True,
     )
 
+    # 00:15 every day (not market-day-bound — subscriptions lapse on weekends
+    # too). Max grace after expiry is therefore ~24h.
+    sched.add_job(
+        _tier_expiry_sweep,
+        trigger=CronTrigger(hour=0, minute=15, timezone=IST),
+        id='pipeline2_tier_expiry_sweep',
+        name='Tier expiry sweep (00:15 IST, daily)',
+        args=[dsn],
+        replace_existing=True,
+    )
+
     sched.start()
-    log.info('pipeline2 scheduler started (daily_run 18:00, transit_scoring 19:00, gap_sweep 19:30 IST, Mon-Fri)')
+    log.info('pipeline2 scheduler started (daily_run 18:00, transit_scoring 19:00, '
+             'gap_sweep 19:30 IST Mon-Fri; tier_expiry_sweep 00:15 IST daily)')
     return sched
 
 

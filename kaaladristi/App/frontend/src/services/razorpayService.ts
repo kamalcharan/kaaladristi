@@ -25,12 +25,42 @@ export interface UserInfo {
   phone?: string | null
 }
 
+// Identifiers from the Razorpay handler response, threaded to onSuccess so a
+// timed-out poll can hand them to /api/payments/reconcile.
+export interface CheckoutRefs {
+  order_id?:        string
+  subscription_id?: string
+  payment_id?:      string
+}
+
+export type ReconcileStatus = 'activated' | 'already_active' | 'pending'
+
+/** Ask the server to verify the payment directly with Razorpay and activate
+ *  the tier if money was captured. Used when the post-checkout poll times out
+ *  (webhook slow/missed). Server never trusts the client for the payment fact. */
+export async function reconcilePayment(
+  user_id: string,
+  refs: CheckoutRefs,
+): Promise<{ status: ReconcileStatus; tier: string | null }> {
+  const res = await fetch(`${PIPELINE_URL}/api/payments/reconcile`, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body:    JSON.stringify({
+      user_id,
+      order_id:        refs.order_id,
+      subscription_id: refs.subscription_id,
+    }),
+  })
+  if (!res.ok) throw new Error(`Reconcile failed: ${await res.text()}`)
+  return res.json()
+}
+
 // ── Trial (one-time order) ──────────────────────────────────────────
 
 export async function startTrialCheckout(
   user_id: string,
   user: UserInfo,
-  onSuccess: () => void,
+  onSuccess: (refs: CheckoutRefs) => void,
   onDismiss?: () => void,
 ): Promise<void> {
   const res = await fetch(`${PIPELINE_URL}/api/payments/create-trial-order`, {
@@ -49,10 +79,12 @@ export async function startTrialCheckout(
     amount:      order.amount,
     currency:    order.currency,
     name:        'DristiQ',
-    description: 'Trial — 3 days full access',
+    description: 'Trial — 14 days full access',
     prefill:     { name: user.name ?? '', email: user.email ?? '' },
     theme:       { color: '#8b5cf6' },
-    handler()   { onSuccess() },
+    handler(resp: any) {
+      onSuccess({ order_id: order.order_id, payment_id: resp?.razorpay_payment_id })
+    },
     modal:       { ondismiss() { onDismiss?.() } },
   })
   rzp.open()
@@ -64,7 +96,7 @@ export async function startSubscriptionCheckout(
   tier: 'quarterly' | 'annual',
   user_id: string,
   user: UserInfo,
-  onSuccess: () => void,
+  onSuccess: (refs: CheckoutRefs) => void,
   onDismiss?: () => void,
 ): Promise<void> {
   const res = await fetch(`${PIPELINE_URL}/api/payments/create-subscription`, {
@@ -84,7 +116,9 @@ export async function startSubscriptionCheckout(
     description:     tier === 'quarterly' ? 'Quarterly — ₹1,999 / 90 days' : 'Annual — ₹4,999 / year',
     prefill:         { name: user.name ?? '', email: user.email ?? '' },
     theme:           { color: '#8b5cf6' },
-    handler()        { onSuccess() },
+    handler(resp: any) {
+      onSuccess({ subscription_id, payment_id: resp?.razorpay_payment_id })
+    },
     modal:           { ondismiss() { onDismiss?.() } },
   })
   rzp.open()
