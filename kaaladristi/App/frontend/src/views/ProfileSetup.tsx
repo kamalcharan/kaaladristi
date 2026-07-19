@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '@/stores/authStore'
 import { useFrameworkStore } from '@/stores/frameworkStore'
 import { updateProfile } from '@/services/auth'
+import { resolveSpotlightIntent } from '@/services/spotlight'
 import { PAID_TIERS } from '@/constants/frameworkConstants'
 import { getTemplateForICP } from '@/constants/frameworkTemplates'
 import type { FrameworkTemplate } from '@/constants/frameworkTemplates'
@@ -686,13 +687,21 @@ export default function ProfileSetup() {
     }
   }
 
-  // Screen 4 (plan selection) — both paths land in the workspace
+  // Screen 4 (plan selection) — both paths land in the workspace, unless a
+  // landing-spotlight intent is pending ("See it inside" was the reason this
+  // user signed up) — then the curiosity payoff comes first: today's pick's
+  // Study page. One-shot; falls back to /workspace on any failure.
+  async function exitToDestination() {
+    const dest = await resolveSpotlightIntent()
+    navigate(dest ?? '/workspace', { replace: true })
+  }
+
   function handlePaidSuccess() {
-    navigate('/workspace', { replace: true })
+    void exitToDestination()
   }
 
   function handleFreeSelected() {
-    navigate('/workspace', { replace: true })
+    void exitToDestination()
   }
 
   async function handleBrowse() {

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 import { signIn, signUp, forgotPassword } from '@/services/auth';
+import { resolveSpotlightIntent } from '@/services/spotlight';
 import { useAuthStore } from '@/stores/authStore';
 import { LogoMark, Starfield } from './landing/shared';
 
@@ -46,7 +47,12 @@ export default function LoginPage() {
   const [inviteError, setInviteError] = useState('');
 
   useEffect(() => {
-    if (user) navigate('/workspace', { replace: true });
+    if (!user) return;
+    // Honor a pending landing-spotlight intent ("See it inside") before the
+    // default workspace redirect — one-shot, falls back to /workspace.
+    void resolveSpotlightIntent().then((dest) => {
+      navigate(dest ?? '/workspace', { replace: true });
+    });
   }, [user, navigate]);
 
   const reset = (mode: AuthMode) => { setAuthMode(mode); setError(''); setSuccess(''); };
@@ -91,7 +97,12 @@ export default function LoginPage() {
         await signIn(email, password);
         await useAuthStore.getState().refreshProfile();
         const prof = useAuthStore.getState().profile;
-        navigate(prof?.onboarded ? '/workspace' : '/setup');
+        if (!prof?.onboarded) {
+          navigate('/setup'); // intent survives — ProfileSetup's exits consume it
+        } else {
+          const dest = await resolveSpotlightIntent();
+          navigate(dest ?? '/workspace');
+        }
       }
     } catch (err: any) {
       setError(err.message || 'Something went wrong');

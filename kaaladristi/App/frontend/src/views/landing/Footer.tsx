@@ -51,8 +51,17 @@ export function Footer() {
 
         {/* Bottom row */}
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginTop:32, gap:32, flexWrap:'wrap' }}>
-          <p style={{ fontFamily:SANS, margin:0, fontSize:11, color:C.ink4, lineHeight:1.6, maxWidth:'68ch' }}>
-            DristiQ is a data and analytics platform. Nothing on this platform constitutes investment advice or trading recommendations. Past market behavior mapped against time-cycles does not guarantee future results. Users are solely responsible for their trading decisions.
+          <p style={{ fontFamily:SANS, margin:0, fontSize:11, color:C.ink4, lineHeight:1.7, maxWidth:'76ch' }}>
+            <strong style={{ color:C.ink3, fontWeight:500 }}>Important disclosure:</strong> DristiQ is operated
+            by Vikuna Technologies and is a data research and educational platform. It is{' '}
+            <strong style={{ color:C.ink3, fontWeight:500 }}>not registered with the Securities and Exchange
+            Board of India (SEBI)</strong> as an Investment Adviser, Research Analyst, or Stock Broker.
+            Content on this platform — including screener outputs, time-cycle overlays, and VaNi
+            observations — constitutes educational and research material only. Nothing on DristiQ should
+            be construed as investment advice, a buy/sell/hold recommendation, or a solicitation to trade.
+            Past patterns and correlations do not guarantee future outcomes. Users are solely responsible
+            for their investment decisions; please consult a SEBI-registered investment adviser before
+            making financial decisions.
           </p>
           <div style={{ fontFamily:MONO, fontSize:10, letterSpacing:'.22em', color:C.ink4, textTransform:'uppercase', textAlign:'right' }}>
             © 2026 Vikuna Technologies<br/>

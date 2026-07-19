@@ -13,6 +13,7 @@ import { useNavigate } from 'react-router-dom';
 import { createChart, CandlestickSeries, ColorType, type IChartApi } from 'lightweight-charts';
 import { C, MONO } from './tokens';
 import { FadeUp, SectionHeader } from './shared';
+import { storeSpotlightIntent } from '@/services/spotlight';
 
 const PIPELINE_API = (import.meta.env.VITE_PIPELINE_API_URL?.trim() || '');
 
@@ -24,9 +25,6 @@ interface SpotlightPayload {
   bars: SpotlightBar[];
   scan_counts: { id: string; label: string; count: number }[];
 }
-
-/** Part 3 consumes this key after login to deep-link into Study. */
-export const SPOTLIGHT_INTENT_KEY = 'kd_post_login_intent';
 
 function cssVar(name: string, fallback: string): string {
   const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
@@ -106,7 +104,7 @@ export function Spotlight() {
     : `${data?.index_name ?? 'NIFTY 500'} — the broad market as it closed. Refreshed every trading evening after the data pipeline completes.`;
 
   const seeInside = () => {
-    try { localStorage.setItem(SPOTLIGHT_INTENT_KEY, 'spotlight'); } catch { /* ignore */ }
+    storeSpotlightIntent();
     navigate('/login');
   };
 
