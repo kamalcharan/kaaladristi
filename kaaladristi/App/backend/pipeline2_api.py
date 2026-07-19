@@ -7569,12 +7569,17 @@ async def custom_index_target(req: _TargetRequest):
 # ═══════════════════════════════════════════════════════════════════════════
 # Landing Spotlight — public, depersonalized "chart of the day"
 # ═══════════════════════════════════════════════════════════════════════════
-# Feeds the landing page "Today on DristiQ" proof band. Regime-gated:
+# Feeds the landing page "Today on DristiQ" proof band. Regime-gated, and the
+# regime drives BOTH the chart pick and the scan-count strip (owner decision
+# 2026-07-19: long-only numbers must not front a deteriorating tape):
 #   · healthy participation  → top Conviction Flow stock (fallback: top Stage 2
-#     Leader by magic_rs) — identity STRIPPED from the public payload
-#   · anything else          → NIFTY 500 index view (conservative default)
-# The regime never appears in the payload — it only drives selection (owner
-# decision 2026-07-19: no regime adjectives outside the logged-in product).
+#     Leader by magic_rs) + long-side counts (Conviction Flow / Stage 2)
+#   · anything else          → top laggard (Stage 4 + Lagging Magic RS zone,
+#     weakest RS, mcap >= 1000 Cr for a readable chart) + laggard-side counts
+#     (Stage 4 structure / Lagging RS); index view only as last-resort fallback
+# Identity is STRIPPED from the public payload in both directions. The regime
+# never appears in the payload — it only drives selection (owner decision
+# 2026-07-19: no regime adjectives outside the logged-in product).
 # The pick's identity is held server-side in the cache; the authenticated
 # /reveal endpoint returns it so the post-login deep-link can open Study.
 
@@ -7677,7 +7682,45 @@ def _spotlight_pick_equity(cur, trade_date: str) -> dict | None:
     return None
 
 
-def _spotlight_scan_counts(cur, trade_date: str) -> list[dict]:
+def _spotlight_pick_laggard(cur, trade_date: str) -> dict | None:
+    """Weak-regime pick: Stage 4 structure in the Lagging Magic RS zone with
+    the weakest relative strength. The zone gate matters — raw magic_rs ASC
+    alone surfaces stocks whose RS is deeply negative but already recovering
+    above their own MA (zone flips bullish). mcap floor keeps the public
+    chart on a liquid, readable name."""
+    cur.execute(
+        """
+        SELECT e.equity_id, s.symbol
+        FROM km_equity_eod e
+        JOIN km_equity_symbols s ON s.id = e.equity_id AND s.exchange = 'NSE'
+        WHERE e.trade_date = %s AND e.stage = 'S4'
+          AND e.magic_rs_zone = 'Strong Bear' AND e.magic_rs IS NOT NULL
+          AND s.mcap_cr >= 1000
+        ORDER BY e.magic_rs ASC LIMIT 1
+        """,
+        (trade_date,),
+    )
+    row = cur.fetchone()
+    if row:
+        return {'equity_id': row['equity_id'], 'symbol': row['symbol'], 'source': 'stage_4_laggard'}
+    return None
+
+
+def _spotlight_scan_counts(cur, trade_date: str, healthy: bool) -> list[dict]:
+    if not healthy:
+        cur.execute(
+            "SELECT count(*) FILTER (WHERE e.stage = 'S4') AS s4, "
+            "       count(*) FILTER (WHERE e.magic_rs_zone = 'Strong Bear') AS lagging "
+            "FROM km_equity_eod e "
+            "JOIN km_equity_symbols s ON s.id = e.equity_id AND s.exchange = 'NSE' "
+            "WHERE e.trade_date = %s",
+            (trade_date,),
+        )
+        r = cur.fetchone()
+        return [
+            {'id': 'stage_4', 'label': 'Stage 4 structure', 'count': r['s4']},
+            {'id': 'lagging_rs', 'label': 'Lagging relative strength', 'count': r['lagging']},
+        ]
     cur.execute("SELECT count(*) AS n " + _SPOTLIGHT_CF_FILTER, (trade_date,))
     cf = cur.fetchone()['n']
     cur.execute(
@@ -7755,8 +7798,9 @@ def _spotlight_build() -> dict:
                 return cached
 
             healthy = _spotlight_regime_healthy(cur)
-            pick = _spotlight_pick_equity(cur, trade_date) if healthy else None
-            counts = _spotlight_scan_counts(cur, trade_date)
+            pick = (_spotlight_pick_equity(cur, trade_date) if healthy
+                    else _spotlight_pick_laggard(cur, trade_date))
+            counts = _spotlight_scan_counts(cur, trade_date, healthy)
 
             if pick:
                 bars = _spotlight_equity_bars(cur, pick['equity_id'], trade_date)

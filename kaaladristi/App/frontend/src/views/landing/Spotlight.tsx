@@ -99,8 +99,11 @@ export function Spotlight() {
   const title = isEquity
     ? <>Today&rsquo;s highest-<em style={{ color: C.g1, fontStyle: 'italic' }}>confluence</em> chart.</>
     : <>Today&rsquo;s market <em style={{ color: C.g1, fontStyle: 'italic' }}>structure</em>.</>;
+  // Side-neutral by design: the pick may be the day's strongest-confluence
+  // stock OR its weakest laggard (regime decides server-side) — the copy
+  // never says which. The counts strip carries the observational facts.
   const lede = isEquity
-    ? 'One NSE equity met more scanner conditions than any other today. No name here — the identity is revealed inside.'
+    ? 'One NSE equity stands out across today’s scanner conditions more than any other. No name here — the identity is revealed inside.'
     : `${data?.index_name ?? 'NIFTY 500'} — the broad market as it closed. Refreshed every trading evening after the data pipeline completes.`;
 
   const seeInside = () => {
