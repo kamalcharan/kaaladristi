@@ -9,12 +9,26 @@
   background:
     linear-gradient(var(--kd-elevated, var(--card-soft)), var(--kd-elevated, var(--card-soft))),
     var(--bg);
-  border: 1px solid var(--border);
+  /* deliberately NOT the product-card recipe: gold-tinted border + ribbon +
+     eyebrow below mark this as guide chrome, not another data panel */
+  border: 1px solid color-mix(in srgb, var(--gold) 35%, var(--border));
   border-radius: var(--card-radius-lg, 14px);
-  box-shadow: var(--card-shadow), 0 0 40px var(--accent-glow);
+  box-shadow: var(--card-shadow), 0 0 48px var(--accent-glow);
   color: var(--text-secondary);
   max-width: 340px;
-  padding: 18px 18px 14px;
+  padding: 21px 18px 14px;
+  overflow: hidden;
+}
+
+/* accent ribbon along the top edge — the "you are in a walkthrough" marker */
+.kd-tour-popover.driver-popover::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--gold), var(--accent));
 }
 
 /* the pointer arrow is a plain border-triangle — hide it, glass cards float */
@@ -29,6 +43,19 @@
   letter-spacing: -0.01em;
   color: var(--text-primary);
   margin-bottom: 6px;
+}
+
+/* eyebrow above every title — no product card carries this */
+.kd-tour-popover .driver-popover-title::before {
+  content: '✦ Guided walk';
+  display: block;
+  font-family: var(--font-mono, monospace);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--gold);
+  margin-bottom: 7px;
 }
 
 .kd-tour-popover .driver-popover-description {
