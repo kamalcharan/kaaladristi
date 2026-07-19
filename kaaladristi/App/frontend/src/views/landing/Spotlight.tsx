@@ -180,7 +180,7 @@ export function Spotlight() {
                 ))}
               </div>
               <button onClick={seeInside} className="dq-btn" style={{ padding: '9px 18px', fontSize: 12 }}>
-                See it inside <span className="dq-arrow">→</span>
+                Login to view <span className="dq-arrow">→</span>
               </button>
             </div>
           </div>
