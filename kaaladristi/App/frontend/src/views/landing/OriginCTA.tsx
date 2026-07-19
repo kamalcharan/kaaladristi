@@ -68,7 +68,7 @@ export function OriginCTA() {
       <section id="beta" style={{
         position:'relative', padding:'160px 0',
         borderTop:`1px solid ${C.rule}`, borderBottom:`1px solid ${C.rule}`,
-        background:`radial-gradient(1200px 500px at 50% 50%,rgba(226,185,111,0.08),transparent 60%),linear-gradient(180deg,rgba(26,16,64,0.35),rgba(10,10,18,0.8))`,
+        background:`radial-gradient(1200px 500px at 50% 50%,rgba(245,166,35,0.08),transparent 60%),linear-gradient(180deg,rgba(28,32,48,0.35),rgba(19,22,29,0.8))`,
       }}>
         <div className="dq-wrap" style={{ textAlign:'center', position:'relative' }}>
           <FadeUp>
@@ -87,7 +87,7 @@ export function OriginCTA() {
           <FadeUp delay={240}>
             <form onSubmit={submit} className="dq-beta-form" style={{
               display:'flex', maxWidth:540, margin:'0 auto',
-              border:`1px solid ${C.g3}`, background:'rgba(10,10,18,0.6)',
+              border:`1px solid ${C.g3}`, background:'rgba(19,22,29,0.6)',
               backdropFilter:'blur(8px)',
             }}>
               <input

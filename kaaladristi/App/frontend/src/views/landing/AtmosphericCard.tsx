@@ -55,10 +55,10 @@ export function AtmosphericCard({ atmo, loading }: { atmo: Atmo | null; loading:
   return (
     <div style={{
       position:'absolute', left:'-10%', bottom:'-6%', width:300,
-      background:'rgba(10,10,18,0.9)', border:`1px solid ${C.rule}`,
+      background:'rgba(19,22,29,0.9)', border:`1px solid ${C.rule}`,
       backdropFilter:'blur(16px)', WebkitBackdropFilter:'blur(16px)',
       padding:'18px 20px', fontSize:12,
-      boxShadow:`0 20px 60px rgba(0,0,0,0.5),0 0 30px rgba(226,185,111,0.08)`,
+      boxShadow:`0 20px 60px rgba(0,0,0,0.5),0 0 30px rgba(245,166,35,0.08)`,
     }} className="dq-atmo-card">
 
       {/* Header row */}

@@ -52,7 +52,7 @@ export function InsightSection() {
                 {NOT_LIST.map((x,i) => (
                   <li key={x} style={{ padding:'14px 0', borderBottom: i<3 ? '1px solid rgba(255,255,255,0.04)' : 'none', color:C.ink3, fontSize:15, display:'flex', alignItems:'center', gap:14, fontFamily:SANS }}>
                     <span style={{ color:C.ink4, width:16 }}>×</span>
-                    <span style={{ textDecoration:'line-through', textDecorationColor:'rgba(138,131,114,0.4)' }}>{x}</span>
+                    <span style={{ textDecoration:'line-through', textDecorationColor:'rgba(122,128,153,0.4)' }}>{x}</span>
                   </li>
                 ))}
               </ul>
@@ -68,11 +68,11 @@ export function InsightSection() {
 
           {/* ARE column */}
           <FadeUp delay={120}>
-            <div style={{ padding:'40px 36px', border:`1px solid ${C.rule}`, background:'linear-gradient(180deg,rgba(226,185,111,0.04),rgba(226,185,111,0.01))', height:'100%', boxShadow:`inset 0 0 40px rgba(226,185,111,0.03)` }}>
+            <div style={{ padding:'40px 36px', border:`1px solid ${C.rule}`, background:'linear-gradient(180deg,rgba(245,166,35,0.04),rgba(245,166,35,0.01))', height:'100%', boxShadow:`inset 0 0 40px rgba(245,166,35,0.03)` }}>
               <div style={{ fontFamily:MONO, fontSize:11, letterSpacing:'.22em', color:C.g2, marginBottom:18 }}>✓ WHAT WE ARE</div>
               <ul style={{ listStyle:'none', padding:0, margin:0 }}>
                 {ARE_LIST.map((x,i) => (
-                  <li key={x} style={{ padding:'14px 0', borderBottom: i<3 ? `1px solid rgba(226,185,111,0.08)` : 'none', color:C.ink1, fontSize:15, display:'flex', alignItems:'center', gap:14, fontFamily:SANS }}>
+                  <li key={x} style={{ padding:'14px 0', borderBottom: i<3 ? `1px solid rgba(245,166,35,0.08)` : 'none', color:C.ink1, fontSize:15, display:'flex', alignItems:'center', gap:14, fontFamily:SANS }}>
                     <span style={{ color:C.g1, width:16 }}>◆</span>
                     <span>{x}</span>
                   </li>

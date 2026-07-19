@@ -90,7 +90,7 @@ export function Hero({ atmo, loading }: { atmo: Atmo | null; loading: boolean })
         <FadeUp delay={500}>
           <div className="dq-disclaimer" style={{
             marginTop:80, padding:'24px 32px', border:`1px solid ${C.rule}`,
-            background:'rgba(10,10,18,0.4)', display:'grid',
+            background:'rgba(19,22,29,0.4)', display:'grid',
             gridTemplateColumns:'auto 1fr auto', gap:28, alignItems:'center',
           }}>
             <div style={{ fontFamily:MONO, fontSize:10, letterSpacing:'.24em', color:C.g2 }}>◇ NON-ADVISORY</div>
