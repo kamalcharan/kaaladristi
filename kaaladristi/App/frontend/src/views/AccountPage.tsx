@@ -9,6 +9,7 @@ import { User, Lock, CreditCard, Palette } from 'lucide-react'
 import { useAuthStore } from '@/stores/authStore'
 import { updateProfile, changePassword } from '@/services/auth'
 import { fmtDate } from '@/lib/dateUtils'
+import { isValidIndianMobile, normalizeIndianMobile } from '@/lib/phone'
 import { PageHeader, Tabs } from '@/components/ui'
 import ThemeSettings from '@/components/domain/ThemeSettings'
 
@@ -169,10 +170,14 @@ function ProfileTab() {
   const [status, setStatus] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
   const handleSave = async () => {
+    if (!isValidIndianMobile(phone)) {
+      setStatus({ type: 'error', text: 'Enter a valid 10-digit Indian mobile number.' })
+      return
+    }
     setSaving(true)
     setStatus(null)
     try {
-      await updateProfile({ display_name: displayName, phone })
+      await updateProfile({ display_name: displayName, phone: normalizeIndianMobile(phone) })
       await refreshProfile()
       setStatus({ type: 'success', text: 'Profile updated successfully.' })
     } catch (err) {

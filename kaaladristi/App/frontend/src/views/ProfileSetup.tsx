@@ -4,6 +4,7 @@ import { useAuthStore } from '@/stores/authStore'
 import { useFrameworkStore } from '@/stores/frameworkStore'
 import { updateProfile } from '@/services/auth'
 import { resolveSpotlightIntent } from '@/services/spotlight'
+import { isValidIndianMobile, normalizeIndianMobile } from '@/lib/phone'
 import { PAID_TIERS } from '@/constants/frameworkConstants'
 import { getTemplateForICP } from '@/constants/frameworkTemplates'
 import type { FrameworkTemplate } from '@/constants/frameworkTemplates'
@@ -146,6 +147,10 @@ interface S1Props {
 }
 
 function Screen1({ displayName, setDisplayName, phone, setPhone, onBegin }: S1Props) {
+  const [phoneTouched, setPhoneTouched] = useState(false)
+  const phoneValid = isValidIndianMobile(phone)
+  const showPhoneError = phoneTouched && !phoneValid
+  const handleBegin = () => { setPhoneTouched(true); if (phoneValid) onBegin() }
   return (
     <div className="fixed inset-0 flex items-center justify-center overflow-hidden"
       style={{ background: 'var(--bg)' }}>
@@ -212,7 +217,7 @@ function Screen1({ displayName, setDisplayName, phone, setPhone, onBegin }: S1Pr
           animation:'text-in .6s ease 1.1s both' }}>
           I'll help you build your market intelligence framework.
         </p>
-        {/* Subtle name / phone */}
+        {/* Name (optional) + phone (required — how we reach you about your account) */}
         <div style={{ maxWidth:340, margin:'0 auto 28px',
           animation:'text-in .6s ease 1.2s both' }}>
           <input type="text" value={displayName} onChange={e => setDisplayName(e.target.value)}
@@ -221,21 +226,30 @@ function Screen1({ displayName, setDisplayName, phone, setPhone, onBegin }: S1Pr
               background:'color-mix(in srgb, var(--text-primary) 4%, transparent)', border:'1px solid color-mix(in srgb, var(--text-primary) 8%, transparent)',
               borderRadius:10, fontSize:13, color:'var(--text-primary)',
               outline:'none', fontFamily:'inherit' }} />
-          <input type="tel" value={phone} onChange={e => setPhone(e.target.value)}
-            placeholder="Phone for alerts (optional)"
+          <input type="tel" inputMode="numeric" value={phone}
+            onChange={e => setPhone(e.target.value)}
+            onBlur={() => setPhoneTouched(true)}
+            placeholder="Mobile number (required)"
             style={{ width:'100%', padding:'10px 16px',
-              background:'color-mix(in srgb, var(--text-primary) 4%, transparent)', border:'1px solid color-mix(in srgb, var(--text-primary) 8%, transparent)',
+              background:'color-mix(in srgb, var(--text-primary) 4%, transparent)',
+              border:`1px solid ${showPhoneError ? 'var(--bear)' : 'color-mix(in srgb, var(--text-primary) 8%, transparent)'}`,
               borderRadius:10, fontSize:13, color:'var(--text-primary)',
               outline:'none', fontFamily:'inherit' }} />
+          {showPhoneError && (
+            <div style={{ fontSize:11, color:'var(--bear)', textAlign:'left', marginTop:6 }}>
+              Enter a valid 10-digit Indian mobile number.
+            </div>
+          )}
         </div>
-        <button onClick={onBegin}
-          style={{ padding:'14px 40px', border:'none', borderRadius:100, cursor:'pointer',
+        <button onClick={handleBegin} disabled={!phoneValid}
+          style={{ padding:'14px 40px', border:'none', borderRadius:100,
+            cursor: phoneValid ? 'pointer' : 'not-allowed',
             fontSize:15, fontWeight:500, fontFamily:'inherit',
             background:'linear-gradient(135deg, #7c6af7, #5b4fd4)', color:'#fff',
-            letterSpacing:'.01em',
+            letterSpacing:'.01em', opacity: phoneValid ? 1 : 0.5,
             boxShadow:`0 4px 24px ${V}.5), 0 1px 0 color-mix(in srgb, var(--text-primary) 10%, transparent) inset`,
             transition:'all .2s ease', animation:'text-in .6s ease 1.3s both' }}
-          onMouseEnter={e => { (e.currentTarget).style.transform='translateY(-2px)' }}
+          onMouseEnter={e => { if (phoneValid) (e.currentTarget).style.transform='translateY(-2px)' }}
           onMouseLeave={e => { (e.currentTarget).style.transform='' }}>
           Let VaNi begin →
         </button>
@@ -631,14 +645,15 @@ export default function ProfileSetup() {
     }
   }, [step, framework, profile?.id, loadFramework])
 
-  // Save name/phone non-blocking when advancing from Screen 1
+  // Advance from Screen 1. Phone is required + validated in Screen1 before this
+  // fires; persist the normalized 10-digit number (non-blocking — the row
+  // exists and it's editable in Account if a transient save fails).
   function handleBegin() {
-    if (displayName.trim() || phone.trim()) {
-      updateProfile({
-        display_name: displayName.trim() || null,
-        phone: phone.trim() || null,
-      }).catch(() => {/* non-critical */})
-    }
+    if (!isValidIndianMobile(phone)) return
+    updateProfile({
+      display_name: displayName.trim() || null,
+      phone: normalizeIndianMobile(phone),
+    }).catch(() => {/* non-critical — editable later in Account */})
     setStep(2)
   }
 
