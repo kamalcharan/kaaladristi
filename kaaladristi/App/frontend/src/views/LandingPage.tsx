@@ -5,6 +5,7 @@ import { Spotlight } from './landing/Spotlight';
 import { InsightSection } from './landing/Insight';
 import { Pillars } from './landing/Pillars';
 import { VaNiSection } from './landing/VaNi';
+import { AstroTeaser } from './landing/AstroTeaser';
 import { Personas } from './landing/Personas';
 import { OriginCTA } from './landing/OriginCTA';
 import { Footer } from './landing/Footer';
@@ -133,6 +134,7 @@ export default function LandingPage() {
           <InsightSection/>
           <Pillars/>
           <VaNiSection/>
+          <AstroTeaser/>
           <Personas/>
           <OriginCTA/>
           <Footer/>
