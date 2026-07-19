@@ -1,4 +1,4 @@
--- km_migration_160_pricing_gst_beta_default.sql
+-- km_migration_163_pricing_gst_beta_default.sql
 -- Target DB: kaala_dristi_db
 --
 -- Payments P0 (Part 3/3) — pricing model: yearly-only + GST + beta default.
