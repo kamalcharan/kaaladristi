@@ -605,6 +605,17 @@ export default function ProfileSetup() {
   const [committing,  setCommitting]  = useState(false)
   const [error,       setError]       = useState<string | null>(null)
 
+  // Resume: a returning user who built their framework (icp_mode saved) but
+  // never completed the final step lands here (ProtectedRoute forces /setup
+  // while onboarded is false). Skip the wizard and drop them on the last step
+  // instead of making them redo everything. Runs once on mount.
+  const [resumeChecked, setResumeChecked] = useState(false)
+  useEffect(() => {
+    if (resumeChecked || !profile) return
+    setResumeChecked(true)
+    if (!profile.onboarded && profile.icp_mode) setStep(4)
+  }, [profile, resumeChecked])
+
   // Screen 2: typing animation — reveal question after 1.4s
   useEffect(() => {
     if (step !== 2) return
@@ -669,21 +680,34 @@ export default function ProfileSetup() {
     if (!saved) throw new Error('framework service: save failed')
   }
 
-  // "Start here →" — apply template, mark onboarded, go to plan selection
+  // "Start here →" — apply template + save icp_mode, then go to the final
+  // step. NOTE: onboarded is intentionally NOT set here. It flips only when
+  // the user completes the last screen (2026-07-19) — so abandoning before
+  // then forces them back to finish on next login. icp_mode persisting is the
+  // resume signal: framework built, final step pending → jump straight to it.
   async function handleAccept() {
     if (!icp) return
     setCommitting(true)
     setError(null)
     try {
       await commitFramework()
-      await updateProfile({ onboarded: true, icp_mode: icpMode })
+      await updateProfile({ icp_mode: icpMode })
       try { await refreshProfile() } catch {
-        if (profile) setProfile({ ...profile, onboarded: true, icp_mode: icpMode })
+        if (profile) setProfile({ ...profile, icp_mode: icpMode })
       }
+      setCommitting(false)
       setStep(4)
     } catch (e) {
       setError(errMessage(e))
       setCommitting(false)
+    }
+  }
+
+  // Complete onboarding — the single place onboarded flips to true.
+  async function completeOnboarding() {
+    await updateProfile({ onboarded: true })
+    try { await refreshProfile() } catch {
+      if (profile) setProfile({ ...profile, onboarded: true })
     }
   }
 
@@ -692,6 +716,7 @@ export default function ProfileSetup() {
   // user signed up) — then the curiosity payoff comes first: today's pick's
   // Study page. One-shot; falls back to /workspace on any failure.
   async function exitToDestination() {
+    await completeOnboarding()  // final step done → onboarded
     const dest = await resolveSpotlightIntent()
     navigate(dest ?? '/workspace', { replace: true })
   }
@@ -768,7 +793,7 @@ export default function ProfileSetup() {
                 Choose your plan
               </h1>
               <p style={{ fontSize: 15, color: 'var(--text-muted)', maxWidth: 420, margin: '0 auto' }}>
-                Your framework is ready. Upgrade now for full access, or start free.
+                Your framework is ready — this is the last step.
               </p>
             </div>
             <PricingCards

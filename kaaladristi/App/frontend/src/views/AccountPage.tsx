@@ -46,7 +46,7 @@ const TIER_FEATURES: Record<string, string[]> = {
     'Workspace with 10 custom blocks',
   ],
   annual: [
-    'Everything in Quarterly',
+    'Everything, unlimited — all scanners & indicators',
     'Workspace — unlimited blocks & overlays',
     'Priority VaNi AI analysis',
     'Early access to new features',

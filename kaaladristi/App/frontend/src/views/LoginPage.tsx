@@ -8,24 +8,22 @@ import { LogoMark, Starfield } from './landing/shared';
 
 // Design tokens matching DristiQ landing page
 const C = {
-  bg:    '#07070c',
-  card:  '#0d0d1a',
-  ink1:  '#f4ecd6',
-  ink2:  '#d9cfb6',
-  ink3:  '#8a8372',
-  ink4:  '#50493c',
-  g1:    '#e2b96f',
+  bg:    '#0d0f14',
+  card:  '#13161d',
+  ink1:  '#e8e6e0',
+  ink2:  '#b7bcc9',
+  ink3:  '#7a8099',
+  ink4:  '#3a3f52',
+  g1:    '#f5a623',
   g2:    'var(--gold)',
-  g3:    '#8a6f28',
-  rule:  'rgba(226,185,111,.18)',
-  rs:    'rgba(226,185,111,.08)',
-  glow:  'rgba(226,185,111,.22)',
+  g3:    '#8a7433',
+  rule:  'rgba(245,166,35,.18)',
+  rs:    'rgba(245,166,35,.08)',
+  glow:  'rgba(245,166,35,.22)',
 };
 const SERIF = "'Cormorant Garamond','Playfair Display',serif";
 const MONO  = "'JetBrains Mono','Geist Mono',ui-monospace,monospace";
 const SANS  = "'DM Sans','Inter',system-ui,sans-serif";
-
-const INVITE_CODE = 'bharathavarsha';
 
 type AuthMode = 'login' | 'register' | 'forgot';
 
@@ -41,11 +39,6 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
-  // Invite-code gate
-  const [showInviteModal, setShowInviteModal] = useState(false);
-  const [inviteInput, setInviteInput] = useState('');
-  const [inviteError, setInviteError] = useState('');
-
   useEffect(() => {
     if (!user) return;
     // Honor a pending landing-spotlight intent ("See it inside") before the
@@ -57,24 +50,8 @@ export default function LoginPage() {
 
   const reset = (mode: AuthMode) => { setAuthMode(mode); setError(''); setSuccess(''); };
 
-  const handleTabClick = (mode: AuthMode) => {
-    if (mode === 'register') {
-      setInviteInput(''); setInviteError('');
-      setShowInviteModal(true);
-    } else {
-      reset(mode);
-    }
-  };
-
-  const handleInviteSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (inviteInput.trim().toLowerCase() === INVITE_CODE) {
-      setShowInviteModal(false);
-      reset('register');
-    } else {
-      setInviteError('Invalid invite code. Please check and try again.');
-    }
-  };
+  // Registration is open (invite gate removed 2026-07-19) — tabs switch directly.
+  const handleTabClick = (mode: AuthMode) => reset(mode);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -123,78 +100,10 @@ export default function LoginPage() {
   return (
     <div style={{ minHeight: '100vh', background: C.bg, display: 'flex', flexDirection: 'column', fontFamily: SANS, WebkitFontSmoothing: 'antialiased', overflowX: 'hidden' }}>
 
-      {/* ── Invite-code modal ──────────────────────────────────────────────── */}
-      {showInviteModal && (
-        <div style={{
-          position: 'fixed', inset: 0, zIndex: 100,
-          background: 'rgba(7,7,12,.85)', backdropFilter: 'blur(6px)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
-        }}
-          onClick={() => setShowInviteModal(false)}>
-          <div style={{
-            background: C.card, border: `1px solid ${C.rule}`,
-            padding: '40px 36px', width: '100%', maxWidth: 400,
-          }}
-            onClick={e => e.stopPropagation()}>
-            <div style={{ textAlign: 'center', marginBottom: 28 }}>
-              <p style={{ fontFamily: MONO, fontSize: 9, letterSpacing: '.22em', textTransform: 'uppercase', color: C.g1, margin: '0 0 10px' }}>
-                Beta Access
-              </p>
-              <h2 style={{ fontFamily: SERIF, fontWeight: 400, fontSize: 28, color: C.ink1, margin: '0 0 8px', lineHeight: 1.2 }}>
-                Enter Invite Code
-              </h2>
-              <p style={{ fontFamily: SANS, fontSize: 13, color: C.ink3, margin: 0 }}>
-                DristiQ is currently invite-only.<br/>Enter the code you received to register.
-              </p>
-            </div>
-
-            <form onSubmit={handleInviteSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              <div>
-                <label style={{ display: 'block', fontFamily: MONO, fontSize: 9, letterSpacing: '.2em', textTransform: 'uppercase', color: C.ink4, marginBottom: 8 }}>
-                  Invite Code
-                </label>
-                <input
-                  type="text" autoFocus
-                  value={inviteInput} onChange={e => { setInviteInput(e.target.value); setInviteError(''); }}
-                  placeholder="enter code"
-                  style={{ ...inputStyle, letterSpacing: '.08em' }}
-                  onFocus={e => (e.currentTarget.style.borderColor = C.g2)}
-                  onBlur={e => (e.currentTarget.style.borderColor = C.rule)}
-                />
-              </div>
-
-              {inviteError && (
-                <div style={{ padding: '10px 12px', background: 'var(--bear-bg)', border: '1px solid var(--bear-dim, color-mix(in srgb, var(--bear) 30%, transparent))', color: 'var(--bear)', fontFamily: SANS, fontSize: 12 }}>
-                  {inviteError}
-                </div>
-              )}
-
-              <button type="submit" style={{
-                padding: '13px 0', marginTop: 4,
-                background: `linear-gradient(180deg,rgba(226,185,111,.92),color-mix(in srgb, var(--gold) 92%, transparent))`,
-                border: `1px solid ${C.g2}`,
-                color: '#0a0a12', fontFamily: SANS, fontSize: 13, letterSpacing: '.1em',
-                textTransform: 'uppercase', fontWeight: 600, cursor: 'pointer',
-              }}>
-                Verify &amp; Continue
-              </button>
-
-              <button type="button" onClick={() => setShowInviteModal(false)} style={{
-                padding: '10px 0', background: 'none', border: 'none',
-                fontFamily: MONO, fontSize: 9, letterSpacing: '.16em', textTransform: 'uppercase',
-                color: C.ink4, cursor: 'pointer',
-              }}>
-                Cancel
-              </button>
-            </form>
-          </div>
-        </div>
-      )}
-
       {/* Background layers */}
       <div style={{
         position: 'fixed', inset: 0, zIndex: 0, pointerEvents: 'none',
-        background: `radial-gradient(900px 600px at 50% 0%,rgba(45,27,105,.3),transparent 60%),radial-gradient(700px 500px at 80% 80%,rgba(226,185,111,.05),transparent 65%),${C.bg}`,
+        background: `radial-gradient(900px 600px at 50% 0%,rgba(40,46,68,.3),transparent 60%),radial-gradient(700px 500px at 80% 80%,rgba(245,166,35,.05),transparent 65%),${C.bg}`,
       }}/>
       <Starfield/>
 
@@ -322,7 +231,7 @@ export default function LoginPage() {
               <button type="submit" disabled={isSubmitting} style={{
                 display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
                 padding: '14px 0', marginTop: 4,
-                background: isSubmitting ? 'rgba(226,185,111,.3)' : `linear-gradient(180deg,rgba(226,185,111,.92),color-mix(in srgb, var(--gold) 92%, transparent))`,
+                background: isSubmitting ? 'rgba(245,166,35,.3)' : `linear-gradient(180deg,rgba(245,166,35,.92),color-mix(in srgb, var(--gold) 92%, transparent))`,
                 border: `1px solid ${C.g2}`,
                 color: '#0a0a12', fontFamily: SANS, fontSize: 13, letterSpacing: '.1em', textTransform: 'uppercase', fontWeight: 600,
                 cursor: isSubmitting ? 'not-allowed' : 'pointer', transition: 'all .25s ease',

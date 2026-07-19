@@ -21,7 +21,7 @@ interface GateContextConfig {
 const GATE_CONFIGS: Record<GateContext, GateContextConfig> = {
   add_rule: {
     icon: <Zap size={16} />,
-    message: "VaNi can't add rules to your framework on the free tier. Upgrade to build your own combination — or try the Trial for 3 days.",
+    message: "VaNi can't add rules to your framework on the free tier. Upgrade to build your own combination — or try the Trial for 14 days.",
   },
   add_indicator: {
     icon: <Activity size={16} />,
@@ -45,7 +45,7 @@ const GATE_CONFIGS: Record<GateContext, GateContextConfig> = {
   },
   save_walk_widget: {
     icon: <Activity size={16} />,
-    message: "Save Walk widgets to your workspace to re-visit any correlation's history at any time. Available on Quarterly and above.",
+    message: "Save Walk widgets to your workspace to re-visit any correlation's history at any time. Available on any paid plan.",
   },
 }
 
@@ -127,23 +127,6 @@ export default function InlineGate({ context, isOpen, onDismiss }: InlineGatePro
     }
   }
 
-  async function handleQuarterlyPurchase() {
-    if (!profile?.id) return
-    setPaying(true)
-    setPayError(null)
-    try {
-      await startSubscriptionCheckout(
-        'quarterly',
-        profile.id,
-        { name: profile.full_name, email: profile.email },
-        () => pollProfileUntilUpgraded(),
-        () => setPaying(false),
-      )
-    } catch (err) {
-      setPayError(String(err))
-      setPaying(false)
-    }
-  }
 
   async function handleAnnualPurchase() {
     if (!profile?.id) return
@@ -272,19 +255,7 @@ export default function InlineGate({ context, isOpen, onDismiss }: InlineGatePro
               border: 'none', color: '#fff', cursor: paying || activating ? 'wait' : 'pointer',
               transition: 'background .15s',
             }}>
-            {paying ? 'Opening checkout…' : 'Try everything for 3 days · ₹199 one-time'}
-          </button>
-
-          <button
-            onClick={handleQuarterlyPurchase}
-            disabled={paying || activating}
-            style={{
-              padding: '10px 16px', borderRadius: 10, fontSize: 12, fontWeight: 500,
-              background: 'var(--panel-recess)',
-              border: '1px solid color-mix(in srgb, var(--accent) 25%, transparent)',
-              color: 'var(--text-secondary)', cursor: paying || activating ? 'wait' : 'pointer',
-            }}>
-            Quarterly · ₹1,999 / 90 days
+            {paying ? 'Opening checkout…' : 'Try everything for 14 days · ₹199 + GST'}
           </button>
 
           <button
@@ -296,7 +267,7 @@ export default function InlineGate({ context, isOpen, onDismiss }: InlineGatePro
               border: '1px solid color-mix(in srgb, var(--accent) 25%, transparent)',
               color: 'var(--text-secondary)', cursor: paying || activating ? 'wait' : 'pointer',
             }}>
-            Annual · ₹4,999 / year
+            Annual · ₹4,999 / year + 18% GST
           </button>
 
           <button
