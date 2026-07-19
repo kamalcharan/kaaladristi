@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { from } from '@/services/postgrest'
@@ -28,6 +28,9 @@ import SectorPulse from '@/components/domain/DashboardV3/SectorPulse'
 import VaNiHighlightsBoard from '@/components/domain/VaNiHighlightsBoard'
 import AtmosphericBadge from '@/components/domain/AtmosphericBadge'
 import MyBookmarksPanel from '@/components/domain/MyBookmarksPanel'
+import TourLauncher from '@/components/ui/TourLauncher'
+import { useTour } from '@/hooks/useTour'
+import { buildWorkspaceTourSteps } from '@/config/tours/workspaceTour'
 
 type ActiveTab = 'today' | 'discovery' | 'myspace' | 'bookmarks'
 
@@ -103,6 +106,17 @@ export default function WorkspacePage() {
     setActivePairKey(key)
     setDrawerOpen(true)
   }, [])
+
+  // ── Explainer walk — auto-starts on first visit (after welcome-modal ack),
+  //    replayable via the ? launcher in the tab bar ──
+  const tourSteps = useMemo(() => buildWorkspaceTourSteps({ astro: icpMode === 'astro' }), [icpMode])
+  const { startTour } = useTour<ActiveTab>({
+    tourId: 'workspace',
+    steps: tourSteps,
+    userId: profile?.id,
+    enabled: !!framework && !isLoading,
+    onTabChange: setActiveTab,
+  })
 
   useEffect(() => {
     if (!framework && profile?.id) {
@@ -240,6 +254,7 @@ export default function WorkspacePage() {
 
         {/* Right side */}
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10 }}>
+          <TourLauncher onClick={() => void startTour()} />
           <AtmosphericBadge />
           <span style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
             {todayDisplay}
@@ -281,10 +296,12 @@ export default function WorkspacePage() {
             </div>
 
             {/* 1 · Index cards — NIFTY 50 / BANK / 500 / India VIX */}
-            <TickerRail date={today} />
+            <div data-tour="ticker-rail">
+              <TickerRail date={today} />
+            </div>
 
             {/* Shared index selector (drives rotation + breadth + ROC) + Market Breadth nav */}
-            <div style={{
+            <div data-tour="breadth-controls" style={{
               display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10,
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
@@ -311,11 +328,13 @@ export default function WorkspacePage() {
             </div>
 
             {/* 2 · How breadth is moving — rotation (VaNi read; no heatmap) */}
-            <BreadthRotation indexId={breadthIndexId} title={`How breadth is moving · ${breadthIndex}`} />
+            <div data-tour="breadth-rotation">
+              <BreadthRotation indexId={breadthIndexId} title={`How breadth is moving · ${breadthIndex}`} />
+            </div>
 
             {/* 3 · Panchangam (40%) + Sky Regime (60%) — one row, astro ICP */}
             {icpMode === 'astro' && (
-              <div style={{
+              <div data-tour="astro-row" style={{
                 display: 'grid', gridTemplateColumns: 'minmax(0, 40fr) minmax(0, 60fr)', gap: 20, alignItems: 'start',
               }}>
                 <PanchangamCard date={today} />
@@ -327,7 +346,7 @@ export default function WorkspacePage() {
             {todayBreadthLoading && !todayBreadth ? (
               <DristiQLoader message="Loading breadth & momentum…" />
             ) : (
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+              <div data-tour="breadth-charts" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
                 <MarketBreadthChart
                   data={todayBreadth?.data}
                   isLoading={todayBreadthLoading}
@@ -352,19 +371,19 @@ export default function WorkspacePage() {
           {/* Sector Pulse — score-framework rotation verdict (replaced the old
               industry-rank panel, owner decision 2026-07-06; per-scan preview
               widgets remain available as My Space catalog widgets) */}
-          <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)' }}>
+          <div data-tour="sector-pulse" style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)' }}>
             <SectorPulse />
           </div>
 
           {/* VaNi Highlights — union of ✦ across all scanners, both sides open */}
-          <div style={{ padding: '16px 20px' }}>
+          <div data-tour="vani-highlights" style={{ padding: '16px 20px' }}>
             <VaNiHighlightsBoard />
           </div>
         </div>
       )}
 
       {activeTab === 'myspace' && (
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <div data-tour="workspace-canvas" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
           <WorkspaceCanvas
             framework={framework!}
             onOpenDrawer={openDrawer}
