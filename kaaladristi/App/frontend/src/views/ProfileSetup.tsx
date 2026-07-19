@@ -9,8 +9,9 @@ import { PAID_TIERS } from '@/constants/frameworkConstants'
 import { getTemplateForICP } from '@/constants/frameworkTemplates'
 import type { FrameworkTemplate } from '@/constants/frameworkTemplates'
 import PricingCards from '@/components/domain/Pricing/PricingCards'
+import ThemeSettings from '@/components/domain/ThemeSettings'
 
-type Step = 1 | 2 | 3 | 4
+type Step = 1 | 2 | 3 | 4 | 5
 type ICP  = 'investor' | 'trader' | 'both'
 
 // ── Keyframe animations ───────────────────────────────────────────────────────
@@ -617,6 +618,7 @@ export default function ProfileSetup() {
   const [phone,       setPhone]       = useState(profile?.phone ?? '')
   const [s2Typed,     setS2Typed]     = useState(false)
   const [committing,  setCommitting]  = useState(false)
+  const [browseIntent, setBrowseIntent] = useState(false)  // "Customize in Catalog" path → theme step → /catalog
   const [error,       setError]       = useState<string | null>(null)
 
   // Resume: a returning user who built their framework (icp_mode saved) but
@@ -726,35 +728,39 @@ export default function ProfileSetup() {
     }
   }
 
-  // Screen 4 (plan selection) — both paths land in the workspace, unless a
-  // landing-spotlight intent is pending ("See it inside" was the reason this
-  // user signed up) — then the curiosity payoff comes first: today's pick's
-  // Study page. One-shot; falls back to /workspace on any failure.
-  async function exitToDestination() {
-    await completeOnboarding()  // final step done → onboarded
+  // Final step is now Theme (Step 5). Plan exits advance to it rather than
+  // completing — so every user consciously picks a theme before entering.
+  // `browseIntent` remembers the "Customize in Catalog" path so the theme
+  // step lands them in the catalog instead of the workspace.
+  function handlePaidSuccess() {
+    setStep(5)
+  }
+
+  function handleFreeSelected() {
+    setStep(5)
+  }
+
+  // Theme step "Enter DristiQ" — the single place onboarding completes.
+  async function finishOnboarding() {
+    await completeOnboarding()  // onboarded → true
+    if (browseIntent) { navigate('/catalog', { replace: true }); return }
     const dest = await resolveSpotlightIntent()
     navigate(dest ?? '/workspace', { replace: true })
   }
 
-  function handlePaidSuccess() {
-    void exitToDestination()
-  }
-
-  function handleFreeSelected() {
-    void exitToDestination()
-  }
-
   async function handleBrowse() {
-    if (!icp) { navigate('/catalog', { replace: true }); return }
+    if (!icp) { setBrowseIntent(true); setStep(5); return }
     setCommitting(true)
     setError(null)
     try {
       await commitFramework()
-      await updateProfile({ onboarded: true, icp_mode: icpMode })
+      await updateProfile({ icp_mode: icpMode })   // onboarded flips at theme step
       try { await refreshProfile() } catch {
-        if (profile) setProfile({ ...profile, onboarded: true, icp_mode: icpMode })
+        if (profile) setProfile({ ...profile, icp_mode: icpMode })
       }
-      navigate('/catalog', { replace: true })
+      setBrowseIntent(true)
+      setCommitting(false)
+      setStep(5)
     } catch (e) {
       setError(errMessage(e))
       setCommitting(false)
@@ -801,20 +807,62 @@ export default function ProfileSetup() {
                 background: 'var(--accent-glow)', border: '1px solid var(--accent-dim)',
                 fontSize: 10, fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase',
                 color: 'var(--accent)', fontFamily: 'var(--font-mono, monospace)', marginBottom: 20 }}>
-                One last step
+                Almost there
               </div>
               <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 32, fontWeight: 300,
                 letterSpacing: '-0.03em', marginBottom: 12, color: 'var(--text-primary)' }}>
                 Choose your plan
               </h1>
               <p style={{ fontSize: 15, color: 'var(--text-muted)', maxWidth: 420, margin: '0 auto' }}>
-                Your framework is ready — this is the last step.
+                Your framework is ready.
               </p>
             </div>
             <PricingCards
               onPaidSuccess={handlePaidSuccess}
               onFreeSelected={handleFreeSelected}
             />
+          </div>
+        </div>
+      )}
+
+      {/* Step 5 — Theme preference (final step: onboarded flips here) */}
+      {step === 5 && (
+        <div className="fixed inset-0 overflow-y-auto" style={{ background: 'var(--bg)', padding: '48px 24px 80px' }}>
+          <div style={{ maxWidth: 460, margin: '0 auto' }}>
+            <div style={{ textAlign: 'center', marginBottom: 32 }}>
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 7,
+                padding: '5px 14px', borderRadius: 100,
+                background: 'var(--accent-glow)', border: '1px solid var(--accent-dim)',
+                fontSize: 10, fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase',
+                color: 'var(--accent)', fontFamily: 'var(--font-mono, monospace)', marginBottom: 20 }}>
+                One last step
+              </div>
+              <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 32, fontWeight: 300,
+                letterSpacing: '-0.03em', marginBottom: 12, color: 'var(--text-primary)' }}>
+                Make it yours
+              </h1>
+              <p style={{ fontSize: 15, color: 'var(--text-muted)', maxWidth: 420, margin: '0 auto' }}>
+                Pick the look that suits you — you can change it anytime in Account.
+              </p>
+            </div>
+
+            <div style={{
+              padding: '20px 22px', borderRadius: 16,
+              background: 'var(--card)', border: '1px solid var(--border)', marginBottom: 24,
+            }}>
+              <ThemeSettings />
+            </div>
+
+            <button
+              onClick={() => void finishOnboarding()}
+              style={{
+                width: '100%', padding: '13px', borderRadius: 12, border: 'none',
+                background: 'var(--accent-solid)', color: 'white',
+                fontSize: 14, fontWeight: 600, cursor: 'pointer',
+                fontFamily: 'var(--font-body)',
+              }}>
+              Enter DristiQ →
+            </button>
           </div>
         </div>
       )}
