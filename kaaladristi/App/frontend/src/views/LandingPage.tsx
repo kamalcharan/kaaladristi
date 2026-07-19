@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { Starfield, Navbar } from './landing/shared';
 import { Hero } from './landing/Hero';
+import { Spotlight } from './landing/Spotlight';
 import { InsightSection } from './landing/Insight';
 import { Pillars } from './landing/Pillars';
 import { VaNiSection } from './landing/VaNi';
@@ -128,6 +129,7 @@ export default function LandingPage() {
         <Navbar/>
         <main>
           <Hero atmo={atmo} loading={loading}/>
+          <Spotlight/>
           <InsightSection/>
           <Pillars/>
           <VaNiSection/>
