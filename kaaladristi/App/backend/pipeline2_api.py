@@ -7564,3 +7564,237 @@ async def custom_index_target(req: _TargetRequest):
         conn.close()
 
     return {'theme': theme_row, 'stock_count': len(stocks)}
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Landing Spotlight — public, depersonalized "chart of the day"
+# ═══════════════════════════════════════════════════════════════════════════
+# Feeds the landing page "Today on DristiQ" proof band. Regime-gated:
+#   · healthy participation  → top Conviction Flow stock (fallback: top Stage 2
+#     Leader by magic_rs) — identity STRIPPED from the public payload
+#   · anything else          → NIFTY 500 index view (conservative default)
+# The regime never appears in the payload — it only drives selection (owner
+# decision 2026-07-19: no regime adjectives outside the logged-in product).
+# The pick's identity is held server-side in the cache; the authenticated
+# /reveal endpoint returns it so the post-login deep-link can open Study.
+
+_spotlight_cache: dict = {}  # latest trade_date str → {'public': …, 'pick': …}
+
+_SPOTLIGHT_BARS = 130
+
+# Regime thresholds (v1 two-state gate; see docs — participation level + 5-day
+# direction, a deliberately simple proxy for the in-app breadth/ROC read)
+_SPOTLIGHT_MIN_PCT_ABOVE_SMA50 = 50.0
+_SPOTLIGHT_MAX_EMA20_DROP_5D = 5.0
+
+
+def _spotlight_latest_date(cur) -> str | None:
+    cur.execute(
+        "SELECT max(trade_date) AS d FROM km_trading_calendar "
+        "WHERE exchange = 'NSE' AND status IN ('completed', 'partial')"
+    )
+    row = cur.fetchone()
+    return row['d'].strftime('%Y-%m-%d') if row and row['d'] else None
+
+
+def _spotlight_regime_healthy(cur) -> bool:
+    """NIFTY 500 participation gate: level (pct above SMA50) + 5-session
+    direction (pct above EMA20 now vs 5 sessions ago)."""
+    cur.execute(
+        """
+        WITH dates AS (
+          SELECT trade_date, row_number() OVER (ORDER BY trade_date DESC) AS rn
+          FROM km_trading_calendar
+          WHERE exchange = 'NSE' AND status IN ('completed', 'partial')
+        ),
+        members AS (
+          SELECT c.equity_id FROM km_index_constituents c
+          JOIN km_index_symbols s ON s.id = c.index_id
+          WHERE s.name = 'NIFTY 500'
+        ),
+        b0 AS (
+          SELECT count(*) FILTER (WHERE e.close > e.sma_50) AS above50,
+                 count(*) FILTER (WHERE e.sma_50 > 0)       AS valid50,
+                 count(*) FILTER (WHERE e.close > e.ema_20) AS above20,
+                 count(*) FILTER (WHERE e.ema_20 > 0)       AS valid20
+          FROM km_equity_eod e JOIN members m ON m.equity_id = e.equity_id
+          WHERE e.trade_date = (SELECT trade_date FROM dates WHERE rn = 1)
+        ),
+        b5 AS (
+          SELECT count(*) FILTER (WHERE e.close > e.ema_20) AS above20,
+                 count(*) FILTER (WHERE e.ema_20 > 0)       AS valid20
+          FROM km_equity_eod e JOIN members m ON m.equity_id = e.equity_id
+          WHERE e.trade_date = (SELECT trade_date FROM dates WHERE rn = 6)
+        )
+        SELECT 100.0 * b0.above50 / nullif(b0.valid50, 0) AS pct50,
+               100.0 * b0.above20 / nullif(b0.valid20, 0) AS pct20_now,
+               100.0 * b5.above20 / nullif(b5.valid20, 0) AS pct20_prev
+        FROM b0, b5
+        """
+    )
+    r = cur.fetchone()
+    if not r or r['pct50'] is None or r['pct20_now'] is None:
+        return False  # missing data → conservative index view
+    pct50 = float(r['pct50'])
+    drop = (float(r['pct20_prev']) - float(r['pct20_now'])) if r['pct20_prev'] is not None else 0.0
+    return pct50 >= _SPOTLIGHT_MIN_PCT_ABOVE_SMA50 and drop <= _SPOTLIGHT_MAX_EMA20_DROP_5D
+
+
+_SPOTLIGHT_CF_FILTER = """
+    FROM km_equity_eod e
+    JOIN km_equity_symbols s ON s.id = e.equity_id AND s.exchange = 'NSE'
+    WHERE e.trade_date = %s
+      AND e.ema_20 > 0
+      AND abs((e.close - e.ema_20) / e.ema_20 * 100) <= 8
+      AND e.avg_amt_22d > 1.5
+      AND e.delivery_surge_x > 1.5
+"""
+
+
+def _spotlight_pick_equity(cur, trade_date: str) -> dict | None:
+    """Top Conviction Flow stock; fallback top Stage 2 Leader by magic_rs."""
+    cur.execute(
+        "SELECT e.equity_id, s.symbol " + _SPOTLIGHT_CF_FILTER +
+        " ORDER BY e.delivery_surge_x DESC LIMIT 1",
+        (trade_date,),
+    )
+    row = cur.fetchone()
+    if row:
+        return {'equity_id': row['equity_id'], 'symbol': row['symbol'], 'source': 'conviction_flow'}
+    cur.execute(
+        """
+        SELECT e.equity_id, s.symbol
+        FROM km_equity_eod e
+        JOIN km_equity_symbols s ON s.id = e.equity_id AND s.exchange = 'NSE'
+        WHERE e.trade_date = %s AND e.stage = 'S2' AND e.magic_rs IS NOT NULL
+        ORDER BY e.magic_rs DESC LIMIT 1
+        """,
+        (trade_date,),
+    )
+    row = cur.fetchone()
+    if row:
+        return {'equity_id': row['equity_id'], 'symbol': row['symbol'], 'source': 'stage_2_leaders'}
+    return None
+
+
+def _spotlight_scan_counts(cur, trade_date: str) -> list[dict]:
+    cur.execute("SELECT count(*) AS n " + _SPOTLIGHT_CF_FILTER, (trade_date,))
+    cf = cur.fetchone()['n']
+    cur.execute(
+        "SELECT count(*) AS n FROM km_equity_eod e "
+        "JOIN km_equity_symbols s ON s.id = e.equity_id AND s.exchange = 'NSE' "
+        "WHERE e.trade_date = %s AND e.stage = 'S2'",
+        (trade_date,),
+    )
+    s2 = cur.fetchone()['n']
+    return [
+        {'id': 'conviction_flow', 'label': 'Conviction Flow', 'count': cf},
+        {'id': 'stage_2_leaders', 'label': 'Stage 2 Leaders', 'count': s2},
+    ]
+
+
+def _spotlight_equity_bars(cur, equity_id: int, trade_date: str) -> list[dict]:
+    cur.execute(
+        """
+        SELECT trade_date, open, high, low, close, magic_rs, magic_ma
+        FROM km_equity_eod
+        WHERE equity_id = %s AND trade_date <= %s
+        ORDER BY trade_date DESC LIMIT %s
+        """,
+        (equity_id, trade_date, _SPOTLIGHT_BARS),
+    )
+    rows = cur.fetchall()
+    return [
+        {
+            't': r['trade_date'].strftime('%Y-%m-%d'),
+            'o': float(r['open']) if r['open'] is not None else None,
+            'h': float(r['high']) if r['high'] is not None else None,
+            'l': float(r['low']) if r['low'] is not None else None,
+            'c': float(r['close']) if r['close'] is not None else None,
+            'rs': float(r['magic_rs']) if r['magic_rs'] is not None else None,
+            'ma': float(r['magic_ma']) if r['magic_ma'] is not None else None,
+        }
+        for r in reversed(rows)
+    ]
+
+
+def _spotlight_index_bars(cur, index_name: str, trade_date: str) -> list[dict]:
+    cur.execute(
+        """
+        SELECT e.trade_date, e.open, e.high, e.low, e.close
+        FROM km_index_eod e
+        JOIN km_index_symbols s ON s.id = e.index_id
+        WHERE s.name = %s AND e.trade_date <= %s
+        ORDER BY e.trade_date DESC LIMIT %s
+        """,
+        (index_name, trade_date, _SPOTLIGHT_BARS),
+    )
+    rows = cur.fetchall()
+    return [
+        {
+            't': r['trade_date'].strftime('%Y-%m-%d'),
+            'o': float(r['open']) if r['open'] is not None else None,
+            'h': float(r['high']) if r['high'] is not None else None,
+            'l': float(r['low']) if r['low'] is not None else None,
+            'c': float(r['close']) if r['close'] is not None else None,
+        }
+        for r in reversed(rows)
+    ]
+
+
+def _spotlight_build() -> dict:
+    conn = _conn(statement_timeout_ms=20000)
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            trade_date = _spotlight_latest_date(cur)
+            if not trade_date:
+                raise HTTPException(status_code=503, detail='No completed trading data')
+
+            cached = _spotlight_cache.get(trade_date)
+            if cached:
+                return cached
+
+            healthy = _spotlight_regime_healthy(cur)
+            pick = _spotlight_pick_equity(cur, trade_date) if healthy else None
+            counts = _spotlight_scan_counts(cur, trade_date)
+
+            if pick:
+                bars = _spotlight_equity_bars(cur, pick['equity_id'], trade_date)
+                public = {
+                    'trade_date': trade_date,
+                    'mode': 'equity',       # identity deliberately absent
+                    'bars': bars,
+                    'scan_counts': counts,
+                }
+            else:
+                bars = _spotlight_index_bars(cur, 'NIFTY 500', trade_date)
+                public = {
+                    'trade_date': trade_date,
+                    'mode': 'index',
+                    'index_name': 'NIFTY 500',
+                    'bars': bars,
+                    'scan_counts': counts,
+                }
+
+            entry = {'public': public, 'pick': pick}
+            _spotlight_cache.clear()  # only ever one date cached
+            _spotlight_cache[trade_date] = entry
+            return entry
+    finally:
+        conn.close()
+
+
+@app.get('/api/landing/spotlight')
+def landing_spotlight():
+    """Public: today's depersonalized spotlight chart for the landing page."""
+    return _spotlight_build()['public']
+
+
+@app.get('/api/landing/spotlight/reveal')
+def landing_spotlight_reveal(_uid: str = Depends(_get_current_user_id)):
+    """Authenticated: identity of today's pick, for the post-login Study deep-link."""
+    entry = _spotlight_build()
+    pick = entry['pick']
+    if not pick:
+        return {'mode': 'index', 'index_name': 'NIFTY 500'}
+    return {'mode': 'equity', **pick}
