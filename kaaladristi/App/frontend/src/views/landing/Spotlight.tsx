@@ -10,14 +10,17 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { createChart, CandlestickSeries, ColorType, type IChartApi } from 'lightweight-charts';
+import { createChart, CandlestickSeries, LineSeries, ColorType, type IChartApi } from 'lightweight-charts';
 import { C, MONO } from './tokens';
 import { FadeUp, SectionHeader } from './shared';
 import { storeSpotlightIntent } from '@/services/spotlight';
 
 const PIPELINE_API = (import.meta.env.VITE_PIPELINE_API_URL?.trim() || '');
 
-interface SpotlightBar { t: string; o: number | null; h: number | null; l: number | null; c: number | null }
+interface SpotlightBar {
+  t: string; o: number | null; h: number | null; l: number | null; c: number | null;
+  rs?: number | null; ma?: number | null; e20?: number | null;
+}
 interface SpotlightPayload {
   trade_date: string;
   mode: 'equity' | 'index';
@@ -72,6 +75,8 @@ export function Spotlight() {
       handleScale: false,
     });
 
+    const hasRs = data.bars.some((b) => b.rs != null);
+
     const series = chart.addSeries(CandlestickSeries, {
       upColor: bull,
       downColor: bear,
@@ -79,12 +84,45 @@ export function Spotlight() {
       wickDownColor: bear,
       borderVisible: false,
     });
-
     series.setData(
       data.bars
         .filter((b) => b.o != null && b.h != null && b.l != null && b.c != null)
         .map((b) => ({ time: b.t, open: b.o!, high: b.h!, low: b.l!, close: b.c! })),
     );
+    // Reserve the bottom band for the Magic RS pane when present
+    series.priceScale().applyOptions({
+      scaleMargins: hasRs ? { top: 0.04, bottom: 0.3 } : { top: 0.06, bottom: 0.06 },
+    });
+
+    // EMA20 on the price pane — the product's signature reference line
+    const emaPoints = data.bars
+      .filter((b) => b.e20 != null)
+      .map((b) => ({ time: b.t, value: b.e20! }));
+    if (emaPoints.length) {
+      const ema = chart.addSeries(LineSeries, {
+        color: C.g2, lineWidth: 1,
+        priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false,
+      });
+      ema.setData(emaPoints);
+    }
+
+    // Magic RS + its MA in a bottom band on a separate hidden scale —
+    // the DristiQ look, driven entirely by the depersonalized payload
+    if (hasRs) {
+      const rsOpts = {
+        priceScaleId: 'magic-rs',
+        priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false,
+      } as const;
+      const rsLine = chart.addSeries(LineSeries, { ...rsOpts, color: C.g1, lineWidth: 1 });
+      rsLine.setData(data.bars.filter((b) => b.rs != null).map((b) => ({ time: b.t, value: b.rs! })));
+      const maLine = chart.addSeries(LineSeries, { ...rsOpts, color: C.ink4, lineWidth: 1 });
+      maLine.setData(data.bars.filter((b) => b.ma != null).map((b) => ({ time: b.t, value: b.ma! })));
+      chart.priceScale('magic-rs').applyOptions({
+        scaleMargins: { top: 0.76, bottom: 0.02 },
+        visible: false,
+      });
+    }
+
     chart.timeScale().fitContent();
     chartRef.current = chart;
 
@@ -166,6 +204,19 @@ export function Spotlight() {
               )}
             </div>
 
+            {/* Legend — only when the RS band renders (equity mode) */}
+            {isEquity && (
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 18, flexWrap: 'wrap',
+                padding: '8px 18px', borderTop: `1px solid ${C.rule}`,
+                fontFamily: MONO, fontSize: 10, letterSpacing: '.08em', color: C.ink4,
+              }}>
+                <span><span style={{ color: C.g2 }}>──</span>&nbsp;EMA 20</span>
+                <span><span style={{ color: C.g1 }}>──</span>&nbsp;Magic RS (lower band)</span>
+                <span><span style={{ color: C.ink3 }}>──</span>&nbsp;RS average</span>
+              </div>
+            )}
+
             {/* Scan counts + CTA footer */}
             <div style={{
               display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -180,7 +231,7 @@ export function Spotlight() {
                 ))}
               </div>
               <button onClick={seeInside} className="dq-btn" style={{ padding: '9px 18px', fontSize: 12 }}>
-                See it inside <span className="dq-arrow">→</span>
+                Login to view <span className="dq-arrow">→</span>
               </button>
             </div>
           </div>

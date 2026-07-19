@@ -7739,7 +7739,7 @@ def _spotlight_scan_counts(cur, trade_date: str, healthy: bool) -> list[dict]:
 def _spotlight_equity_bars(cur, equity_id: int, trade_date: str) -> list[dict]:
     cur.execute(
         """
-        SELECT trade_date, open, high, low, close, magic_rs, magic_ma
+        SELECT trade_date, open, high, low, close, magic_rs, magic_ma, ema_20
         FROM km_equity_eod
         WHERE equity_id = %s AND trade_date <= %s
         ORDER BY trade_date DESC LIMIT %s
@@ -7756,6 +7756,7 @@ def _spotlight_equity_bars(cur, equity_id: int, trade_date: str) -> list[dict]:
             'c': float(r['close']) if r['close'] is not None else None,
             'rs': float(r['magic_rs']) if r['magic_rs'] is not None else None,
             'ma': float(r['magic_ma']) if r['magic_ma'] is not None else None,
+            'e20': float(r['ema_20']) if r['ema_20'] is not None else None,
         }
         for r in reversed(rows)
     ]
