@@ -6629,12 +6629,36 @@ class CreateOrderRequest(BaseModel):
 def _activate_tier(
     user_id: str, tier: str, days: int,
     subscription_id: str = None, payment_id: str = None
-):
+) -> bool:
+    """Activate a paid tier. Idempotent on payment_id / subscription_id so the
+    webhook and the reconcile endpoint can both fire for the same payment
+    without double-inserting a user_subscriptions row. Returns True if this
+    call performed the activation, False if it was already recorded."""
     from datetime import timedelta
     expires_at = datetime.utcnow() + timedelta(days=days)
     conn = _conn(5000)
     try:
         with conn.cursor() as cur:
+            # Idempotency guard — has this exact payment already been recorded?
+            if payment_id:
+                cur.execute(
+                    "SELECT 1 FROM user_subscriptions WHERE razorpay_payment_id = %s LIMIT 1",
+                    (payment_id,)
+                )
+                if cur.fetchone():
+                    log.info(f"tier activation skipped (payment {payment_id} already recorded)")
+                    return False
+            elif subscription_id:
+                cur.execute(
+                    """SELECT 1 FROM user_subscriptions
+                       WHERE razorpay_subscription_id = %s AND status = 'active'
+                         AND expires_at > now() LIMIT 1""",
+                    (subscription_id,)
+                )
+                if cur.fetchone():
+                    log.info(f"tier activation skipped (subscription {subscription_id} already active)")
+                    return False
+
             cur.execute(
                 """UPDATE km_profiles
                    SET tier = %s, expires_at = %s, updated_at = now()
@@ -6650,6 +6674,7 @@ def _activate_tier(
             )
         conn.commit()
         log.info(f"tier activated: user={user_id} tier={tier} expires={expires_at}")
+        return True
     finally:
         conn.close()
 
@@ -6812,6 +6837,87 @@ async def payments_webhook(request: Request):
     except Exception as exc:
         log.error(f'webhook handler error: {event} {exc}')
         # Always return 200 to Razorpay — never let webhook retry loop
+
+
+class ReconcileRequest(BaseModel):
+    user_id:         str
+    order_id:        str | None = None   # trial (one-time order)
+    subscription_id: str | None = None   # quarterly / annual
+
+
+_RECONCILE_TIER_DAYS = {'trial': 14, 'quarterly': 90, 'annual': 365}
+
+
+@app.post('/api/payments/reconcile')
+def payments_reconcile(
+    req: ReconcileRequest,
+    caller_id: str = Depends(_get_current_user_id),
+):
+    """Client-driven recovery for a paid-but-not-yet-activated checkout.
+
+    The checkout handler polls the profile for ~30s waiting on the webhook.
+    If the webhook is slow or was missed, the client calls this endpoint with
+    the order/subscription id from the Razorpay handler response. We ask
+    Razorpay directly whether money was actually captured and, if so, activate
+    the tier — idempotently, so a late webhook can't then double-activate.
+
+    Returns {status: 'activated'|'already_active'|'pending', tier}. Never
+    trusts the client for the fact of payment — Razorpay is the source of
+    truth; the client only supplies the id to look up.
+    """
+    if caller_id != req.user_id:
+        raise HTTPException(status_code=403, detail='Forbidden')
+    if not req.order_id and not req.subscription_id:
+        raise HTTPException(status_code=400, detail='order_id or subscription_id required')
+    if not RAZORPAY_KEY_ID or not RAZORPAY_KEY_SECRET:
+        raise HTTPException(status_code=503, detail='Payment gateway not configured')
+
+    try:
+        import razorpay as _rzp
+        client = _rzp.Client(auth=(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET))
+
+        # ── Trial: one-time order ──────────────────────────────────────
+        if req.order_id:
+            order = client.order.fetch(req.order_id)
+            notes = order.get('notes', {}) or {}
+            if notes.get('user_id') != req.user_id:
+                raise HTTPException(status_code=403, detail='Order does not belong to caller')
+            if order.get('status') != 'paid':
+                return {'status': 'pending', 'tier': None}
+            payments = client.order.payments(req.order_id).get('items', [])
+            captured = next((p for p in payments if p.get('status') == 'captured'), None)
+            if not captured:
+                return {'status': 'pending', 'tier': None}
+            tier = notes.get('tier', 'trial')
+            activated = _activate_tier(
+                req.user_id, tier, days=_RECONCILE_TIER_DAYS.get(tier, 14),
+                payment_id=captured.get('id'),
+            )
+            return {'status': 'activated' if activated else 'already_active', 'tier': tier}
+
+        # ── Subscription: quarterly / annual ───────────────────────────
+        sub = client.subscription.fetch(req.subscription_id)
+        notes = sub.get('notes', {}) or {}
+        if notes.get('user_id') != req.user_id:
+            raise HTTPException(status_code=403, detail='Subscription does not belong to caller')
+        tier = notes.get('tier')
+        # 'active' = charged & running; 'authenticated' = mandate set but first
+        # charge not yet captured (still pending — let the webhook handle it).
+        if sub.get('status') != 'active':
+            return {'status': 'pending', 'tier': tier}
+        activated = _activate_tier(
+            req.user_id, tier, days=_RECONCILE_TIER_DAYS.get(tier, 365),
+            subscription_id=req.subscription_id,
+        )
+        return {'status': 'activated' if activated else 'already_active', 'tier': tier}
+
+    except HTTPException:
+        raise
+    except ImportError:
+        raise HTTPException(status_code=503, detail='razorpay SDK not installed')
+    except Exception as exc:
+        log.error(f'reconcile error: {exc}')
+        raise HTTPException(status_code=502, detail='Could not reach payment gateway')
 
 
 # ── Custom Index — AI Discover ────────────────────────────────────────────────

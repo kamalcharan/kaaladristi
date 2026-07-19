@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Check, Zap, TrendingUp, BarChart2, Brain, Star } from 'lucide-react'
 import { useAuthStore } from '@/stores/authStore'
-import { startTrialCheckout, startSubscriptionCheckout } from '@/services/razorpayService'
+import { startTrialCheckout, startSubscriptionCheckout, reconcilePayment, type CheckoutRefs } from '@/services/razorpayService'
 
 const TIERS = [
   { id: 'free'      as const, label: 'Free',      price: '₹0',     duration: '1 week',   cta: 'Current plan',  highlight: false },
@@ -38,27 +38,68 @@ export default function PricingCards({ onPaidSuccess, onFreeSelected }: PricingC
   const [paying,   setPaying]   = useState<string | null>(null)
   const [activating, setActivating] = useState(false)
   const [payError, setPayError] = useState<string | null>(null)
+  // Paid-but-pending recovery: webhook hasn't landed within the poll window.
+  // We keep the checkout refs so the user can trigger a direct reconcile.
+  const [pendingRefs, setPendingRefs] = useState<CheckoutRefs | null>(null)
+  const [reconciling, setReconciling] = useState(false)
 
   const currentTier   = profile?.tier ?? 'free'
   const isOnboarding  = !!onPaidSuccess || !!onFreeSelected
 
-  async function pollProfileUntilUpgraded() {
+  function upgraded(startTier: string): boolean {
+    const t = useAuthStore.getState().profile?.tier
+    return !!t && t !== startTier && t !== 'free'
+  }
+
+  async function pollProfileUntilUpgraded(refs: CheckoutRefs) {
     setActivating(true)
+    setPendingRefs(null)
     const startTier = profile?.tier ?? 'free'
     const deadline  = Date.now() + 30_000
     while (Date.now() < deadline) {
       await new Promise(r => setTimeout(r, 2000))
       await refreshProfile()
-      const current = useAuthStore.getState().profile
-      if (current?.tier && current.tier !== startTier && current.tier !== 'free') {
-        setActivating(false)
-        setPaying(null)
+      if (upgraded(startTier)) {
+        setActivating(false); setPaying(null)
         onPaidSuccess?.()
         return
       }
     }
-    setActivating(false)
-    setPaying(null)
+    // Poll timed out — the webhook is slow or was missed. Try a direct
+    // reconcile once before surfacing the manual recovery card.
+    try {
+      const r = await reconcilePayment(profile!.id, refs)
+      if (r.status === 'activated' || r.status === 'already_active') {
+        await refreshProfile()
+        setActivating(false); setPaying(null)
+        onPaidSuccess?.()
+        return
+      }
+    } catch { /* fall through to recovery UI */ }
+
+    setActivating(false); setPaying(null)
+    setPendingRefs(refs)  // show the recovery card
+  }
+
+  async function retryReconcile() {
+    if (!pendingRefs || !profile?.id) return
+    setReconciling(true)
+    setPayError(null)
+    const startTier = currentTier
+    try {
+      const r = await reconcilePayment(profile.id, pendingRefs)
+      await refreshProfile()
+      if (r.status === 'activated' || r.status === 'already_active' || upgraded(startTier)) {
+        setPendingRefs(null)
+        onPaidSuccess?.()
+      } else {
+        setPayError('Payment is still being confirmed by the bank. This can take a few minutes — please try again shortly. If it was debited, your access will activate automatically.')
+      }
+    } catch {
+      setPayError('Could not reach the payment gateway. Your payment is safe — please retry in a moment.')
+    } finally {
+      setReconciling(false)
+    }
   }
 
   async function handleCta(tierId: string) {
@@ -72,7 +113,7 @@ export default function PricingCards({ onPaidSuccess, onFreeSelected }: PricingC
         await startTrialCheckout(
           profile.id,
           { name: profile.full_name, email: profile.email },
-          () => pollProfileUntilUpgraded(),
+          (refs) => pollProfileUntilUpgraded(refs),
           () => setPaying(null),
         )
       } else if (tierId === 'quarterly') {
@@ -80,7 +121,7 @@ export default function PricingCards({ onPaidSuccess, onFreeSelected }: PricingC
           'quarterly',
           profile.id,
           { name: profile.full_name, email: profile.email },
-          () => pollProfileUntilUpgraded(),
+          (refs) => pollProfileUntilUpgraded(refs),
           () => setPaying(null),
         )
       } else if (tierId === 'annual') {
@@ -88,7 +129,7 @@ export default function PricingCards({ onPaidSuccess, onFreeSelected }: PricingC
           'annual',
           profile.id,
           { name: profile.full_name, email: profile.email },
-          () => pollProfileUntilUpgraded(),
+          (refs) => pollProfileUntilUpgraded(refs),
           () => setPaying(null),
         )
       }
@@ -100,10 +141,32 @@ export default function PricingCards({ onPaidSuccess, onFreeSelected }: PricingC
 
   return (
     <div>
+      {/* Paid-but-pending recovery — webhook missed the poll window */}
+      {pendingRefs && (
+        <div style={{ maxWidth: 520, margin: '0 auto 24px', padding: '16px 18px', borderRadius: 12,
+          background: 'var(--caution-bg)', border: '1px solid var(--caution-dim)', textAlign: 'center' }}>
+          <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--caution)', marginBottom: 6 }}>
+            Confirming your payment…
+          </div>
+          <div style={{ fontSize: 12.5, color: 'var(--text-secondary)', lineHeight: 1.6, marginBottom: 12 }}>
+            If your payment was debited, your access is safe and will activate automatically.
+            You can also confirm it now:
+          </div>
+          <button
+            onClick={retryReconcile}
+            disabled={reconciling}
+            style={{ padding: '8px 20px', borderRadius: 100, cursor: reconciling ? 'default' : 'pointer',
+              border: '1px solid var(--caution)', background: 'transparent', color: 'var(--caution)',
+              fontSize: 13, fontFamily: 'var(--font-mono,monospace)', opacity: reconciling ? 0.6 : 1 }}>
+            {reconciling ? 'Checking…' : 'Confirm payment now'}
+          </button>
+        </div>
+      )}
+
       {payError && (
-        <div style={{ maxWidth: 500, margin: '0 auto 24px', padding: '10px 16px', borderRadius: 10,
+        <div style={{ maxWidth: 520, margin: '0 auto 24px', padding: '10px 16px', borderRadius: 10,
           background: 'var(--bear-bg)', border: '1px solid var(--bear-dim, rgba(239,68,68,.3))',
-          fontSize: 13, color: '#fca5a5', textAlign: 'center' }}>
+          fontSize: 13, color: '#fca5a5', textAlign: 'center', lineHeight: 1.5 }}>
           {payError}
         </div>
       )}
