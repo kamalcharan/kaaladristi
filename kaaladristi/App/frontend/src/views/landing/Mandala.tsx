@@ -17,7 +17,7 @@ function CandleArc({ cx, cy, r }: { cx: number; cy: number; r: number }) {
         <g key={i} opacity="0.9">
           <line x1={c.x} y1={c.low} x2={c.x} y2={c.high} stroke={c.up?C.g1:C.g3} strokeWidth="0.8"/>
           <rect x={c.x-2} y={Math.min(c.open,c.close)} width="4" height={Math.abs(c.close-c.open)+1}
-            fill={c.up?'rgba(226,185,111,0.9)':'rgba(13,13,26,0.9)'}
+            fill={c.up?'rgba(245,166,35,0.9)':'rgba(28,32,48,0.9)'}
             stroke={c.up?C.ink1:C.g1} strokeWidth="0.6"/>
         </g>
       ))}
@@ -39,9 +39,9 @@ export function PanchangamMandala({ size = 560 }: { size?: number }) {
     <svg viewBox={`0 0 ${size} ${size}`} width="100%" height="100%" style={{ display:'block', overflow:'visible' }}>
       <defs>
         <radialGradient id="dq-mgrad" cx="50%" cy="50%" r="50%">
-          <stop offset="0%"   stopColor="#1a1040" stopOpacity="0.25"/>
-          <stop offset="60%"  stopColor="#0d0d1a" stopOpacity="0.1"/>
-          <stop offset="100%" stopColor="#0a0a12" stopOpacity="0"/>
+          <stop offset="0%"   stopColor="#1c2030" stopOpacity="0.25"/>
+          <stop offset="60%"  stopColor="#1c2030" stopOpacity="0.1"/>
+          <stop offset="100%" stopColor="#13161d" stopOpacity="0"/>
         </radialGradient>
         <radialGradient id="dq-cg" cx="50%" cy="50%" r="50%">
           <stop offset="0%"   stopColor={C.ink1} stopOpacity="0.9"/>

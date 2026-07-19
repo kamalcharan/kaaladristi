@@ -140,7 +140,7 @@ export function Pillars() {
       <div className="dq-wrap" style={{ marginTop:72 }}>
         {/* Two lenses signature row */}
         <FadeUp>
-          <div className="dq-two-lenses" style={{ border:`1px solid ${C.rule}`, background:`linear-gradient(180deg,rgba(226,185,111,0.04),rgba(10,10,18,0.3))`, padding:'48px 44px', marginBottom:1, display:'grid', gridTemplateColumns:'auto 1fr auto', gap:48, alignItems:'center' }}>
+          <div className="dq-two-lenses" style={{ border:`1px solid ${C.rule}`, background:`linear-gradient(180deg,rgba(245,166,35,0.04),rgba(19,22,29,0.3))`, padding:'48px 44px', marginBottom:1, display:'grid', gridTemplateColumns:'auto 1fr auto', gap:48, alignItems:'center' }}>
             <div style={{ display:'flex', alignItems:'center', gap:28 }}>
               <AncientLens/>
               <div style={{ fontFamily:MONO, fontSize:22, color:C.g1, letterSpacing:'.08em' }}>⊕</div>

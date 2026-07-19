@@ -1,12 +1,14 @@
-// DristiQ landing page design tokens — pixel-perfect to reference
+// DristiQ landing page design tokens — aligned to the product's Vikuna Black
+// theme (config/theme/themes/kaaladristi.ts, dark mode) so landing → login →
+// app is one continuous surface: amber/antique-gold accents on deep blue-slate.
 
 export const C = {
-  bg0: '#07070c', bg1: '#0a0a12', bg2: '#0d0d1a',
-  ink1: '#f4ecd6', ink2: '#d9cfb6', ink3: '#8a8372', ink4: '#50493c',
-  g1: '#e2b96f', g2: '#c9a84c', g3: '#8a6f28',
-  glow: 'rgba(226,185,111,.28)',
-  rule: 'rgba(226,185,111,.18)',
-  rs: 'rgba(226,185,111,.08)', // rule-soft
+  bg0: '#0d0f14', bg1: '#13161d', bg2: '#1c2030',
+  ink1: '#e8e6e0', ink2: '#b7bcc9', ink3: '#7a8099', ink4: '#3a3f52',
+  g1: '#f5a623', g2: '#c9a24b', g3: '#8a7433',
+  glow: 'rgba(245,166,35,.25)',
+  rule: 'rgba(245,166,35,.16)',
+  rs: 'rgba(245,166,35,.07)', // rule-soft
 } as const;
 
 export const SERIF = "'Cormorant Garamond','Playfair Display',serif";
