@@ -6626,6 +6626,21 @@ class CreateOrderRequest(BaseModel):
     user_id: str
 
 
+_PRICE_CONFIG_KEY = {'trial': 'price_trial_paise', 'quarterly': 'price_quarterly_paise',
+                     'annual': 'price_annual_paise'}
+
+
+def _price_breakdown(tier: str) -> tuple[int, int, int]:
+    """Return (base, gst, total) in paise for a tier. Prices in km_config are
+    GST-EXCLUSIVE; GST is added at gst_rate. Total is what the customer is
+    charged (trial one-time order amount; and the amount the Razorpay
+    subscription plan must be created at)."""
+    base = int(_KM_CONFIG.get(_PRICE_CONFIG_KEY.get(tier, ''), '0') or '0')
+    rate = float(_KM_CONFIG.get('gst_rate', '0.18') or '0.18')
+    gst = round(base * rate)
+    return base, gst, base + gst
+
+
 def _activate_tier(
     user_id: str, tier: str, days: int,
     subscription_id: str = None, payment_id: str = None
@@ -6659,6 +6674,7 @@ def _activate_tier(
                     log.info(f"tier activation skipped (subscription {subscription_id} already active)")
                     return False
 
+            base, gst, total = _price_breakdown(tier)
             cur.execute(
                 """UPDATE km_profiles
                    SET tier = %s, expires_at = %s, updated_at = now()
@@ -6668,12 +6684,14 @@ def _activate_tier(
             cur.execute(
                 """INSERT INTO user_subscriptions
                    (user_id, tier, started_at, expires_at,
-                    razorpay_subscription_id, razorpay_payment_id, status)
-                   VALUES (%s::uuid, %s, now(), %s, %s, %s, 'active')""",
-                (user_id, tier, expires_at, subscription_id, payment_id)
+                    razorpay_subscription_id, razorpay_payment_id, status,
+                    base_paise, gst_paise, total_paise)
+                   VALUES (%s::uuid, %s, now(), %s, %s, %s, 'active', %s, %s, %s)""",
+                (user_id, tier, expires_at, subscription_id, payment_id, base, gst, total)
             )
         conn.commit()
-        log.info(f"tier activated: user={user_id} tier={tier} expires={expires_at}")
+        log.info(f"tier activated: user={user_id} tier={tier} expires={expires_at} "
+                 f"total_paise={total}")
         return True
     finally:
         conn.close()
@@ -6747,17 +6765,21 @@ def payments_create_trial_order(
     if not RAZORPAY_KEY_ID or not RAZORPAY_KEY_SECRET:
         raise HTTPException(status_code=503, detail='Payment gateway not configured')
 
-    amount = int(_KM_CONFIG.get('price_trial_paise', '19900'))
+    # Charge GST-inclusive total (base prices in km_config are exclusive)
+    base, gst, total = _price_breakdown('trial')
 
     try:
         import razorpay as _rzp
         client = _rzp.Client(auth=(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET))
         order = client.order.create({
-            'amount':   amount,
+            'amount':   total,
             'currency': 'INR',
             'notes':    {'tier': 'trial', 'user_id': req.user_id},
         })
-        return {'order_id': order['id'], 'amount': order['amount'], 'currency': order['currency']}
+        return {
+            'order_id': order['id'], 'amount': order['amount'], 'currency': order['currency'],
+            'base_paise': base, 'gst_paise': gst, 'total_paise': total,
+        }
     except ImportError:
         raise HTTPException(status_code=503, detail='razorpay SDK not installed')
     except Exception as exc:

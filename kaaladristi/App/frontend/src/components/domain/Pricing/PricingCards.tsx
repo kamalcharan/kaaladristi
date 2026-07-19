@@ -3,26 +3,37 @@ import { Check, Zap, TrendingUp, BarChart2, Brain, Star } from 'lucide-react'
 import { useAuthStore } from '@/stores/authStore'
 import { startTrialCheckout, startSubscriptionCheckout, reconcilePayment, type CheckoutRefs } from '@/services/razorpayService'
 
+// Yearly-only at launch (owner decision 2026-07-19). Quarterly retired; free
+// tier removed (everyone is 'beta' pre-launch). base = GST-exclusive rupees;
+// the "+ 18% GST" total is shown alongside so nothing surprises at checkout.
+const GST_RATE = 0.18
+
 const TIERS = [
-  { id: 'free'      as const, label: 'Free',      price: '₹0',     duration: '1 week',   cta: 'Current plan',  highlight: false },
-  { id: 'trial'     as const, label: 'Trial',     price: '₹199',   duration: '14 days',  cta: 'Start Trial →', highlight: false },
-  { id: 'quarterly' as const, label: 'Quarterly', price: '₹1,999', duration: '3 months', cta: 'Subscribe →',   highlight: false },
-  { id: 'annual'    as const, label: 'Annual',    price: '₹4,999', duration: '1 year',   cta: 'Best value →',  highlight: true  },
+  { id: 'trial'  as const, label: 'Trial',  base: 199,  duration: '14 days',  sub: 'One-time · full access',   cta: 'Start Trial →', highlight: false },
+  { id: 'annual' as const, label: 'Annual', base: 4999, duration: 'per year', sub: '≈ ₹417/mo · billed yearly', cta: 'Get Annual →',  highlight: true  },
 ]
 
-const FEATURES: { label: string; free: boolean; trial: boolean; paid: boolean; icon: React.ReactNode }[] = [
-  { label: 'Nifty 50 dashboard',            free: true,  trial: true,  paid: true,  icon: <BarChart2 size={13} /> },
-  { label: 'Visual Pulse — index',          free: true,  trial: true,  paid: true,  icon: <TrendingUp size={13} /> },
-  { label: 'Panchang + astro calendar',     free: true,  trial: true,  paid: true,  icon: <Star size={13} /> },
-  { label: 'Workspace — 2 instruments',     free: true,  trial: true,  paid: true,  icon: <Zap size={13} /> },
-  { label: 'VaNi insights',                 free: false, trial: true,  paid: true,  icon: <Brain size={13} /> },
-  { label: 'Correlation detection',         free: false, trial: true,  paid: true,  icon: <TrendingUp size={13} /> },
-  { label: 'All astro rules + framework',   free: false, trial: true,  paid: true,  icon: <Star size={13} /> },
-  { label: 'Unlimited instruments',         free: false, trial: true,  paid: true,  icon: <BarChart2 size={13} /> },
-  { label: 'Full 6yr+ correlation history', free: false, trial: true,  paid: true,  icon: <TrendingUp size={13} /> },
-  { label: 'Visual Pulse — equities',       free: false, trial: true,  paid: true,  icon: <BarChart2 size={13} /> },
-  { label: 'Scanner — all presets',         free: false, trial: true,  paid: true,  icon: <Zap size={13} /> },
-  { label: 'Intraday cockpit',              free: false, trial: false, paid: true,  icon: <Brain size={13} /> },
+function inr(n: number): string {
+  return n.toLocaleString('en-IN', { maximumFractionDigits: 2 })
+}
+/** GST-inclusive total for a base rupee amount. */
+function gstTotal(base: number): number {
+  return Math.round(base * (1 + GST_RATE) * 100) / 100
+}
+
+// Everything is included in both paid tiers — the trial is the full product
+// for 14 days, not a feature-limited teaser.
+const FEATURES: { label: string; icon: React.ReactNode }[] = [
+  { label: 'Full market dashboard + breadth',   icon: <BarChart2 size={13} /> },
+  { label: 'Visual Pulse — index & equities',   icon: <TrendingUp size={13} /> },
+  { label: 'Panchang + astro calendar',         icon: <Star size={13} /> },
+  { label: 'All 9 scanner presets',             icon: <Zap size={13} /> },
+  { label: 'VaNi insights',                     icon: <Brain size={13} /> },
+  { label: 'Correlation detection',             icon: <TrendingUp size={13} /> },
+  { label: 'All astro rules + framework',       icon: <Star size={13} /> },
+  { label: 'Unlimited workspace instruments',   icon: <BarChart2 size={13} /> },
+  { label: 'Full correlation history',          icon: <TrendingUp size={13} /> },
+  { label: 'Intraday cockpit',                  icon: <Brain size={13} /> },
 ]
 
 const PAID_TIER_IDS = ['trial', 'quarterly', 'annual', 'beta']
@@ -44,6 +55,7 @@ export default function PricingCards({ onPaidSuccess, onFreeSelected }: PricingC
   const [reconciling, setReconciling] = useState(false)
 
   const currentTier   = profile?.tier ?? 'free'
+  const isBeta        = currentTier === 'beta'
   const isOnboarding  = !!onPaidSuccess || !!onFreeSelected
 
   function upgraded(startTier: string): boolean {
@@ -171,12 +183,25 @@ export default function PricingCards({ onPaidSuccess, onFreeSelected }: PricingC
         </div>
       )}
 
-      {/* Tier cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 40 }}>
+      {/* Founding-member banner — beta grants full access; pricing is a preview */}
+      {isBeta && (
+        <div style={{ maxWidth: 640, margin: '0 auto 28px', padding: '14px 18px', borderRadius: 12,
+          background: 'var(--caution-bg)', border: '1px solid var(--caution-dim)', textAlign: 'center' }}>
+          <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--caution)', marginBottom: 4 }}>
+            You’re a founding member — full access, free during beta.
+          </div>
+          <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+            No payment needed now. Here’s what plans will look like at public launch — founding members keep preferential pricing.
+          </div>
+        </div>
+      )}
+
+      {/* Tier cards — trial + annual, centered */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0,1fr))', gap: 16,
+        maxWidth: 560, margin: '0 auto 40px' }}>
         {TIERS.map(tier => {
-          const isCurrentFree = tier.id === 'free' && !PAID_TIER_IDS.includes(currentTier)
-          const isCurrent     = tier.id === currentTier
-          const disabled      = tier.id === 'free' || isCurrentFree || isCurrent || !!paying
+          const isCurrent = tier.id === currentTier
+          const disabled  = isBeta || isCurrent || !!paying
 
           return (
             <div key={tier.id} style={{
@@ -189,18 +214,22 @@ export default function PricingCards({ onPaidSuccess, onFreeSelected }: PricingC
                 <div style={{ position: 'absolute', top: -12, left: '50%', transform: 'translateX(-50%)',
                   padding: '2px 12px', borderRadius: 20, fontSize: 10, fontWeight: 600,
                   background: 'var(--accent)', color: '#fff', letterSpacing: '.06em',
-                  fontFamily: 'var(--font-mono,monospace)' }}>
+                  fontFamily: 'var(--font-mono,monospace)', whiteSpace: 'nowrap' }}>
                   BEST VALUE
                 </div>
               )}
               <div style={{ fontSize: 13, fontWeight: 600, color: 'color-mix(in srgb, var(--text-primary) 60%, transparent)', marginBottom: 8, letterSpacing: '.03em' }}>
                 {tier.label}
               </div>
-              <div style={{ fontSize: 28, fontWeight: 700, color: '#fff', marginBottom: 4 }}>
-                {tier.price}
+              <div style={{ fontSize: 28, fontWeight: 700, color: '#fff', marginBottom: 2 }}>
+                ₹{inr(tier.base)}
+                <span style={{ fontSize: 13, fontWeight: 400, color: 'var(--text-muted)' }}> / {tier.duration}</span>
               </div>
-              <div style={{ fontSize: 12, color: 'var(--text-muted, #6b7280)', marginBottom: 24 }}>
-                {tier.duration}
+              <div style={{ fontSize: 11.5, color: 'var(--accent)', marginBottom: 2 }}>
+                + 18% GST · ₹{inr(gstTotal(tier.base))} total
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 22 }}>
+                {tier.sub}
               </div>
               <button
                 onClick={() => handleCta(tier.id)}
@@ -209,15 +238,15 @@ export default function PricingCards({ onPaidSuccess, onFreeSelected }: PricingC
                   width: '100%', padding: '10px', borderRadius: 10, fontSize: 13,
                   fontWeight: 600, border: 'none',
                   cursor: (disabled || activating) ? (paying ? 'wait' : 'default') : 'pointer',
-                  background: tier.highlight
+                  background: tier.highlight && !disabled
                     ? 'var(--accent-solid)'
-                    : (isCurrentFree || isCurrent) ? 'color-mix(in srgb, var(--text-primary) 6%, transparent)' : 'color-mix(in srgb, var(--text-primary) 10%, transparent)',
-                  color: (isCurrentFree || isCurrent) ? 'color-mix(in srgb, var(--text-primary) 35%, transparent)' : '#fff',
+                    : (isBeta || isCurrent) ? 'color-mix(in srgb, var(--text-primary) 6%, transparent)' : 'color-mix(in srgb, var(--text-primary) 10%, transparent)',
+                  color: (isBeta || isCurrent) ? 'color-mix(in srgb, var(--text-primary) 35%, transparent)' : '#fff',
                   transition: 'background .15s',
                 }}>
                 {activating        ? 'Activating your plan…' :
                  paying === tier.id ? 'Opening checkout…' :
-                 isCurrentFree      ? 'Current plan' :
+                 isBeta             ? 'Free in Beta' :
                  isCurrent          ? 'Active' :
                  tier.cta}
               </button>
@@ -226,31 +255,24 @@ export default function PricingCards({ onPaidSuccess, onFreeSelected }: PricingC
         })}
       </div>
 
-      {/* Feature comparison */}
-      <div style={{ borderRadius: 16, overflow: 'hidden', border: '1px solid var(--border)', background: 'var(--card)', marginBottom: 32 }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 80px 80px 80px 80px',
-          padding: '12px 20px', background: 'var(--panel-recess)',
+      {/* What's included — identical for both paid tiers (trial is the full product) */}
+      <div style={{ maxWidth: 560, margin: '0 auto 32px', borderRadius: 16, overflow: 'hidden',
+        border: '1px solid var(--border)', background: 'var(--card)' }}>
+        <div style={{ padding: '12px 20px', background: 'var(--panel-recess)',
           borderBottom: '1px solid var(--border)', fontSize: 11,
           color: 'color-mix(in srgb, var(--text-primary) 40%, transparent)', fontFamily: 'var(--font-mono,monospace)',
-          letterSpacing: '.04em', textAlign: 'center' }}>
-          <span style={{ textAlign: 'left' }}>FEATURE</span>
-          <span>FREE</span><span>TRIAL</span><span>QTR</span><span>ANNUAL</span>
+          letterSpacing: '.04em' }}>
+          EVERYTHING INCLUDED — TRIAL & ANNUAL
         </div>
         {FEATURES.map((f, i) => (
-          <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 80px 80px 80px 80px',
-            padding: '11px 20px', borderBottom: '1px solid color-mix(in srgb, var(--text-primary) 5%, transparent)',
+          <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            padding: '11px 20px', borderBottom: i < FEATURES.length - 1 ? '1px solid color-mix(in srgb, var(--text-primary) 5%, transparent)' : 'none',
             background: i % 2 === 0 ? 'transparent' : 'color-mix(in srgb, var(--text-primary) 1%, transparent)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'color-mix(in srgb, var(--text-primary) 70%, transparent)' }}>
               <span style={{ color: 'var(--accent)' }}>{f.icon}</span>
               {f.label}
             </div>
-            {[f.free, f.trial, f.paid, f.paid].map((yes, j) => (
-              <div key={j} style={{ textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                {yes
-                  ? <Check size={14} style={{ color: '#22c55e' }} />
-                  : <span style={{ color: 'color-mix(in srgb, var(--text-primary) 15%, transparent)', fontSize: 16 }}>—</span>}
-              </div>
-            ))}
+            <Check size={14} style={{ color: 'var(--risk-green)' }} />
           </div>
         ))}
       </div>
@@ -262,16 +284,17 @@ export default function PricingCards({ onPaidSuccess, onFreeSelected }: PricingC
             style={{ background: 'none', border: 'none', cursor: 'pointer',
               fontSize: 13, color: 'var(--text-muted)', textDecoration: 'underline',
               textUnderlineOffset: 3 }}>
-            Continue with Free plan →
+            {isBeta ? 'Continue to my workspace →' : 'Maybe later →'}
           </button>
         </div>
       )}
 
       {/* Standalone page: footer note */}
       {!isOnboarding && (
-        <p style={{ textAlign: 'center', fontSize: 12, color: 'color-mix(in srgb, var(--text-primary) 25%, transparent)' }}>
-          All payments processed by Razorpay. Prices include GST.
-          Cancel or change plan from Settings → Account.
+        <p style={{ textAlign: 'center', fontSize: 12, color: 'color-mix(in srgb, var(--text-primary) 25%, transparent)', lineHeight: 1.6 }}>
+          Payments processed by Razorpay · GST invoice emailed on payment.
+          Prices exclusive of 18% GST; the total shown above is charged.
+          Manage your plan from Settings → Account.
         </p>
       )}
     </div>
