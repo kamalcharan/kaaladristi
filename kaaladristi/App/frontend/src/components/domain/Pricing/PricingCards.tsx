@@ -5,7 +5,7 @@ import { startTrialCheckout, startSubscriptionCheckout } from '@/services/razorp
 
 const TIERS = [
   { id: 'free'      as const, label: 'Free',      price: '₹0',     duration: '1 week',   cta: 'Current plan',  highlight: false },
-  { id: 'trial'     as const, label: 'Trial',     price: '₹199',   duration: '3 days',   cta: 'Start Trial →', highlight: false },
+  { id: 'trial'     as const, label: 'Trial',     price: '₹199',   duration: '14 days',  cta: 'Start Trial →', highlight: false },
   { id: 'quarterly' as const, label: 'Quarterly', price: '₹1,999', duration: '3 months', cta: 'Subscribe →',   highlight: false },
   { id: 'annual'    as const, label: 'Annual',    price: '₹4,999', duration: '1 year',   cta: 'Best value →',  highlight: true  },
 ]

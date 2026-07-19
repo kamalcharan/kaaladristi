@@ -6757,17 +6757,20 @@ async def payments_webhook(request: Request):
 
     body_bytes = await request.body()
 
-    # Verify webhook signature
-    if RAZORPAY_WEBHOOK_SECRET:
-        sig = request.headers.get('x-razorpay-signature', '')
-        expected = _hmac.new(
-            RAZORPAY_WEBHOOK_SECRET.encode(), body_bytes, _hashlib.sha256
-        ).hexdigest()
-        log.warning(f'webhook sig check: expected={expected[:16]}… got={sig[:16]}…')
-        if not _hmac.compare_digest(expected, sig):
-            log.warning(f'webhook signature mismatch')
-            # Temporarily disabled for testing — re-enable after debugging
-            # raise HTTPException(status_code=400, detail='Invalid webhook signature')
+    # Verify webhook signature — REQUIRED. Tier activation rides this webhook,
+    # so an unverified event is an open self-serve tier grant. If the secret
+    # is missing we refuse to process at all (503 → Razorpay retries and the
+    # misconfiguration surfaces in ops) rather than silently trusting events.
+    if not RAZORPAY_WEBHOOK_SECRET:
+        log.error('webhook rejected: RAZORPAY_WEBHOOK_SECRET not configured')
+        raise HTTPException(status_code=503, detail='Webhook not configured')
+    sig = request.headers.get('x-razorpay-signature', '')
+    expected = _hmac.new(
+        RAZORPAY_WEBHOOK_SECRET.encode(), body_bytes, _hashlib.sha256
+    ).hexdigest()
+    if not _hmac.compare_digest(expected, sig):
+        log.warning('webhook rejected: signature mismatch')
+        raise HTTPException(status_code=400, detail='Invalid webhook signature')
 
     payload = json.loads(body_bytes)
     event   = payload.get('event')
@@ -6781,7 +6784,9 @@ async def payments_webhook(request: Request):
             tier    = notes.get('tier', 'trial')
             user_id = notes.get('user_id')
             if user_id and tier == 'trial':
-                _activate_tier(user_id, tier, days=3, payment_id=payment.get('id'))
+                # 14 days (owner decision 2026-07-19) — matches TIER_DEFAULT_DAYS
+                # and the pricing card copy; ~10 market closes to build the habit
+                _activate_tier(user_id, tier, days=14, payment_id=payment.get('id'))
 
         elif event == 'subscription.charged':
             sub     = entity.get('subscription', {}).get('entity', {})
