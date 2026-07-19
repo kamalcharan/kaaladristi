@@ -3,7 +3,12 @@
  * Class applied via popoverClass: 'kd-tour-popover' in useTour.ts. */
 
 .kd-tour-popover.driver-popover {
-  background: var(--kd-elevated, var(--card));
+  /* MUST be opaque — --kd-elevated is rgba(255,255,255,0.08) glass and lets
+     page content bleed through the card. Layer the elevated tint over the
+     solid page bg so the surface stays opaque and both flip in light mode. */
+  background:
+    linear-gradient(var(--kd-elevated, var(--card-soft)), var(--kd-elevated, var(--card-soft))),
+    var(--bg);
   border: 1px solid var(--border);
   border-radius: var(--card-radius-lg, 14px);
   box-shadow: var(--card-shadow), 0 0 40px var(--accent-glow);
