@@ -14,6 +14,9 @@ import { fetchBookmarks, addBookmark, removeBookmark, setPosition as apiSetPosit
 interface BookmarkState {
   bookmarks: BookmarkRow[];
   bookmarkedIds: Set<number>;
+  /** In-flight toggle intentions (equityId → desired membership). Lets a
+   *  concurrent load() reconcile without clobbering an optimistic toggle. */
+  optimistic: Map<number, boolean>;
   isLoading: boolean;
   error: string | null;
   hasLoaded: boolean;
@@ -31,6 +34,7 @@ interface BookmarkState {
 export const useBookmarkStore = create<BookmarkState>((set, get) => ({
   bookmarks: [],
   bookmarkedIds: new Set(),
+  optimistic: new Map(),
   isLoading: false,
   error: null,
   hasLoaded: false,
@@ -38,15 +42,15 @@ export const useBookmarkStore = create<BookmarkState>((set, get) => ({
   load: async () => {
     const userId = useAuthStore.getState().profile?.id;
     if (!userId) return;
+    if (get().isLoading) return; // dedupe the ~N concurrent calls from N toggle mounts
     set({ isLoading: true, error: null });
     try {
       const rows = await fetchBookmarks(userId);
-      set({
-        bookmarks: rows,
-        bookmarkedIds: new Set(rows.map((r) => r.equity_id)),
-        isLoading: false,
-        hasLoaded: true,
-      });
+      const ids = new Set(rows.map((r) => r.equity_id));
+      // Re-apply any in-flight optimistic toggles so a late load() doesn't
+      // clobber a bookmark the user just clicked (the reset-on-first-click bug).
+      get().optimistic.forEach((want, id) => (want ? ids.add(id) : ids.delete(id)));
+      set({ bookmarks: rows, bookmarkedIds: ids, isLoading: false, hasLoaded: true });
     } catch (e) {
       set({ isLoading: false, error: e instanceof Error ? e.message : 'Failed to load bookmarks' });
     }
@@ -56,36 +60,43 @@ export const useBookmarkStore = create<BookmarkState>((set, get) => ({
     const userId = useAuthStore.getState().profile?.id;
     if (!userId) return;
 
-    const wasBookmarked = get().bookmarkedIds.has(equityId);
+    const want = !get().bookmarkedIds.has(equityId);
 
-    // Optimistic update — icon flips immediately, reconciled/rolled back below.
+    // Optimistic flip + record the intention (survives a concurrent load()).
     set((s) => {
       const nextIds = new Set(s.bookmarkedIds);
-      if (wasBookmarked) nextIds.delete(equityId);
-      else nextIds.add(equityId);
+      want ? nextIds.add(equityId) : nextIds.delete(equityId);
+      const opt = new Map(s.optimistic).set(equityId, want);
       return {
         bookmarkedIds: nextIds,
-        bookmarks: wasBookmarked
-          ? s.bookmarks.filter((b) => b.equity_id !== equityId)
-          : s.bookmarks,
+        optimistic: opt,
+        bookmarks: want ? s.bookmarks : s.bookmarks.filter((b) => b.equity_id !== equityId),
       };
     });
 
+    // Clear this id's intention and hard-assert final membership (guards against
+    // any load() that resolved in between).
+    const settle = (finalWant: boolean, extra?: Partial<BookmarkState>) =>
+      set((s) => {
+        const opt = new Map(s.optimistic);
+        opt.delete(equityId);
+        const nextIds = new Set(s.bookmarkedIds);
+        finalWant ? nextIds.add(equityId) : nextIds.delete(equityId);
+        return { optimistic: opt, bookmarkedIds: nextIds, ...extra };
+      });
+
     try {
-      if (wasBookmarked) {
-        await removeBookmark(userId, equityId);
-      } else {
+      if (want) {
         const row = await addBookmark(userId, equityId);
         set((s) => ({ bookmarks: [row, ...s.bookmarks.filter((b) => b.equity_id !== equityId)] }));
+        settle(true);
+      } else {
+        await removeBookmark(userId, equityId);
+        settle(false);
       }
     } catch (e) {
-      // Roll back the optimistic flip on failure.
-      set((s) => {
-        const nextIds = new Set(s.bookmarkedIds);
-        if (wasBookmarked) nextIds.add(equityId);
-        else nextIds.delete(equityId);
-        return { bookmarkedIds: nextIds, error: e instanceof Error ? e.message : 'Failed to update bookmark' };
-      });
+      // Roll back to the pre-click state.
+      settle(!want, { error: e instanceof Error ? e.message : 'Failed to update bookmark' });
     }
   },
 
