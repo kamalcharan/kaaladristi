@@ -31,6 +31,9 @@ export default function BetaWelcomeModal() {
       if (user?.id) localStorage.setItem(ackKey(user.id), new Date().toISOString());
     } catch { /* storage unavailable — modal simply reappears next session */ }
     setIsOpen(false);
+    // sequencing hook: lets the page explainer walk (useTour) start only
+    // after this modal is out of the way on a user's very first visit
+    window.dispatchEvent(new Event('kd:welcome-acked'));
   }
 
   if (!isOpen) return null;

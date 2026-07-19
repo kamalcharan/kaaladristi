@@ -1,0 +1,93 @@
+/* Explainer-walk popover — glass skin over driver.js defaults.
+ * Theme-token-only (works in dark now, light when unlocked).
+ * Class applied via popoverClass: 'kd-tour-popover' in useTour.ts. */
+
+.kd-tour-popover.driver-popover {
+  background: var(--kd-elevated, var(--card));
+  border: 1px solid var(--border);
+  border-radius: var(--card-radius-lg, 14px);
+  box-shadow: var(--card-shadow), 0 0 40px var(--accent-glow);
+  color: var(--text-secondary);
+  max-width: 340px;
+  padding: 18px 18px 14px;
+}
+
+/* the pointer arrow is a plain border-triangle — hide it, glass cards float */
+.kd-tour-popover .driver-popover-arrow {
+  display: none;
+}
+
+.kd-tour-popover .driver-popover-title {
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+  margin-bottom: 6px;
+}
+
+.kd-tour-popover .driver-popover-description {
+  font-family: var(--font-body, inherit);
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text-secondary);
+}
+
+.kd-tour-popover .driver-popover-progress-text {
+  font-family: var(--font-mono, monospace);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  color: var(--text-faint);
+}
+
+.kd-tour-popover .driver-popover-footer {
+  margin-top: 14px;
+  gap: 8px;
+}
+
+.kd-tour-popover .driver-popover-footer button {
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  padding: 5px 12px;
+  border-radius: 100px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  text-shadow: none;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+
+.kd-tour-popover .driver-popover-footer button:hover {
+  color: var(--text-primary);
+  border-color: var(--border-strong, var(--border));
+  background: var(--accent-glow);
+}
+
+.kd-tour-popover .driver-popover-next-btn {
+  background: var(--accent-dim);
+  border-color: var(--accent-dim);
+  color: var(--accent);
+}
+
+.kd-tour-popover .driver-popover-next-btn:hover {
+  background: var(--accent-dim);
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.kd-tour-popover .driver-popover-close-btn {
+  border: none;
+  background: transparent;
+  color: var(--text-faint);
+  padding: 2px 6px;
+}
+
+.kd-tour-popover .driver-popover-close-btn:hover {
+  color: var(--text-primary);
+  background: transparent;
+}
+
+/* highlighted element ring — subtle gold pulse over the accent stage */
+.driver-active-element {
+  border-radius: 10px;
+}
