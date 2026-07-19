@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Check, Zap, TrendingUp, BarChart2, Brain, Star } from 'lucide-react'
 import { useAuthStore } from '@/stores/authStore'
-import { startTrialCheckout, startSubscriptionCheckout, reconcilePayment, type CheckoutRefs } from '@/services/razorpayService'
+import { startOrderCheckout, reconcilePayment, type CheckoutRefs } from '@/services/razorpayService'
 
 // Yearly-only at launch (owner decision 2026-07-19). Quarterly retired; free
 // tier removed (everyone is 'beta' pre-launch). base = GST-exclusive rupees;
@@ -121,24 +121,9 @@ export default function PricingCards({ onPaidSuccess, onFreeSelected }: PricingC
     setPaying(tierId)
     setPayError(null)
     try {
-      if (tierId === 'trial') {
-        await startTrialCheckout(
-          profile.id,
-          { name: profile.full_name, email: profile.email },
-          (refs) => pollProfileUntilUpgraded(refs),
-          () => setPaying(null),
-        )
-      } else if (tierId === 'quarterly') {
-        await startSubscriptionCheckout(
-          'quarterly',
-          profile.id,
-          { name: profile.full_name, email: profile.email },
-          (refs) => pollProfileUntilUpgraded(refs),
-          () => setPaying(null),
-        )
-      } else if (tierId === 'annual') {
-        await startSubscriptionCheckout(
-          'annual',
+      if (tierId === 'trial' || tierId === 'annual') {
+        await startOrderCheckout(
+          tierId,
           profile.id,
           { name: profile.full_name, email: profile.email },
           (refs) => pollProfileUntilUpgraded(refs),

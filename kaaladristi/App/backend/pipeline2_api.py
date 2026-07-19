@@ -6624,6 +6624,7 @@ class CreateSubscriptionRequest(BaseModel):
 
 class CreateOrderRequest(BaseModel):
     user_id: str
+    tier: str = 'trial'   # 'trial' | 'annual' — both are one-time orders now
 
 
 _PRICE_CONFIG_KEY = {'trial': 'price_trial_paise', 'quarterly': 'price_quarterly_paise',
@@ -6754,19 +6755,24 @@ def payments_create_subscription(
         raise HTTPException(status_code=500, detail=str(exc))
 
 
-@app.post('/api/payments/create-trial-order')
-def payments_create_trial_order(
+@app.post('/api/payments/create-order')
+@app.post('/api/payments/create-trial-order')   # legacy alias (cached frontends)
+def payments_create_order(
     req: CreateOrderRequest,
     caller_id: str = Depends(_get_current_user_id),
 ):
-    """Creates a one-time Razorpay order for trial tier."""
+    """Create a one-time Razorpay order for a paid tier. Both trial and annual
+    are one-time orders now (no subscriptions — owner decision 2026-07-19); the
+    expiry sweep handles lapse. Charges the GST-inclusive total (km_config
+    prices are exclusive)."""
     if caller_id != req.user_id:
         raise HTTPException(status_code=403, detail='Forbidden')
+    if req.tier not in ('trial', 'annual'):
+        raise HTTPException(status_code=400, detail='Unsupported tier')
     if not RAZORPAY_KEY_ID or not RAZORPAY_KEY_SECRET:
         raise HTTPException(status_code=503, detail='Payment gateway not configured')
 
-    # Charge GST-inclusive total (base prices in km_config are exclusive)
-    base, gst, total = _price_breakdown('trial')
+    base, gst, total = _price_breakdown(req.tier)
 
     try:
         import razorpay as _rzp
@@ -6774,16 +6780,16 @@ def payments_create_trial_order(
         order = client.order.create({
             'amount':   total,
             'currency': 'INR',
-            'notes':    {'tier': 'trial', 'user_id': req.user_id},
+            'notes':    {'tier': req.tier, 'user_id': req.user_id},
         })
         return {
             'order_id': order['id'], 'amount': order['amount'], 'currency': order['currency'],
-            'base_paise': base, 'gst_paise': gst, 'total_paise': total,
+            'tier': req.tier, 'base_paise': base, 'gst_paise': gst, 'total_paise': total,
         }
     except ImportError:
         raise HTTPException(status_code=503, detail='razorpay SDK not installed')
     except Exception as exc:
-        log.error(f'create_trial_order error: {exc}')
+        log.error(f'create_order error: {exc}')
         raise HTTPException(status_code=500, detail=str(exc))
 
 
@@ -6825,15 +6831,15 @@ async def payments_webhook(request: Request):
 
     try:
         if event == 'payment.captured':
-            # Trial one-time order
+            # One-time order — trial (14d) or annual (365d). Duration from
+            # _RECONCILE_TIER_DAYS; idempotent via payment_id.
             payment = entity.get('payment', {}).get('entity', {})
             notes   = payment.get('notes', {})
             tier    = notes.get('tier', 'trial')
             user_id = notes.get('user_id')
-            if user_id and tier == 'trial':
-                # 14 days (owner decision 2026-07-19) — matches TIER_DEFAULT_DAYS
-                # and the pricing card copy; ~10 market closes to build the habit
-                _activate_tier(user_id, tier, days=14, payment_id=payment.get('id'))
+            if user_id and tier in _RECONCILE_TIER_DAYS:
+                _activate_tier(user_id, tier, days=_RECONCILE_TIER_DAYS[tier],
+                               payment_id=payment.get('id'))
 
         elif event == 'subscription.charged':
             sub     = entity.get('subscription', {}).get('entity', {})

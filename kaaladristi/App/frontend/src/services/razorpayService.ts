@@ -55,18 +55,26 @@ export async function reconcilePayment(
   return res.json()
 }
 
-// ── Trial (one-time order) ──────────────────────────────────────────
+// ── One-time order checkout (trial + annual — no subscriptions) ─────
 
-export async function startTrialCheckout(
+type OrderTier = 'trial' | 'annual'
+
+const ORDER_DESC: Record<OrderTier, string> = {
+  trial:  'Trial — 14 days full access',
+  annual: 'Annual — 1 year full access',
+}
+
+export async function startOrderCheckout(
+  tier: OrderTier,
   user_id: string,
   user: UserInfo,
   onSuccess: (refs: CheckoutRefs) => void,
   onDismiss?: () => void,
 ): Promise<void> {
-  const res = await fetch(`${PIPELINE_URL}/api/payments/create-trial-order`, {
+  const res = await fetch(`${PIPELINE_URL}/api/payments/create-order`, {
     method:  'POST',
     headers: { 'Content-Type': 'application/json', ...authHeaders() },
-    body:    JSON.stringify({ user_id }),
+    body:    JSON.stringify({ user_id, tier }),
   })
   if (!res.ok) throw new Error(`Order creation failed: ${await res.text()}`)
   const order = await res.json()
@@ -79,7 +87,7 @@ export async function startTrialCheckout(
     amount:      order.amount,
     currency:    order.currency,
     name:        'DristiQ',
-    description: 'Trial — 14 days full access',
+    description: ORDER_DESC[tier],
     prefill:     { name: user.name ?? '', email: user.email ?? '' },
     theme:       { color: '#8b5cf6' },
     handler(resp: any) {
@@ -90,36 +98,8 @@ export async function startTrialCheckout(
   rzp.open()
 }
 
-// ── Quarterly / Annual (subscription) ──────────────────────────────
-
-export async function startSubscriptionCheckout(
-  tier: 'quarterly' | 'annual',
-  user_id: string,
-  user: UserInfo,
-  onSuccess: (refs: CheckoutRefs) => void,
-  onDismiss?: () => void,
-): Promise<void> {
-  const res = await fetch(`${PIPELINE_URL}/api/payments/create-subscription`, {
-    method:  'POST',
-    headers: { 'Content-Type': 'application/json', ...authHeaders() },
-    body:    JSON.stringify({ tier, user_id }),
-  })
-  if (!res.ok) throw new Error(`Subscription creation failed: ${await res.text()}`)
-  const { subscription_id } = await res.json()
-
-  await loadRazorpayScript()
-  const RzpCtor = (window as any)['Razorpay'] as new (o: any) => { open(): void }
-  const rzp = new RzpCtor({
-    key:             RAZORPAY_KEY_ID,
-    subscription_id: subscription_id,
-    name:            'DristiQ',
-    description:     tier === 'quarterly' ? 'Quarterly — ₹1,999 / 90 days' : 'Annual — ₹4,999 / year',
-    prefill:         { name: user.name ?? '', email: user.email ?? '' },
-    theme:           { color: '#8b5cf6' },
-    handler(resp: any) {
-      onSuccess({ subscription_id, payment_id: resp?.razorpay_payment_id })
-    },
-    modal:           { ondismiss() { onDismiss?.() } },
-  })
-  rzp.open()
-}
+/** @deprecated use startOrderCheckout('trial', …) */
+export const startTrialCheckout = (
+  user_id: string, user: UserInfo,
+  onSuccess: (refs: CheckoutRefs) => void, onDismiss?: () => void,
+) => startOrderCheckout('trial', user_id, user, onSuccess, onDismiss)

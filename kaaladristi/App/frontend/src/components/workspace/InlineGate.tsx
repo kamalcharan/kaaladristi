@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { X, Lock, Zap, TrendingUp, BarChart2, Clock, Activity } from 'lucide-react'
 import { useAuthStore } from '@/stores/authStore'
-import { startTrialCheckout, startSubscriptionCheckout } from '@/services/razorpayService'
+import { startOrderCheckout } from '@/services/razorpayService'
 
 export type GateContext =
   | 'add_rule'
@@ -110,12 +110,13 @@ export default function InlineGate({ context, isOpen, onDismiss }: InlineGatePro
   const paidTiers = ['trial', 'quarterly', 'annual', 'beta']
   const isFree   = !profile?.tier || !paidTiers.includes(profile.tier)
 
-  async function handleTrialPurchase() {
+  async function handleOrderPurchase(tier: 'trial' | 'annual') {
     if (!profile?.id) return
     setPaying(true)
     setPayError(null)
     try {
-      await startTrialCheckout(
+      await startOrderCheckout(
+        tier,
         profile.id,
         { name: profile.full_name, email: profile.email },
         () => pollProfileUntilUpgraded(),
@@ -126,25 +127,8 @@ export default function InlineGate({ context, isOpen, onDismiss }: InlineGatePro
       setPaying(false)
     }
   }
-
-
-  async function handleAnnualPurchase() {
-    if (!profile?.id) return
-    setPaying(true)
-    setPayError(null)
-    try {
-      await startSubscriptionCheckout(
-        'annual',
-        profile.id,
-        { name: profile.full_name, email: profile.email },
-        () => pollProfileUntilUpgraded(),
-        () => setPaying(false),
-      )
-    } catch (err) {
-      setPayError(String(err))
-      setPaying(false)
-    }
-  }
+  const handleTrialPurchase  = () => handleOrderPurchase('trial')
+  const handleAnnualPurchase = () => handleOrderPurchase('annual')
 
   return (
     <div
