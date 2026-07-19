@@ -313,7 +313,12 @@ export function ScanFilterBar({ presetId, stocks, filters, onFiltersChange }: Sc
     onFiltersChange({ ...filters, [k]: v });
 
   return (
-    <div style={{ marginBottom: '4px' }}>
+    // Fragment (not a wrapper div) so the toggle button and the open panel are
+    // direct flex children of the parent Filters bar. The panel gets
+    // order/flexBasis below to drop onto its own full-width line — which keeps
+    // the Filters button and the right-aligned export controls together on the
+    // top row instead of the export controls wrapping below the panel.
+    <>
       {/* Toggle button */}
       <button
         onClick={() => setOpen((o) => !o)}
@@ -331,10 +336,15 @@ export function ScanFilterBar({ presetId, stocks, filters, onFiltersChange }: Sc
         <span>Filters{active ? ` · ${countActive(filters)}` : ''}</span>
       </button>
 
-      {/* Filter bar */}
+      {/* Filter bar — full-width row of its own, ordered after the export
+          controls so those stay on the top line with the Filters button. */}
       {open && (
         <div style={{
+          order: 99,
+          flexBasis: '100%',
+          width: '100%',
           marginTop: '8px',
+          marginBottom: '4px',
           padding: '12px 20px',
           background: 'var(--card-soft)',
           border: '1px solid var(--border)',
@@ -466,7 +476,7 @@ export function ScanFilterBar({ presetId, stocks, filters, onFiltersChange }: Sc
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 }
 

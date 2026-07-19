@@ -8,6 +8,7 @@ import SearchStrip from './SearchStrip';
 import VaNiChatPanel from './VaNiChatPanel';
 import JobMonitor from './JobMonitor';
 import { NoiseOverlay } from '@/components/ui';
+import PageTour from '@/components/ui/PageTour';
 
 export default function Layout() {
   const [collapsed, setCollapsed] = useState(
@@ -46,6 +47,7 @@ export default function Layout() {
 
           {/* Right cluster */}
           <div className="flex items-center" style={{ gap: '14px' }}>
+            <PageTour />
             <DataFreshnessChip />
 
             {/* VaNi button — indigo-bg, indigo border, pill */}

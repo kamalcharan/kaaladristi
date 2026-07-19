@@ -17,6 +17,8 @@ type NavSection = {
   icon: LucideIcon;
   /** Whether the accordion group starts expanded. */
   defaultOpen?: boolean;
+  /** Render items flat (no group header/accordion) — top-level menu. */
+  flat?: boolean;
 };
 
 const navSections: NavSection[] = [
@@ -24,6 +26,7 @@ const navSections: NavSection[] = [
     heading: 'View',
     icon: LayoutGrid,
     defaultOpen: true,
+    flat: true,   // top-level items — no "View" parent heading
     items: [
       { to: '/workspace',        glyph: '⊞', label: 'Workspace' },
       { to: '/catalog',          glyph: '⊟', label: 'Catalog' },
@@ -279,6 +282,15 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
           if (collapsed) {
             return (
               <div key={section.heading} style={{ marginTop: si > 0 ? '24px' : '0' }}>
+                {visibleItems.map(renderItem)}
+              </div>
+            );
+          }
+
+          // Flat section: render items directly, no group header/accordion.
+          if (section.flat) {
+            return (
+              <div key={section.heading} style={{ marginTop: si > 0 ? '18px' : '0' }}>
                 {visibleItems.map(renderItem)}
               </div>
             );
