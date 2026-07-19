@@ -58,8 +58,10 @@ export default function LoginPage() {
     setError(''); setSuccess(''); setIsSubmitting(true);
     try {
       if (authMode === 'forgot') {
-        const msg = await forgotPassword(email);
-        setSuccess(msg || 'If that email exists, a reset link has been sent.');
+        await forgotPassword(email);
+        // Self-serve email reset isn't live yet (no transactional email during
+        // beta) — be honest instead of claiming a link was sent.
+        setSuccess('Thanks — during beta, password resets are handled manually. We\'ll reach out to help you reset it.');
         reset('login');
       } else if (authMode === 'register') {
         if (!fullName.trim()) { setError('Please enter your full name'); setIsSubmitting(false); return; }
@@ -135,7 +137,7 @@ export default function LoginPage() {
               {authMode === 'forgot' ? 'Reset Password' : authMode === 'login' ? 'Welcome back.' : 'Create account.'}
             </h1>
             <p style={{ fontFamily: MONO, fontSize: 10, letterSpacing: '.22em', textTransform: 'uppercase', color: C.ink3, margin: 0 }}>
-              {authMode === 'forgot' ? 'Enter your email for a reset link' : authMode === 'login' ? 'Sign in to your DristiQ dashboard' : 'Join the DristiQ beta cohort'}
+              {authMode === 'forgot' ? 'Enter your email — we\'ll help you reset' : authMode === 'login' ? 'Sign in to your DristiQ dashboard' : 'Join the DristiQ beta cohort'}
             </p>
           </div>
 
