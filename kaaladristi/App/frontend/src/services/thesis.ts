@@ -89,8 +89,18 @@ function barPosture(b: ThesisBar): number {
   return n ? Math.round((s / n) * 100) : 0
 }
 
+/** Aligned/total over only the pillars that actually have data — a no-data
+ *  pillar (value === '—') must never count toward either side, or the
+ *  numerator can exceed the denominator (seen live as "4/3"). */
+function alignedRatio(pillars: Pillar[]): { aligned: number; total: number } {
+  const withData = pillars.filter((p) => p.value !== '—')
+  const total = withData.length || pillars.length
+  const aligned = withData.filter((p) => p.aligned).length
+  return { aligned, total }
+}
+
 function alignedCount(bar: ThesisBar): number {
-  return buildPillars(bar as LatestRow).filter((p) => p.aligned).length
+  return alignedRatio(buildPillars(bar as LatestRow)).aligned
 }
 
 export function computeThesis(
@@ -102,13 +112,14 @@ export function computeThesis(
   const latest = bars[bars.length - 1]
   const pillars = buildPillars(latest as LatestRow)
   // A pillar with no data ("—", e.g. delivery/Liquidity absent for many BSE/thin
-  // names) must NOT count as a failure — that wrongly drags the read down (2/4
-  // when it's really 2/3) and makes it clash with a strong single-lens read like
-  // RS. Exclude data-gap pillars from the denominator (same no-fallback hygiene
-  // breadth uses).
+  // names) must NOT count toward either side of the ratio — not as a failure
+  // (that wrongly drags 3/3 down to "2/4") and not as a pass either (a pillar
+  // can be flagged aligned off a fallback field — e.g. Liquidity's `aligned`
+  // reads delivery_surge_x even when its displayed value, delivery_pct, is
+  // null — which produced an impossible "4/3" when only the denominator
+  // excluded it). Same no-fallback hygiene breadth uses.
   const withData = pillars.filter((p) => p.value !== '—')
-  const alignedNow = pillars.filter((p) => p.aligned).length
-  const total = withData.length || pillars.length
+  const { aligned: alignedNow, total } = alignedRatio(pillars)
   const ratio = alignedNow / total
 
   // Trend — aligned now vs ~5 bars ago.
@@ -161,8 +172,7 @@ export function computeThesis(
   if (relationship === 'position' && position) {
     const entryBar = bars.find((b) => b.trade_date >= position.entryDate) ?? bars[bars.length - 1]
     const entryPillars = buildPillars(entryBar as LatestRow)
-    const entryAligned = entryPillars.filter((p) => p.aligned).length
-    const entryTotal = entryPillars.filter((p) => p.value !== '—').length || entryPillars.length
+    const { aligned: entryAligned, total: entryTotal } = alignedRatio(entryPillars)
     read.entry = {
       date: position.entryDate,
       price: position.entryPrice,
