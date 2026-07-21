@@ -63,10 +63,7 @@ export default function DataFreshnessChip() {
 
   const config = STATUS_CONFIG[pipeline.status];
   const suffix = config.suffix(pipeline.daysOld);
-
-  const [y, m, d] = pipeline.latestDataDate.split('-');
-  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  const label = `Data · ${parseInt(d)} ${months[parseInt(m) - 1]} ${y}`;
+  const label = `Data · ${pipeline.latestDataDateFormatted}`;
 
   return (
     <button

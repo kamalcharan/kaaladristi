@@ -13,6 +13,7 @@ import { usePipelineStatus } from '@/hooks/usePipelineStatus';
 import type { VaNiAskResponse } from '@/hooks/useVaNiChat';
 import { from } from '@/services/postgrest';
 import { displaySymbol } from '@/lib/symbolUtils';
+import { fmtDateLong } from '@/lib/dateUtils';
 
 const pipelineUrl =
   (import.meta.env.VITE_PIPELINE_API_URL as string) ?? '';
@@ -85,9 +86,15 @@ export default function VaNiChatPanel() {
     (i) => !i.intentId.startsWith('scanner.') || !!scanContext,
   );
   const equityIntents = entity ? getEquityIntents(entity.symbol) : [];
+  // "Read today's results" is only accurate when the confirmed pipeline date
+  // IS today — it usually isn't (EOD data lands after close). Name the actual
+  // date instead of assuming "today", the same way the freshness pill does.
+  const dateLabel = latestDataDateFormatted || (latestDataDate ? fmtDateLong(latestDataDate) : 'today');
+  const labelFor = (i: { intentId: string; label: string }) =>
+    i.intentId === 'scanner.read_results' ? `Read ${dateLabel} results` : i.label;
   const allIntents = [
-    ...equityIntents.map(i => ({ intentId: i.intentId, label: i.label })),
-    ...pageIntents.map(i => ({ intentId: i.intentId, label: i.label })),
+    ...equityIntents.map(i => ({ intentId: i.intentId, label: labelFor(i) })),
+    ...pageIntents.map(i => ({ intentId: i.intentId, label: labelFor(i) })),
   ];
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -146,11 +153,16 @@ export default function VaNiChatPanel() {
     setActiveIntentId(intentId);
 
     const askEntity = overrideEntity ?? entity;
-    const dataDate = latestDataDate || new Date().toISOString().slice(0, 10);
+    // `date` (ISO) drives real backend date lookups for equity/dashboard
+    // intents — must stay YYYY-MM-DD. `dataDateDisplay` is scanner-only and
+    // display-only: it's echoed verbatim into VaNi's "As of the {date}
+    // close…" opener, so it must already read naturally, not as "2026-07-20".
+    const dateIso = latestDataDate || new Date().toISOString().slice(0, 10);
+    const dataDateDisplay = latestDataDateFormatted || fmtDateLong(dateIso);
     askMutation.mutate(
       {
         intent_id: intentId,
-        date: dataDate,
+        date: dateIso,
         ...(askEntity && intentId.startsWith('equity.') ? {
           entity_type: askEntity.type,
           entity_id: askEntity.id,
@@ -158,7 +170,7 @@ export default function VaNiChatPanel() {
         } : {}),
         ...(intentId.startsWith('scanner.') && scanContext ? {
           preset_id: scanContext.presetId,
-          data_date: dataDate,
+          data_date: dataDateDisplay,
           timeframe: scanContext.timeframe,
           exchange: scanContext.exchange,
           ...(intentId === 'scanner.read_results' ? {
