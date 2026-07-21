@@ -159,6 +159,20 @@ export default function RotationGraph({
   const posWord = today.level != null && today.level >= levelCenter ? cfg.posPos : cfg.posNeg;
   const momWord = today.momentum != null && today.momentum >= 0 ? 'rising' : 'slowing';
 
+  // Durability of the CURRENT quadrant + the transition log — the badge alone
+  // can't tell a fresh flip from an established read, and can't tell a clean
+  // single move from a choppy back-and-forth. Both are answered by a plain
+  // scan of the same `pts[].pos` already used to color the trail.
+  let streak = 0;
+  if (today.pos) {
+    for (let i = pts.length - 1; i >= 0 && pts[i].pos === today.pos; i--) streak++;
+  }
+  const transitions: { date: string; to: Pos }[] = [];
+  for (let i = 1; i < pts.length; i++) {
+    const to = pts[i].pos;
+    if (to && to !== pts[i - 1].pos) transitions.push({ date: pts[i].date, to });
+  }
+
   return (
     <div className="glass-card rounded-2xl p-4">
       {/* Header */}
@@ -300,6 +314,31 @@ export default function RotationGraph({
               </div>
             ))}
           </div>
+
+          {/* Durability + transition log — how long the current quadrant has
+              held, and how many times it's flipped, so the badge above reads
+              as "fresh" or "established" instead of a bare label. */}
+          {q && (
+            <div className="pt-2.5 mt-0.5 border-t" style={{ borderColor: 'color-mix(in srgb, var(--text-primary) 10%, transparent)' }}>
+              <div className="text-[11px] font-mono font-bold" style={{ color: q.color }}>
+                {q.name} for {streak} session{streak === 1 ? '' : 's'}
+              </div>
+              <div className="text-[10px] text-muted mt-0.5">
+                {transitions.length} quadrant change{transitions.length === 1 ? '' : 's'} in the last {pts.length} sessions
+              </div>
+              {transitions.length > 0 && (
+                <div className="flex flex-col gap-1 mt-2">
+                  {transitions.slice(-4).reverse().map((t, i) => (
+                    <div key={`${t.date}-${i}`} className="flex items-center gap-1.5 text-[10px]">
+                      <span className="font-mono text-faint">{fmtDate(t.date)}</span>
+                      <span className="text-faint">entered</span>
+                      <span className="font-mono font-bold" style={{ color: cfg.quad[t.to].color }}>{cfg.quad[t.to].name}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
 

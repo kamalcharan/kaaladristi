@@ -124,7 +124,7 @@
 :root {
   --story-bigmoney: #f5a623;   --story-magicrs: #10b981;   --story-flow: #38bdf8;
   --story-stage: #a855f7;      --story-scan: #06b6d4;      --story-conviction: #eab308;
-  --story-fpb: #fb923c;        --story-sector: #22c55e;
+  --story-fpb: #fb923c;        --story-sector: #22c55e;    --story-rsbreakaway: #ec4899;
 }
 
 /* Rule-tag identity hues. Referenced by var() from constants/ruleTagColors so
