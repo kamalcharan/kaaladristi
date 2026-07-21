@@ -164,8 +164,30 @@ reproduces.
    /api/confidence/compute) re-scores. Verify with
    `python3 generate_mercury_windows.py --dry-run-combust 2025 2027` first if
    desired (no DB needed).
-4. Evidence computation: per-window-type stats (VIX Δ, range ratio, turn
-   frequency) for the 13 launch Mercury rules — table or matview.
-5. Evidence tooltip on band click (extend `OverlayExplainPopover`).
+4. ~~Evidence computation~~ **BUILT 2026-07-21** — migration 161
+   (`km_rule_evidence`, one row per rule, grants incl. `authenticated`) +
+   `scripts/compute_rule_evidence.py` (range ratio vs 60-session baseline,
+   direction counts, ±10-session turn frequency, VIX overlap — every measure
+   paired with its matched-length BASE RATE) — wired into the 19:00 IST
+   transit-scoring job after benchmark confidence. **Owner: run migration 161,
+   then the script once** (`DB_PRIMARY=... python3 compute_rule_evidence.py`)
+   to seed rows before tonight's job.
+   **⚠ Honest-numbers finding (prototyped live before building):** Mercury
+   windows are largely IN LINE with NIFTY's unconditional behavior on coarse
+   measures — combust range ratio 1.005, closed-higher 61% vs a drifting-index
+   base rate of ≈ the same. The copy contract absorbs this: thresholds in
+   `patternLines()` (TradingChart.tsx) only allow an effect claim when it
+   clears the base rate (range ≥1.15× or ≤0.85×, direction ±8 pts, turn ±10
+   pts); otherwise the card says "in line with usual". Publishing the null is
+   part of the product's credibility — the astro layer's primary value is
+   ORIENTATION (§2), and any measured deviation that does clear the bar is
+   surfaced with its base rate beside it. Finer cuts (combustion stage,
+   direction, per-benchmark) are stored in `slices` JSONB for the almanac.
+5. ~~Evidence tooltip~~ **BUILT 2026-07-21** — band tooltip in
+   `TradingChart.tsx` rewritten: THIS WINDOW ✓/✗/"not scored yet" verdicts
+   RETIRED from the user surface (upcoming windows keep their opening date);
+   new THE PATTERN block renders threshold-driven evidence copy; base-bias
+   "moved as expected" grading retired, expert-inference track record kept
+   under an INFERENCE label. THIS CHART line unchanged.
 6. Almanac view (flagship premium surface) + free active-window badge.
 7. VaNi Morning Brief window narration.

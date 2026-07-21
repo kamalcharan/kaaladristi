@@ -115,12 +115,20 @@ def _score_recent_transits(dsn: str) -> None:
             bench_rows = score_benchmark_confidence(conn)
         except Exception as e:
             log.error(f'transit scoring: benchmark confidence failed — {e}')
+        # Astro-story §3: refresh per-rule observational evidence (range/turn/
+        # VIX vs base rates) — feeds the chart band tooltip + almanac copy.
+        ev_rows = 0
+        try:
+            from scripts.compute_rule_evidence import compute_rule_evidence
+            ev_rows = compute_rule_evidence(conn)
+        except Exception as e:
+            log.error(f'transit scoring: rule evidence failed — {e}')
         conn.commit()
         log.info(
             f'Transit scoring complete — {scored} transits + {daily_scored} daily '
             f'signals scored, {upserted} rules upserted, '
             f'{rescored} windows re-scored vs current hypothesis, '
-            f'{bench_rows} rule x benchmark rows'
+            f'{bench_rows} rule x benchmark rows, {ev_rows} evidence rows'
         )
     except Exception as e:
         try:
