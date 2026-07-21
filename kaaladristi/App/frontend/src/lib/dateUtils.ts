@@ -16,6 +16,14 @@ export function fmtDateShort(iso: string | null | undefined): string {
   return `${d}-${MONTH_ABBR[+m - 1]}`;
 }
 
+/** Format ISO date string → D MMM YYYY (e.g. 20 Jul 2026) — the prose/header
+ *  format (no leading zero, no dashes), for freshness pills and VaNi text. */
+export function fmtDateLong(iso: string | null | undefined): string {
+  if (!iso) return '—';
+  const [y, m, d] = iso.split('-');
+  return `${parseInt(d, 10)} ${MONTH_ABBR[+m - 1]} ${y}`;
+}
+
 /** Build ISO date string from parts */
 export function toIso(year: number, month: number, day: number): string {
   return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
