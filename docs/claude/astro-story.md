@@ -123,20 +123,35 @@ Conclusions:
 - Trivia: the sheet's LORD column on combust/motion rows = weekday lord of the
   start date (Jan 4 Sunday → Sun, Jul 2 Thursday → Jupiter, …).
 
-**Defined subtask (next session):** calibrate a visibility criterion (e.g.
-planet-altitude-when-Sun-at-−X°, or kālāṁśa time-degrees) against the sheet's
-13 timestamped 2026 boundaries; regenerate `TR-MER-CMB-E-BEA` windows with the
-matched method so product almanac == owner's almanac. **Open question for
-owner: which city is set on their Drik Panchang** (times suggest event-time
-stamps at Mercury's own rise/set; city changes dates by ±1 day). Fallback
-hybrid: import Drik Panchang published dates for display years, calibrated
-model for the 26-year backtest history.
+**CALIBRATED (2026-07-21, city = Ujjain, owner-confirmed):** a parameter sweep
+over the Swiss Ephemeris VR visibility model converges at extinction
+`ktot=0.24` + observer Snellen ratio `3.25` (constants `CALIB_DATM`/`CALIB_DOBS`
+in `verify_combust_method.py`). Result vs the owner's 2026 sheet: **6/13
+boundaries exact-day, mean |Δ| ≈ 0.9 d, worst 3 d — and on exact-day matches
+the time-of-day agrees within minutes** (e.g. model 05:49 vs sheet 05:48),
+i.e. this is essentially Drik's model with slightly different visibility
+constants. Kālāṁśa time-degree thresholds were tested and refuted: boundary
+gaps are phase-dependent (bright pre-superior Mercury visible at ~10 td, faint
+post-inferior crescent needs ~14–15 td), which only a magnitude-aware model
+reproduces.
+
+**Regeneration plan for `TR-MER-CMB-E-BEA` (next session):**
+- 1990–2030 backfill: calibrated heliacal model (±1–3 d edge fuzz on 15–48 d
+  windows is acceptable for historical stats; consistent and unbiased).
+- Almanac display years (2025–2027): small override table anchored to the
+  owner's sheet / Drik Panchang published dates, so the product almanac
+  matches the owner's almanac exactly.
+- `generate_mercury_windows.py` gets a `detect='visibility'` mode replacing
+  the flat 15° arc for this rule; keep windows asta→udaya (combust = invisible
+  period). Re-score after regeneration (nightly job or POST
+  /api/confidence/compute).
 
 ## 7. Build order (proposed)
 
-1. Run migration 160 (owner, pgAdmin) → verify Catalog shows 19.
+1. ~~Run migration 160~~ **DONE 2026-07-21** — owner ran it, Catalog shows 19.
 2. SR-B4 VIX data-quality check (small, read-only) — unblocks yardstick #1.
-3. Combust method calibration + `TR-MER-CMB-E-BEA` regeneration (§6).
+3. `TR-MER-CMB-E-BEA` regeneration with the calibrated visibility model (§6 —
+   calibration itself is DONE; the generator change + override table remain).
 4. Evidence computation: per-window-type stats (VIX Δ, range ratio, turn
    frequency) for the 13 launch Mercury rules — table or matview.
 5. Evidence tooltip on band click (extend `OverlayExplainPopover`).

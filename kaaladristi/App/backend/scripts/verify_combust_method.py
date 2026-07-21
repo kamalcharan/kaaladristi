@@ -13,10 +13,20 @@ combustion arc. This script proves it by computing, at each of the sheet's own
   2. a modern arcus-visionis heliacal event search (swe.heliacal_ut) for
      comparison — right phenomenon, but default params miss by days.
 
-Next step (calibration subtask): fit a visibility criterion (planet altitude
-when Sun at -X°, or kalamsa time-degrees) to the 13 sheet boundaries below,
-then regenerate TR-MER-CMB-E-BEA windows in generate_mercury_windows.py with
-the matched method. Needs the owner's Drik Panchang city setting.
+CALIBRATION RESULT (2026-07-21, owner confirmed city = Ujjain): a parameter
+sweep over the VR visibility model (extinction coefficient x observer Snellen
+ratio) converges to CALIB_DATM/CALIB_DOBS below — vs the owner's 2026 sheet:
+6/13 boundaries exact-day, mean |delta| ~0.9 d, worst 3 d. Kalamsa
+(time-degree) thresholds were also tested and refuted: the boundary gaps are
+phase-dependent (bright pre-superior-conjunction Mercury visible at ~10 td,
+faint post-inferior crescent needs ~14-15 td), which only a magnitude-aware
+visibility model reproduces.
+
+Recommended use (see docs/claude/astro-story.md §6): calibrated model for the
+full 1990-2030 TR-MER-CMB-E-BEA backfill (edge fuzz of +/-1-3 d on 15-48 d
+windows is fine for historical stats); a small override table anchored to the
+owner's sheet / Drik Panchang published dates for the almanac display years,
+so the product almanac matches the owner's sheet exactly.
 
 Run: python3 verify_combust_method.py   (no DB access needed)
 """
@@ -31,11 +41,14 @@ swe.set_ephe_path(EPHE_PATH)
 swe.set_sid_mode(swe.SIDM_LAHIRI)
 FLAGS = swe.FLG_SIDEREAL | swe.FLG_SPEED
 
-# Drik Panchang default city (New Delhi). The sheet's actual city is unknown —
-# the calibration subtask should sweep candidate cities.
-GEOPOS = [77.209, 28.614, 216.0]
+# Ujjain — owner-confirmed Drik Panchang city setting (2026-07-21).
+GEOPOS = [75.7885, 23.1793, 494.0]
 DATM = [1013.25, 15.0, 50.0, 0.25]
 DOBS = [36.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+
+# Calibrated visibility parameters (sweep result, this file's docstring).
+CALIB_DATM = [1013.25, 25.0, 40.0, 0.24]   # [pressure, temp, RH, extinction ktot]
+CALIB_DOBS = [36.0, 3.25, 0.0, 0.0, 0.0, 0.0]  # [age, Snellen ratio, ...]
 
 # Owner's almanac 2026 combust boundaries (IST), transcribed from mercury.jpg.
 # kind: 'asta' = disappearance (combust start), 'udaya' = reappearance (end).
@@ -91,23 +104,25 @@ HELIACAL_EVENT = {('asta', 'W'): 4, ('udaya', 'E'): 3,
                   ('asta', 'E'): 2, ('udaya', 'W'): 1}
 
 
-def heliacal_comparison():
-    print('— Modern arcus-visionis model (default params, New Delhi) vs sheet —')
+def heliacal_comparison(datm, dobs, label):
+    print(f'— {label} —')
+    total = 0.0
     for kind, sky, t in SHEET_2026:
         target = jd_ist(*t)
         try:
-            jd = swe.heliacal_ut(target - 10.0, GEOPOS, DATM, DOBS, 'Mercury',
+            jd = swe.heliacal_ut(target - 15.0, GEOPOS, datm, dobs, 'Mercury',
                                  HELIACAL_EVENT[(kind, sky)],
                                  swe.HELFLAG_HIGH_PRECISION)[0]
             delta = jd - target
+            total += abs(delta)
             stamp = datetime(*t).strftime('%d-%b-%y %H:%M')
             print(f"model {jd_to_ist(jd):<18} sheet {stamp:<18} Δ {delta:+6.1f} d")
         except Exception as e:  # noqa: BLE001 — diagnostic script
             print(f"model search failed for {kind}/{sky} {t}: {e}")
-    print('  → close on some boundaries, off by days on others: default')
-    print('    visibility params are not Drik Panchang\'s; calibration needed.')
+    print(f'  total |Δ| = {total:.1f} d over {len(SHEET_2026)} boundaries\n')
 
 
 if __name__ == '__main__':
     implied_orbs()
-    heliacal_comparison()
+    heliacal_comparison(DATM, DOBS, 'Default visibility params (uncalibrated)')
+    heliacal_comparison(CALIB_DATM, CALIB_DOBS, 'CALIBRATED params (sweep best fit)')
