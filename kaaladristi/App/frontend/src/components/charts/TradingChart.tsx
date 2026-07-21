@@ -37,6 +37,7 @@ import { useQuery } from '@tanstack/react-query';
 import { INDICATOR_DEFAULT_COLORS } from '@/constants/catalogItems';
 import { planetColorOfRuleCode } from '@/constants/planetColors';
 import { fetchConfidence, fetchBenchConfidence, fetchEvidence, type RuleEvidence } from '@/pages/RuleEngine/ruleService';
+import { useAstroHorizon } from '@/hooks/useAstroHorizon';
 
 // ── SMA config — used in legacy (non-workspace) mode ──
 const SMA_LINES: { key: keyof IndicatorRow; color: string; label: string; width: LineWidth }[] = [
@@ -280,13 +281,21 @@ export default function TradingChart({ data, height = 900, compact = false, work
   // # of leading whitespace points prepended to the candle series (workspace
   // mode only). Logical indices are offset by this vs. the `data` array.
   const leadOffsetRef = useRef(0);
+  // Astro forward-horizon (POA §Phase C): future events beyond the tier's
+  // cutoff never render — bands, pins, or tooltips. History is never gated.
+  const { cutoffIso: astroCutoffIso } = useAstroHorizon();
+  const horizonBands = useMemo(
+    () => astroBands.filter(b => b.from <= astroCutoffIso),
+    [astroBands, astroCutoffIso],
+  );
+
   // Read astroBands inside buildCharts WITHOUT adding it to buildCharts' deps —
   // toggling an astro rule must NOT rebuild the whole chart (it redraws on the
   // bands canvas instead). The ±90-day axis padding is only worth its wasted
   // whitespace when astro zones (which can sit in the future) are present, so
   // buildCharts consults this ref to decide whether to pad or fit-to-data.
-  const astroBandsRef = useRef(astroBands);
-  useEffect(() => { astroBandsRef.current = astroBands; }, [astroBands]);
+  const astroBandsRef = useRef(horizonBands);
+  useEffect(() => { astroBandsRef.current = horizonBands; }, [horizonBands]);
 
   const chartsRef = useRef<IChartApi[]>([]);
 
@@ -872,7 +881,7 @@ export default function TradingChart({ data, height = 900, compact = false, work
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, width, h);
 
-      if (astroBands.length === 0) return;
+      if (horizonBands.length === 0) return;
 
       const today = new Date().toISOString().slice(0, 10);
       const ts    = mainChartRef.current.timeScale();
@@ -894,9 +903,9 @@ export default function TradingChart({ data, height = 900, compact = false, work
       }
 
       // Single-day events render as marker lines (handled separately below), never zones.
-      const pointBands   = astroBands.filter(b => b.isPoint)
-      const panchakBands = astroBands.filter(b => b.isPanchak && !b.isPoint)
-      const nonPanchak   = astroBands.filter(b => !b.isPanchak && !b.isPoint)
+      const pointBands   = horizonBands.filter(b => b.isPoint)
+      const panchakBands = horizonBands.filter(b => b.isPanchak && !b.isPoint)
+      const nonPanchak   = horizonBands.filter(b => !b.isPanchak && !b.isPoint)
 
       // Group by groupTag
       const byGroup = new Map<string, typeof nonPanchak>()
@@ -1133,7 +1142,7 @@ export default function TradingChart({ data, height = 900, compact = false, work
     // otherwise a single draw is enough.
     const today0  = new Date().toISOString().slice(0, 10)
     const in15d   = new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
-    const hasFuturePins = astroBands.some(
+    const hasFuturePins = horizonBands.some(
       b => !b.isPoint && !b.isPanchak && b.from > today0 && b.from <= in15d,
     )
 
@@ -1157,7 +1166,7 @@ export default function TradingChart({ data, height = 900, compact = false, work
         ctx?.clearRect(0, 0, canvas.width, canvas.height);
       }
     };
-  }, [astroBands]);
+  }, [horizonBands]);
 
   return (
     <div className="space-y-0.5">
@@ -1181,14 +1190,14 @@ export default function TradingChart({ data, height = 900, compact = false, work
       <div
         style={{ position: 'relative' }}
         onContextMenu={e => {
-          if (!onZoneClick || astroBands.length === 0 || !mainChartRef.current) return;
+          if (!onZoneClick || horizonBands.length === 0 || !mainChartRef.current) return;
           const rect   = (e.currentTarget as HTMLElement).getBoundingClientRect();
           const mouseX = e.clientX - rect.left;
           const ts     = mainChartRef.current.timeScale();
           // Collect ALL bands at the click point (Phase 5) — points first so
           // the popover leads with what the cursor is aimed at.
           const found: AstroBand[] = [];
-          for (const band of astroBands) {
+          for (const band of horizonBands) {
             const x1 = ts.timeToCoordinate(band.from as Time);
             const x2 = ts.timeToCoordinate(band.to   as Time);
             if (x1 == null || x2 == null) continue;
@@ -1206,7 +1215,7 @@ export default function TradingChart({ data, height = 900, compact = false, work
           }
         }}
         onMouseMove={e => {
-          if (astroBands.length === 0 || !mainChartRef.current) {
+          if (horizonBands.length === 0 || !mainChartRef.current) {
             if (bandTooltip) setBandTooltip(null);
             return;
           }
@@ -1219,7 +1228,7 @@ export default function TradingChart({ data, height = 900, compact = false, work
           // ±4px hit tolerance hover that right-click always had — a 1px
           // line was effectively un-hoverable before.
           const found: AstroBand[] = [];
-          for (const band of astroBands) {
+          for (const band of horizonBands) {
             const x1 = ts.timeToCoordinate(band.from as Time);
             const x2 = ts.timeToCoordinate(band.to   as Time);
             if (x1 == null || x2 == null) continue;

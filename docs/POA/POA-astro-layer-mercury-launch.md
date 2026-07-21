@@ -67,55 +67,76 @@ Almanac view · free badge · VaNi narration
 
 ---
 
-## 2. Forward phases (in order)
+## 2. Forward phases (owner rescope 2026-07-21: MERCURY ONLY until it's fully
+in place; VaNi narration LATER; the three deliverables are chart storytelling,
+the calendar, and the pricing gateway)
 
-### Phase 1 — Free-tier active-window badge (small; start immediately)
-A compact chip on Study/chart pages + dashboard: "☿ Mercury combust · ends
-Jul 24" (from `km_rule_transits`, catalog-visible rules with a window covering
-today). Free users see THAT a window exists — no evidence, no history.
-**DoD:** badge renders on `/chart/*` and dashboard for any active window;
-clicking it for a free user opens the upgrade gate; paid user → tooltip/almanac.
+### Phase A — Storytelling on the chart
+Mercury's narrative arc rendered on the user's own chart (Study + My Space,
+shared `TradingChart` pipeline — already the band substrate):
+1. **Boundary markers** — vertical glyph-tagged lines on watch days (ingress
+   days ☿→sign; stations) distinct from window shading. The bands say "you
+   were in a window"; the markers say "this exact day was a watch day."
+   **⏳ REMAINING** (ingress ticks in the canvas draw pass).
+2. **Story ribbon** — ✅ **BUILT 2026-07-21** (`MercuryStoryRibbon.tsx` +
+   `services/mercuryStory.ts`, rendered above the Study chart in ChartView):
+   *"☿ direct in Cancer · combust (ghora) until 24 Jul · next: enters Leo
+   6 Aug ◈"* — watch-day events marked ◈; "next:" tail horizon-clamped with
+   a 🔒 "+N this quarter" chip for free/quarterly.
+3. THE PATTERN tooltip (done) stays the click-through evidence layer.
+**DoD:** a user scrolling any chart can read where Mercury's story was, is,
+and (within their tier horizon) goes next, without leaving the chart.
 
-### Phase 2 — Almanac view (flagship premium surface)
-The owner's Excel productized. Route `/almanac` (premium-gated via existing
-`InlineGate` pattern).
-- **Today strip:** active windows now, each with its role line (orientation vs
-  watch-day) from `km_rule_evidence`.
-- **Ahead (90 days):** chronological event list from `km_rule_transits`
-  (ingresses, stations, combust entries/exits, retro windows) with exact
-  IST timestamps; watch-day events visually distinct; each row's texture line
-  = the same threshold-driven copy the tooltip uses (shared helper — extract
-  `patternLines()` out of TradingChart into a service).
-- **Window detail (click):** full evidence read — window count since '08,
-  range/direction/turn vs base, transition stats, and past-window list.
-- Slow-planet events appear in the calendar (they're visible rules) but carry
-  NO texture lines until their slice ships (principle 4).
-**DoD:** owner can retire the Excel for 2026 Mercury planning; every number
-on the page traces to `km_rule_evidence`/`km_rule_transits`.
+### Phase B — The Calendar (presentation decided: the owner's Excel as lanes)
+Route `/almanac`. Not a month grid — a **three-lane timeline**, which is
+exactly the owner's own Excel rendered as UI (Motion / Combust & Rise /
+Journey are the three tables in the sheet):
+- **Lane 1 · Journey:** sign segments as colored spans (ingress boundaries =
+  watch-day ticks).
+- **Lane 2 · Motion:** direct/retrograde spans (stations as ticks).
+- **Lane 3 · Combust:** glare-zone windows (asta/udaya edges, stage label).
+- **Today cursor** vertical line; past is dimmed; future extends exactly to
+  the tier horizon, then fades into a locked/blurred zone with the upgrade
+  prompt ("Unlock the full quarter").
+- **Event list** below the lanes: chronological rows with exact IST
+  timestamps + the threshold-driven texture line (shared `patternLines()`
+  helper extracted from TradingChart into a service).
+- **Window detail on click:** full evidence read from `km_rule_evidence`.
+**DoD:** owner can retire the Excel for Mercury 2026 planning; every number
+traces to `km_rule_transits`/`km_rule_evidence`; horizon gate visibly works
+per tier.
 
-### Phase 3 — VaNi narration (small)
-- Morning Brief line on watch-days and window entries/exits: "Mercury enters
-  Leo tomorrow — trend changes have clustered around ingress days (56% vs
-  49% usual); the previous day's high/low is the level to watch."
-- Same copy contract: counts + base rate, no direction, thresholds decide
-  whether a number is cited at all.
-**DoD:** brief mentions astro only on event days; wording passes the D39 vocab check.
+### Phase C — Pricing gateway (forward-horizon gating)
+How far ahead a user can see astro events (ribbon "next:" tail + calendar
+future zone + any upcoming-window surface):
 
-### Phase 4 — Slow-planet ingress replication (cheap, before Venus)
-Run the SAME orb-transition math over `TRN-{MAR,JUP,SAT}-MAN-TRN` (windows
-already exist). Question: does the ingress watch-day effect replicate beyond
-Mercury? Outcome feeds the Venus-slice plan and (if it replicates) a much
-stronger unified "ingress days are watch days" story.
-**DoD:** one table in astro-story.md: per planet, n / flip% / base / verdict.
+| Tier | Forward horizon (owner-confirmed 2026-07-21) |
+|---|---|
+| `free` | next 5 days (today + 4) |
+| `quarterly` | next 5 days (today + 4) |
+| `annual` | next 90 days |
+| `trial` / `beta` | same as annual (90 days) |
 
-### Phase 5 — Venus slice (repeat the proven pipeline)
-Venus is the data-backed slice #2 (20 rules live, 1,527 windows). Steps, in
-the Mercury order that worked: verify/regenerate windows (incl. Venus combust
-via the SAME calibrated visibility model — the owner-noted `TR-VEN-CMB-W-BUL`
-exists) → almanac overrides from the owner's Venus sheet (request it then) →
-evidence rows land automatically (script already covers all rules) → add
-'Venus' to `LAUNCH_ACTIVE_GROUP_TAGS` → catalog visibility for the vetted set.
-**DoD:** same checklist Mercury passed (MERCURY_SLICE_PLAN.md §1 as template).
+- **History is unrestricted for every tier** (owner-confirmed).
+- One constant map `ASTRO_HORIZON_DAYS` in `frameworkConstants.ts`; a single
+  `useAstroHorizon()` hook reads profile tier → days; every astro surface
+  clamps through it.
+- Launch enforcement is client-side (consistent with every existing tier gate
+  incl. InlineGate); noted caveat: PostgREST reads of `km_rule_transits` are
+  not horizon-restricted server-side — a server-enforced `/api/almanac`
+  endpoint is the post-launch hardening path if it matters.
+**DoD:** switching tier on a test profile visibly changes the ribbon tail and
+the calendar's locked zone; free user sees today-only + gate.
+**Status:** foundation ✅ BUILT 2026-07-21 — `ASTRO_HORIZON_DAYS`
+(`frameworkConstants.ts`) + `useAstroHorizon()` hook; `TradingChart` clamps
+ALL future astro rendering (bands, future pins, tooltips) through it; ribbon
+"next:" tail + lock chip obey it. Remaining: the Almanac future zone (with
+Phase B) and the post-launch server-side enforcement note.
+
+### Later (explicitly deferred by owner, in this order of likelihood)
+- **VaNi narration** of watch days / Morning Brief lines — after A–C.
+- **Slow-planet ingress replication check** — only after Mercury is fully in
+  place; then Venus slice (same pipeline; request owner's Venus sheet then).
 
 ### Parked (unchanged)
 VIX ~2008 backfill · pseudo-sector history · stock-level astro stats ·
