@@ -14,9 +14,15 @@ import { fetchBookmarks, addBookmark, removeBookmark, setPosition as apiSetPosit
 interface BookmarkState {
   bookmarks: BookmarkRow[];
   bookmarkedIds: Set<number>;
-  /** In-flight toggle intentions (equityId → desired membership). Lets a
-   *  concurrent load() reconcile without clobbering an optimistic toggle. */
-  optimistic: Map<number, boolean>;
+  /** Last toggle outcome per equityId, timestamped. A load() that STARTED
+   *  before this timestamp fetched a snapshot that predates the toggle, so
+   *  its answer for this id is stale even if it resolves LATER — clearing
+   *  the entry the moment toggle() settles (the previous approach) doesn't
+   *  cover that ordering: a load() already in flight when the user clicks
+   *  can still resolve after settle() and clobber the fresh bookmark with
+   *  pre-click data. Keeping the entry (never cleared) and comparing
+   *  timestamps instead of presence/absence closes that gap. */
+  confirmed: Map<number, { want: boolean; at: number }>;
   isLoading: boolean;
   error: string | null;
   hasLoaded: boolean;
@@ -34,7 +40,7 @@ interface BookmarkState {
 export const useBookmarkStore = create<BookmarkState>((set, get) => ({
   bookmarks: [],
   bookmarkedIds: new Set(),
-  optimistic: new Map(),
+  confirmed: new Map(),
   isLoading: false,
   error: null,
   hasLoaded: false,
@@ -43,13 +49,17 @@ export const useBookmarkStore = create<BookmarkState>((set, get) => ({
     const userId = useAuthStore.getState().profile?.id;
     if (!userId) return;
     if (get().isLoading) return; // dedupe the ~N concurrent calls from N toggle mounts
+    const startedAt = Date.now();
     set({ isLoading: true, error: null });
     try {
       const rows = await fetchBookmarks(userId);
       const ids = new Set(rows.map((r) => r.equity_id));
-      // Re-apply any in-flight optimistic toggles so a late load() doesn't
-      // clobber a bookmark the user just clicked (the reset-on-first-click bug).
-      get().optimistic.forEach((want, id) => (want ? ids.add(id) : ids.delete(id)));
+      // A toggle confirmed AFTER this fetch started is fresher than the
+      // snapshot we just fetched, regardless of which one RESOLVED first —
+      // keep the confirmed answer for those ids instead of the server's.
+      get().confirmed.forEach(({ want, at }, id) => {
+        if (at >= startedAt) (want ? ids.add(id) : ids.delete(id));
+      });
       set({ bookmarks: rows, bookmarkedIds: ids, isLoading: false, hasLoaded: true });
     } catch (e) {
       set({ isLoading: false, error: e instanceof Error ? e.message : 'Failed to load bookmarks' });
@@ -62,27 +72,25 @@ export const useBookmarkStore = create<BookmarkState>((set, get) => ({
 
     const want = !get().bookmarkedIds.has(equityId);
 
-    // Optimistic flip + record the intention (survives a concurrent load()).
+    // Optimistic flip — reconciled/rolled back below.
     set((s) => {
       const nextIds = new Set(s.bookmarkedIds);
       want ? nextIds.add(equityId) : nextIds.delete(equityId);
-      const opt = new Map(s.optimistic).set(equityId, want);
       return {
         bookmarkedIds: nextIds,
-        optimistic: opt,
         bookmarks: want ? s.bookmarks : s.bookmarks.filter((b) => b.equity_id !== equityId),
       };
     });
 
-    // Clear this id's intention and hard-assert final membership (guards against
-    // any load() that resolved in between).
+    // Record the outcome with a timestamp (never cleared — see `confirmed`
+    // doc) and hard-assert final membership, regardless of any load() that
+    // resolved (or is still resolving) around the same time.
     const settle = (finalWant: boolean, extra?: Partial<BookmarkState>) =>
       set((s) => {
-        const opt = new Map(s.optimistic);
-        opt.delete(equityId);
+        const confirmed = new Map(s.confirmed).set(equityId, { want: finalWant, at: Date.now() });
         const nextIds = new Set(s.bookmarkedIds);
         finalWant ? nextIds.add(equityId) : nextIds.delete(equityId);
-        return { optimistic: opt, bookmarkedIds: nextIds, ...extra };
+        return { confirmed, bookmarkedIds: nextIds, ...extra };
       });
 
     try {
