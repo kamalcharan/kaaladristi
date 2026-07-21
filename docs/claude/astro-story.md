@@ -170,11 +170,11 @@ reproduces.
   period). Re-score after regeneration (nightly job or POST
   /api/confidence/compute).
 
-**POA for remaining work + an important reconciliation decision:
-`docs/POA/POA-astro-layer-mercury-launch.md`** — a pre-existing Pattern
-Engine (`docs/POA/POA-astro-pattern-engine.md`, 2026-07-06) does overlapping
-level-break analysis on `km_rule_patterns`; the two systems need a sign-off
-on which feeds the Almanac view before that build starts.
+**THE ACTIVE POA: `docs/POA/POA-astro-layer-mercury-launch.md`** — owner
+decision 2026-07-21: this session's pipeline (`km_rule_evidence`, base rates,
+orb transitions) IS the baseline; earlier attempts (Pattern Engine /
+`km_rule_patterns`) are legacy, admin-only, not built upon. Forward phases:
+free badge → Almanac view → VaNi narration → slow-planet replication → Venus.
 
 ## 7. Build order (proposed)
 

@@ -1,5 +1,13 @@
 # POA — Astro Pattern Engine (Rule Engine → Patterns)
 
+> ⚠ **LEGACY (owner decision 2026-07-21): do not build on this.** The astro
+> layer's baseline is now `km_rule_evidence` + the base-rate/orb methodology —
+> see **`docs/POA/POA-astro-layer-mercury-launch.md`** (the active POA).
+> `km_rule_patterns` + the admin PatternsTab stay as-is (harmless, admin-only)
+> but receive no new investment; do not re-run `pattern_study.py` for Mercury.
+> Salvageable ideas (level-break forward returns, reaction curves) get rebuilt
+> into `km_rule_evidence` if wanted.
+
 **Date:** 2026-07-06 · **Status:** Phases 1–4 complete (same day); owner SEBI copy review pending
 **Origin:** Owner + Claude discussion following the four-planet almanac sprints (migrations 127–131)
 **Owner's framing:** *"Discovery gives confidence, but what I need is patterns — e.g. Mercury combustion is trend change; if the high/low of combustion is broken, momentum gets good. Also how are technicals reacting for these planets — it starts with institutional money flow first."*
