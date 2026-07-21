@@ -252,6 +252,20 @@ function patternLines(ev: RuleEvidence): string[] {
   if ((ev.vix_windows ?? 0) >= 10 && ev.vix_up_n != null) {
     lines.push(`VIX rose in ${ev.vix_up_n} of ${ev.vix_windows} recent windows`);
   }
+  // Boundary-day transitions (migration 162, ±2-session orb): the trend-change
+  // story lives at window edges — station/ingress/entry/exit — and the
+  // influence is an orb, not a stamp. Shown with base rates; "watch days, not
+  // signals" — the prev-day H/L break inside the zone is the confirmation.
+  const TRANSITION_LABEL: Record<string, string> = { day: 'event ±2d', start: 'entry ±2d', end: 'exit ±2d' };
+  for (const [key, t] of Object.entries(ev.transitions ?? {})) {
+    if (t.n < 10) continue;
+    const flipBase = t.base_flip_pct != null ? ` (usual ≈${t.base_flip_pct.toFixed(0)}%)` : '';
+    let line = `${TRANSITION_LABEL[key] ?? key} ×${t.n}: trend flipped ${t.flip_pct.toFixed(0)}%${flipBase}`;
+    if (t.confirm_given_flip_pct != null) {
+      line += ` · flips confirmed by a prev-day H/L break ${t.confirm_given_flip_pct.toFixed(0)}%`;
+    }
+    lines.push(line);
+  }
   return lines;
 }
 

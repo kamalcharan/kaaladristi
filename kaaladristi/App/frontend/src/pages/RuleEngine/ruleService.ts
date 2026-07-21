@@ -112,6 +112,19 @@ export async function fetchConfidence(): Promise<RuleConfidence[]> {
 // threshold-driven off these numbers — it may only claim an effect that
 // clears the base rate; otherwise it says "in line with usual".
 
+/** Boundary-day transition study (migration 162, ±2-session orb): the event
+ *  ±2 sessions is the transition ZONE — flip_pct compares the 5-session trend
+ *  after the zone vs before it; confirm_given_flip_pct is the fusion
+ *  confirmation (a prev-day-H/L break inside the zone in the new trend's
+ *  direction). Keys: 'day' for point rules; 'start'/'end' for range rules. */
+export interface TransitionStats {
+  n: number;
+  flip_pct: number;
+  confirm_given_flip_pct: number | null;
+  base_flip_pct: number | null;
+  base_confirm_given_flip_pct: number | null;
+}
+
 export interface RuleEvidence {
   rule_id: number;
   windows_total: number;
@@ -125,11 +138,12 @@ export interface RuleEvidence {
   turn_base_pct: number | null;
   vix_windows: number | null;
   vix_up_n: number | null;
+  transitions: Record<string, TransitionStats> | null;
 }
 
 export async function fetchEvidence(): Promise<RuleEvidence[]> {
   const { data, error } = await from('km_rule_evidence')
-    .select('rule_id,windows_total,windows_scored,first_scored,range_ratio_mean,pos_close_n,pos_close_base_pct,avg_window_ret,turn_n,turn_base_pct,vix_windows,vix_up_n')
+    .select('rule_id,windows_total,windows_scored,first_scored,range_ratio_mean,pos_close_n,pos_close_base_pct,avg_window_ret,turn_n,turn_base_pct,vix_windows,vix_up_n,transitions')
     .execute();
   if (error) throw new Error(error.message);
   return Array.isArray(data) ? (data as RuleEvidence[]) : [];
