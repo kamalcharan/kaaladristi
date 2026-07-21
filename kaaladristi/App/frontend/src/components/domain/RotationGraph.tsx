@@ -20,6 +20,16 @@ export interface RotationPoint {
   momentum: number | null;
 }
 
+/** The most recent "clean separation" read (rs variant only) — a different
+ *  pair of series (RS vs its own MA) than level×momentum, so this is new
+ *  information, not a restatement of the plotted trail's dot colors. */
+export interface BreakawaySignal {
+  date: string;
+  title: string;
+  detail: string;
+  tone: 'bull' | 'bear';
+}
+
 interface RotationGraphProps {
   points: RotationPoint[];
   tail?: number;
@@ -32,6 +42,8 @@ interface RotationGraphProps {
   autoPlay?: boolean;
   /** Playback duration in seconds (default 7). */
   playSeconds?: number;
+  /** Latest Clean Breakaway/Breakdown within the plotted window, if any (rs variant only). */
+  breakaway?: BreakawaySignal | null;
 }
 
 const TEAL = '#2dd4bf';
@@ -102,6 +114,7 @@ export default function RotationGraph({
   levelCenter = 0,
   autoPlay = false,
   playSeconds = 7,
+  breakaway = null,
 }: RotationGraphProps) {
   const cfg = VARIANTS[variant];
   const [hover, setHover] = useState<number | null>(null);
@@ -300,6 +313,27 @@ export default function RotationGraph({
               </div>
             ))}
           </div>
+
+          {/* Clean read — RS vs its OWN MA, a different pair of series than
+              level×momentum above, so this is genuinely new information, not
+              a restatement of the trail's dot colors. */}
+          {variant === 'rs' && (
+            <div className="pt-2.5 mt-0.5 border-t" style={{ borderColor: 'color-mix(in srgb, var(--text-primary) 10%, transparent)' }}>
+              <div className="text-[9px] font-mono uppercase tracking-widest text-faint mb-1">Clean read</div>
+              {breakaway ? (
+                <>
+                  <div className="text-[11px] font-mono font-bold" style={{ color: breakaway.tone === 'bull' ? 'var(--risk-green)' : 'var(--risk-red)' }}>
+                    {breakaway.title} · {fmtDate(breakaway.date)}
+                  </div>
+                  <div className="text-[10px] text-muted mt-1 leading-snug">{breakaway.detail}.</div>
+                </>
+              ) : (
+                <div className="text-[10px] text-muted leading-snug">
+                  No clean Magic RS breakaway in the last {pts.length} sessions — {q ? `the ${q.name.toLowerCase()} reading isn't` : 'this reading isn\'t'} backed by a steady, low-noise separation from its own baseline.
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
 

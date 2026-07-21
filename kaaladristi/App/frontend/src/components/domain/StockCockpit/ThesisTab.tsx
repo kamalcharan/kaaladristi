@@ -2,7 +2,7 @@
  * ThesisTab — ChartView's 3rd tab (Phase 2a). The single home for thesis
  * verification, reached from bookmarks / positions / scanners. It adapts to
  * your relationship with the stock:
- *   · position  → entry scorecard · P&L · health-vs-entry · deterioration
+ *   · position  → entry scorecard · P&L · health-vs-entry · signal timeline
  *   · watchlist → the same reversal read, framed as opportunity
  *   · none      → the cold setup read + prompts to bookmark / hold
  *
@@ -34,8 +34,8 @@ function buildThesisFacts(name: string, t: ThesisRead): string {
   lines.push(`Pillars aligned now: ${t.alignedNow} of ${t.total}${strong.length ? ` (strong on ${strong.join(', ')})` : ''}${weak.length ? `; weak on ${weak.join(', ')}` : ''}`)
   lines.push(`Alignment trend: ${t.alignedTrend}`)
   lines.push(`Verdict: ${t.verdict.label} — ${t.verdict.line}`)
-  if (t.deterioration.length) {
-    lines.push('Recent warnings: ' + t.deterioration.slice(0, 4).map((e) => `${e.title} (${e.date})`).join('; '))
+  if (t.signals.length) {
+    lines.push('Recent signals: ' + t.signals.slice(0, 4).map((e) => `${e.title} [${e.tone}] (${e.date})`).join('; '))
   }
   return lines.join('\n')
 }
@@ -320,16 +320,19 @@ export default function ThesisTab({
         </Card>
       </div>
 
-      {/* ── Deterioration timeline ── */}
-      {thesis.deterioration.length > 0 && (
+      {/* ── Signal timeline — every story event that fired, both directions.
+          Tone dot is independent of the kind color: kind says WHAT changed
+          (flow/conviction/stage/...), the dot says WHICH WAY. ── */}
+      {thesis.signals.length > 0 && (
         <div>
-          <Label>{relationship === 'position' ? 'Deterioration since entry' : 'Recent warnings'}</Label>
+          <Label>{relationship === 'position' ? 'Signals since entry' : 'Recent signals'}</Label>
           <div style={{ marginTop: 6 }}>
-            {thesis.deterioration.map((e, i) => (
+            {thesis.signals.map((e, i) => (
               <div key={`${e.barIndex}-${e.kind}-${i}`} style={{ display: 'grid', gridTemplateColumns: '70px 1fr', gap: 12,
                 padding: '8px 0', borderBottom: '1px solid color-mix(in srgb, var(--text-primary) 5%, transparent)' }}>
                 <span style={{ ...MONO, fontSize: 11, color: 'var(--text-faint)' }}>{e.date}</span>
                 <span style={{ fontSize: 12.5 }}>
+                  <span style={{ color: TONE[e.tone], marginRight: 5 }} title={e.tone}>●</span>
                   <b style={{ color: KIND_COLORS[e.kind] }}>{e.title}.</b>{' '}
                   <span style={{ color: 'var(--text-muted)' }}>{e.detail}.</span>
                   {e.reactionPct != null && (

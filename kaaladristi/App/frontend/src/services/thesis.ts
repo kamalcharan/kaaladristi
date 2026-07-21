@@ -3,9 +3,11 @@
  *
  * Reads a stock's daily bars (already fetched by the cockpit) and derives the
  * "is this thesis holding?" picture: current pillar alignment + its trend, a
- * per-bar risk↔reward POSTURE trajectory, and the recent DETERIORATION events
- * (bearish story events). When the user holds the stock, it also scores the
- * ENTRY setup and the P&L. Pure + deterministic; observational, never advice.
+ * per-bar risk↔reward POSTURE trajectory, and the recent SIGNAL events (both
+ * bullish and bearish story events, unfiltered — the timeline must show what
+ * actually happened, not a one-sided subset of it). When the user holds the
+ * stock, it also scores the ENTRY setup and the P&L. Pure + deterministic;
+ * observational, never advice.
  *
  * Reuses the two things already built: buildPillars (VerdictHero) and
  * buildStoryEvents (the visual replay's event stream) — one substrate, so the
@@ -50,8 +52,8 @@ export interface ThesisRead {
   total: number
   alignedTrend: 'improving' | 'steady' | 'deteriorating'
   postureTrajectory: PosturePoint[]
-  /** Bearish story events, most recent last (since entry when a position). */
-  deterioration: StoryEvent[]
+  /** Story events, both directions, most recent last (since entry when a position). */
+  signals: StoryEvent[]
   verdict: { label: string; tone: 'bull' | 'bear' | 'neutral'; line: string }
   /** VaNi's grounded one-line narration of the read (deterministic — spoken
    *  from the computed facts, not a raw LLM guess). */
@@ -64,8 +66,8 @@ export interface ThesisRead {
 
 const BULL_FLOWS = new Set(['FRESH_LONGS', 'SHORT_COVERING'])
 const BEAR_FLOWS = new Set(['FRESH_SHORTS', 'LONG_LIQUIDATION'])
-/** Recent window (~2 months of sessions) for a watchlist/cold stock's warnings. */
-const RECENT_WARN_BARS = 44
+/** Recent window (~2 months of sessions) for a watchlist/cold stock's signal feed. */
+const RECENT_SIGNAL_BARS = 44
 
 /** A loose per-bar shape — the equity IndicatorRow already satisfies it. */
 export interface ThesisBar extends StoryBar {
@@ -87,8 +89,18 @@ function barPosture(b: ThesisBar): number {
   return n ? Math.round((s / n) * 100) : 0
 }
 
+/** Aligned/total over only the pillars that actually have data — a no-data
+ *  pillar (value === '—') must never count toward either side, or the
+ *  numerator can exceed the denominator (seen live as "4/3"). */
+function alignedRatio(pillars: Pillar[]): { aligned: number; total: number } {
+  const withData = pillars.filter((p) => p.value !== '—')
+  const total = withData.length || pillars.length
+  const aligned = withData.filter((p) => p.aligned).length
+  return { aligned, total }
+}
+
 function alignedCount(bar: ThesisBar): number {
-  return buildPillars(bar as LatestRow).filter((p) => p.aligned).length
+  return alignedRatio(buildPillars(bar as LatestRow)).aligned
 }
 
 export function computeThesis(
@@ -100,13 +112,14 @@ export function computeThesis(
   const latest = bars[bars.length - 1]
   const pillars = buildPillars(latest as LatestRow)
   // A pillar with no data ("—", e.g. delivery/Liquidity absent for many BSE/thin
-  // names) must NOT count as a failure — that wrongly drags the read down (2/4
-  // when it's really 2/3) and makes it clash with a strong single-lens read like
-  // RS. Exclude data-gap pillars from the denominator (same no-fallback hygiene
-  // breadth uses).
+  // names) must NOT count toward either side of the ratio — not as a failure
+  // (that wrongly drags 3/3 down to "2/4") and not as a pass either (a pillar
+  // can be flagged aligned off a fallback field — e.g. Liquidity's `aligned`
+  // reads delivery_surge_x even when its displayed value, delivery_pct, is
+  // null — which produced an impossible "4/3" when only the denominator
+  // excluded it). Same no-fallback hygiene breadth uses.
   const withData = pillars.filter((p) => p.value !== '—')
-  const alignedNow = pillars.filter((p) => p.aligned).length
-  const total = withData.length || pillars.length
+  const { aligned: alignedNow, total } = alignedRatio(pillars)
   const ratio = alignedNow / total
 
   // Trend — aligned now vs ~5 bars ago.
@@ -119,17 +132,19 @@ export function computeThesis(
   const start = Math.max(0, bars.length - 30)
   const postureTrajectory = bars.slice(start).map((b) => ({ date: b.trade_date, posture: barPosture(b) }))
 
-  // Deterioration — bearish story events, NEWEST FIRST. For a position, since
-  // entry; otherwise only the recent window (so "warnings" are actually recent,
-  // not 2-month-old events).
+  // Signals — the full story, both directions, NEWEST FIRST. No tone filter:
+  // showing only the bearish half (the old behaviour) misrepresents what
+  // actually happened whenever the stock is also confirming higher. For a
+  // position, since entry; otherwise only the recent window (so the feed is
+  // actually recent, not 2-month-old events).
   const events = buildStoryEvents(bars)
-  let deterioration = events.filter((e) => e.tone === 'bear')
+  let signals = events
   if (relationship === 'position' && position?.entryDate) {
-    deterioration = deterioration.filter((e) => e.date >= position.entryDate)
+    signals = signals.filter((e) => e.date >= position.entryDate)
   } else {
-    deterioration = deterioration.filter((e) => e.barIndex >= bars.length - RECENT_WARN_BARS)
+    signals = signals.filter((e) => e.barIndex >= bars.length - RECENT_SIGNAL_BARS)
   }
-  deterioration = deterioration.slice(-6).reverse()
+  signals = signals.slice(-8).reverse()
 
   // Verdict — ratio of aligned pillars (data-present) + latest posture. The line
   // NAMES what's strong vs weak, so a "Mixed" reads as an insight — "leading on
@@ -150,15 +165,14 @@ export function computeThesis(
   }
 
   const read: ThesisRead = {
-    relationship, pillars, alignedNow, total, alignedTrend, postureTrajectory, deterioration, verdict, vaniLine: '',
+    relationship, pillars, alignedNow, total, alignedTrend, postureTrajectory, signals, verdict, vaniLine: '',
   }
 
   // Position layer — entry scorecard + P&L + entry-anchored risk.
   if (relationship === 'position' && position) {
     const entryBar = bars.find((b) => b.trade_date >= position.entryDate) ?? bars[bars.length - 1]
     const entryPillars = buildPillars(entryBar as LatestRow)
-    const entryAligned = entryPillars.filter((p) => p.aligned).length
-    const entryTotal = entryPillars.filter((p) => p.value !== '—').length || entryPillars.length
+    const { aligned: entryAligned, total: entryTotal } = alignedRatio(entryPillars)
     read.entry = {
       date: position.entryDate,
       price: position.entryPrice,
@@ -200,10 +214,10 @@ export function computeThesis(
       `${read.alignedNow}/${read.total} pillars hold — ${verdict.line}. Risk is ${r.riskTrend}.`
   } else if (relationship === 'watchlist') {
     read.vaniLine = `On your watchlist — ${verdict.label.toLowerCase()}: ${verdict.line}.` +
-      (deterioration.length ? ` Latest flag: ${deterioration[0].title.toLowerCase()} on ${deterioration[0].date}.` : '')
+      (signals.length ? ` Latest signal: ${signals[0].title.toLowerCase()} on ${signals[0].date}.` : '')
   } else {
     read.vaniLine = `${verdict.label} — ${verdict.line}.` +
-      (deterioration.length ? ` Recent warning: ${deterioration[0].title.toLowerCase()}.` : '')
+      (signals.length ? ` Latest signal: ${signals[0].title.toLowerCase()}.` : '')
   }
 
   return read

@@ -1057,55 +1057,6 @@ function FpbResults({ preset, timeframe, viewMode, onViewModeChange }: {
 
 // ── Screen 2: Results ──────────────────────────────────────────
 
-// First-visit orientation: 14 presets with no guidance was a documented
-// drop-off point ("which scanner do I start with?"). Shown once per browser,
-// dismissible; hidden when the user is already on the recommended scan.
-const SCAN_HINT_KEY = 'kd_scan_hint_dismissed';
-
-function ScanStartHereHint({ currentPresetId }: { currentPresetId: string }) {
-  const navigate = useNavigate();
-  const [dismissed, setDismissed] = useState(() => {
-    try { return localStorage.getItem(SCAN_HINT_KEY) === 'true'; } catch { return true; }
-  });
-
-  if (dismissed || currentPresetId === 'power_buy') return null;
-
-  function dismiss() {
-    try { localStorage.setItem(SCAN_HINT_KEY, 'true'); } catch { /* ignore */ }
-    setDismissed(true);
-  }
-
-  return (
-    <div style={{
-      display: 'flex', alignItems: 'center', gap: 10, marginTop: 12,
-      padding: '8px 12px', borderRadius: 8,
-      background: 'rgba(240,165,0,0.06)', border: '1px solid rgba(240,165,0,0.2)',
-    }}>
-      <span style={{ fontSize: 12, color: 'var(--text-secondary)', flex: 1 }}>
-        New to scanners? <strong style={{ color: 'var(--gold)' }}>Strength Confluence</strong> is
-        the best starting point — stocks where several independent conditions line up at once.
-      </span>
-      <button
-        onClick={() => { dismiss(); navigate('/scanner/power_buy'); }}
-        style={{
-          fontSize: 11, fontWeight: 600, padding: '4px 10px', borderRadius: 6,
-          border: '1px solid var(--gold)', background: 'transparent',
-          color: 'var(--gold)', cursor: 'pointer', whiteSpace: 'nowrap',
-        }}
-      >
-        Open it →
-      </button>
-      <button
-        onClick={dismiss}
-        aria-label="Dismiss"
-        style={{ fontSize: 13, background: 'none', border: 'none', color: 'var(--text-faint)', cursor: 'pointer', padding: '0 2px' }}
-      >
-        ✕
-      </button>
-    </div>
-  );
-}
-
 function ScannerResults({ presetId }: { presetId: string }) {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -1252,14 +1203,30 @@ function ScannerResults({ presetId }: { presetId: string }) {
       )}
 
       <div style={{ marginBottom: '24px' }}>
-        <h1 style={{
-          fontFamily: 'var(--font-display)', fontSize: '28px', fontWeight: 500,
-          letterSpacing: '-0.02em', lineHeight: 1, marginBottom: '6px',
-          color: 'var(--text-primary)',
-        }}>
-          {preset.name}
-        </h1>
-        <p style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
+          <h1 style={{
+            fontFamily: 'var(--font-display)', fontSize: '28px', fontWeight: 500,
+            letterSpacing: '-0.02em', lineHeight: 1,
+            color: 'var(--text-primary)',
+          }}>
+            {preset.name}
+          </h1>
+          <button
+            onClick={() => openVaNiWithIntent('scanner.explain_preset')}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0,
+              padding: '5px 12px', borderRadius: 8,
+              border: '1px solid var(--accent-indigo)',
+              background: 'color-mix(in srgb, var(--accent-indigo) 8%, transparent)',
+              color: 'var(--accent-indigo)', fontSize: 12, fontWeight: 500,
+              cursor: 'pointer', fontFamily: 'var(--font-body)',
+              transition: 'all 0.15s',
+            }}
+          >
+            <span style={{ fontSize: 12 }}>✦</span> VaNi explains this screener
+          </button>
+        </div>
+        <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: 6 }}>
           {preset.description}
         </p>
         {preset.tooltip && preset.tooltip !== preset.description && (
@@ -1267,21 +1234,6 @@ function ScannerResults({ presetId }: { presetId: string }) {
             {preset.tooltip}
           </p>
         )}
-        <button
-          onClick={() => openVaNiWithIntent('scanner.explain_preset')}
-          style={{
-            display: 'inline-flex', alignItems: 'center', gap: 6,
-            marginTop: 10, padding: '5px 12px', borderRadius: 8,
-            border: '1px solid var(--accent-indigo)',
-            background: 'color-mix(in srgb, var(--accent-indigo) 8%, transparent)',
-            color: 'var(--accent-indigo)', fontSize: 12, fontWeight: 500,
-            cursor: 'pointer', fontFamily: 'var(--font-body)',
-            transition: 'all 0.15s',
-          }}
-        >
-          <span style={{ fontSize: 12 }}>✦</span> VaNi explains this screener
-        </button>
-        <ScanStartHereHint currentPresetId={presetId} />
       </div>
     </div>
   );

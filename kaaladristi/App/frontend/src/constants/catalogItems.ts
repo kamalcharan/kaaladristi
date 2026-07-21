@@ -206,6 +206,26 @@ const INDICATORS: CatalogItem[] = [
       { text: 'Reference only — not predictive', type: 'limit' },
     ],
   },
+  {
+    id: 'rs_breakaway',
+    display_name: 'Clean Breakaway',
+    description: 'Magic RS pulling cleanly away from its own moving average — a steady, low-noise separation over the last 8 sessions, not just a positive reading.',
+    block_type: 'indicator',
+    placement: 'chart_overlay',
+    data_source: 'computed_ts',
+    overlay_type: 'indicator_line',
+    db_table: ['km_equity_eod', 'km_index_eod'],
+    db_column: 'magic_rs',   // renderer also reads magic_ma over the same window
+    applicable_to: ['equity', 'index'],
+    tier_required: 'free',
+    vani_explanation: "Clean Breakaway flags when Magic RS separates from its own trailing average in a steady, mostly one-directional climb (or fall) rather than a choppy back-and-forth that happens to end up in the same place. Two stocks can both read 'Strong Bull' on a given day — one got there in a straight line, the other whipsawed there. This tells you which kind you're looking at, so a zone reading isn't taken at face value alone.",
+    vani_tags: [
+      { text: 'Distinguishes a clean move from noise', type: 'works' },
+      { text: 'No new data — uses magic_rs/magic_ma already computed daily', type: 'works' },
+      { text: 'Fires on the transition, not every bar it holds', type: 'works' },
+      { text: 'Observational — not a signal to act on alone', type: 'limit' },
+    ],
+  },
 ]
 
 // ── Widgets ───────────────────────────────────────────────────────────────────

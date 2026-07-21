@@ -22,6 +22,7 @@ export interface StoryBar {
   low?: number | null
   volume?: number | null
   magic_rs?: number | null
+  magic_ma?: number | null
   delivery_pct?: number | null
   score_5d?: number | null
   score_22d?: number | null
@@ -44,6 +45,7 @@ export type StoryKind =
   | 'sector'
   | 'conviction'
   | 'flow'
+  | 'rs_breakaway'
 
 /** One signature colour per kind (→ globals.css --story-* vars). */
 export const KIND_COLORS: Record<StoryKind, string> = {
@@ -55,6 +57,7 @@ export const KIND_COLORS: Record<StoryKind, string> = {
   sector: 'var(--story-sector)',
   conviction: 'var(--story-conviction)',
   flow: 'var(--story-flow)',
+  rs_breakaway: 'var(--story-rsbreakaway)',
 }
 
 export interface StoryEvent {
@@ -78,6 +81,7 @@ const REACTION_BARS = 5
 const PRIORITY: Record<StoryKind, number> = {
   big_money: 8,
   fpb: 7,
+  rs_breakaway: 6.5,
   magic_rs: 6,
   stage: 5,
   sector: 4,
@@ -188,6 +192,64 @@ function fpbEvents(bars: StoryBar[]): { i: number; title: string; detail: string
   return out
 }
 
+// ── RS breakaway — magic_rs pulling cleanly away from its own MA (magic_ma is
+// already the smoothed trailing baseline magic_rs_zone is derived from — same
+// fast-line-vs-baseline shape as a MACD line separating from its signal line).
+// "Clean" is measured, not just "positive": most of the day-over-day moves
+// must agree with the overall direction (a straight climb, not a sawtooth),
+// and the baseline must have moved little over the same window — the read
+// is the SEPARATION, not just RS being up. ──
+const BREAKAWAY = {
+  WINDOW: 8,          // bars — long enough to judge a trend, short enough to stay current
+  MIN_RS_MOVE: 6,     // minimum |Δmagic_rs| over the window before this means anything
+  CLEAN_RATIO: 0.75,  // share of day-over-day deltas that must agree with the overall direction
+  MA_SLACK: 0.35,      // |Δmagic_ma| must stay under this fraction of |Δmagic_rs|
+} as const
+
+function breakawayTone(bars: StoryBar[], i: number): StoryTone | null {
+  const w = BREAKAWAY.WINDOW
+  if (i < w) return null
+  const rs = bars[i].magic_rs, rs0 = bars[i - w].magic_rs
+  const ma = bars[i].magic_ma, ma0 = bars[i - w].magic_ma
+  if (rs == null || rs0 == null || ma == null || ma0 == null) return null
+
+  const rsChange = rs - rs0
+  if (Math.abs(rsChange) < BREAKAWAY.MIN_RS_MOVE) return null
+  const maChange = ma - ma0
+  if (Math.abs(maChange) > Math.abs(rsChange) * BREAKAWAY.MA_SLACK) return null
+
+  let agree = 0, total = 0
+  for (let k = i - w + 1; k <= i; k++) {
+    const a = bars[k].magic_rs, b = bars[k - 1].magic_rs
+    if (a == null || b == null) continue
+    total++
+    if ((rsChange > 0 && a > b) || (rsChange < 0 && a < b)) agree++
+  }
+  if (total === 0 || agree / total < BREAKAWAY.CLEAN_RATIO) return null
+
+  return rsChange > 0 ? 'bull' : 'bear'
+}
+
+function breakawayEvents(bars: StoryBar[]): { i: number; title: string; detail: string; tone: StoryTone }[] {
+  const out: { i: number; title: string; detail: string; tone: StoryTone }[] = []
+  let prev: StoryTone | null = null
+  for (let i = 1; i < bars.length; i++) {
+    const tone = breakawayTone(bars, i)
+    if (tone && tone !== prev) {
+      out.push({
+        i,
+        title: tone === 'bull' ? 'Clean breakaway' : 'Clean breakdown',
+        detail: tone === 'bull'
+          ? `Magic RS pulled cleanly away from its own baseline over the last ${BREAKAWAY.WINDOW} sessions`
+          : `Magic RS broke cleanly below its own baseline over the last ${BREAKAWAY.WINDOW} sessions`,
+        tone,
+      })
+    }
+    prev = tone
+  }
+  return out
+}
+
 /**
  * Build the ordered story for a stock's bars (ascending by date).
  * @param bigMoneyDates set of trade_date strings flagged as big-money days.
@@ -261,6 +323,9 @@ export function buildStoryEvents(
 
   // 7) FPB — coil forming + burst/shatter release (recomputed from the bars).
   for (const f of fpbEvents(bars)) add(f.i, 'fpb', f.title, f.detail, f.tone)
+
+  // 8) RS breakaway — magic_rs cleanly separating from its own MA.
+  for (const b of breakawayEvents(bars)) add(b.i, 'rs_breakaway', b.title, b.detail, b.tone)
 
   out.sort((a, b) => a.barIndex - b.barIndex)
   return out

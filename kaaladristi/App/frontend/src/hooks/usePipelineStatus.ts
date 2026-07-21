@@ -10,14 +10,14 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { from } from '@/services/postgrest';
-import { fmtDate, fmtDateShort } from '@/lib/dateUtils';
+import { fmtDateLong, fmtDateShort } from '@/lib/dateUtils';
 
 export type PipelineStatusLevel = 'current' | 'pending' | 'delayed' | 'stale';
 
 export interface PipelineStatus {
   /** Most recent trade_date with completed pipeline data */
   latestDataDate: string | null;
-  /** Formatted date string: "15-Apr-2026" */
+  /** Formatted date string: "15 Apr 2026" */
   latestDataDateFormatted: string;
   /** Data is for today (or most recent trading day if weekend) */
   isCurrent: boolean;
@@ -31,7 +31,7 @@ export interface PipelineStatus {
   isLoading: boolean;
 }
 
-function formatDate(iso: string): string { return fmtDate(iso); }
+function formatDate(iso: string): string { return fmtDateLong(iso); }
 function formatDateShort(iso: string): string { return fmtDateShort(iso); }
 
 function daysBetween(from: string, to: string): number {

@@ -385,6 +385,17 @@ export default function ChartView() {
     () => ((isEquity || isIndex) && tf === 'daily' ? buildStoryEvents(rows, bigMoneyDates, sectorByDate) : []),
     [isEquity, isIndex, tf, rows, bigMoneyDates, sectorByDate],
   );
+  // Latest Clean Breakaway/Breakdown within the rotation's plotted window —
+  // storyEvents is indexed against `rows`, rotationPoints against `pulseBars`;
+  // join by date (same pattern used for the story/playhead bridge below).
+  const latestBreakaway = useMemo(() => {
+    if (rotationPoints.length === 0) return null;
+    const windowDates = new Set(rotationPoints.slice(-22).map((p) => p.date));
+    const hits = storyEvents.filter((e) => e.kind === 'rs_breakaway' && windowDates.has(e.date));
+    if (hits.length === 0) return null;
+    const latest = hits[hits.length - 1];
+    return { date: latest.date, title: latest.title, detail: latest.detail, tone: latest.tone as 'bull' | 'bear' };
+  }, [storyEvents, rotationPoints]);
   // Events are indexed against `rows` (the chart's data) but the playhead
   // indexes `pulseBars` — different arrays. Bridge them by DATE, not index.
   const eventDates = useMemo(() => new Set(storyEvents.map((e) => e.date)), [storyEvents]);
@@ -828,7 +839,7 @@ export default function ChartView() {
             <div className={cn('grid grid-cols-1 gap-3', isEquity && 'lg:grid-cols-[2fr_1fr]')}>
               <div className="min-w-0">
                 {tf === 'daily' && hasRsData ? (
-                  <RotationGraph points={rotationPoints} benchmark="NIFTY 500" autoPlay playSeconds={7} />
+                  <RotationGraph points={rotationPoints} benchmark="NIFTY 500" autoPlay playSeconds={7} breakaway={latestBreakaway} />
                 ) : (
                   <div className="glass-card rounded-xl p-3 text-[10px] text-muted">
                     RS-Rotation is available on the daily timeframe{hasRsData ? '' : ' (RS not computed here)'}.
