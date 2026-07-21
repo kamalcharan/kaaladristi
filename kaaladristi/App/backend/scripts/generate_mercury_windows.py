@@ -12,9 +12,14 @@ Rules generated:
   0. TR-MER-RET          — Mercury retrograde windows (motion almanac)
   1. TR-JUP-MER-RET-BUL  — Mercury retrograde ∩ Jupiter retrograde
   2. TR-MER-VEN-RET-BUL  — Mercury retrograde ∩ Venus retrograde
-  3. TR-MER-CMB-E-BEA    — Mercury combust windows (14° arc, re-detected from
-                           Swiss Ephemeris directly — NOT the daily flag — so
-                           stored windows always match the 14° spec)
+  3. TR-MER-CMB-E-BEA    — Mercury combust windows (v3: HELIACAL VISIBILITY
+                           detection — asta→udaya invisibility periods at
+                           Ujjain, calibrated against the owner's Drik
+                           Panchang almanac; 2026 display windows anchored
+                           exactly to the almanac via ALMANAC_OVERRIDES.
+                           See scripts/verify_combust_method.py and
+                           docs/claude/astro-story.md §6 for why a fixed
+                           arc can never reproduce the almanac)
   4. TRN-MER-MAN-TRN     — Mercury sign transit windows (Journey)
   5. TRN-MER-RIS-W-BUL   — Mercury station-direct (rise) — single-day
   6-10. DN-{MON..FRI}-MER-* — Moon in Mercury nakshatra + weekday (day rows)
@@ -75,11 +80,40 @@ SIGNS = ['Aries', 'Taurus', 'Gemini', 'Cancer', 'Leo', 'Virgo',
 # see generate_ephemeris.py — so day-boundary brackets use the same hour.
 SAMPLE_HOUR_UT = 5.5
 
-# Combustion arc. The classical example value is 14°, but the owner's almanac
-# boundaries reverse-engineer to ~15° (separation at the sheet's own entry/exit
-# times for Jul-2026 = 15.20° / 14.82°). 14° produced a window ~1 day narrow on
-# each side (the 20-day gap); 15° reproduces the sheet to within a few hours.
+# Combustion arc — used ONLY for combustion-stage band classification now.
+# (v2 used it as the window-detection threshold, calibrated to the almanac's
+# Jul-2026 row — which coincidentally sits near 15°. The almanac is actually a
+# visibility computation with variable implied orbs 9.8°–16.8°; v3 detects
+# windows via the heliacal model below. See verify_combust_method.py.)
 COMBUST_LIMIT_DEG = 15.0
+
+# ── v3 combust detection: heliacal visibility at Ujjain ───────────────────────
+# Calibrated against the owner's Drik Panchang almanac (city = Ujjain,
+# confirmed 2026-07-21): sweep best fit is extinction ktot=0.24 + observer
+# Snellen ratio 3.25 → 6/13 almanac boundaries exact-day, mean |Δ| ≈ 0.9 d,
+# worst 3 d; exact-day matches agree on time-of-day within minutes.
+UJJAIN_GEOPOS = [75.7885, 23.1793, 494.0]
+CALIB_DATM = [1013.25, 25.0, 40.0, 0.24]        # pressure, temp, RH, extinction
+CALIB_DOBS = [36.0, 3.25, 0.0, 0.0, 0.0, 0.0]   # age, Snellen ratio, ...
+
+# swisseph heliacal event types
+SE_MORNING_FIRST = 1   # udaya in morning sky (after inferior conjunction)
+SE_EVENING_LAST  = 2   # asta in evening sky (before inferior conjunction)
+SE_EVENING_FIRST = 3   # udaya in evening sky (after superior conjunction)
+SE_MORNING_LAST  = 4   # asta in morning sky (before superior conjunction)
+
+# Exact almanac windows (IST) from the owner's sheet (docs/finastro/mercury.jpg).
+# Any model window whose asta lands within ±6 days of one of these is replaced
+# by the almanac's exact timestamps, so the product almanac matches the sheet.
+ALMANAC_OVERRIDES = [
+    ((2026, 1,  4,  6, 32), (2026, 2,  5, 19, 20)),
+    ((2026, 2, 28, 19, 33), (2026, 3, 16,  5, 51)),
+    ((2026, 5,  2,  5, 30), (2026, 5, 23, 19, 58)),
+    ((2026, 7,  2, 20, 14), (2026, 7, 24,  5, 11)),
+    ((2026, 8, 18,  5, 37), (2026, 9, 13, 19, 27)),
+    ((2026,10, 27, 18, 56), (2026,11, 11,  5, 48)),
+    ((2026,12, 15,  6, 21), (2027, 1, 18, 19,  9)),
+]
 # Stages = the arc split into 5 equal bands, classified by the DEEPEST
 # separation reached. At 15° each band is 3°: ghora 0-3 · tikshna 3-6 ·
 # sankshipta 6-9 · vimishra 9-12 · prakruta 12-15. (Fractions of the limit, so
@@ -205,14 +239,48 @@ def ingress_ts(sign_index: int, boundary_day: date):
     return jd_to_utc(x) if x is not None else None
 
 
-def combust_edge_ts(boundary_day: date):
-    """Exact moment separation crosses the 14° limit near boundary_day."""
-    def f(j: float) -> float:
-        return COMBUST_LIMIT_DEG - sun_sep(j)   # >0 inside combustion
+def next_heliacal(jd: float, ev: int) -> float:
+    """Next heliacal event of type ev after jd (calibrated Ujjain model)."""
+    return swe.heliacal_ut(jd, UJJAIN_GEOPOS, CALIB_DATM, CALIB_DOBS,
+                           'Mercury', ev, swe.HELFLAG_HIGH_PRECISION)[0]
 
-    jd = jd_of(boundary_day)
-    x = bisect_crossing(f, jd - 1.5, jd + 1.5)
-    return jd_to_utc(x) if x is not None else None
+
+def detect_visibility_windows(jd_lo: float, jd_hi: float) -> list:
+    """
+    Walk Mercury's visibility cycle from jd_lo, returning invisibility
+    (combust) windows as (asta_jd, udaya_jd, kind) with kind
+    'superior' (morning-last → evening-first) or
+    'inferior' (evening-last → morning-first).
+
+    Edge note: if jd_lo falls INSIDE an invisibility window, that partial
+    window is skipped (detection starts at the first asta after jd_lo) —
+    same boundary behavior class as the v2 island scan.
+    """
+    windows = []
+    ml = next_heliacal(jd_lo, SE_MORNING_LAST)
+    el = next_heliacal(jd_lo, SE_EVENING_LAST)
+    while True:
+        is_superior = ml <= el
+        asta = ml if is_superior else el
+        if asta > jd_hi:
+            break
+        udaya = next_heliacal(
+            asta, SE_EVENING_FIRST if is_superior else SE_MORNING_FIRST)
+        windows.append((asta, udaya, 'superior' if is_superior else 'inferior'))
+        ml = next_heliacal(udaya + 2.0, SE_MORNING_LAST)
+        el = next_heliacal(udaya + 2.0, SE_EVENING_LAST)
+    return windows
+
+
+IST = timezone(timedelta(hours=5, minutes=30))
+
+
+def ist_date_of(ts: datetime) -> date:
+    return ts.astimezone(IST).date()
+
+
+def ist_dt(y, mo, d, h, mi) -> datetime:
+    return datetime(y, mo, d, h, mi, tzinfo=IST)
 
 
 def combust_min_sep(start_d: date, end_d: date) -> tuple:
@@ -373,31 +441,42 @@ def generate_retrograde(cur, rule_ids: dict) -> dict:
     return results
 
 
-# ── Rule 3: Mercury Combust — re-detected from Swiss Ephemeris (14° spec) ─────
+# ── Rule 3: Mercury Combust — v3 heliacal visibility (asta → udaya) ───────────
+
+def build_combust_windows() -> list:
+    """
+    Detect combust windows via the calibrated Ujjain visibility model and
+    apply ALMANAC_OVERRIDES (exact sheet timestamps for the display years).
+    Returns dicts with start/end dates+ts, kind, and source — no DB needed
+    (used by both generation and --dry-run-combust).
+    """
+    jd_lo = jd_of(BACKFILL_FROM)
+    jd_hi = jd_of(BACKFILL_TO)
+    overrides = [(ist_dt(*s), ist_dt(*e)) for s, e in ALMANAC_OVERRIDES]
+
+    out = []
+    for asta_jd, udaya_jd, kind in detect_visibility_windows(jd_lo, jd_hi):
+        asta_ts, udaya_ts = jd_to_utc(asta_jd), jd_to_utc(udaya_jd)
+        source = 'heliacal_ujjain'
+        for o_start, o_end in overrides:
+            if abs((asta_ts - o_start).days) <= 6:
+                asta_ts, udaya_ts = o_start, o_end
+                source = 'almanac_ujjain'
+                break
+        out.append({
+            "start_date": ist_date_of(asta_ts),
+            "end_date":   ist_date_of(udaya_ts),
+            "start_ts":   asta_ts,
+            "end_ts":     udaya_ts,
+            "kind":       kind,
+            "source":     source,
+        })
+    return out
+
 
 def generate_combust(cur, rule_id: int) -> tuple:
-    # Daily scan of separation at the standard sample hour; islands where <14°.
-    windows = []
-    in_window, w_start = False, None
-    one = timedelta(days=1)
-    d = BACKFILL_FROM
-    while d <= BACKFILL_TO:
-        combust = sun_sep(jd_of(d)) < COMBUST_LIMIT_DEG
-        if combust and not in_window:
-            in_window, w_start = True, d
-        elif not combust and in_window:
-            windows.append({"start_date": w_start, "end_date": d - one})
-            in_window = False
-        d += one
-    if in_window:
-        windows.append({"start_date": w_start, "end_date": BACKFILL_TO})
-
     rows = []
-    for w in windows:
-        start_ts = None if w["start_date"] <= BACKFILL_FROM \
-            else combust_edge_ts(w["start_date"])
-        end_ts = None if w["end_date"] >= BACKFILL_TO \
-            else combust_edge_ts(w["end_date"] + one)
+    for w in build_combust_windows():
         min_sep, jd_min = combust_min_sep(w["start_date"], w["end_date"])
         stage = combustion_stage(min_sep)
         direction = 'east' if signed_sun_offset(jd_min) > 0 else 'west'
@@ -405,12 +484,14 @@ def generate_combust(cur, rule_id: int) -> tuple:
             "combust_start": str(w["start_date"]),
             "combust_end":   str(w["end_date"]),
             "rule_type": "combust",
-            "combust_limit_deg": COMBUST_LIMIT_DEG,
+            "detect": "visibility_v3",
+            "conjunction": w["kind"],
+            "combust_source": w["source"],
         }
         rows.append(make_row(
             rule_id, w["start_date"], w["end_date"], snap,
-            start_ts=start_ts, end_ts=end_ts,
-            sign=sign_at(start_ts, w["start_date"]),
+            start_ts=w["start_ts"], end_ts=w["end_ts"],
+            sign=sign_at(w["start_ts"], w["start_date"]),
             direction=direction, combustion_type=stage, sun_sep_min=min_sep,
         ))
     return bulk_insert(cur, rows)
@@ -643,5 +724,25 @@ def main():
         conn.close()
 
 
+def dry_run_combust(year_from: int, year_to: int):
+    """Print v3 combust windows for a year range — no DB connection needed."""
+    global BACKFILL_FROM, BACKFILL_TO
+    BACKFILL_FROM = date(year_from, 1, 1)
+    BACKFILL_TO = date(year_to, 12, 31)
+    print(f"  v3 combust windows (visibility model, Ujjain) "
+          f"{year_from}–{year_to}:\n")
+    print(f"  {'start':<18} {'end':<18} {'days':>5}  {'kind':<9} {'source'}")
+    for w in build_combust_windows():
+        days = (w['end_date'] - w['start_date']).days
+        s = w['start_ts'].astimezone(IST).strftime('%d-%b-%y %H:%M')
+        e = w['end_ts'].astimezone(IST).strftime('%d-%b-%y %H:%M')
+        print(f"  {s:<18} {e:<18} {days:>5}  {w['kind']:<9} {w['source']}")
+
+
 if __name__ == "__main__":
-    main()
+    if len(sys.argv) > 1 and sys.argv[1] == '--dry-run-combust':
+        y0 = int(sys.argv[2]) if len(sys.argv) > 2 else 2024
+        y1 = int(sys.argv[3]) if len(sys.argv) > 3 else 2027
+        dry_run_combust(y0, y1)
+    else:
+        main()

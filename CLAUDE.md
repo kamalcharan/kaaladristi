@@ -310,7 +310,9 @@ Base threshold: 6% with ATR adaptive factor.
 ## Current Plan
 
 
-Active sprint: **Rules Engine**.
+Active sprint: **Astro Layer — Mercury slice** (2026-07-21 →). Narrative contract, launch decisions, yardstick design (VIX as one of several), and the combust-method finding + calibration subtask: **`docs/claude/astro-story.md`**. Companion: `MERCURY_SLICE_PLAN.md` (repo root). Launch catalog scope shipped as migration 160 (Variant B: 13 Mercury + 6 slow-planet almanac rules) — owner runs it in pgAdmin (kaala-postgres MCP is read-only).
+
+Prior sprint: **Rules Engine**.
 
 | Component | Status | Description |
 |---|---|---|
@@ -382,7 +384,7 @@ AI_MODEL=claude-haiku-4-5      # any model the provider supports
 
 New migrations go in `App/DBscripts/km_migration_NNN_description.sql`.
 Run them directly in pgAdmin, DBeaver, or `psql` — **no Python wrapper scripts**.
-Next migration number: **153**. (152 = `km_migration_152_custom_index_return_chain.sql` — return-chained custom-index synthesis, replaces the raw-price `AVG(close)` that jumped the level whenever a constituent listed; adds `v_custom_index_health`.)
+Next migration number: **161**. (160 = `km_migration_160_mercury_launch_catalog_scope.sql` — Mercury-slice launch catalog scope, Variant B + W2/W4 hygiene; see `docs/claude/astro-story.md` §5. ⚠ Numbering drifted: files exist through 159 with DUPLICATE numbers at 152 and 153 and no 155 — always `ls App/DBscripts/ | sort` before picking a number, don't trust this line alone.)
 
 **Target database**: most migrations target `kaala_dristi_db`. Migrations that target `vani_db` must say so explicitly in the file header (example: migration 092).
 
