@@ -170,6 +170,12 @@ reproduces.
   period). Re-score after regeneration (nightly job or POST
   /api/confidence/compute).
 
+**POA for remaining work + an important reconciliation decision:
+`docs/POA/POA-astro-layer-mercury-launch.md`** — a pre-existing Pattern
+Engine (`docs/POA/POA-astro-pattern-engine.md`, 2026-07-06) does overlapping
+level-break analysis on `km_rule_patterns`; the two systems need a sign-off
+on which feeds the Almanac view before that build starts.
+
 ## 7. Build order (proposed)
 
 1. ~~Run migration 160~~ **DONE 2026-07-21** — owner ran it, Catalog shows 19.
