@@ -20,6 +20,16 @@ export interface RotationPoint {
   momentum: number | null;
 }
 
+/** The most recent "clean separation" read (rs variant only) — a different
+ *  pair of series (RS vs its own MA) than level×momentum, so this is new
+ *  information, not a restatement of the plotted trail's dot colors. */
+export interface BreakawaySignal {
+  date: string;
+  title: string;
+  detail: string;
+  tone: 'bull' | 'bear';
+}
+
 interface RotationGraphProps {
   points: RotationPoint[];
   tail?: number;
@@ -32,6 +42,8 @@ interface RotationGraphProps {
   autoPlay?: boolean;
   /** Playback duration in seconds (default 7). */
   playSeconds?: number;
+  /** Latest Clean Breakaway/Breakdown within the plotted window, if any (rs variant only). */
+  breakaway?: BreakawaySignal | null;
 }
 
 const TEAL = '#2dd4bf';
@@ -102,6 +114,7 @@ export default function RotationGraph({
   levelCenter = 0,
   autoPlay = false,
   playSeconds = 7,
+  breakaway = null,
 }: RotationGraphProps) {
   const cfg = VARIANTS[variant];
   const [hover, setHover] = useState<number | null>(null);
@@ -158,20 +171,6 @@ export default function RotationGraph({
   const trailPoints = visible.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
   const posWord = today.level != null && today.level >= levelCenter ? cfg.posPos : cfg.posNeg;
   const momWord = today.momentum != null && today.momentum >= 0 ? 'rising' : 'slowing';
-
-  // Durability of the CURRENT quadrant + the transition log — the badge alone
-  // can't tell a fresh flip from an established read, and can't tell a clean
-  // single move from a choppy back-and-forth. Both are answered by a plain
-  // scan of the same `pts[].pos` already used to color the trail.
-  let streak = 0;
-  if (today.pos) {
-    for (let i = pts.length - 1; i >= 0 && pts[i].pos === today.pos; i--) streak++;
-  }
-  const transitions: { date: string; to: Pos }[] = [];
-  for (let i = 1; i < pts.length; i++) {
-    const to = pts[i].pos;
-    if (to && to !== pts[i - 1].pos) transitions.push({ date: pts[i].date, to });
-  }
 
   return (
     <div className="glass-card rounded-2xl p-4">
@@ -315,26 +314,22 @@ export default function RotationGraph({
             ))}
           </div>
 
-          {/* Durability + transition log — how long the current quadrant has
-              held, and how many times it's flipped, so the badge above reads
-              as "fresh" or "established" instead of a bare label. */}
-          {q && (
+          {/* Clean read — RS vs its OWN MA, a different pair of series than
+              level×momentum above, so this is genuinely new information, not
+              a restatement of the trail's dot colors. */}
+          {variant === 'rs' && (
             <div className="pt-2.5 mt-0.5 border-t" style={{ borderColor: 'color-mix(in srgb, var(--text-primary) 10%, transparent)' }}>
-              <div className="text-[11px] font-mono font-bold" style={{ color: q.color }}>
-                {q.name} for {streak} session{streak === 1 ? '' : 's'}
-              </div>
-              <div className="text-[10px] text-muted mt-0.5">
-                {transitions.length} quadrant change{transitions.length === 1 ? '' : 's'} in the last {pts.length} sessions
-              </div>
-              {transitions.length > 0 && (
-                <div className="flex flex-col gap-1 mt-2">
-                  {transitions.slice(-4).reverse().map((t, i) => (
-                    <div key={`${t.date}-${i}`} className="flex items-center gap-1.5 text-[10px]">
-                      <span className="font-mono text-faint">{fmtDate(t.date)}</span>
-                      <span className="text-faint">entered</span>
-                      <span className="font-mono font-bold" style={{ color: cfg.quad[t.to].color }}>{cfg.quad[t.to].name}</span>
-                    </div>
-                  ))}
+              <div className="text-[9px] font-mono uppercase tracking-widest text-faint mb-1">Clean read</div>
+              {breakaway ? (
+                <>
+                  <div className="text-[11px] font-mono font-bold" style={{ color: breakaway.tone === 'bull' ? 'var(--risk-green)' : 'var(--risk-red)' }}>
+                    {breakaway.title} · {fmtDate(breakaway.date)}
+                  </div>
+                  <div className="text-[10px] text-muted mt-1 leading-snug">{breakaway.detail}.</div>
+                </>
+              ) : (
+                <div className="text-[10px] text-muted leading-snug">
+                  No clean Magic RS breakaway in the last {pts.length} sessions — {q ? `the ${q.name.toLowerCase()} reading isn't` : 'this reading isn\'t'} backed by a steady, low-noise separation from its own baseline.
                 </div>
               )}
             </div>
