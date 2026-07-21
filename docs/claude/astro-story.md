@@ -49,11 +49,15 @@ The confidence engine's directional hypothesis test leaves `turning`/`volatile`
 rules with `scored_windows=0` by design. The evidence layer for exactly those
 rules comes from **volatility/turn measurables**, VIX being one of several:
 
-1. **VIX change** — did India VIX close higher inside the window vs the 20
-   sessions before it? (India VIX history starts ~2008; windows before that
-   fall back to the next two measures. Precondition: run backlog item SR-B4 —
-   verify VIX data quality in `km_index_eod` id=94 — before building on it.)
-2. **Realized range expansion** — daily range inside window vs baseline.
+1. **Realized range expansion** — daily range inside window vs baseline.
+   **Primary deep-history yardstick**: computable from 26 years of NIFTY OHLC.
+2. **VIX change** — did India VIX close higher inside the window vs the 20
+   sessions before it? **SR-B4 done (2026-07-21): series is clean but SHALLOW**
+   — `km_index_eod` id=94 has 280 rows, 2025-06-02 → present only (no nulls,
+   no gaps >4d, range 9.15–27.89). Only ~4 Mercury combust windows overlap it,
+   so VIX is the *recent-era cross-check + live badge*, NOT the historical
+   evidence backbone. (A ~2008-onward VIX backfill from NSE archives would
+   upgrade it — separate ingestion task, not required for launch.)
 3. **Turn frequency** — did the index print a local top/bottom inside the
    window? (the natural test for `turning` rules).
 4. **Directional matched %** — the existing `km_rule_confidence` machinery,
@@ -149,9 +153,17 @@ reproduces.
 ## 7. Build order (proposed)
 
 1. ~~Run migration 160~~ **DONE 2026-07-21** — owner ran it, Catalog shows 19.
-2. SR-B4 VIX data-quality check (small, read-only) — unblocks yardstick #1.
-3. `TR-MER-CMB-E-BEA` regeneration with the calibrated visibility model (§6 —
-   calibration itself is DONE; the generator change + override table remain).
+2. ~~SR-B4 VIX data-quality check~~ **DONE 2026-07-21** — clean but only 13.5
+   months deep; see §3 (realized range promoted to primary yardstick).
+3. `TR-MER-CMB-E-BEA` regeneration — **generator updated (v3 visibility
+   detection + ALMANAC_OVERRIDES; dry-run verified: all 7 almanac-2026 windows
+   reproduce the owner's sheet exactly, incl. day counts 32/16/21/22/26/15/34).
+   REMAINING: owner runs `DB_PRIMARY=... python3 generate_mercury_windows.py`
+   on the VPS** — reconciling run wipes + rebuilds ALL Mercury rule windows
+   1990–2030 (designed behavior), then the 19:00 confidence job (or POST
+   /api/confidence/compute) re-scores. Verify with
+   `python3 generate_mercury_windows.py --dry-run-combust 2025 2027` first if
+   desired (no DB needed).
 4. Evidence computation: per-window-type stats (VIX Δ, range ratio, turn
    frequency) for the 13 launch Mercury rules — table or matview.
 5. Evidence tooltip on band click (extend `OverlayExplainPopover`).
