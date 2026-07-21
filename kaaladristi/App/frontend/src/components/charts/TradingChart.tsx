@@ -36,7 +36,7 @@ import { fmtDate, fmtDateShort } from '@/lib/dateUtils';
 import { useQuery } from '@tanstack/react-query';
 import { INDICATOR_DEFAULT_COLORS } from '@/constants/catalogItems';
 import { planetColorOfRuleCode } from '@/constants/planetColors';
-import { fetchConfidence, fetchBenchConfidence } from '@/pages/RuleEngine/ruleService';
+import { fetchConfidence, fetchBenchConfidence, fetchEvidence, type RuleEvidence } from '@/pages/RuleEngine/ruleService';
 
 // ── SMA config — used in legacy (non-workspace) mode ──
 const SMA_LINES: { key: keyof IndicatorRow; color: string; label: string; width: LineWidth }[] = [
@@ -221,6 +221,40 @@ const DEFAULT_OVERLAYS: NonNullable<TradingChartProps['overlays']> = [];
 const DEFAULT_BANDS: NonNullable<TradingChartProps['astroBands']> = [];
 const DEFAULT_BM_EVENTS: NonNullable<TradingChartProps['bigMoneyEvents']> = [];
 
+/** Threshold-driven THE PATTERN copy (astro-story §3). The card may only
+ *  claim an effect that clears NIFTY's unconditional base rate by a margin —
+ *  otherwise it says so plainly. Honesty is enforced here, not in review. */
+function patternLines(ev: RuleEvidence): string[] {
+  const n = ev.windows_scored;
+  if (!n) return [];
+  const lines: string[] = [];
+  const sinceYr = ev.first_scored ? `'${ev.first_scored.slice(2, 4)}` : '—';
+  let rangeTxt = 'range in line with usual';
+  if (ev.range_ratio_mean != null) {
+    if (ev.range_ratio_mean >= 1.15) rangeTxt = `range ran ${ev.range_ratio_mean.toFixed(2)}× usual`;
+    else if (ev.range_ratio_mean <= 0.85) rangeTxt = `quieter than usual (${ev.range_ratio_mean.toFixed(2)}×)`;
+  }
+  lines.push(`${n} windows since ${sinceYr} · ${rangeTxt}`);
+  if (ev.pos_close_n != null && ev.pos_close_base_pct != null) {
+    const pct = (ev.pos_close_n / n) * 100;
+    lines.push(
+      Math.abs(pct - ev.pos_close_base_pct) < 8
+        ? `closed higher in ${ev.pos_close_n}/${n} — near its usual rate`
+        : `closed higher in ${ev.pos_close_n}/${n} (usual ≈${ev.pos_close_base_pct.toFixed(0)}%)`,
+    );
+  }
+  if (ev.turn_n != null && ev.turn_base_pct != null) {
+    const pct = (ev.turn_n / n) * 100;
+    if (Math.abs(pct - ev.turn_base_pct) >= 10) {
+      lines.push(`a swing high/low formed inside ${pct.toFixed(0)}% (usual ≈${ev.turn_base_pct.toFixed(0)}%)`);
+    }
+  }
+  if ((ev.vix_windows ?? 0) >= 10 && ev.vix_up_n != null) {
+    lines.push(`VIX rose in ${ev.vix_up_n} of ${ev.vix_windows} recent windows`);
+  }
+  return lines;
+}
+
 export default function TradingChart({ data, height = 900, compact = false, workspaceMode = false, highlightDate = null, overlays = DEFAULT_OVERLAYS, astroBands = DEFAULT_BANDS, bigMoneyEvents = DEFAULT_BM_EVENTS, onVisibleRangeChange, onCrosshairMove, onZoneClick, benchmarkIndexId = null, benchmarkName = null, storyBubble = null }: TradingChartProps) {
   const mainRef      = useRef<HTMLDivElement>(null);
   const rsiRef       = useRef<HTMLDivElement>(null);
@@ -291,6 +325,21 @@ export default function TradingChart({ data, height = 900, compact = false, work
   const benchConfByRule = useMemo(
     () => new Map((benchConfRows ?? []).map(c => [c.rule_id, c])),
     [benchConfRows],
+  );
+
+  // Observational evidence (migration 161) — base-rate-anchored texture for
+  // THE PATTERN line. Copy is threshold-driven: an effect is only claimed
+  // when it clears NIFTY's unconditional base rate by a margin.
+  const { data: evidenceRows } = useQuery({
+    queryKey: ['rule-engine', 'evidence'],
+    queryFn: fetchEvidence,
+    enabled: astroBands.length > 0,
+    staleTime: 5 * 60 * 1000,
+    retry: 1,
+  });
+  const evidenceByRule = useMemo(
+    () => new Map((evidenceRows ?? []).map(e => [e.rule_id, e])),
+    [evidenceRows],
   );
 
   // Phase 2 of the benchmark gap (owner 2026-07-07): the NIFTY verdict stays,
@@ -1337,30 +1386,21 @@ export default function TradingChart({ data, height = 900, compact = false, work
                         </>
                       )}
                     </div>
-                    {/* Two explicitly-scoped lines (owner 2026-07-07: "a user
-                        needs to understand it much better"): THIS WINDOW = the
-                        one occurrence under the cursor; RULE OVERALL = the
-                        rule's whole track record. Batsman's average vs
-                        today's innings — both true, different scopes. */}
-                    <div style={{ marginTop: 5, fontSize: 10, display: 'flex', gap: 5, alignItems: 'baseline' }}>
-                      <span style={{ fontSize: 8, letterSpacing: '0.1em', color: 'color-mix(in srgb, var(--text-primary) 35%, transparent)', fontFamily: 'var(--font-mono, monospace)' }}>
-                        THIS WINDOW
-                      </span>
-                      {/* Honesty pass (owner 2026-07-07): matched is scored against
-                          NIFTY 50 regardless of the instrument this chart shows —
-                          say so instead of implying it belongs to this chart. */}
-                      {b.matched === true  && <span style={{ color: c }}>✓ NIFTY 50 moved as expected</span>}
-                      {b.matched === false && <span style={{ color: 'var(--bear)' }}>✗ NIFTY 50 moved against expectation</span>}
-                      {b.matched === null  && (
-                        <span style={{ color: 'color-mix(in srgb, var(--text-primary) 40%, transparent)' }}>
-                          {b.from > today
-                            ? '◦ upcoming — not scored yet'
-                            : b.baseBias
-                              ? '◦ not scored yet'
-                              : '◦ observational — no directional claim'}
+                    {/* Astro-story §2: the card orients, it does not grade.
+                        The old THIS WINDOW ✓/✗/"not scored yet" line issued a
+                        directional verdict (or narrated unfinished homework) —
+                        replaced by THE PATTERN below. Upcoming windows still
+                        get their opening date. */}
+                    {b.from > today && (
+                      <div style={{ marginTop: 5, fontSize: 10, display: 'flex', gap: 5, alignItems: 'baseline' }}>
+                        <span style={{ fontSize: 8, letterSpacing: '0.1em', color: 'color-mix(in srgb, var(--text-primary) 35%, transparent)', fontFamily: 'var(--font-mono, monospace)' }}>
+                          THIS WINDOW
                         </span>
-                      )}
-                    </div>
+                        <span style={{ color: 'color-mix(in srgb, var(--text-primary) 40%, transparent)' }}>
+                          ◦ upcoming — opens {fmtDate(b.from)}
+                        </span>
+                      </div>
+                    )}
                     {/* Phase 2: the viewed instrument's own move over this
                         window — the fact this chart can actually attest to. */}
                     {(() => {
@@ -1377,23 +1417,44 @@ export default function TradingChart({ data, height = 900, compact = false, work
                         </div>
                       );
                     })()}
-                    {/* Aggregate confidence — how the RULE behaves, not just this window.
-                        POA item 3: the % is only meaningful against a stated
-                        hypothesis, so the tested claim is named inline
-                        ('vs inference (…)' or 'vs base bias (…)'). */}
-                    {conf?.confidence_score != null && (conf.total_occurrences ?? 0) > 0 && (
+                    {/* THE PATTERN — base-rate-anchored texture (migration 161).
+                        Copy is threshold-driven in patternLines(): an effect is
+                        claimed only when it clears NIFTY's unconditional rate;
+                        otherwise the card says "in line with usual" — the null
+                        result is part of the product's honesty contract. */}
+                    {(() => {
+                      const ev = evidenceByRule.get(b.ruleId);
+                      const lines = ev ? patternLines(ev) : [];
+                      if (lines.length === 0) return null;
+                      return (
+                        <div style={{ marginTop: 3, fontSize: 10, display: 'flex', gap: 5, alignItems: 'baseline' }}>
+                          <span style={{ fontSize: 8, letterSpacing: '0.1em', color: 'color-mix(in srgb, var(--text-primary) 35%, transparent)', fontFamily: 'var(--font-mono, monospace)', flexShrink: 0 }}>
+                            THE PATTERN
+                          </span>
+                          <div style={{ fontFamily: 'var(--font-mono, monospace)', color: 'color-mix(in srgb, var(--text-primary) 60%, transparent)' }}>
+                            <div>NIFTY 50 · {lines[0]}</div>
+                            {lines.slice(1).map((l, j) => <div key={j}>{l}</div>)}
+                          </div>
+                        </div>
+                      );
+                    })()}
+                    {/* Expert-inference track record — kept only for rules with a
+                        curated hypothesis; base-bias grading is retired from the
+                        user surface ("moved as expected" was a verdict, astro-story §2). */}
+                    {conf?.confidence_score != null && (conf.total_occurrences ?? 0) > 0
+                      && conf.hypothesis_source === 'inference' && (
                       <div style={{ marginTop: 3, fontSize: 10, display: 'flex', gap: 5, alignItems: 'baseline' }}>
                         <span style={{ fontSize: 8, letterSpacing: '0.1em', color: 'color-mix(in srgb, var(--text-primary) 35%, transparent)', fontFamily: 'var(--font-mono, monospace)' }}>
-                          RULE OVERALL
+                          INFERENCE
                         </span>
                         <span style={{ fontFamily: 'var(--font-mono, monospace)', color: 'color-mix(in srgb, var(--text-primary) 60%, transparent)' }}>
-                          {benchLabel} moved as expected in {conf.confidence_score.toFixed(0)}% of {conf.total_occurrences} windows
+                          {benchLabel} matched it in {conf.confidence_score.toFixed(0)}% of {conf.total_occurrences} windows
                           {conf.avg_return_matched != null && (
                             <> · avg {conf.avg_return_matched >= 0 ? '+' : ''}{conf.avg_return_matched.toFixed(1)}% when it did</>
                           )}
-                          {conf.hypothesis_source && conf.hypothesis_impact && (
+                          {conf.hypothesis_impact && (
                             <span style={{ color: 'color-mix(in srgb, var(--text-primary) 40%, transparent)' }}>
-                              {' '}· vs {conf.hypothesis_source === 'inference' ? 'inference' : 'base bias'} ({conf.hypothesis_impact.replace(/_/g, ' ')})
+                              {' '}({conf.hypothesis_impact.replace(/_/g, ' ')})
                             </span>
                           )}
                         </span>

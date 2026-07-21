@@ -106,6 +106,35 @@ export async function fetchConfidence(): Promise<RuleConfidence[]> {
   return Array.isArray(data) ? (data as RuleConfidence[]) : [];
 }
 
+// ── Observational evidence (migration 161 — astro-story §3) ──────────────────
+// Base-rate-anchored texture per rule: range ratio, direction counts, turn
+// frequency vs NIFTY 50's unconditional behavior. The band tooltip's copy is
+// threshold-driven off these numbers — it may only claim an effect that
+// clears the base rate; otherwise it says "in line with usual".
+
+export interface RuleEvidence {
+  rule_id: number;
+  windows_total: number;
+  windows_scored: number;
+  first_scored: string | null;
+  range_ratio_mean: number | null;
+  pos_close_n: number | null;
+  pos_close_base_pct: number | null;
+  avg_window_ret: number | null;
+  turn_n: number | null;
+  turn_base_pct: number | null;
+  vix_windows: number | null;
+  vix_up_n: number | null;
+}
+
+export async function fetchEvidence(): Promise<RuleEvidence[]> {
+  const { data, error } = await from('km_rule_evidence')
+    .select('rule_id,windows_total,windows_scored,first_scored,range_ratio_mean,pos_close_n,pos_close_base_pct,avg_window_ret,turn_n,turn_base_pct,vix_windows,vix_up_n')
+    .execute();
+  if (error) throw new Error(error.message);
+  return Array.isArray(data) ? (data as RuleEvidence[]) : [];
+}
+
 // ── Per-benchmark confidence (migration 139 — POA item 4 part 1) ─────────────
 
 export interface RuleBenchConfidence {
