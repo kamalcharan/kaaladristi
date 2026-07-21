@@ -6,14 +6,20 @@
 -- change... usually previous day high or low break will happen... fusion").
 --
 -- The transition claim lives at window BOUNDARIES (station day, ingress day,
--- combust entry/exit), not interiors. Per rule the compute script stores, per
--- boundary kind ('day' for point rules, 'start'/'end' for range rules):
---   n, flip_pct (5-session short-trend flipped, prior |trend| >= 1%),
---   break_pct (close beyond previous day's high/low), flip_given_break_pct,
---   plus the matched base rates.
--- Live prototype (2026-07-21, NIFTY 2008+): flips run +3..+6 pts above the
--- 49.8% base consistently across five Mercury event families — a small,
--- direction-consistent tilt. Watch days, not signals; the break confirms.
+-- combust entry/exit), not interiors — and the influence is an ORB, not a
+-- stamp ("the impact will be +/- 2 days — checking a single day is a
+-- mistake"). Per boundary kind ('day' for point rules, 'start'/'end' for
+-- range rules) the compute script stores:
+--   n, flip_pct               5-session trend AFTER the ±2-session zone
+--                             flipped vs the trend entering it (prior
+--                             |trend| >= 1%)
+--   confirm_given_flip_pct    a prev-day-H/L break-and-close INSIDE the zone
+--                             in the new trend's direction (fusion confirm)
+-- plus matched base rates.
+-- Orb prototype (2026-07-21, NIFTY 2008+, base flip 48.9%): sign-ingress
+-- days carry the real tilt (56.4%, n=241, ~2.3 sigma); combust-entry and
+-- retro-station single-day tilts washed out under the orb test. Watch days,
+-- not signals; the break confirms.
 
 BEGIN;
 

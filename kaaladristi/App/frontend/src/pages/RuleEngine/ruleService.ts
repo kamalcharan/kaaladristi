@@ -112,18 +112,17 @@ export async function fetchConfidence(): Promise<RuleConfidence[]> {
 // threshold-driven off these numbers — it may only claim an effect that
 // clears the base rate; otherwise it says "in line with usual".
 
-/** Boundary-day transition study (migration 162): did the 5-session short
- *  trend flip near the event, and did price close beyond the previous day's
- *  high/low (the quant confirmation — "fusion"). Keys: 'day' for point
- *  rules; 'start'/'end' (entry/exit) for range rules. */
+/** Boundary-day transition study (migration 162, ±2-session orb): the event
+ *  ±2 sessions is the transition ZONE — flip_pct compares the 5-session trend
+ *  after the zone vs before it; confirm_given_flip_pct is the fusion
+ *  confirmation (a prev-day-H/L break inside the zone in the new trend's
+ *  direction). Keys: 'day' for point rules; 'start'/'end' for range rules. */
 export interface TransitionStats {
   n: number;
   flip_pct: number;
-  break_pct: number;
-  flip_given_break_pct: number | null;
+  confirm_given_flip_pct: number | null;
   base_flip_pct: number | null;
-  base_break_pct: number | null;
-  base_flip_given_break_pct: number | null;
+  base_confirm_given_flip_pct: number | null;
 }
 
 export interface RuleEvidence {

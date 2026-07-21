@@ -23,14 +23,16 @@ Base rates per rule use the rule's MEDIAN window length in sessions:
 
 Boundary-day TRANSITION study (migration 162, `transitions` JSONB — owner
 2026-07-21: "Mercury is about trend change... prev day high/low break...
-fusion"): at each window boundary (point rules: the day; range rules: entry
-and exit separately) with a real prior trend (|5-session move| >= 1%):
-  flip_pct              5-session short trend flipped sign
-  break_pct             close beyond previous day's high/low (quant confirm)
-  flip_given_break_pct  the fusion conditional
-each with the matched base rate. Live prototype: Mercury boundary families
-run +3..+6 pts over the 49.8% base flip rate, direction-consistent — watch
-days, not signals.
+fusion... the impact will be +/- 2 days — checking a single day is a
+mistake"): each window boundary (point rules: the day; range rules: entry
+and exit separately) is an ORB — event ±2 sessions is the transition ZONE.
+With a real prior trend (|5-session move ending before the zone| >= 1%):
+  flip_pct                the 5-session trend AFTER the zone flipped vs before
+  confirm_given_flip_pct  a prev-day-H/L break-and-close INSIDE the zone in
+                          the new trend's direction (the fusion confirmation)
+each with the matched base rate. Orb prototype vs NIFTY 2008+ (base 48.9%):
+sign-ingress 56.4% (n=241) is the real carrier; combust-entry/retro-station
+single-day tilts washed out under the orb test.
 
 Wired into the 19:00 IST transit-scoring job (pipeline2/scheduler.py) after
 benchmark confidence; also runnable standalone:
@@ -107,68 +109,79 @@ def _win_indices(dates, start_d, end_d):
     return i0, i1
 
 
-# ── Boundary-day transition study (migration 162 — "fusion") ──────────────────
-# Mercury-type rules mark trend-CHANGE dates, not directional windows (owner
-# 2026-07-21). Measured at window boundaries: did the 5-session short trend
-# flip, and did price close beyond the previous day's high/low (the quant
-# confirmation)? Prior trend must be a real one (|5-session move| >= 1%).
+# ── Boundary-day transition study (migration 162 — "fusion", ±2d orb) ─────────
+# Mercury-type rules mark trend-CHANGE dates, not directional windows, and the
+# influence is an ORB, not a stamp (owner 2026-07-21: "usually the impact will
+# be +/- 2 days for any planetary confluence — one of the mistakes is checking
+# for a single day"). The event ±ORB_SESSIONS is the transition ZONE: compare
+# the 5-session trend ENTERING the zone vs LEAVING it, and look for the
+# confirming prev-day-H/L break INSIDE the zone in the new trend's direction.
+# Orb prototyping vs NIFTY 2008+ (base flip 48.9%): sign-ingress days carry a
+# real tilt (56.4%, n=241); combust-entry and retro-station single-day tilts
+# washed out — the orb test is stricter AND fairer.
 
 TREND_SESSIONS = 5
+ORB_SESSIONS = 2
 MIN_PRIOR_TREND = 0.01
 EVENT_MAP_TOLERANCE_DAYS = 4
 MIN_EVENTS = 10
 
 
 def _transition_arrays(dates, closes, highs, lows):
-    """Per-session rb (5s trend ending yesterday), ra (5s from yesterday),
-    pd_break (close beyond previous day's range). None where undefined."""
+    """Per-center-session i: before_t (5s trend ending the day before the orb),
+    after_t (5s trend after the orb exits), brk_dir (per-day close beyond the
+    previous day's high=+1 / low=-1 / neither=0). None where undefined."""
     n = len(dates)
-    rb = [None] * n
-    ra = [None] * n
-    brk = [None] * n
-    T = TREND_SESSIONS
+    T, O = TREND_SESSIONS, ORB_SESSIONS
+    before_t = [None] * n
+    after_t = [None] * n
+    brk_dir = [0] * n
     for i in range(n):
-        if i >= T + 1 and closes[i - T - 1] != 0:
-            rb[i] = (closes[i - 1] - closes[i - T - 1]) / closes[i - T - 1]
-        if 1 <= i and i + T < n and closes[i - 1] != 0:
-            ra[i] = (closes[i + T - 1] - closes[i - 1]) / closes[i - 1]
+        if i >= O + T + 1 and closes[i - O - T - 1] != 0:
+            before_t[i] = (closes[i - O - 1] - closes[i - O - T - 1]) / closes[i - O - T - 1]
+        if i + O + T < n and closes[i + O] != 0:
+            after_t[i] = (closes[i + O + T] - closes[i + O]) / closes[i + O]
         if i >= 1:
-            brk[i] = closes[i] > highs[i - 1] or closes[i] < lows[i - 1]
-    return rb, ra, brk
+            brk_dir[i] = 1 if closes[i] > highs[i - 1] else (-1 if closes[i] < lows[i - 1] else 0)
+    return before_t, after_t, brk_dir
 
 
-def _transition_agg(indices, rb, ra, brk):
-    flips = brks = flip_and_brk = 0
+def _confirming_break_in_orb(i, after_sign, brk_dir):
+    for j in range(i - ORB_SESSIONS, i + ORB_SESSIONS + 1):
+        if 0 <= j < len(brk_dir) and brk_dir[j] == after_sign:
+            return True
+    return False
+
+
+def _transition_agg(indices, before_t, after_t, brk_dir):
+    flips = confirmed = 0
     n = 0
     for i in indices:
         n += 1
-        flip = (rb[i] > 0) != (ra[i] > 0)
+        flip = (before_t[i] > 0) != (after_t[i] > 0)
         if flip:
             flips += 1
-        if brk[i]:
-            brks += 1
-            if flip:
-                flip_and_brk += 1
+            if _confirming_break_in_orb(i, 1 if after_t[i] > 0 else -1, brk_dir):
+                confirmed += 1
     if n == 0:
         return None
     return {
         'n': n,
         'flip_pct': round(flips / n * 100, 1),
-        'break_pct': round(brks / n * 100, 1),
-        'flip_given_break_pct': round(flip_and_brk / brks * 100, 1) if brks else None,
+        'confirm_given_flip_pct': round(confirmed / flips * 100, 1) if flips else None,
     }
 
 
-def _valid_transition_day(i, rb, ra, brk):
-    return (rb[i] is not None and ra[i] is not None and brk[i] is not None
-            and abs(rb[i]) >= MIN_PRIOR_TREND)
+def _valid_transition_day(i, before_t, after_t):
+    return (before_t[i] is not None and after_t[i] is not None
+            and abs(before_t[i]) >= MIN_PRIOR_TREND)
 
 
-def _map_event_day(dates, d, rb, ra, brk):
-    """Event date → first valid trending session within tolerance, else None."""
+def _map_event_day(dates, d, before_t, after_t):
+    """Event date → first valid trending orb-center within tolerance, else None."""
     i = bisect_left(dates, d)
     while i < len(dates) and (dates[i] - d).days <= EVENT_MAP_TOLERANCE_DAYS:
-        if _valid_transition_day(i, rb, ra, brk):
+        if _valid_transition_day(i, before_t, after_t):
             return i
         i += 1
     return None
@@ -200,9 +213,9 @@ def compute_rule_evidence(conn) -> int:
     swings = _swing_flags(highs, lows)
     swing_prefix = _prefix([1 if s else 0 for s in swings])
 
-    rb, ra, brk = _transition_arrays(dates, closes, highs, lows)
-    base_idx = [i for i in range(len(dates)) if _valid_transition_day(i, rb, ra, brk)]
-    transition_base = _transition_agg(base_idx, rb, ra, brk) or {}
+    before_t, after_t, brk_dir = _transition_arrays(dates, closes, highs, lows)
+    base_idx = [i for i in range(len(dates)) if _valid_transition_day(i, before_t, after_t)]
+    transition_base = _transition_agg(base_idx, before_t, after_t, brk_dir) or {}
 
     vix_dates, vix_closes, _, _, _ = _load_series(cur, VIX_INDEX_ID)
 
@@ -308,14 +321,13 @@ def compute_rule_evidence(conn) -> int:
         for key, event_dates in boundary_sets.items():
             idxs = []
             for d in event_dates:
-                i = _map_event_day(dates, d, rb, ra, brk)
+                i = _map_event_day(dates, d, before_t, after_t)
                 if i is not None:
                     idxs.append(i)
-            agg_t = _transition_agg(idxs, rb, ra, brk)
+            agg_t = _transition_agg(idxs, before_t, after_t, brk_dir)
             if agg_t and agg_t['n'] >= MIN_EVENTS:
                 agg_t['base_flip_pct'] = transition_base.get('flip_pct')
-                agg_t['base_break_pct'] = transition_base.get('break_pct')
-                agg_t['base_flip_given_break_pct'] = transition_base.get('flip_given_break_pct')
+                agg_t['base_confirm_given_flip_pct'] = transition_base.get('confirm_given_flip_pct')
                 transitions[key] = agg_t
 
         cur.execute("""

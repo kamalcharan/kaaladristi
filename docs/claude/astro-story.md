@@ -68,20 +68,23 @@ three-signal confluence redesign, which stays parked.
 
 **5. Boundary-day transitions (added 2026-07-21 — owner: "Mercury is not
 about bearish or bullish… it is about trend change… usually previous day
-high or low break will happen… fusion").** The transition claim lives at
-window BOUNDARIES (station day, ingress day, combust entry/exit), not
-interiors. Per boundary kind, migration 162 + the evidence script store:
-5-session trend-flip rate (prior |trend| ≥ 1%), prev-day H/L break-and-close
-rate, and the fusion conditional flip-given-break — each with base rates.
-**Live prototype result (NIFTY 2008+, base flip 49.8% / break 56.5%):**
-retro-station 55.8/61.5 (n=52) · ingress 55.4/58.7 (n=242) · combust-entry
-55.0/61.0 (n=100) · station-direct 52.8/58.5 (n=53) · combust-exit 51.9/55.7
-(n=106). No single family is decisive, but the tilt is +3..+6 pts in the
-same direction across five independent event families. Product framing:
-**boundary days are WATCH DAYS, not signals — the prev-day H/L break is the
+high or low break will happen… fusion", and "the impact will be ±2 days —
+checking a single day is a mistake").** The transition claim lives at window
+BOUNDARIES (station day, ingress day, combust entry/exit), not interiors —
+and the influence is an **orb**: event ±2 sessions is the transition ZONE.
+Migration 162 + the evidence script store, per boundary kind: the flip rate
+of the 5-session trend AFTER the zone vs before it (prior |trend| ≥ 1%), and
+the fusion confirmation — a prev-day-H/L break-and-close INSIDE the zone in
+the new trend's direction, given a flip — each with base rates.
+**Orb-framed result (NIFTY 2008+, base flip 48.9%):** the single-day
+prototype's +3..+6 pt tilt across five families REDISTRIBUTED under the
+stricter orb test — **sign ingress (the Journey, the owner's most detailed
+almanac table) is the real carrier: 56.4% (n=241, ~2.3σ)**; combust-entry
+(47.7%) and retro-station (50.0%) washed out. Product framing: **boundary
+days are WATCH DAYS, not signals — the break inside the zone is the
 confirmation** ("fusion": astro says when to watch, quant says whether it
-fired). This is also the seed of the future alert layer (VaNi: "today is a
-Mercury station day — watch the previous day's high/low").
+fired). Seed of the future alert layer (VaNi: "Mercury enters Leo tomorrow —
+watch the previous day's high/low over the next two sessions").
 
 ## 4. Surfaces — three acts
 
