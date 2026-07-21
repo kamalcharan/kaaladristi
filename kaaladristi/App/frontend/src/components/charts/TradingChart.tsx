@@ -252,6 +252,18 @@ function patternLines(ev: RuleEvidence): string[] {
   if ((ev.vix_windows ?? 0) >= 10 && ev.vix_up_n != null) {
     lines.push(`VIX rose in ${ev.vix_up_n} of ${ev.vix_windows} recent windows`);
   }
+  // Boundary-day transitions (migration 162): the trend-change story lives at
+  // window edges — station/ingress/entry/exit days. Shown with base rates;
+  // "watch days, not signals" — the prev-day H/L break is the confirmation.
+  const TRANSITION_LABEL: Record<string, string> = { day: 'event days', start: 'entry days', end: 'exit days' };
+  for (const [key, t] of Object.entries(ev.transitions ?? {})) {
+    if (t.n < 10) continue;
+    const flipBase = t.base_flip_pct != null ? ` (usual ≈${t.base_flip_pct.toFixed(0)}%)` : '';
+    const brkBase = t.base_break_pct != null ? ` (usual ≈${t.base_break_pct.toFixed(0)}%)` : '';
+    lines.push(
+      `${TRANSITION_LABEL[key] ?? key} ×${t.n}: trend flipped ${t.flip_pct.toFixed(0)}%${flipBase} · prev-day H/L broke ${t.break_pct.toFixed(0)}%${brkBase}`,
+    );
+  }
   return lines;
 }
 

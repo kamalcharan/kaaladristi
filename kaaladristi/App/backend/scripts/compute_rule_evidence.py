@@ -21,6 +21,17 @@ Base rates per rule use the rule's MEDIAN window length in sessions:
   pos_close_base_pct  P(close[i+L] > close[i]) over the whole series
   turn_base_pct       P(an L-session stretch contains a swing point)
 
+Boundary-day TRANSITION study (migration 162, `transitions` JSONB — owner
+2026-07-21: "Mercury is about trend change... prev day high/low break...
+fusion"): at each window boundary (point rules: the day; range rules: entry
+and exit separately) with a real prior trend (|5-session move| >= 1%):
+  flip_pct              5-session short trend flipped sign
+  break_pct             close beyond previous day's high/low (quant confirm)
+  flip_given_break_pct  the fusion conditional
+each with the matched base rate. Live prototype: Mercury boundary families
+run +3..+6 pts over the 49.8% base flip rate, direction-consistent — watch
+days, not signals.
+
 Wired into the 19:00 IST transit-scoring job (pipeline2/scheduler.py) after
 benchmark confidence; also runnable standalone:
 
@@ -55,26 +66,21 @@ def _load_series(cur, index_id):
         WHERE index_id = %s AND close IS NOT NULL
         ORDER BY trade_date
     """, (index_id,))
-    dates, closes, trs = [], [], []
+    dates, closes, trs, highs, lows = [], [], [], [], []
     for d, c, h, l in cur.fetchall():
+        c = float(c)
         dates.append(d)
-        closes.append(float(c))
-        trs.append((float(h) - float(l)) / float(c) * 100.0
-                   if h is not None and l is not None and float(c) != 0 else None)
-    return dates, closes, trs
+        closes.append(c)
+        highs.append(float(h) if h is not None else c)
+        lows.append(float(l) if l is not None else c)
+        trs.append((float(h) - float(l)) / c * 100.0
+                   if h is not None and l is not None and c != 0 else None)
+    return dates, closes, trs, highs, lows
 
 
-def _swing_flags(closes, dates, cur):
-    """±SWING_WING-session fractal on high/low (falls back to close if OHLC gaps)."""
-    cur.execute("""
-        SELECT trade_date, high, low FROM km_index_eod
-        WHERE index_id = %s AND high IS NOT NULL AND low IS NOT NULL
-        ORDER BY trade_date
-    """, (BENCHMARK_INDEX_ID,))
-    hl = {d: (float(h), float(l)) for d, h, l in cur.fetchall()}
-    highs = [hl.get(d, (c, c))[0] for d, c in zip(dates, closes)]
-    lows = [hl.get(d, (c, c))[1] for d, c in zip(dates, closes)]
-    n = len(dates)
+def _swing_flags(highs, lows):
+    """±SWING_WING-session fractal on high/low."""
+    n = len(highs)
     flags = [False] * n
     w = SWING_WING
     for i in range(w, n - w):
@@ -101,6 +107,73 @@ def _win_indices(dates, start_d, end_d):
     return i0, i1
 
 
+# ── Boundary-day transition study (migration 162 — "fusion") ──────────────────
+# Mercury-type rules mark trend-CHANGE dates, not directional windows (owner
+# 2026-07-21). Measured at window boundaries: did the 5-session short trend
+# flip, and did price close beyond the previous day's high/low (the quant
+# confirmation)? Prior trend must be a real one (|5-session move| >= 1%).
+
+TREND_SESSIONS = 5
+MIN_PRIOR_TREND = 0.01
+EVENT_MAP_TOLERANCE_DAYS = 4
+MIN_EVENTS = 10
+
+
+def _transition_arrays(dates, closes, highs, lows):
+    """Per-session rb (5s trend ending yesterday), ra (5s from yesterday),
+    pd_break (close beyond previous day's range). None where undefined."""
+    n = len(dates)
+    rb = [None] * n
+    ra = [None] * n
+    brk = [None] * n
+    T = TREND_SESSIONS
+    for i in range(n):
+        if i >= T + 1 and closes[i - T - 1] != 0:
+            rb[i] = (closes[i - 1] - closes[i - T - 1]) / closes[i - T - 1]
+        if 1 <= i and i + T < n and closes[i - 1] != 0:
+            ra[i] = (closes[i + T - 1] - closes[i - 1]) / closes[i - 1]
+        if i >= 1:
+            brk[i] = closes[i] > highs[i - 1] or closes[i] < lows[i - 1]
+    return rb, ra, brk
+
+
+def _transition_agg(indices, rb, ra, brk):
+    flips = brks = flip_and_brk = 0
+    n = 0
+    for i in indices:
+        n += 1
+        flip = (rb[i] > 0) != (ra[i] > 0)
+        if flip:
+            flips += 1
+        if brk[i]:
+            brks += 1
+            if flip:
+                flip_and_brk += 1
+    if n == 0:
+        return None
+    return {
+        'n': n,
+        'flip_pct': round(flips / n * 100, 1),
+        'break_pct': round(brks / n * 100, 1),
+        'flip_given_break_pct': round(flip_and_brk / brks * 100, 1) if brks else None,
+    }
+
+
+def _valid_transition_day(i, rb, ra, brk):
+    return (rb[i] is not None and ra[i] is not None and brk[i] is not None
+            and abs(rb[i]) >= MIN_PRIOR_TREND)
+
+
+def _map_event_day(dates, d, rb, ra, brk):
+    """Event date → first valid trending session within tolerance, else None."""
+    i = bisect_left(dates, d)
+    while i < len(dates) and (dates[i] - d).days <= EVENT_MAP_TOLERANCE_DAYS:
+        if _valid_transition_day(i, rb, ra, brk):
+            return i
+        i += 1
+    return None
+
+
 def _base_rates(closes, swing_prefix, length):
     n = len(closes)
     if length < 1 or n <= length + 1:
@@ -119,15 +192,19 @@ def compute_rule_evidence(conn) -> int:
     """Recompute km_rule_evidence for every rule with windows. Returns rows written."""
     cur = conn.cursor()
 
-    dates, closes, trs = _load_series(cur, BENCHMARK_INDEX_ID)
+    dates, closes, trs, highs, lows = _load_series(cur, BENCHMARK_INDEX_ID)
     if len(dates) < 300:
         raise RuntimeError('benchmark series too short — aborting evidence compute')
     tr_prefix = _prefix(trs)
     tr_count_prefix = _prefix([0 if t is None else 1 for t in trs])
-    swings = _swing_flags(closes, dates, cur)
+    swings = _swing_flags(highs, lows)
     swing_prefix = _prefix([1 if s else 0 for s in swings])
 
-    vix_dates, vix_closes, _ = _load_series(cur, VIX_INDEX_ID)
+    rb, ra, brk = _transition_arrays(dates, closes, highs, lows)
+    base_idx = [i for i in range(len(dates)) if _valid_transition_day(i, rb, ra, brk)]
+    transition_base = _transition_agg(base_idx, rb, ra, brk) or {}
+
+    vix_dates, vix_closes, _, _, _ = _load_series(cur, VIX_INDEX_ID)
 
     cur.execute("""
         SELECT t.rule_id, t.start_date, t.end_date, t.direction, t.combustion_type
@@ -219,6 +296,28 @@ def compute_rule_evidence(conn) -> int:
 
         vix_scored = [m for m in measured if m['vix_up'] is not None]
 
+        # Boundary-day transition study: point rules test the day itself;
+        # range rules test entry ('start') and exit ('end') separately —
+        # combust entry vs exit are distinct phenomena.
+        is_point = all(s == e for s, e, _, _ in wins)
+        boundary_sets = {'day': [s for s, e, _, _ in wins]} if is_point else {
+            'start': [s for s, e, _, _ in wins],
+            'end':   [e for s, e, _, _ in wins],
+        }
+        transitions = {}
+        for key, event_dates in boundary_sets.items():
+            idxs = []
+            for d in event_dates:
+                i = _map_event_day(dates, d, rb, ra, brk)
+                if i is not None:
+                    idxs.append(i)
+            agg_t = _transition_agg(idxs, rb, ra, brk)
+            if agg_t and agg_t['n'] >= MIN_EVENTS:
+                agg_t['base_flip_pct'] = transition_base.get('flip_pct')
+                agg_t['base_break_pct'] = transition_base.get('break_pct')
+                agg_t['base_flip_given_break_pct'] = transition_base.get('flip_given_break_pct')
+                transitions[key] = agg_t
+
         cur.execute("""
             INSERT INTO km_rule_evidence
               (rule_id, benchmark_index_id, windows_total, windows_scored,
@@ -226,8 +325,8 @@ def compute_rule_evidence(conn) -> int:
                range_ratio_mean, range_expanded_n,
                pos_close_n, pos_close_base_pct, avg_window_ret,
                turn_n, turn_base_pct, vix_windows, vix_up_n,
-               last20, slices, computed_at)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s, now())
+               last20, slices, transitions, computed_at)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s, now())
             ON CONFLICT (rule_id) DO UPDATE SET
               benchmark_index_id = EXCLUDED.benchmark_index_id,
               windows_total = EXCLUDED.windows_total,
@@ -246,6 +345,7 @@ def compute_rule_evidence(conn) -> int:
               vix_up_n = EXCLUDED.vix_up_n,
               last20 = EXCLUDED.last20,
               slices = EXCLUDED.slices,
+              transitions = EXCLUDED.transitions,
               computed_at = now()
         """, (
             rule_id, BENCHMARK_INDEX_ID, totals.get(rule_id, len(wins)), all_agg['n'],
@@ -259,6 +359,7 @@ def compute_rule_evidence(conn) -> int:
             round(turn_base, 1) if turn_base is not None else None,
             len(vix_scored), sum(1 for m in vix_scored if m['vix_up']),
             json.dumps(last20), json.dumps(slices) if slices else None,
+            json.dumps(transitions) if transitions else None,
         ))
         written += 1
 
