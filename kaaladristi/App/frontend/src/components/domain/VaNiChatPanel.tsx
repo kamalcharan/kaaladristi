@@ -14,9 +14,22 @@ import type { VaNiAskResponse } from '@/hooks/useVaNiChat';
 import { from } from '@/services/postgrest';
 import { displaySymbol } from '@/lib/symbolUtils';
 import { fmtDateLong } from '@/lib/dateUtils';
+import type { VaNiPage } from '@/config/vaniIntents';
 
 const pipelineUrl =
   (import.meta.env.VITE_PIPELINE_API_URL as string) ?? '';
+
+// Human-facing header label per page — the raw enum ('index_vp') is an
+// internal routing key and must never render verbatim (was leaking "vp").
+const PAGE_DISPLAY_LABELS: Partial<Record<VaNiPage, string>> = {
+  dashboard: 'Dashboard',
+  equity_vp: 'Stock Chart',
+  index_vp: 'Index Chart',
+  industry_transition: 'Industry Transition',
+  scanner: 'Scanner',
+  manipulation_watch: 'Manipulation Watch',
+  astro_calendar: 'Astro Calendar',
+};
 
 interface ChatMessage {
   id: string;
@@ -293,9 +306,14 @@ export default function VaNiChatPanel() {
   const lastMessage = messages[messages.length - 1];
   const showFollowUp = lastMessage?.type === 'response' && !askMutation.isPending && remainingIntents.length > 0;
 
+  // The raw page enum ('index_vp', 'astro_calendar', …) is an internal
+  // routing key, not display text — page.replace('_',' ') alone would leak
+  // "vp" straight into the header ("index vp context"). Found while wiring
+  // My Space into this same panel (owner 2026-07-22).
+  const pageLabel = PAGE_DISPLAY_LABELS[page] ?? page.replace(/_/g, ' ');
   const headerSubtext = entity
-    ? `${entity.symbol} · ${page.replace(/_/g, ' ')}`
-    : `${page.replace(/_/g, ' ')} context · ${allIntents.length} questions`;
+    ? `${entity.symbol} · ${pageLabel}`
+    : `${pageLabel} context · ${allIntents.length} questions`;
 
   const IntentButton = ({ intentId, label, variant }: { intentId: string; label: string; variant: 'primary' | 'secondary' }) => (
     <button
