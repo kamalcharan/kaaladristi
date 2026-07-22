@@ -226,8 +226,7 @@ Owner chose to focus the second Almanac type on **Bayer Rules** ("Stock &
 Commodity Traders Hand-Book of Trend Determination", George Bayer, 1940)
 rather than Venus. Checked against `km_astro_rule_master.tags` before
 building — exactly **10 rules tagged `Bayer`**, no hidden extras:
-- **9 have live transit + evidence data**, now built as one Almanac lane
-  each (`services/bayerAlmanac.ts`): R1 (`TRN-MER-MAN-TRN`), R2
+- **9 have live transit + evidence data**: R1 (`TRN-MER-MAN-TRN`), R2
   (`BAY-R02-MAR-MER-SPD`), R3 (`BAY-R03-VEN-RET`), R4A
   (`TRN-MER-RIS-W-BUL`), R6 (`BAY-R06-MAR-1635`), R9 (`TR-MER-CMB-E-BEA`),
   R21 (`CON-MER-VEN-CD-BEA`), R22 (`CON-SUN-MER-TRN`), R27
@@ -238,15 +237,29 @@ building — exactly **10 rules tagged `Bayer`**, no hidden extras:
 - **1 excluded on purpose** — `BAY-R14-VEN-LON` (Venus longitude unit
   cycle): 12,963 windows across the backfill, effectively a continuous
   oscillator rather than a discrete event; sits at its own base rate
-  anyway (52.8% vs 53.0%). Revisit only if a different presentation
-  (e.g. a cycle-phase strip, not a lane) is wanted later.
+  anyway (52.8% vs 53.0%).
 - **~35+ rules remain blocked** (4B, 5, 7, 8, 10-13, 15-20, 23-26, 28-48) —
   `docs/claude/rules-engine.md` is explicit: original 1940 handbook needed,
   do not guess/approximate. Unblock path: owner sourcing the material.
 - **Type-selector dropdown** built alongside (Mercury / Bayer enabled;
   Venus / Panchak / Major Transits shown disabled) — the shell principle
   #4 called for, now backed by a second real type instead of a placeholder.
-**Status: 9-rule Bayer Almanac + type selector BUILT 2026-07-23.** Pending
+
+**Presentation, corrected 2026-07-23** — the first pass gave Bayer a lane
+per rule, copying Mercury's 3-lane timeline. Owner correction: Mercury's
+lanes work because they're complementary faces of ONE continuous story
+(always in some sign, always direct-or-retrograde, always combust-or-not),
+mirroring the owner's own Excel. Bayer's 9 rules are independent trading
+claims about different planets, mostly sparse/rare events with **no shared
+narrative** — a timeline lane per rule implied a comparability that isn't
+there (R14's exclusion, because it didn't fit the lane format at all, was
+already a sign of the mismatch). Rebuilt as a **rule-status grid** instead
+(`services/bayerAlmanac.ts`'s `fetchBayerStatus`, `AlmanacPage.tsx`'s
+`BayerRulesBody`): one card per rule — active today or not, next
+occurrence (horizon-gated), the evidence read, Bayer's own 1940 claim
+explicitly marked unverified. No Live/Month/Year nav for Bayer — a status
+view answers "right now", not a browsable period.
+**Status: Bayer status grid + type selector BUILT 2026-07-23.** Pending
 owner's live check (same as every Almanac surface).
 
 ### ⚠ Known gap (found 2026-07-23, not yet fixed) — Almanac has NO VaNi page context
