@@ -9,7 +9,7 @@ import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { PageHeader } from '@/components/ui'
 import {
-  fetchMercuryAlmanac, PAST_DAYS, FUTURE_DAYS,
+  fetchMercuryAlmanac, PAST_DAYS, FUTURE_DAYS, RULE_JOURNEY,
   type LaneSegment, type AlmanacEvent, type MercuryAlmanac,
 } from '@/services/mercuryAlmanac'
 import { fetchEvidence, type RuleEvidence } from '@/pages/RuleEngine/ruleService'
@@ -33,6 +33,18 @@ const WEEKDAY_ABBR = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 // km_days_of_week.name → JS Date#getDay() index (Sunday = 0).
 const WEEKDAY_INDEX: Record<string, number> = {
   Sunday: 0, Monday: 1, Tuesday: 2, Wednesday: 3, Thursday: 4, Friday: 5, Saturday: 6,
+}
+
+// Panchang-style rashi names — km_rule_transits.sign stores the English name
+// (Aries, Taurus, ...); display the Sanskrit name with English in the
+// tooltip. Same spellings already used in DashboardV3/PlanetRegimeStrip.tsx.
+const ZODIAC_SANSKRIT: Record<string, string> = {
+  Aries: 'Mesha', Taurus: 'Vrishabha', Gemini: 'Mithuna', Cancer: 'Karka',
+  Leo: 'Simha', Virgo: 'Kanya', Libra: 'Tula', Scorpio: 'Vrishchika',
+  Sagittarius: 'Dhanu', Capricorn: 'Makara', Aquarius: 'Kumbha', Pisces: 'Meena',
+}
+function sanskritSign(sign: string): string {
+  return ZODIAC_SANSKRIT[sign] ?? sign
 }
 
 const TOTAL_DAYS = PAST_DAYS + FUTURE_DAYS
@@ -69,7 +81,7 @@ const LANE_COLORS: Record<string, string> = {
 // ── Lane row ──────────────────────────────────────────────────────────────
 
 function TimelineLane({
-  title, segments, rangeStart, cutoffIso, color, onSegmentClick, onLockedClick, lordFor,
+  title, segments, rangeStart, cutoffIso, color, onSegmentClick, onLockedClick, lordFor, sanskrit,
 }: {
   title: string
   segments: LaneSegment[]
@@ -79,6 +91,8 @@ function TimelineLane({
   onSegmentClick: (seg: LaneSegment, e: React.MouseEvent) => void
   onLockedClick: (e: React.MouseEvent) => void
   lordFor?: (iso: string) => string | null
+  /** Journey lane only — segment labels are zodiac signs, shown in Sanskrit (Panchang style), English kept in the tooltip. */
+  sanskrit?: boolean
 }) {
   return (
     <div style={{ display: 'flex', alignItems: 'stretch', minHeight: 40 }}>
@@ -91,13 +105,21 @@ function TimelineLane({
       </div>
       <div style={{ position: 'relative', flex: 1, minWidth: 900, height: 34, borderRadius: 6,
         background: 'color-mix(in srgb, var(--text-primary) 3%, transparent)' }}>
-        {segments.map(seg => {
+        {segments.map((seg, i) => {
           const left = xPct(seg.from, rangeStart)
           const right = xPct(seg.to, rangeStart)
           const width = Math.max(right - left, 0.4)
           const locked = seg.from > cutoffIso
           const lord = lordFor?.(seg.from)
-          const startTitle = lord ? `${seg.label} · ${fmtD(seg.from)} → ${fmtD(seg.to)} · starts on ${lord}'s day` : `${seg.label} · ${fmtD(seg.from)} → ${fmtD(seg.to)}`
+          const displayLabel = sanskrit ? sanskritSign(seg.label) : seg.label
+          const englishSuffix = sanskrit && displayLabel !== seg.label ? ` (${seg.label})` : ''
+          const startTitle = lord
+            ? `${displayLabel}${englishSuffix} · ${fmtD(seg.from)} → ${fmtD(seg.to)} · starts on ${lord}'s day`
+            : `${displayLabel}${englishSuffix} · ${fmtD(seg.from)} → ${fmtD(seg.to)}`
+          // Alternate tint by index so back-to-back same-color segments (the
+          // Journey lane is always fully covered — no true gaps) stay
+          // visually distinct instead of blending into one faint blob.
+          const fillPct = i % 2 === 0 ? 24 : 34
           return (
             <div
               key={`${seg.ruleCode}-${seg.from}`}
@@ -105,11 +127,14 @@ function TimelineLane({
               title={locked ? 'Beyond your plan’s horizon' : startTitle}
               style={{
                 position: 'absolute', left: `${left}%`, width: `${width}%`,
-                top: 4, bottom: 4, borderRadius: 4, cursor: 'pointer',
+                top: 4, bottom: 4, cursor: 'pointer',
+                borderRadius: i === 0 ? '4px 0 0 4px' : i === segments.length - 1 ? '0 4px 4px 0' : 0,
                 background: locked
                   ? 'color-mix(in srgb, var(--text-primary) 6%, transparent)'
-                  : `color-mix(in srgb, ${color} 22%, transparent)`,
-                border: `1px solid ${locked ? 'color-mix(in srgb, var(--text-primary) 10%, transparent)' : `color-mix(in srgb, ${color} 50%, transparent)`}`,
+                  : `color-mix(in srgb, ${color} ${fillPct}%, transparent)`,
+                borderTop: `1px solid ${locked ? 'color-mix(in srgb, var(--text-primary) 10%, transparent)' : `color-mix(in srgb, ${color} 60%, transparent)`}`,
+                borderBottom: `1px solid ${locked ? 'color-mix(in srgb, var(--text-primary) 10%, transparent)' : `color-mix(in srgb, ${color} 60%, transparent)`}`,
+                borderLeft: `1px solid ${locked ? 'color-mix(in srgb, var(--text-primary) 10%, transparent)' : 'color-mix(in srgb, var(--card) 80%, transparent)'}`,
                 display: 'flex', alignItems: 'center', overflow: 'hidden',
                 filter: locked ? 'blur(2px)' : undefined,
                 opacity: locked ? 0.6 : 1,
@@ -121,7 +146,7 @@ function TimelineLane({
                   color: locked ? 'var(--text-muted)' : 'var(--text-primary)',
                   fontFamily: 'var(--font-mono, monospace)',
                 }}>
-                  {locked ? '🔒' : seg.label}
+                  {locked ? '🔒' : displayLabel}
                 </span>
               )}
             </div>
@@ -302,7 +327,7 @@ export default function AlmanacPage() {
                 )}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                   <TimelineLane title="Journey" segments={almanac.journey} rangeStart={rangeStart}
-                    cutoffIso={cutoffIso} color={LANE_COLORS.journey} lordFor={lordFor}
+                    cutoffIso={cutoffIso} color={LANE_COLORS.journey} lordFor={lordFor} sanskrit
                     onSegmentClick={handleSegmentClick} onLockedClick={handleLockedClick} />
                   <TimelineLane title="Motion" segments={almanac.motion} rangeStart={rangeStart}
                     cutoffIso={cutoffIso} color={LANE_COLORS.motion} lordFor={lordFor}
@@ -338,6 +363,10 @@ export default function AlmanacPage() {
               const lord = lordFor(ev.date)
               const weekday = WEEKDAY_ABBR[new Date(`${ev.date}T00:00:00`).getDay()]
               const vix = locked ? null : vixFor(ev.date)
+              const isJourney = ev.ruleCode === RULE_JOURNEY
+              const displayEventLabel = isJourney
+                ? ev.label.replace(/^(enters|exits) (.+)$/, (_m, verb, sign) => `${verb} ${sanskritSign(sign)}`)
+                : ev.label
               return (
                 <div
                   key={`${ev.date}-${ev.ruleCode}-${ev.label}-${i}`}
@@ -355,8 +384,11 @@ export default function AlmanacPage() {
                   <span style={{ width: 14, flexShrink: 0, textAlign: 'center', color: ev.watchDay ? 'var(--accent)' : 'var(--text-muted)' }}>
                     {ev.watchDay ? '◈' : '○'}
                   </span>
-                  <span style={{ flexShrink: 0, fontSize: 12, color: 'var(--text-primary)', minWidth: 140 }}>
-                    ☿ {ev.label}
+                  <span
+                    title={isJourney && displayEventLabel !== ev.label ? `English: ${ev.label}` : undefined}
+                    style={{ flexShrink: 0, fontSize: 12, color: 'var(--text-primary)', minWidth: 140 }}
+                  >
+                    ☿ {displayEventLabel}
                   </span>
                   {lord && (
                     <span
