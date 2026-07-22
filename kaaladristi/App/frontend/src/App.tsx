@@ -15,6 +15,7 @@ import SettingsView from '@/views/SettingsView';
 import InferenceView from '@/views/InferenceView';
 import RuleEvalView from '@/views/RuleEvalView';
 import CalendarView from '@/views/CalendarView';
+import AlmanacPage from '@/views/AlmanacPage';
 import ChartView from '@/views/ChartView';
 import { VisualPulsePage } from '@/components/domain/VisualPulse';
 import { EquityVisualPulsePage } from '@/components/domain/VisualPulse/equity';
@@ -119,6 +120,7 @@ function AppRoutes() {
           <Route path="/inference" element={<InferenceView />} />
           <Route path="/rule-eval" element={<RuleEvalView />} />
           <Route path="/astro-calendar" element={<CalendarView />} />
+          <Route path="/almanac" element={<AlmanacPage />} />
           <Route path="/chart/:type/:id" element={<ChartView />} />
           <Route path="/pulse/:indexId" element={<VisualPulsePage />} />
           <Route path="/pulse/equity/:equityId" element={<EquityVisualPulsePage />} />
