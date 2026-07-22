@@ -10,8 +10,9 @@ import { useQuery } from '@tanstack/react-query'
 import { PageHeader, DristiQLoader } from '@/components/ui'
 import {
   fetchMercuryAlmanac, PAST_DAYS, FUTURE_DAYS, RULE_JOURNEY,
-  type LaneSegment, type AlmanacEvent, type MercuryAlmanac,
+  type LaneSegment, type AlmanacEvent,
 } from '@/services/mercuryAlmanac'
+import { fetchBayerAlmanac, BAYER_RULES } from '@/services/bayerAlmanac'
 import { fetchEvidence, type RuleEvidence } from '@/pages/RuleEngine/ruleService'
 import { buildRuleRead } from '@/services/ruleInterpretation'
 import { useAstroHorizon } from '@/hooks/useAstroHorizon'
@@ -23,6 +24,41 @@ import InlineGate from '@/components/workspace/InlineGate'
 
 const MERCURY_COLOR =
   ASTRO_GROUP_OVERLAYS.find(g => g.tag === 'Mercury')?.color ?? 'var(--accent)'
+const VENUS_COLOR =
+  ASTRO_GROUP_OVERLAYS.find(g => g.tag === 'Venus')?.color ?? 'var(--accent)'
+const MARS_COLOR =
+  ASTRO_GROUP_OVERLAYS.find(g => g.tag === 'Gandanta')?.color ?? 'var(--caution)'
+const BAYER_COLOR =
+  ASTRO_GROUP_OVERLAYS.find(g => g.tag === 'Bayer')?.color ?? 'var(--caution)'
+
+type AlmanacType = 'mercury' | 'bayer'
+/** Type-selector dropdown — Mercury and Bayer have live evidence; the rest
+ * are shown disabled (principle #4: one planet/rule-set at a time, provably
+ * correct before the next). */
+const ALMANAC_TYPES: { id: AlmanacType | string; label: string; enabled: boolean }[] = [
+  { id: 'mercury', label: 'Mercury', enabled: true },
+  { id: 'bayer', label: 'Bayer Rules', enabled: true },
+  { id: 'venus', label: 'Venus', enabled: false },
+  { id: 'panchak', label: 'Panchak', enabled: false },
+  { id: 'major-transit', label: 'Major Transits', enabled: false },
+]
+
+/** Bayer lanes are one-per-rule across several planets — color by the rule's own tag. */
+function bayerLaneColor(ruleCode: string): string {
+  if (ruleCode === 'BAY-R03-VEN-RET') return VENUS_COLOR
+  if (ruleCode === 'BAY-R06-MAR-1635') return MARS_COLOR
+  if (['TRN-MER-MAN-TRN', 'TRN-MER-RIS-W-BUL', 'TR-MER-CMB-E-BEA', 'BAY-R27-MER-SPD'].includes(ruleCode)) return MERCURY_COLOR
+  return BAYER_COLOR
+}
+
+/** Glyph shown next to a rule's label — Mercury's own glyph in Mercury mode; per-planet in Bayer mode. */
+function glyphForRule(ruleCode: string, type: AlmanacType): string {
+  if (type === 'mercury') return '☿'
+  if (ruleCode === 'BAY-R03-VEN-RET') return '♀'
+  if (ruleCode === 'BAY-R06-MAR-1635' || ruleCode === 'BAY-R02-MAR-MER-SPD') return '♂'
+  if (['TRN-MER-MAN-TRN', 'TRN-MER-RIS-W-BUL', 'TR-MER-CMB-E-BEA', 'BAY-R27-MER-SPD'].includes(ruleCode)) return '☿'
+  return '⬡'
+}
 
 // Classical graha glyphs — same set used in Intraday's PlanetsSidebar.
 const PLANET_GLYPH: Record<string, string> = {
@@ -102,9 +138,11 @@ const LANE_COLORS: Record<string, string> = {
 // ── Lane row ──────────────────────────────────────────────────────────────
 
 function TimelineLane({
-  title, segments, rangeStart, totalDays, cutoffIso, color, onSegmentClick, onLockedClick, lordFor, sanskrit,
+  title, titleTooltip, segments, rangeStart, totalDays, cutoffIso, color, onSegmentClick, onLockedClick, lordFor, sanskrit,
 }: {
   title: string
+  /** Full rule name shown on hover — Bayer lanes are terse ("R1") to fit the fixed-width column. */
+  titleTooltip?: string
   segments: LaneSegment[]
   rangeStart: string
   totalDays: number
@@ -118,11 +156,13 @@ function TimelineLane({
 }) {
   return (
     <div style={{ display: 'flex', alignItems: 'stretch', minHeight: 40 }}>
-      <div style={{
-        width: 88, flexShrink: 0, display: 'flex', alignItems: 'center',
-        fontSize: 10, fontFamily: 'var(--font-mono, monospace)',
-        color: 'var(--text-secondary)', letterSpacing: '0.04em', textTransform: 'uppercase',
-      }}>
+      <div
+        title={titleTooltip}
+        style={{
+          width: 88, flexShrink: 0, display: 'flex', alignItems: 'center',
+          fontSize: 10, fontFamily: 'var(--font-mono, monospace)',
+          color: 'var(--text-secondary)', letterSpacing: '0.04em', textTransform: 'uppercase',
+        }}>
         {title}
       </div>
       <div style={{ position: 'relative', flex: 1, minWidth: 900, height: 34, borderRadius: 6,
@@ -185,6 +225,7 @@ export default function AlmanacPage() {
   const { cutoffIso, fullQuarter, days: horizonDays } = useAstroHorizon()
   const [gateOpen, setGateOpen] = useState(false)
   const [explainAt, setExplainAt] = useState<{ x: number; y: number; ruleCode: string; ruleId: number; label: string } | null>(null)
+  const [almanacType, setAlmanacType] = useState<AlmanacType>('mercury')
 
   // ── Live / Month / Year nav — history is unrestricted for every tier
   // (Phase C), so Month/Year can browse any past period freely; the future
@@ -228,12 +269,41 @@ export default function AlmanacPage() {
     setCursorMonth(n.getMonth())
   }
 
-  const { data: almanac, isLoading } = useQuery({
+  const { data: mercuryAlmanac, isLoading: mercuryLoading } = useQuery({
     queryKey: ['mercury-almanac', rangeStart, rangeEnd],
     queryFn: () => fetchMercuryAlmanac(rangeStart, rangeEnd),
     staleTime: 15 * 60_000,
     retry: 1,
+    enabled: almanacType === 'mercury',
   })
+  const { data: bayerAlmanac, isLoading: bayerLoading } = useQuery({
+    queryKey: ['bayer-almanac', rangeStart, rangeEnd],
+    queryFn: () => fetchBayerAlmanac(rangeStart, rangeEnd),
+    staleTime: 15 * 60_000,
+    retry: 1,
+    enabled: almanacType === 'bayer',
+  })
+  const isLoading = almanacType === 'mercury' ? mercuryLoading : bayerLoading
+  const hasData = almanacType === 'mercury' ? !!mercuryAlmanac : !!bayerAlmanac
+  const events = almanacType === 'mercury' ? (mercuryAlmanac?.events ?? []) : (bayerAlmanac?.events ?? [])
+
+  const renderLanes = useMemo(() => {
+    if (almanacType === 'mercury') {
+      if (!mercuryAlmanac) return []
+      return [
+        { title: 'Journey', titleTooltip: undefined, segments: mercuryAlmanac.journey, color: LANE_COLORS.journey, sanskrit: true },
+        { title: 'Motion', titleTooltip: undefined, segments: mercuryAlmanac.motion, color: LANE_COLORS.motion, sanskrit: false },
+        { title: 'Combust', titleTooltip: undefined, segments: mercuryAlmanac.combust, color: LANE_COLORS.combust, sanskrit: false },
+      ]
+    }
+    if (!bayerAlmanac) return []
+    return bayerAlmanac.lanes.map(lane => ({
+      title: lane.title,
+      titleTooltip: BAYER_RULES.find(r => r.code === lane.ruleCode)?.label,
+      segments: lane.segments, color: bayerLaneColor(lane.ruleCode),
+      sanskrit: lane.ruleCode === RULE_JOURNEY,
+    }))
+  }, [almanacType, mercuryAlmanac, bayerAlmanac])
 
   const { data: evidenceRows } = useQuery({
     queryKey: ['rule-engine', 'evidence'],
@@ -306,18 +376,18 @@ export default function AlmanacPage() {
 
   const handleSegmentClick = (seg: LaneSegment, e: React.MouseEvent) => {
     e.stopPropagation()
-    setExplainAt({ x: e.clientX, y: e.clientY, ruleCode: seg.ruleCode, ruleId: seg.ruleId, label: `☿ ${seg.label}` })
+    setExplainAt({ x: e.clientX, y: e.clientY, ruleCode: seg.ruleCode, ruleId: seg.ruleId, label: `${glyphForRule(seg.ruleCode, almanacType)} ${seg.label}` })
   }
   const handleEventClick = (ev: AlmanacEvent, e: React.MouseEvent) => {
     if (ev.date > cutoffIso) { setGateOpen(true); return }
-    setExplainAt({ x: e.clientX, y: e.clientY, ruleCode: ev.ruleCode, ruleId: ev.ruleId, label: `☿ ${ev.label}` })
+    setExplainAt({ x: e.clientX, y: e.clientY, ruleCode: ev.ruleCode, ruleId: ev.ruleId, label: `${glyphForRule(ev.ruleCode, almanacType)} ${ev.label}` })
   }
   const handleLockedClick = (e: React.MouseEvent) => {
     e.stopPropagation()
     setGateOpen(true)
   }
 
-  const visibleEvents = (almanac?.events ?? []).filter(ev => ev.date >= rangeStart && ev.date <= rangeEnd)
+  const visibleEvents = events.filter(ev => ev.date >= rangeStart && ev.date <= rangeEnd)
 
   const rangeLabel = viewMode === 'live'
     ? `${PAST_DAYS}d back → ${horizonDays}d ahead`
@@ -329,10 +399,37 @@ export default function AlmanacPage() {
     <div style={{ padding: '20px 24px 60px', maxWidth: 1400, margin: '0 auto' }}>
       <PageHeader
         eyebrow="Astro Layer"
-        title="Mercury"
-        titleEm="Almanac"
-        lead="Motion · Combust & Rise · Journey"
+        title={almanacType === 'mercury' ? 'Mercury' : 'Bayer'}
+        titleEm={almanacType === 'mercury' ? 'Almanac' : 'Rules'}
+        lead={almanacType === 'mercury'
+          ? 'Motion · Combust & Rise · Journey'
+          : "George Bayer's 1940 trading rules · one lane per rule"}
       />
+
+      {/* Type selector */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 14 }}>
+        <label style={{
+          fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono, monospace)',
+          textTransform: 'uppercase', letterSpacing: '0.06em',
+        }}>
+          Almanac
+        </label>
+        <select
+          value={almanacType}
+          onChange={e => setAlmanacType(e.target.value as AlmanacType)}
+          style={{
+            padding: '4px 10px', borderRadius: 6, fontSize: 12, cursor: 'pointer',
+            fontFamily: 'var(--font-mono, monospace)', background: 'var(--card)',
+            border: '1px solid var(--border)', color: 'var(--text-primary)',
+          }}
+        >
+          {ALMANAC_TYPES.map(t => (
+            <option key={t.id} value={t.id} disabled={!t.enabled}>
+              {t.label}{!t.enabled ? ' (coming soon)' : ''}
+            </option>
+          ))}
+        </select>
+      </div>
 
       {/* Live / Month / Year nav */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '14px 0' }}>
@@ -395,10 +492,10 @@ export default function AlmanacPage() {
       </div>
 
       {isLoading ? (
-        <DristiQLoader message="Reading Mercury's transits…" />
-      ) : !almanac ? (
+        <DristiQLoader message={almanacType === 'mercury' ? "Reading Mercury's transits…" : "Reading Bayer's rules…"} />
+      ) : !hasData ? (
         <div style={{ padding: 60, textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>
-          No Mercury data available.
+          No {almanacType === 'mercury' ? 'Mercury' : 'Bayer'} data available.
         </div>
       ) : (
         <>
@@ -462,15 +559,12 @@ export default function AlmanacPage() {
                   }} />
                 )}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  <TimelineLane title="Journey" segments={almanac.journey} rangeStart={rangeStart} totalDays={totalDays}
-                    cutoffIso={cutoffIso} color={LANE_COLORS.journey} lordFor={lordFor} sanskrit
-                    onSegmentClick={handleSegmentClick} onLockedClick={handleLockedClick} />
-                  <TimelineLane title="Motion" segments={almanac.motion} rangeStart={rangeStart} totalDays={totalDays}
-                    cutoffIso={cutoffIso} color={LANE_COLORS.motion} lordFor={lordFor}
-                    onSegmentClick={handleSegmentClick} onLockedClick={handleLockedClick} />
-                  <TimelineLane title="Combust" segments={almanac.combust} rangeStart={rangeStart} totalDays={totalDays}
-                    cutoffIso={cutoffIso} color={LANE_COLORS.combust} lordFor={lordFor}
-                    onSegmentClick={handleSegmentClick} onLockedClick={handleLockedClick} />
+                  {renderLanes.map(lane => (
+                    <TimelineLane key={lane.title} title={lane.title} titleTooltip={lane.titleTooltip} segments={lane.segments}
+                      rangeStart={rangeStart} totalDays={totalDays} cutoffIso={cutoffIso}
+                      color={lane.color} lordFor={lordFor} sanskrit={lane.sanskrit}
+                      onSegmentClick={handleSegmentClick} onLockedClick={handleLockedClick} />
+                  ))}
                 </div>
               </div>
             </div>
@@ -485,7 +579,7 @@ export default function AlmanacPage() {
               }}>
                 Events · {rangeLabel}
               </div>
-              {mercurySectorNames.length > 0 && (
+              {almanacType === 'mercury' && mercurySectorNames.length > 0 && (
                 <div style={{ marginTop: 4, fontSize: 10.5, color: 'color-mix(in srgb, var(--text-primary) 40%, transparent)' }}>
                   ☿ Mercury-ruled sectors (astrological reference, not a performance claim): {mercurySectorNames.join(' · ')}
                 </div>
@@ -524,17 +618,19 @@ export default function AlmanacPage() {
                     title={isJourney && displayEventLabel !== ev.label ? `English: ${ev.label}` : undefined}
                     style={{ flexShrink: 0, fontSize: 12, color: 'var(--text-primary)', minWidth: 140 }}
                   >
-                    ☿ {displayEventLabel}
+                    {glyphForRule(ev.ruleCode, almanacType)} {displayEventLabel}
                   </span>
-                  <span
-                    title={`${ev.boundary === 'start' ? 'Start' : 'End'} of a ${ev.days}-day window (this date is the ${ev.boundary})`}
-                    style={{
-                      flexShrink: 0, fontSize: 10, fontFamily: 'var(--font-mono, monospace)',
-                      color: 'color-mix(in srgb, var(--text-primary) 35%, transparent)', width: 32,
-                    }}
-                  >
-                    {ev.days}d
-                  </span>
+                  {ev.days > 0 && (
+                    <span
+                      title={`${ev.boundary === 'start' ? 'Start' : 'End'} of a ${ev.days}-day window (this date is the ${ev.boundary})`}
+                      style={{
+                        flexShrink: 0, fontSize: 10, fontFamily: 'var(--font-mono, monospace)',
+                        color: 'color-mix(in srgb, var(--text-primary) 35%, transparent)', width: 32,
+                      }}
+                    >
+                      {ev.days}d
+                    </span>
+                  )}
                   {lord && (
                     <span
                       title={`${weekday}day · ${lord}'s day (vara lord)`}
@@ -597,7 +693,7 @@ export default function AlmanacPage() {
 
       {explainAt && (
         <OverlayExplainPopover
-          tag="Mercury"
+          tag={almanacType === 'mercury' ? 'Mercury' : 'Bayer'}
           focusRuleId={explainAt.ruleId}
           focusRuleLabel={explainAt.label}
           anchorX={explainAt.x}
