@@ -369,13 +369,24 @@ PLANET_IDS = {"Mercury": swe.MERCURY, "Venus": swe.VENUS, "Jupiter": swe.JUPITER
 
 
 def enrich_retro_windows(windows: list, planet: str) -> None:
-    """Attach exact station timestamps to daily-flag retro windows (in place)."""
+    """Attach exact station timestamps to daily-flag retro windows (in place).
+    Also corrects start_date/end_date to the IST calendar date of that precise
+    moment when known — km_planetary_positions is a once-a-day (11:00 IST)
+    classification, so its day-level start/end can land a day off from the
+    true station instant (e.g. a 04:28 IST station is already "direct" by the
+    time that day's snapshot runs, so the daily table's last-retrograde day is
+    the day BEFORE the true station date). Same fix Combust already applies
+    via ist_date_of() — see docs/claude/astro-story.md."""
     pid = PLANET_IDS[planet]
     for w in windows:
         w["start_ts"] = None if w["start_date"] <= BACKFILL_FROM \
             else station_ts(pid, w["start_date"])
         w["end_ts"] = None if w["end_date"] >= BACKFILL_TO \
             else station_ts(pid, w["end_date"] + timedelta(days=1))
+        if w["start_ts"] is not None:
+            w["start_date"] = ist_date_of(w["start_ts"])
+        if w["end_ts"] is not None:
+            w["end_date"] = ist_date_of(w["end_ts"])
 
 
 # ── Rule 0: Plain Mercury Retrograde (motion almanac) ─────────────────────────
@@ -550,6 +561,15 @@ def generate_sign_transits(cur, rule_id: int) -> tuple:
         if i + 1 < len(entries):
             nxt_start, nxt_sign = entries[i + 1][0], entries[i + 1][1]
             end_ts = ingress_for(nxt_start, nxt_sign)
+        # Same daily-classification-vs-precise-timestamp fix as
+        # enrich_retro_windows() — prefer the exact ingress moment's IST date
+        # over the coarse once-a-day snapshot date. entry i's end_ts is the
+        # same ts as entry i+1's start_ts, so both land on the same corrected
+        # date and the Journey lane's segments still abut with no gap.
+        if start_ts is not None:
+            start_d = ist_date_of(start_ts)
+        if end_ts is not None:
+            end_d = ist_date_of(end_ts)
         snap = {"sign": sign_name, "rule_type": "sign_transit"}
         rows.append(make_row(
             rule_id, start_d, end_d, snap,
@@ -578,6 +598,8 @@ def generate_station_direct(cur, rule_id: int) -> tuple:
     rows = []
     for (start_date,) in cur.fetchall():
         ts = station_ts(swe.MERCURY, start_date)
+        if ts is not None:
+            start_date = ist_date_of(ts)
         jd = utc_to_jd(ts) if ts else jd_of(start_date)
         direction = 'east' if signed_sun_offset(jd) > 0 else 'west'
         snap = {"event": "mercury_station_direct", "rule_type": "manifestation"}
