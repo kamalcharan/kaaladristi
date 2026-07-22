@@ -249,7 +249,23 @@ building — exactly **10 rules tagged `Bayer`**, no hidden extras:
 **Status: 9-rule Bayer Almanac + type selector BUILT 2026-07-23.** Pending
 owner's live check (same as every Almanac surface).
 
+### ⚠ Known gap (found 2026-07-23, not yet fixed) — Almanac has NO VaNi page context
+`hooks/usePageContext.ts`'s `PATH_MAP` has zero entry for `/almanac` — same
+bug class as the `/workspace` gap fixed earlier this session (see VaNi
+unification note above). Falls through to `page: 'dashboard'`, so the
+global "Ask VaNi" header button shows generic dashboard questions instead
+of anything Mercury/Bayer-relevant while on the Almanac. Not a trivial
+copy of the `/workspace` fix though — the Almanac now serves TWO types
+(Mercury + Bayer) via one dropdown, and `/astro-calendar` already owns the
+`astro_calendar` VaNiPage for the older `km_astro_calendar` view, so
+`/almanac` needs its own page id (not a straight reuse of `index_vp`'s
+`index.astro_now` intent, which only answers "what's Mercury doing right
+now" — doesn't cover Bayer). Real design work for next session: what
+should "Ask VaNi" answer on `/almanac` when Bayer is selected vs Mercury,
+and does it need a new intent or two, deterministic like `index.astro_now`.
+
 ### Later (explicitly deferred by owner, in this order of likelihood)
+- **Almanac VaNi page context** — the gap above; next thing up.
 - **VaNi narration** of watch days / Morning Brief lines — after A–C.
 - **Bayer handbook sourcing** — unblocks ~35+ parked rules, no other path.
 - **Slow-planet ingress replication check** — only after Mercury is fully in
