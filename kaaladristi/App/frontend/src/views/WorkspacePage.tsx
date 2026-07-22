@@ -12,7 +12,6 @@ import { useAuthStore } from '@/stores/authStore'
 import { useFrameworkStore } from '@/stores/frameworkStore'
 import type { InstrumentRef } from '@/types/framework'
 import WorkspaceCanvas from '@/components/domain/Workspace/WorkspaceCanvas'
-import CorrelationDrawer from '@/components/domain/Workspace/CorrelationDrawer'
 import VaNiMorningBrief from '@/components/workspace/VaNiMorningBrief'
 import PipelineHealthBar from '@/components/workspace/PipelineHealthBar'
 import MarketWeatherCard from '@/components/domain/DashboardV3/MarketWeatherCard'
@@ -51,13 +50,9 @@ function greetingWord(): string {
   return 'Good evening'
 }
 
-function fmtId(id: string): string {
-  return id.replace('astro_rule:', '').replace(/_/g, ' ').toUpperCase()
-}
-
 export default function WorkspacePage() {
   const { profile } = useAuthStore()
-  const { framework, isLoading, error, loadFramework, vaniCorrelations } = useFrameworkStore()
+  const { framework, isLoading, error, loadFramework } = useFrameworkStore()
 
   const icpMode = profile?.icp_mode ?? 'astro'
   const [activeTab, setActiveTab] = useState<ActiveTab>(icpMode === 'technical' ? 'discovery' : 'today')
@@ -187,34 +182,11 @@ export default function WorkspacePage() {
             </div>
           )}
 
-          {/* VaNi confluence pills */}
-          {vaniCorrelations.slice(0, 4).map(c => {
-            const key    = `${c.item_a}:${c.item_b}`
-            const active = c.currently_active
-            return (
-              <button
-                key={key}
-                onClick={() => openDrawer(key)}
-                style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 6,
-                  padding: '3px 10px', borderRadius: 20, fontSize: 11,
-                  background: active ? 'var(--accent-dim)' : 'var(--accent-glow)',
-                  border: `1px solid ${active ? 'var(--caution)' : 'var(--accent-dim)'}`,
-                  color: active ? 'var(--caution)' : 'var(--text-muted)',
-                  fontFamily: 'var(--font-mono,monospace)',
-                  cursor: 'pointer',
-                  transition: 'border-color .2s, color .2s',
-                }}>
-                <span style={{ fontSize: 9, color: 'var(--accent)' }}>✦</span>
-                {fmtId(c.item_a)} ∩ {fmtId(c.item_b)} · {c.n_instances}×
-                {active && (
-                  <span style={{ width: 6, height: 6, borderRadius: '50%',
-                    background: 'var(--caution)', boxShadow: '0 0 5px var(--caution)',
-                    display: 'inline-block' }} />
-                )}
-              </button>
-            )
-          })}
+          {/* VaNi confluence pills — HIDDEN (owner 2026-07-22): the whole
+              confluence engine (pills, island, drawer) is suspended pending
+              a rebuild on the base-rate framework. Not deleted — vaniCorrelations
+              stays populated for non-astro pairs so this can be re-enabled by
+              restoring this block alone if the drawer/island come back first. */}
         </div>
       </div>
 
@@ -401,13 +373,11 @@ export default function WorkspacePage() {
         </div>
       )}
 
-      {/* Correlation Drawer */}
-      <CorrelationDrawer
-        isOpen={drawerOpen}
-        activePairKey={activePairKey}
-        onClose={() => setDrawerOpen(false)}
-        onSelectPair={setActivePairKey}
-      />
+      {/* Correlation Drawer — HIDDEN (owner 2026-07-22): unpolished/broken
+          (known cache-clear bug) and, for astro pairs, showed unvetted
+          directional stats with no base rate. Component + state kept intact
+          (drawerOpen/activePairKey/openDrawer) so this is a one-line revert
+          if the engine is rebuilt. See POA-astro-layer-mercury-launch.md. */}
 
       {/* Beta footer bar — fixed to bottom, session-dismissable, beta tier only */}
       {isBeta && !betaBarDismissed && (
