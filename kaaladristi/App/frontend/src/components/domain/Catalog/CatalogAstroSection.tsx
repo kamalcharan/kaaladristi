@@ -167,7 +167,7 @@ function ruleToCatalogItem(rule: AstroRule): CatalogItem {
     overlay_type: range ? 'astro_zone' : undefined,
     color:        range ? getGroupDefaultColor(getGroupTag(rule)) : undefined,
     data_source:  'rule_engine',
-    applicable_to: ['equity', 'index'],
+    applicable_to: ['index'],   // astro is index-only (owner 2026-07-22)
     tier_required: 'free',
   }
 }

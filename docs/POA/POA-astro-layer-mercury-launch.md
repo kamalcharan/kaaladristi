@@ -26,6 +26,16 @@ Almanac view · free badge · VaNi narration
 
 ### Non-negotiable principles (settled; do not relitigate without owner)
 
+0. **Astro is INDEX-ONLY (owner 2026-07-22).** The evidence is NIFTY-
+   benchmarked; on a stock chart the layer is noise and complication. Equity
+   charts render NO astro bands/ribbon/ticks even when the user's framework
+   carries the overlay (enforced in ChartView + WorkspaceChart; Catalog
+   metadata says `index`). **Interaction model (same date):** hover = the
+   one-second glance line · **clicking the ☿ ribbon = the discoverable full
+   read** ("read ▸" affordance) · right-click a band = unadvertised shortcut
+   to the same popover. The popover is also where VaNi's card self-appears
+   when narration ships — one door for both.
+
 1. **Two-layer contract:** surface = orientation (almanac language, no verdicts);
    basement = evidence (base-rate-anchored, one click deep). Data science is the
    editor, not the interface.

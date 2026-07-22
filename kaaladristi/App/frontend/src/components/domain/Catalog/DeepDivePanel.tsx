@@ -608,7 +608,7 @@ export default function DeepDivePanel({ item, onClose }: DeepDivePanelProps) {
         placement: isRange ? 'chart_overlay' : 'panel_block',
         overlay_type: isRange ? 'astro_zone' : undefined,
         data_source: 'rule_engine',
-        applicable_to: ['equity', 'index'],
+        applicable_to: ['index'],
         tier_required: 'free',
       }
       if (isRange) addOverlay(syntheticItem)

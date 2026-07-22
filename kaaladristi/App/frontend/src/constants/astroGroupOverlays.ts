@@ -39,7 +39,7 @@ export const ASTRO_GROUP_OVERLAYS: AstroGroupOverlay[] = [
     placement: 'chart_overlay',
     overlay_type: 'astro_zone',
     data_source: 'rule_engine',
-    applicable_to: ['equity', 'index'],
+    applicable_to: ['index'],
     tier_required: 'free',
   },
   {
@@ -52,7 +52,7 @@ export const ASTRO_GROUP_OVERLAYS: AstroGroupOverlay[] = [
     placement: 'chart_overlay',
     overlay_type: 'astro_zone',
     data_source: 'rule_engine',
-    applicable_to: ['equity', 'index'],
+    applicable_to: ['index'],
     tier_required: 'free',
   },
   {
@@ -65,7 +65,7 @@ export const ASTRO_GROUP_OVERLAYS: AstroGroupOverlay[] = [
     placement: 'chart_overlay',
     overlay_type: 'astro_zone',
     data_source: 'rule_engine',
-    applicable_to: ['equity', 'index'],
+    applicable_to: ['index'],
     tier_required: 'free',
   },
   {
@@ -78,7 +78,7 @@ export const ASTRO_GROUP_OVERLAYS: AstroGroupOverlay[] = [
     placement: 'chart_overlay',
     overlay_type: 'astro_zone',
     data_source: 'rule_engine',
-    applicable_to: ['equity', 'index'],
+    applicable_to: ['index'],
     tier_required: 'free',
   },
   {
@@ -91,7 +91,7 @@ export const ASTRO_GROUP_OVERLAYS: AstroGroupOverlay[] = [
     placement: 'chart_overlay',
     overlay_type: 'astro_zone',
     data_source: 'rule_engine',
-    applicable_to: ['equity', 'index'],
+    applicable_to: ['index'],
     tier_required: 'free',
   },
   {
@@ -104,7 +104,7 @@ export const ASTRO_GROUP_OVERLAYS: AstroGroupOverlay[] = [
     placement: 'chart_overlay',
     overlay_type: 'astro_zone',
     data_source: 'rule_engine',
-    applicable_to: ['equity', 'index'],
+    applicable_to: ['index'],
     tier_required: 'free',
   },
   {
@@ -117,7 +117,7 @@ export const ASTRO_GROUP_OVERLAYS: AstroGroupOverlay[] = [
     placement: 'chart_overlay',
     overlay_type: 'astro_zone',
     data_source: 'rule_engine',
-    applicable_to: ['equity', 'index'],
+    applicable_to: ['index'],
     tier_required: 'free',
   },
 ]

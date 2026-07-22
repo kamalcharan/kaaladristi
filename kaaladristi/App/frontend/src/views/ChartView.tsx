@@ -170,7 +170,10 @@ export default function ChartView() {
     if (!bookmarksHasLoaded) loadBookmarks();
   }, [bookmarksHasLoaded, loadBookmarks]);
   const frameworkOverlays = framework?.chart_overlays ?? NO_OVERLAYS;
-  const astroBands = useAstroOverlayBands(frameworkOverlays);
+  // Astro is INDEX-ONLY (owner 2026-07-22): the evidence layer is measured
+  // against NIFTY — on a stock chart the bands are noise, so equity charts
+  // get no astro bands/ribbon even when the user's framework has the overlay.
+  const astroBands = useAstroOverlayBands(type === 'index' ? frameworkOverlays : NO_OVERLAYS);
   // Right-click on an astro band → the full deterministic read (same popover
   // My Space uses; was never wired on Study — owner feedback 2026-07-22).
   const [zoneExplain, setZoneExplain] = useState<{
@@ -539,7 +542,7 @@ export default function ChartView() {
           </div>
         ) : (
           <>
-            <MercuryStoryRibbon />
+            {isIndex && <MercuryStoryRibbon />}
             <TradingChart
               data={rows}
               workspaceMode
