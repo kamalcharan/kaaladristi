@@ -92,6 +92,22 @@ questions). Fixed with the existing scanner/equity pattern, not a new one:
 
 ### Legacy (do NOT build on; cleanup candidates)
 
+- **VaNi Confluence engine** (`useConfluenceDetection.tsx`, `CorrelationDrawer`,
+  `/api/correlation/compute`, `WorkspaceActionIsland`'s pill) — owner flagged
+  live (2026-07-22, screenshot): "Combust ∩ Sign-Manifestation · 512× · 91
+  higher / 71 lower" with zero base rate and directional ("strong bullish")
+  language — exactly what principle #2 exists to prevent. Also: the pairing
+  is near-tautological for Mercury (sign is nearly always active, so it
+  overlaps combust almost whenever combust is active — not a real
+  confluence), and `EVENT_OVERLAP` is marked untested + the cache/delete flow
+  broken in the pre-existing known-issues doc. **SUSPENDED for astro pairs**
+  same session: `useVisibleOverlayPairs()` filters out any pair where either
+  item is `astro_`-prefixed; `GroupOverlapMonitor` (astro-only by
+  construction) unmounted from `WorkspaceCanvas.tsx`, function kept
+  importable if ever rebuilt on `km_rule_evidence`'s base-rate framework.
+  Non-astro indicator-pair confluences untouched. The action island degrades
+  gracefully on its own (existing logic) — shows "N rule(s) active", routes
+  the click to Morning Brief instead of an empty drawer.
 - **Pattern Engine** (`km_rule_patterns`, `pattern_study.py`, admin PatternsTab,
   `POA-astro-pattern-engine.md`) — abandoned mid-attempt; clean/peer split
   starves Mercury-scale samples and no base rates stored. Stays admin-only.
