@@ -12,6 +12,7 @@ export type GateContext =
   | 'free_expired'
   | 'walk_mode'
   | 'save_walk_widget'
+  | 'astro_horizon'
 
 interface GateContextConfig {
   icon: React.ReactNode
@@ -46,6 +47,10 @@ const GATE_CONFIGS: Record<GateContext, GateContextConfig> = {
   save_walk_widget: {
     icon: <Activity size={16} />,
     message: "Save Walk widgets to your workspace to re-visit any correlation's history at any time. Available on any paid plan.",
+  },
+  astro_horizon: {
+    icon: <Clock size={16} />,
+    message: 'Free and Quarterly plans see the next 5 days of astro events. Upgrade to Annual to see the full quarter ahead.',
   },
 }
 
