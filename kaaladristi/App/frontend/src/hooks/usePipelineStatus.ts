@@ -43,6 +43,24 @@ function isWeekend(date: Date): boolean {
   return day === 0 || day === 6;
 }
 
+// The daily pipeline enqueues at 18:00 IST (pipeline2/scheduler.py
+// _enqueue_daily_run) — nothing runs for "today" before that. Before 18:00,
+// yesterday's close being the latest data is the CORRECT, complete state,
+// not something "processing" — daysOld===1 all morning/afternoon is normal,
+// not pending. Bug found live 2026-07-22 10:06 IST: the badge said
+// "processing" for 21-Jul at 10 AM even though 21-Jul's own pipeline had
+// completed the previous evening — nothing was actually running.
+const DAILY_RUN_IST_HOUR = 18;
+
+function istHourNow(): number {
+  // en-US hourly format in Asia/Kolkata, independent of the browser's
+  // local timezone.
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Kolkata', hour: 'numeric', hourCycle: 'h23',
+  }).formatToParts(new Date());
+  return Number(parts.find(p => p.type === 'hour')?.value ?? 0);
+}
+
 /** Fetch the most recent trade_date from km_industry_eod.
  *
  *  No explicit indicator-completeness gate — none is needed as long as
@@ -99,8 +117,16 @@ export function usePipelineStatus(): PipelineStatus {
     isCurrent = true;
     isPendingToday = false;
     status = 'current';
+  } else if (daysOld === 1 && !isWeekendToday && istHourNow() < DAILY_RUN_IST_HOUR) {
+    // 1 day old, before 18:00 IST — the LAST SESSION's data is the correct,
+    // complete state; today's pipeline hasn't been enqueued yet, so nothing
+    // is "pending" or "processing". Reads as current, not a freshness warning.
+    isCurrent = true;
+    isPendingToday = false;
+    status = 'current';
   } else if (daysOld === 1 && !isWeekendToday) {
-    // 1 day old on a weekday — today's pipeline pending
+    // 1 day old, 18:00 IST or later — today's pipeline is enqueued/running
+    // and hasn't landed yet. This is the genuine "processing" window.
     isCurrent = false;
     isPendingToday = true;
     status = 'pending';
@@ -109,8 +135,15 @@ export function usePipelineStatus(): PipelineStatus {
     isCurrent = true;
     isPendingToday = false;
     status = 'current';
+  } else if (daysOld <= 3 && now.getDay() === 1 && istHourNow() < DAILY_RUN_IST_HOUR) {
+    // Monday before 18:00 IST: Friday's data (weekend gap) is still the
+    // correct, complete reference — same "not pending until 18:00" rule.
+    isCurrent = true;
+    isPendingToday = false;
+    status = 'current';
   } else if (daysOld <= 3 && now.getDay() === 1) {
-    // Monday: Friday's data is 3 days old but that's normal (weekend gap)
+    // Monday, 18:00 IST or later: Friday's data is 3 days old but that's
+    // normal (weekend gap) — today's Monday pipeline is now the pending one.
     isCurrent = false;
     isPendingToday = true;
     status = 'pending';
