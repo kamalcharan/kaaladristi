@@ -50,7 +50,7 @@ const GATE_CONFIGS: Record<GateContext, GateContextConfig> = {
   },
   astro_horizon: {
     icon: <Clock size={16} />,
-    message: 'Free and Quarterly plans see the next 5 days of astro events. Upgrade to Annual to see the full quarter ahead.',
+    message: 'Free and Quarterly plans see the next 1 week of astro events. Upgrade to Annual to see the full quarter ahead.',
   },
 }
 
