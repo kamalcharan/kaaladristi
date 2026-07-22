@@ -390,6 +390,15 @@ export default function AlmanacPage() {
                   >
                     ☿ {displayEventLabel}
                   </span>
+                  <span
+                    title={`${ev.boundary === 'start' ? 'Start' : 'End'} of a ${ev.days}-day window (this date is the ${ev.boundary})`}
+                    style={{
+                      flexShrink: 0, fontSize: 10, fontFamily: 'var(--font-mono, monospace)',
+                      color: 'color-mix(in srgb, var(--text-primary) 35%, transparent)', width: 32,
+                    }}
+                  >
+                    {ev.days}d
+                  </span>
                   {lord && (
                     <span
                       title={`${weekday}day · ${lord}'s day (vara lord)`}
