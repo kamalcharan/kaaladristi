@@ -7,6 +7,7 @@ import TradingChart from '@/components/charts/TradingChart'
 import { useChartSyncStore } from '@/stores/chartSyncStore'
 import { useAstroOverlayBands } from '@/hooks/useAstroOverlayBands'
 import OverlayExplainPopover from '@/components/domain/VaNi/OverlayExplainPopover'
+import MercuryStoryRibbon from '@/components/domain/MercuryStoryRibbon'
 import type { AstroBand } from '@/services/astroOverlayService'
 import type { InstrumentRef, ChartOverlay } from '@/types/framework'
 
@@ -90,7 +91,10 @@ export default function WorkspaceChart({ instrument, overlays: overlaysProp, sta
   )
 
   return (
-    <div ref={containerRef} style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+    <div ref={containerRef} style={{ display: 'flex', flexDirection: 'column', height: '100%', position: 'relative' }}>
+      {/* Mercury story chip — floats over the chart top (Study's ribbon,
+          overlay-styled: the workspace block has no spare layout row). */}
+      {!isLoading && <MercuryStoryRibbon overlay />}
       {isLoading && (
         <div style={{
           position: 'absolute', top: HEADER_H, left: 0, right: 0,

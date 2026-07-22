@@ -37,6 +37,19 @@ export const TIER_TYPES = [
 export type TierType = typeof TIER_TYPES[number]
 export const PAID_TIERS: TierType[] = ['trial', 'quarterly', 'annual', 'beta']
 
+// ── Astro forward-horizon gating (owner 2026-07-21) ──────────────────────────
+// How many days AHEAD (inclusive of today) a tier can see astro events —
+// story ribbon "next:" tail, chart future pins, almanac future zone.
+// History is unrestricted for every tier. free/quarterly = today + 4 days;
+// annual (and trial/beta, owner-confirmed) = next quarter.
+export const ASTRO_HORIZON_DAYS: Record<TierType, number> = {
+  free: 5,
+  trial: 90,
+  quarterly: 5,
+  annual: 90,
+  beta: 90,
+}
+
 // Added-by types
 export const ADDED_BY_TYPES = ['user', 'vani'] as const
 export type AddedByType = typeof ADDED_BY_TYPES[number]

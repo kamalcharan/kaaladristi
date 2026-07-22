@@ -24,6 +24,7 @@ import { useAuthStore } from '@/stores/authStore';
 import { useBookmarkStore } from '@/stores/bookmarkStore';
 import CatalogDrawer from '@/components/domain/Catalog/CatalogDrawer';
 import { useAstroOverlayBands } from '@/hooks/useAstroOverlayBands';
+import MercuryStoryRibbon from '@/components/domain/MercuryStoryRibbon';
 import type { ChartOverlay } from '@/types/framework';
 
 const NO_OVERLAYS: ChartOverlay[] = [];
@@ -518,18 +519,21 @@ export default function ChartView() {
             </p>
           </div>
         ) : (
-          <TradingChart
-            data={rows}
-            workspaceMode
-            height={isFull ? Math.max(700, window.innerHeight - 120) : 480}
-            highlightDate={activeIndex != null && pulseBars[effectiveIdx] ? pulseBars[effectiveIdx].trade_date : null}
-            overlays={frameworkOverlays}
-            astroBands={astroBands}
-            bigMoneyEvents={bigMoneyChartLines}
-            benchmarkIndexId={isIndex && id ? Number(id) : null}
-            benchmarkName={isIndex ? name : null}
-            storyBubble={storyBubble}
-          />
+          <>
+            <MercuryStoryRibbon />
+            <TradingChart
+              data={rows}
+              workspaceMode
+              height={isFull ? Math.max(700, window.innerHeight - 120) : 480}
+              highlightDate={activeIndex != null && pulseBars[effectiveIdx] ? pulseBars[effectiveIdx].trade_date : null}
+              overlays={frameworkOverlays}
+              astroBands={astroBands}
+              bigMoneyEvents={bigMoneyChartLines}
+              benchmarkIndexId={isIndex && id ? Number(id) : null}
+              benchmarkName={isIndex ? name : null}
+              storyBubble={storyBubble}
+            />
+          </>
         )}
       </div>
       {rows.length > 0 && (
