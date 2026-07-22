@@ -7,7 +7,7 @@
 
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { PageHeader } from '@/components/ui'
+import { PageHeader, DristiQLoader } from '@/components/ui'
 import {
   fetchMercuryAlmanac, PAST_DAYS, FUTURE_DAYS, RULE_JOURNEY,
   type LaneSegment, type AlmanacEvent, type MercuryAlmanac,
@@ -395,9 +395,7 @@ export default function AlmanacPage() {
       </div>
 
       {isLoading ? (
-        <div style={{ padding: 60, textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>
-          Loading…
-        </div>
+        <DristiQLoader message="Reading Mercury's transits…" />
       ) : !almanac ? (
         <div style={{ padding: 60, textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>
           No Mercury data available.
