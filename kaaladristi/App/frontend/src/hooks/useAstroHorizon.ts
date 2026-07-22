@@ -1,14 +1,15 @@
 // Astro forward-horizon gating (POA-astro-layer-mercury-launch §Phase C).
 // Every astro surface that shows FUTURE events clamps through this hook —
-// story ribbon, chart future pins, almanac future zone. History is never
-// gated. free/quarterly see today + 4 days; annual/trial/beta see 90 days.
+// story ribbon, chart future pins, Almanac future zone (Mercury + Bayer).
+// History is never gated. free/quarterly see the next 1 week (today + 6);
+// annual/trial/beta see 90 days.
 
 import { useMemo } from 'react'
 import { useAuthStore } from '@/stores/authStore'
 import { ASTRO_HORIZON_DAYS, type TierType } from '@/constants/frameworkConstants'
 
 export interface AstroHorizon {
-  /** Days visible ahead, inclusive of today (5 = today + 4). */
+  /** Days visible ahead, inclusive of today (7 = today + 6). */
   days: number
   /** Last visible ISO date (YYYY-MM-DD). Events with date > cutoffIso are locked. */
   cutoffIso: string
