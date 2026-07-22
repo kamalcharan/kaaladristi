@@ -370,25 +370,46 @@ export default function AlmanacPage() {
                       {PLANET_GLYPH[lord] ?? ''} {weekday}
                     </span>
                   )}
-                  {locked ? (
-                    <span style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono, monospace)' }}>
-                      🔒 unlock to see this event's history
-                    </span>
-                  ) : read ? (
-                    <span style={{ fontSize: 10.5, color: 'color-mix(in srgb, var(--text-primary) 50%, transparent)' }}>
-                      {read.hover}
-                    </span>
-                  ) : null}
-                  {vix && (
-                    <span
-                      title="India VIX as of this date — reference only, not scored"
-                      style={{
-                        marginLeft: 'auto', flexShrink: 0, fontSize: 10, fontFamily: 'var(--font-mono, monospace)',
-                        color: 'color-mix(in srgb, var(--text-primary) 40%, transparent)', whiteSpace: 'nowrap',
-                      }}
-                    >
-                      VIX {vix.close.toFixed(1)} {vix.trendPct >= 0 ? '▲' : '▼'}{Math.abs(vix.trendPct).toFixed(1)}%
-                    </span>
+                  {(locked || read || vix) && (
+                    <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'stretch', minHeight: 20 }}>
+                      {/* Column 1 — the pattern read (or lock message) */}
+                      <div style={{
+                        width: 260, flexShrink: 0, display: 'flex', alignItems: 'center',
+                        fontSize: 10.5, color: locked ? 'var(--text-muted)' : 'var(--text-secondary)',
+                        fontFamily: locked ? 'var(--font-mono, monospace)' : undefined,
+                      }}>
+                        {locked ? "🔒 unlock to see this event's history" : read ? read.hover : ''}
+                      </div>
+
+                      {/* Visible divider between the two right-side columns */}
+                      {vix && (
+                        <div style={{
+                          width: 1, alignSelf: 'stretch', margin: '0 14px',
+                          background: 'color-mix(in srgb, var(--text-primary) 18%, transparent)',
+                        }} />
+                      )}
+
+                      {/* Column 2 — VIX context, colored by direction */}
+                      {vix && (() => {
+                        const EPS = 0.15
+                        const rising = vix.trendPct > EPS
+                        const falling = vix.trendPct < -EPS
+                        const vixColor = rising ? 'var(--bear)' : falling ? 'var(--bull)' : 'var(--caution)'
+                        const arrow = rising ? '▲' : falling ? '▼' : '▶'
+                        return (
+                          <div
+                            title="India VIX as of this date — reference only, not scored"
+                            style={{
+                              width: 90, flexShrink: 0, display: 'flex', alignItems: 'center',
+                              fontSize: 10, fontFamily: 'var(--font-mono, monospace)', whiteSpace: 'nowrap',
+                              color: vixColor,
+                            }}
+                          >
+                            VIX {vix.close.toFixed(1)} {arrow}{Math.abs(vix.trendPct).toFixed(1)}%
+                          </div>
+                        )
+                      })()}
+                    </div>
                   )}
                 </div>
               )
