@@ -28,6 +28,8 @@ export interface AlmanacEvent {
   ruleId: number
   label: string           // "enters Leo" / "stations direct" / "enters combust"
   watchDay: boolean       // sign-ingress only, per confirmed evidence
+  boundary: 'start' | 'end'  // which edge of the underlying window this date is
+  days: number            // total length of the window (end_date - start_date), same "TOTAL NO. OF DAYS" the owner's sheet carries
 }
 
 export interface MercuryAlmanac {
@@ -45,6 +47,10 @@ interface TransitRow {
   combustion_type: string | null
   start_ts: string | null
   end_ts: string | null
+}
+
+function daysBetweenDates(a: string, b: string): number {
+  return Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86400000)
 }
 
 export async function fetchMercuryAlmanac(): Promise<MercuryAlmanac | null> {
@@ -74,6 +80,7 @@ export async function fetchMercuryAlmanac(): Promise<MercuryAlmanac | null> {
 
   for (const row of transits as TransitRow[]) {
     const code = idToCode.get(row.rule_id)
+    const days = daysBetweenDates(row.start_date, row.end_date)
     if (code === RULE_JOURNEY) {
       if (!row.sign) continue
       almanac.journey.push({
@@ -82,7 +89,7 @@ export async function fetchMercuryAlmanac(): Promise<MercuryAlmanac | null> {
       })
       almanac.events.push({
         date: row.start_date, ruleCode: code, ruleId: row.rule_id,
-        label: `enters ${row.sign}`, watchDay: true,
+        label: `enters ${row.sign}`, watchDay: true, boundary: 'start', days,
       })
     } else if (code === RULE_MOTION) {
       almanac.motion.push({
@@ -91,11 +98,11 @@ export async function fetchMercuryAlmanac(): Promise<MercuryAlmanac | null> {
       })
       almanac.events.push({
         date: row.start_date, ruleCode: code, ruleId: row.rule_id,
-        label: 'turns retrograde', watchDay: false,
+        label: 'turns retrograde', watchDay: false, boundary: 'start', days,
       })
       almanac.events.push({
         date: row.end_date, ruleCode: code, ruleId: row.rule_id,
-        label: 'stations direct', watchDay: false,
+        label: 'stations direct', watchDay: false, boundary: 'end', days,
       })
     } else if (code === RULE_COMBUST) {
       const stage = row.combustion_type ? ` (${row.combustion_type})` : ''
@@ -105,11 +112,11 @@ export async function fetchMercuryAlmanac(): Promise<MercuryAlmanac | null> {
       })
       almanac.events.push({
         date: row.start_date, ruleCode: code, ruleId: row.rule_id,
-        label: 'enters combust', watchDay: false,
+        label: `enters combust${stage}`, watchDay: false, boundary: 'start', days,
       })
       almanac.events.push({
         date: row.end_date, ruleCode: code, ruleId: row.rule_id,
-        label: 'exits combust', watchDay: false,
+        label: `exits combust${stage}`, watchDay: false, boundary: 'end', days,
       })
     }
   }
