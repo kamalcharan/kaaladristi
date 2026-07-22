@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useActiveRuleToday } from '@/hooks/useRuleInsight'
 import RuleInsightCard from './RuleInsightCard'
+import RuleEvidenceRead from '@/components/domain/RuleEvidenceRead'
 
 function fmtDate(iso: string | null | undefined): string {
   if (!iso) return ''
@@ -152,6 +153,11 @@ export default function OverlayExplainPopover({
           </div>
         </div>
       )}
+
+      {/* Deterministic evidence read — ALWAYS renders when evidence exists
+          (owner feedback 2026-07-22: right-click showed "no interpretation"
+          because the only content was the LLM card below, which self-hides). */}
+      <RuleEvidenceRead ruleId={insightRuleId} />
 
       {/* VaNi interpretation of the focused / active / next rule — self-hides when none */}
       <RuleInsightCard ruleId={insightRuleId} className="mt-3" />

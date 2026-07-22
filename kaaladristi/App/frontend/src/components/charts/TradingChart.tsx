@@ -36,7 +36,8 @@ import { fmtDate, fmtDateShort } from '@/lib/dateUtils';
 import { useQuery } from '@tanstack/react-query';
 import { INDICATOR_DEFAULT_COLORS } from '@/constants/catalogItems';
 import { planetColorOfRuleCode } from '@/constants/planetColors';
-import { fetchConfidence, fetchBenchConfidence, fetchEvidence, type RuleEvidence } from '@/pages/RuleEngine/ruleService';
+import { fetchEvidence } from '@/pages/RuleEngine/ruleService';
+import { buildRuleRead } from '@/services/ruleInterpretation';
 import { useAstroHorizon } from '@/hooks/useAstroHorizon';
 
 // ── SMA config — used in legacy (non-workspace) mode ──
@@ -222,54 +223,6 @@ const DEFAULT_OVERLAYS: NonNullable<TradingChartProps['overlays']> = [];
 const DEFAULT_BANDS: NonNullable<TradingChartProps['astroBands']> = [];
 const DEFAULT_BM_EVENTS: NonNullable<TradingChartProps['bigMoneyEvents']> = [];
 
-/** Threshold-driven THE PATTERN copy (astro-story §3). The card may only
- *  claim an effect that clears NIFTY's unconditional base rate by a margin —
- *  otherwise it says so plainly. Honesty is enforced here, not in review. */
-function patternLines(ev: RuleEvidence): string[] {
-  const n = ev.windows_scored;
-  if (!n) return [];
-  const lines: string[] = [];
-  const sinceYr = ev.first_scored ? `'${ev.first_scored.slice(2, 4)}` : '—';
-  let rangeTxt = 'range in line with usual';
-  if (ev.range_ratio_mean != null) {
-    if (ev.range_ratio_mean >= 1.15) rangeTxt = `range ran ${ev.range_ratio_mean.toFixed(2)}× usual`;
-    else if (ev.range_ratio_mean <= 0.85) rangeTxt = `quieter than usual (${ev.range_ratio_mean.toFixed(2)}×)`;
-  }
-  lines.push(`${n} windows since ${sinceYr} · ${rangeTxt}`);
-  if (ev.pos_close_n != null && ev.pos_close_base_pct != null) {
-    const pct = (ev.pos_close_n / n) * 100;
-    lines.push(
-      Math.abs(pct - ev.pos_close_base_pct) < 8
-        ? `closed higher in ${ev.pos_close_n}/${n} — near its usual rate`
-        : `closed higher in ${ev.pos_close_n}/${n} (usual ≈${ev.pos_close_base_pct.toFixed(0)}%)`,
-    );
-  }
-  if (ev.turn_n != null && ev.turn_base_pct != null) {
-    const pct = (ev.turn_n / n) * 100;
-    if (Math.abs(pct - ev.turn_base_pct) >= 10) {
-      lines.push(`a swing high/low formed inside ${pct.toFixed(0)}% (usual ≈${ev.turn_base_pct.toFixed(0)}%)`);
-    }
-  }
-  if ((ev.vix_windows ?? 0) >= 10 && ev.vix_up_n != null) {
-    lines.push(`VIX rose in ${ev.vix_up_n} of ${ev.vix_windows} recent windows`);
-  }
-  // Boundary-day transitions (migration 162, ±2-session orb): the trend-change
-  // story lives at window edges — station/ingress/entry/exit — and the
-  // influence is an orb, not a stamp. Shown with base rates; "watch days, not
-  // signals" — the prev-day H/L break inside the zone is the confirmation.
-  const TRANSITION_LABEL: Record<string, string> = { day: 'event ±2d', start: 'entry ±2d', end: 'exit ±2d' };
-  for (const [key, t] of Object.entries(ev.transitions ?? {})) {
-    if (t.n < 10) continue;
-    const flipBase = t.base_flip_pct != null ? ` (usual ≈${t.base_flip_pct.toFixed(0)}%)` : '';
-    let line = `${TRANSITION_LABEL[key] ?? key} ×${t.n}: trend flipped ${t.flip_pct.toFixed(0)}%${flipBase}`;
-    if (t.confirm_given_flip_pct != null) {
-      line += ` · flips confirmed by a prev-day H/L break ${t.confirm_given_flip_pct.toFixed(0)}%`;
-    }
-    lines.push(line);
-  }
-  return lines;
-}
-
 export default function TradingChart({ data, height = 900, compact = false, workspaceMode = false, highlightDate = null, overlays = DEFAULT_OVERLAYS, astroBands = DEFAULT_BANDS, bigMoneyEvents = DEFAULT_BM_EVENTS, onVisibleRangeChange, onCrosshairMove, onZoneClick, benchmarkIndexId = null, benchmarkName = null, storyBubble = null }: TradingChartProps) {
   const mainRef      = useRef<HTMLDivElement>(null);
   const rsiRef       = useRef<HTMLDivElement>(null);
@@ -322,33 +275,8 @@ export default function TradingChart({ data, height = 900, compact = false, work
     x: number; y: number; bands: AstroBand[]
   } | null>(null);
 
-  // Per-rule aggregate confidence for the tooltip stats line — the shared
-  // ['rule-engine','confidence'] query Catalog + Rules already use.
-  const { data: confRows } = useQuery({
-    queryKey: ['rule-engine', 'confidence'],
-    queryFn: fetchConfidence,
-    enabled: astroBands.length > 0,
-    staleTime: 5 * 60 * 1000,
-    retry: 1,
-  });
-  const confByRule = useMemo(
-    () => new Map((confRows ?? []).map(c => [c.rule_id, c])),
-    [confRows],
-  );
-
-  // Phase 3: the viewed index's own confidence rows (migration 139). Empty
-  // until the table is populated — the tooltip falls back to NIFTY per rule.
-  const { data: benchConfRows } = useQuery({
-    queryKey: ['rule-engine', 'confidence-bench', benchmarkIndexId],
-    queryFn: () => fetchBenchConfidence(benchmarkIndexId!),
-    enabled: astroBands.length > 0 && benchmarkIndexId != null,
-    staleTime: 5 * 60 * 1000,
-    retry: 1,
-  });
-  const benchConfByRule = useMemo(
-    () => new Map((benchConfRows ?? []).map(c => [c.rule_id, c])),
-    [benchConfRows],
-  );
+  // (Confidence queries removed 2026-07-22 — the hover card now carries only
+  // the one-line evidence read; the full read lives on right-click.)
 
   // Observational evidence (migration 161) — base-rate-anchored texture for
   // THE PATTERN line. Copy is threshold-driven: an effect is only claimed
@@ -1388,7 +1316,7 @@ export default function TradingChart({ data, height = 900, compact = false, work
           }}
         />
         {bandTooltip && bandTooltip.bands.length > 0 && (() => {
-          const MAX_SHOWN = 4;
+          const MAX_SHOWN = 3;
           const shown  = bandTooltip.bands.slice(0, MAX_SHOWN);
           const extra  = bandTooltip.bands.length - shown.length;
           const first  = shown[0];
@@ -1399,7 +1327,9 @@ export default function TradingChart({ data, height = 900, compact = false, work
             <div style={{
               position: 'absolute',
               left: bandTooltip.x + 14,
-              top:  Math.max(8, bandTooltip.y - 60),
+              // Clamp so the card never runs off the bottom of the pane
+              // (owner feedback 2026-07-22: "all data is not visible").
+              top: `min(${Math.max(8, bandTooltip.y - 60)}px, calc(100% - 220px))`,
               zIndex: 20,
               background: 'rgba(13,17,23,0.95)',
               border: `1px solid ${accent(first)}55`,
@@ -1413,13 +1343,6 @@ export default function TradingChart({ data, height = 900, compact = false, work
             }}>
               {shown.map((b, i) => {
                 const c    = accent(b);
-                // Phase 3: prefer the viewed index's own confidence row;
-                // NIFTY 50 aggregate is the fallback — label follows the data.
-                const niftyConf = confByRule.get(b.ruleId);
-                const benchConf = benchmarkIndexId != null ? benchConfByRule.get(b.ruleId) : undefined;
-                const useBench  = benchConf != null && (benchConf.total_occurrences ?? 0) > 0;
-                const conf      = useBench ? benchConf : niftyConf;
-                const benchLabel = useBench ? (benchmarkName ?? 'this index') : 'NIFTY 50';
                 return (
                   <div key={`${b.ruleCode}-${b.from}-${i}`} style={i > 0 ? {
                     marginTop: 7, paddingTop: 7, borderTop: '1px solid color-mix(in srgb, var(--text-primary) 8%, transparent)',
@@ -1472,62 +1395,24 @@ export default function TradingChart({ data, height = 900, compact = false, work
                         </div>
                       );
                     })()}
-                    {/* THE PATTERN — base-rate-anchored texture (migration 161).
-                        Copy is threshold-driven in patternLines(): an effect is
-                        claimed only when it clears NIFTY's unconditional rate;
-                        otherwise the card says "in line with usual" — the null
-                        result is part of the product's honesty contract. */}
+                    {/* One glanceable line — the full read lives on right-click
+                        (owner feedback 2026-07-22: hover was an unreadable
+                        stat dump). */}
                     {(() => {
                       const ev = evidenceByRule.get(b.ruleId);
-                      const lines = ev ? patternLines(ev) : [];
-                      if (lines.length === 0) return null;
+                      if (!ev) return null;
+                      const read = buildRuleRead(ev);
                       return (
-                        <div style={{ marginTop: 3, fontSize: 10, display: 'flex', gap: 5, alignItems: 'baseline' }}>
-                          <span style={{ fontSize: 8, letterSpacing: '0.1em', color: 'color-mix(in srgb, var(--text-primary) 35%, transparent)', fontFamily: 'var(--font-mono, monospace)', flexShrink: 0 }}>
-                            THE PATTERN
+                        <div style={{ marginTop: 4, fontSize: 10, display: 'flex', gap: 5, alignItems: 'baseline' }}>
+                          <span style={{ flexShrink: 0, color: read.role === 'watch' ? 'var(--accent)' : 'color-mix(in srgb, var(--text-primary) 40%, transparent)' }}>
+                            {read.role === 'watch' ? '\u25c8' : '\u25cb'}
                           </span>
-                          <div style={{ fontFamily: 'var(--font-mono, monospace)', color: 'color-mix(in srgb, var(--text-primary) 60%, transparent)' }}>
-                            <div>NIFTY 50 · {lines[0]}</div>
-                            {lines.slice(1).map((l, j) => <div key={j}>{l}</div>)}
-                          </div>
+                          <span style={{ color: 'color-mix(in srgb, var(--text-primary) 62%, transparent)' }}>
+                            {read.hover}
+                          </span>
                         </div>
                       );
                     })()}
-                    {/* Expert-inference track record — kept only for rules with a
-                        curated hypothesis; base-bias grading is retired from the
-                        user surface ("moved as expected" was a verdict, astro-story §2). */}
-                    {conf?.confidence_score != null && (conf.total_occurrences ?? 0) > 0
-                      && conf.hypothesis_source === 'inference' && (
-                      <div style={{ marginTop: 3, fontSize: 10, display: 'flex', gap: 5, alignItems: 'baseline' }}>
-                        <span style={{ fontSize: 8, letterSpacing: '0.1em', color: 'color-mix(in srgb, var(--text-primary) 35%, transparent)', fontFamily: 'var(--font-mono, monospace)' }}>
-                          INFERENCE
-                        </span>
-                        <span style={{ fontFamily: 'var(--font-mono, monospace)', color: 'color-mix(in srgb, var(--text-primary) 60%, transparent)' }}>
-                          {benchLabel} matched it in {conf.confidence_score.toFixed(0)}% of {conf.total_occurrences} windows
-                          {conf.avg_return_matched != null && (
-                            <> · avg {conf.avg_return_matched >= 0 ? '+' : ''}{conf.avg_return_matched.toFixed(1)}% when it did</>
-                          )}
-                          {conf.hypothesis_impact && (
-                            <span style={{ color: 'color-mix(in srgb, var(--text-primary) 40%, transparent)' }}>
-                              {' '}({conf.hypothesis_impact.replace(/_/g, ' ')})
-                            </span>
-                          )}
-                        </span>
-                      </div>
-                    )}
-                    {/* Non-directional inference (volatile/turning/…): no
-                        win-rate exists by design — say so instead of silence. */}
-                    {conf != null && conf.hypothesis_source === 'inference'
-                      && (conf.confidence_score == null || (conf.total_occurrences ?? 0) === 0) && (
-                      <div style={{ marginTop: 3, fontSize: 10, display: 'flex', gap: 5, alignItems: 'baseline' }}>
-                        <span style={{ fontSize: 8, letterSpacing: '0.1em', color: 'color-mix(in srgb, var(--text-primary) 35%, transparent)', fontFamily: 'var(--font-mono, monospace)' }}>
-                          RULE OVERALL
-                        </span>
-                        <span style={{ fontFamily: 'var(--font-mono, monospace)', color: 'color-mix(in srgb, var(--text-primary) 50%, transparent)' }}>
-                          inference{conf.hypothesis_impact ? ` (${conf.hypothesis_impact.replace(/_/g, ' ')})` : ''} makes no directional claim — see Patterns for how it plays out
-                        </span>
-                      </div>
-                    )}
                   </div>
                 );
               })}
@@ -1536,6 +1421,9 @@ export default function TradingChart({ data, height = 900, compact = false, work
                   +{extra} more event{extra > 1 ? 's' : ''} here
                 </div>
               )}
+              <div style={{ marginTop: 6, fontSize: 9, fontFamily: 'var(--font-mono, monospace)', color: 'color-mix(in srgb, var(--text-primary) 35%, transparent)' }}>
+                right-click for the full read
+              </div>
             </div>
           );
         })()}

@@ -25,6 +25,8 @@ import { useBookmarkStore } from '@/stores/bookmarkStore';
 import CatalogDrawer from '@/components/domain/Catalog/CatalogDrawer';
 import { useAstroOverlayBands } from '@/hooks/useAstroOverlayBands';
 import MercuryStoryRibbon from '@/components/domain/MercuryStoryRibbon';
+import OverlayExplainPopover from '@/components/domain/VaNi/OverlayExplainPopover';
+import type { AstroBand } from '@/services/astroOverlayService';
 import type { ChartOverlay } from '@/types/framework';
 
 const NO_OVERLAYS: ChartOverlay[] = [];
@@ -169,6 +171,23 @@ export default function ChartView() {
   }, [bookmarksHasLoaded, loadBookmarks]);
   const frameworkOverlays = framework?.chart_overlays ?? NO_OVERLAYS;
   const astroBands = useAstroOverlayBands(frameworkOverlays);
+  // Right-click on an astro band → the full deterministic read (same popover
+  // My Space uses; was never wired on Study — owner feedback 2026-07-22).
+  const [zoneExplain, setZoneExplain] = useState<{
+    tag: string; ruleId: number; ruleLabel: string; x: number; y: number;
+    coincident?: { ruleId: number; label: string }[];
+  } | null>(null);
+  const handleZoneClick = (band: AstroBand, clientX: number, clientY: number, coincident?: AstroBand[]) => {
+    const others = new Map<number, string>();
+    for (const b of coincident ?? []) {
+      if (b.ruleId !== band.ruleId) others.set(b.ruleId, b.displayName);
+    }
+    setZoneExplain({
+      tag: band.groupTag, ruleId: band.ruleId, ruleLabel: band.displayName,
+      x: clientX, y: clientY,
+      coincident: [...others.entries()].map(([ruleId, label]) => ({ ruleId, label })),
+    });
+  };
   const [overlayDrawerOpen, setOverlayDrawerOpen] = useState(false);
   // Study reorg (2026-07-12): decision-band prose collapsed by default;
   // Member-Of pills demoted to a closed accordion.
@@ -532,7 +551,19 @@ export default function ChartView() {
               benchmarkIndexId={isIndex && id ? Number(id) : null}
               benchmarkName={isIndex ? name : null}
               storyBubble={storyBubble}
+              onZoneClick={handleZoneClick}
             />
+            {zoneExplain && (
+              <OverlayExplainPopover
+                tag={zoneExplain.tag}
+                focusRuleId={zoneExplain.ruleId}
+                focusRuleLabel={zoneExplain.ruleLabel}
+                coincident={zoneExplain.coincident}
+                anchorX={zoneExplain.x}
+                anchorY={zoneExplain.y}
+                onClose={() => setZoneExplain(null)}
+              />
+            )}
           </>
         )}
       </div>
