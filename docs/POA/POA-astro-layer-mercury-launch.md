@@ -63,6 +63,33 @@ Almanac view · free badge · VaNi narration
 | Combust | **ORIENTATION** — you're in the glare zone | all measures in line with base; windows match owner almanac to the minute |
 | Retrograde, conjunctions, stations | orientation | in line with base on coarse measures |
 
+### VaNi unification (owner 2026-07-22, built same session)
+Owner correction to the interaction model: local (ribbon) and global
+("Ask VaNi" header button) must show and answer the SAME intents — not two
+disconnected systems. Investigation found the chart page had ZERO VaNi
+wiring (no page registered, global button fell back to dashboard's generic
+questions). Fixed with the existing scanner/equity pattern, not a new one:
+- New intent `index.astro_now` (`page="index_vp"`, already the registered
+  page for `/chart/index/:id` per `usePageContext.ts` — just never had
+  intents) in both `lib/vani_intents.py` and `config/vaniIntents.ts`.
+- **Deterministic, no LLM** (`lib/astro_narration.py`) — owner directive:
+  "we don't need LLM everywhere... insert into cache... LLM won't be
+  invoked." Computed server-side, written straight into the existing
+  persistent `km_vani_cache` (same mechanism `scanner.explain_preset` /
+  `equity.*` already use) — the LLM branch in `vani_ask()` is never reached
+  for this intent.
+  The ribbon's click now calls `useVaNiStore().openWithIntent('index.astro_now')`
+  — the SAME store the header button reads — instead of a bespoke popover.
+  One system.
+- **Bug caught during this build** (see astro-story.md correction,
+  2026-07-22): the original ribbon/ticks marked motion boundaries as watch
+  days without checking their own evidence. Fixed in the same pass.
+- **Not unified**: the right-click per-band deep-dive (`OverlayExplainPopover`
+  + `RuleEvidenceRead`, deterministic, client-side) stays separate — it
+  answers a different question ("why does THIS specific band matter" vs
+  "what's Mercury doing right now"). Revisit if the owner wants it folded
+  into the same VaNi intent system too.
+
 ### Legacy (do NOT build on; cleanup candidates)
 
 - **Pattern Engine** (`km_rule_patterns`, `pattern_study.py`, admin PatternsTab,

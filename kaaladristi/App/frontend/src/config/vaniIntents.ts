@@ -87,6 +87,13 @@ export const VANI_INTENTS: Record<string, VaNiIntentDef> = {
     icon: 'list',
     displayOrder: 2,
   },
+  // ── Index Chart — Astro (deterministic, no LLM — astro_narration.py) ─────
+  'index.astro_now': {
+    label: "What's Mercury doing right now?",
+    page: 'index_vp',
+    icon: 'moon',
+    displayOrder: 1,
+  },
   // ── Astro Calendar ────────────────────────────────────────────────────────
   'astro_calendar.month_outlook': {
     label: "What's the planetary outlook this month?",

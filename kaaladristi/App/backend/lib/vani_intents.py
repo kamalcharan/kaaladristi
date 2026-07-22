@@ -618,6 +618,32 @@ INTENTS: dict[str, VaNiIntent] = {
     ),
 
     # ══════════════════════════════════════════════════════════════════════════
+    # Index Chart Intents — Astro (deterministic, no LLM in practice)
+    # Owner directive (2026-07-22): both the header "Ask VaNi" button and any
+    # on-page trigger read from THIS SAME registry entry — one coordinated
+    # system, not two. The response is computed in astro_narration.py and
+    # written straight into km_vani_cache; the system_prompt below exists
+    # only so this entry is a valid VaNiIntent tuple — vani_ask() returns
+    # before ever reaching it (see the 'index' prefix branch).
+    # ══════════════════════════════════════════════════════════════════════════
+
+    # ── 22. Mercury Readiness ─────────────────────────────────────────────────
+    "index.astro_now": VaNiIntent(
+        page="index_vp",
+        label="What's Mercury doing right now?",
+        required_context=["date"],
+        system_prompt=(
+            _VANI_IDENTITY
+            + "(Unreachable fallback — index.astro_now is answered "
+            "deterministically by astro_narration.py, never by this prompt.)"
+            + _VANI_RULES
+        ),
+        max_tokens=250,
+        cache_ttl_hours=6,
+        complexity="low",
+    ),
+
+    # ══════════════════════════════════════════════════════════════════════════
     # Equity Intents (parameterized — entity_id injected at runtime)
     # These appear on ANY page when a stock is selected via the VaNi trigger.
     # ══════════════════════════════════════════════════════════════════════════
