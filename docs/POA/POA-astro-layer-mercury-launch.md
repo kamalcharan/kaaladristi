@@ -198,17 +198,27 @@ so the UI shape is ready without building a second planet's evidence yet.
 How far ahead a user can see astro events (ribbon "next:" tail + calendar
 future zone + any upcoming-window surface):
 
-| Tier | Forward horizon (owner-confirmed 2026-07-21) |
+| Tier | Forward horizon (owner-confirmed 2026-07-21; widened 2026-07-23) |
 |---|---|
-| `free` | next 5 days (today + 4) |
-| `quarterly` | next 5 days (today + 4) |
+| `free` | next 1 week (today + 6) |
+| `quarterly` | next 1 week (today + 6) |
 | `annual` | next 90 days |
 | `trial` / `beta` | same as annual (90 days) |
 
 - **History is unrestricted for every tier** (owner-confirmed).
+- **Feature access itself is NOT gated** — every astro overlay stays
+  `tier_required: 'free'` (`astroGroupOverlays.ts`) and `/almanac` has no
+  tier check, just login. Confirmed 2026-07-23 as the intended model when
+  the owner asked to "gate the pricing into the astro things": pricing
+  controls the forward-looking WINDOW, not whether the feature is visible
+  at all. If an all-or-nothing paid gate is ever wanted instead, that's a
+  `tier_required: 'paid'` flip on the overlays + a new InlineGate context
+  for `/almanac` — not built, would be a real product-scope decision.
 - One constant map `ASTRO_HORIZON_DAYS` in `frameworkConstants.ts`; a single
   `useAstroHorizon()` hook reads profile tier → days; every astro surface
-  clamps through it.
+  clamps through it — including Bayer's status grid + per-rule timeline,
+  added 2026-07-23, no extra plumbing needed since both flow through the
+  same shared `cutoffIso`.
 - Launch enforcement is client-side (consistent with every existing tier gate
   incl. InlineGate); noted caveat: PostgREST reads of `km_rule_transits` are
   not horizon-restricted server-side — a server-enforced `/api/almanac`
