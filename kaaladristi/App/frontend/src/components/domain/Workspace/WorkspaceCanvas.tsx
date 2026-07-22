@@ -15,7 +15,7 @@ import OverlayExplainPopover from '@/components/domain/VaNi/OverlayExplainPopove
 import WorkspaceBlock from './WorkspaceBlock'
 import WorkspaceActionIsland from './WorkspaceActionIsland'
 import CatalogDrawer from '@/components/domain/Catalog/CatalogDrawer'
-import { useVisibleOverlayPairs, ConfluencePairMonitor, GroupOverlapMonitor } from '@/hooks/useConfluenceDetection'
+import { useVisibleOverlayPairs, ConfluencePairMonitor } from '@/hooks/useConfluenceDetection'
 import { effectiveDotColor } from './overlayColors'
 import IndexDropdown from '@/components/domain/IndexDropdown'
 
@@ -771,15 +771,13 @@ export default function WorkspaceCanvas({ framework, onOpenDrawer, onMorningBrie
         <ConfluencePairMonitor key={`${a}:${b}`} itemA={a} itemB={b} />
       ))}
 
-      {/* Intra-group overlap monitors (Overlap Visibility Phases 3-4) — one
-          per visible GROUP overlay: pairs of the group's rules active today
-          surface on the island as their own confluence chips. */}
-      {(framework.chart_overlays ?? [])
-        .filter(o => o.visible && o.catalog_item_id.startsWith('astro_group:'))
-        .map(o => {
-          const tag = o.catalog_item_id.slice('astro_group:'.length)
-          return <GroupOverlapMonitor key={o.catalog_item_id} tag={tag} />
-        })}
+      {/* Intra-group overlap monitors — SUSPENDED (owner 2026-07-22).
+          This is astro-only by construction (astro_group: tags), so it's
+          the same "no base rate, directional language, near-constant firing"
+          problem as the pair monitor above, at group scale (up to 6 pairs
+          per group). Not deleted — GroupOverlapMonitor stays importable if
+          this confluence engine is ever rebuilt on km_rule_evidence's
+          base-rate framework instead. */}
     </div>
   )
 }

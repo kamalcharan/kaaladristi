@@ -33,6 +33,14 @@ export function useVisibleOverlayPairs(): Array<[string, string]> {
     for (let i = 0; i < ids.length; i++) {
       for (let j = i + 1; j < ids.length; j++) {
         if (ids[i] === ids[j]) continue
+        // Astro pairs suppressed (owner 2026-07-22): this engine has no base
+        // rate and uses directional ("strong bullish/bearish") language —
+        // exactly what astro-story.md principle #2 exists to prevent. It
+        // also fires near-constantly for Mercury (e.g. Combust ∩ Sign is
+        // overlapping almost whenever combust is active — not a real
+        // confluence). Leave it live for non-astro indicator pairs, which
+        // this suppression doesn't touch.
+        if (ids[i].startsWith('astro_') || ids[j].startsWith('astro_')) continue
         pairs.push([ids[i], ids[j]])
       }
     }
