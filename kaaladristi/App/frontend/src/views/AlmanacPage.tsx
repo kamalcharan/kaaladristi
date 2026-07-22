@@ -1,9 +1,18 @@
-// Mercury Almanac — the owner's Excel (Motion / Combust & Rise / Journey)
-// productized as a three-lane timeline + event list. POA-astro-layer §Phase B.
+// Almanac — two very different bodies sharing one shell (type selector,
+// evidence lookup, VaNi popover, tier gate). POA-astro-layer §Phase B/D.
 // Index-only astro layer (principle #0) — this page IS the astro layer, no
-// per-instrument gating needed. Reuses the exact evidence/copy/popover
-// infrastructure the chart tooltip and ribbon already use — no new stats
-// engine, no new honesty rules; this is a new SURFACE over the same numbers.
+// per-instrument gating needed.
+//
+// Mercury: three-lane timeline mirroring the owner's Excel (Motion/Combust/
+// Journey are complementary faces of ONE continuous story — Mercury is
+// always in some sign, always direct-or-retrograde, always combust-or-not).
+//
+// Bayer Rules: a rule-STATUS grid, not a timeline. Bayer's 9 rules are
+// independent trading claims about different planets, mostly sparse/rare
+// events with no shared narrative connecting them (owner correction,
+// 2026-07-23 — the original lane-per-rule build forced Mercury's continuous-
+// story metaphor onto content that isn't one). Each card: active today?,
+// next occurrence, the evidence read, Bayer's own 1940 claim (unverified).
 
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
@@ -12,7 +21,7 @@ import {
   fetchMercuryAlmanac, PAST_DAYS, FUTURE_DAYS, RULE_JOURNEY,
   type LaneSegment, type AlmanacEvent,
 } from '@/services/mercuryAlmanac'
-import { fetchBayerAlmanac, BAYER_RULES } from '@/services/bayerAlmanac'
+import { fetchBayerStatus } from '@/services/bayerAlmanac'
 import { fetchEvidence, type RuleEvidence } from '@/pages/RuleEngine/ruleService'
 import { buildRuleRead } from '@/services/ruleInterpretation'
 import { useAstroHorizon } from '@/hooks/useAstroHorizon'
@@ -43,17 +52,14 @@ const ALMANAC_TYPES: { id: AlmanacType | string; label: string; enabled: boolean
   { id: 'major-transit', label: 'Major Transits', enabled: false },
 ]
 
-/** Bayer lanes are one-per-rule across several planets — color by the rule's own tag. */
-function bayerLaneColor(ruleCode: string): string {
+/** Bayer rules span several planets — color/glyph by the rule's own tag. */
+function bayerRuleColor(ruleCode: string): string {
   if (ruleCode === 'BAY-R03-VEN-RET') return VENUS_COLOR
   if (ruleCode === 'BAY-R06-MAR-1635') return MARS_COLOR
   if (['TRN-MER-MAN-TRN', 'TRN-MER-RIS-W-BUL', 'TR-MER-CMB-E-BEA', 'BAY-R27-MER-SPD'].includes(ruleCode)) return MERCURY_COLOR
   return BAYER_COLOR
 }
-
-/** Glyph shown next to a rule's label — Mercury's own glyph in Mercury mode; per-planet in Bayer mode. */
-function glyphForRule(ruleCode: string, type: AlmanacType): string {
-  if (type === 'mercury') return '☿'
+function bayerGlyph(ruleCode: string): string {
   if (ruleCode === 'BAY-R03-VEN-RET') return '♀'
   if (ruleCode === 'BAY-R06-MAR-1635' || ruleCode === 'BAY-R02-MAR-MER-SPD') return '♂'
   if (['TRN-MER-MAN-TRN', 'TRN-MER-RIS-W-BUL', 'TR-MER-CMB-E-BEA', 'BAY-R27-MER-SPD'].includes(ruleCode)) return '☿'
@@ -99,6 +105,10 @@ function endIso(): string {
   return new Date(Date.now() + FUTURE_DAYS * DAY_MS).toISOString().slice(0, 10)
 }
 
+function addDays(iso: string, days: number): string {
+  return new Date(Date.parse(`${iso}T00:00:00Z`) + days * DAY_MS).toISOString().slice(0, 10)
+}
+
 function pad2(n: number): string {
   return String(n).padStart(2, '0')
 }
@@ -135,14 +145,34 @@ const LANE_COLORS: Record<string, string> = {
   combust: 'var(--caution)',
 }
 
-// ── Lane row ──────────────────────────────────────────────────────────────
+// ── Day-lord (vara) lookup — shared by both bodies ─────────────────────────
+
+function useLordByWeekday() {
+  const { data: planets } = usePlanets()
+  const { data: daysOfWeek } = useDaysOfWeek()
+  const { data: dayLords } = useDayLords()
+  return useMemo(() => {
+    const map: Record<number, string> = {}
+    if (!planets || !daysOfWeek || !dayLords) return map
+    const planetName = new Map(planets.map(p => [p.id, p.name]))
+    const dayName = new Map(daysOfWeek.map(d => [d.id, d.name]))
+    for (const dl of dayLords) {
+      if (!dl.is_primary) continue
+      const name = dayName.get(dl.day_id)
+      const idx = name ? WEEKDAY_INDEX[name] : undefined
+      const planet = planetName.get(dl.planet_id)
+      if (idx !== undefined && planet) map[idx] = planet
+    }
+    return map
+  }, [planets, daysOfWeek, dayLords])
+}
+
+// ── Lane row (Mercury only) ─────────────────────────────────────────────────
 
 function TimelineLane({
-  title, titleTooltip, segments, rangeStart, totalDays, cutoffIso, color, onSegmentClick, onLockedClick, lordFor, sanskrit,
+  title, segments, rangeStart, totalDays, cutoffIso, color, onSegmentClick, onLockedClick, lordFor, sanskrit,
 }: {
   title: string
-  /** Full rule name shown on hover — Bayer lanes are terse ("R1") to fit the fixed-width column. */
-  titleTooltip?: string
   segments: LaneSegment[]
   rangeStart: string
   totalDays: number
@@ -150,19 +180,17 @@ function TimelineLane({
   color: string
   onSegmentClick: (seg: LaneSegment, e: React.MouseEvent) => void
   onLockedClick: (e: React.MouseEvent) => void
-  lordFor?: (iso: string) => string | null
+  lordFor: (iso: string) => string | null
   /** Journey lane only — segment labels are zodiac signs, shown in Sanskrit (Panchang style), English kept in the tooltip. */
   sanskrit?: boolean
 }) {
   return (
     <div style={{ display: 'flex', alignItems: 'stretch', minHeight: 40 }}>
-      <div
-        title={titleTooltip}
-        style={{
-          width: 88, flexShrink: 0, display: 'flex', alignItems: 'center',
-          fontSize: 10, fontFamily: 'var(--font-mono, monospace)',
-          color: 'var(--text-secondary)', letterSpacing: '0.04em', textTransform: 'uppercase',
-        }}>
+      <div style={{
+        width: 88, flexShrink: 0, display: 'flex', alignItems: 'center',
+        fontSize: 10, fontFamily: 'var(--font-mono, monospace)',
+        color: 'var(--text-secondary)', letterSpacing: '0.04em', textTransform: 'uppercase',
+      }}>
         {title}
       </div>
       <div style={{ position: 'relative', flex: 1, minWidth: 900, height: 34, borderRadius: 6,
@@ -172,7 +200,7 @@ function TimelineLane({
           const right = xPct(seg.to, rangeStart, totalDays)
           const width = Math.max(right - left, 0.4)
           const locked = seg.from > cutoffIso
-          const lord = lordFor?.(seg.from)
+          const lord = lordFor(seg.from)
           const displayLabel = sanskrit ? sanskritSign(seg.label) : seg.label
           const englishSuffix = sanskrit && displayLabel !== seg.label ? ` (${seg.label})` : ''
           const startTitle = lord
@@ -219,17 +247,19 @@ function TimelineLane({
   )
 }
 
-// ── Page ──────────────────────────────────────────────────────────────────
+// ── Mercury body ─────────────────────────────────────────────────────────────
 
-export default function AlmanacPage() {
-  const { cutoffIso, fullQuarter, days: horizonDays } = useAstroHorizon()
-  const [gateOpen, setGateOpen] = useState(false)
-  const [explainAt, setExplainAt] = useState<{ x: number; y: number; ruleCode: string; ruleId: number; label: string } | null>(null)
-  const [almanacType, setAlmanacType] = useState<AlmanacType>('mercury')
-
-  // ── Live / Month / Year nav — history is unrestricted for every tier
-  // (Phase C), so Month/Year can browse any past period freely; the future
-  // edge still clamps through cutoffIso same as Live.
+function MercuryAlmanacBody({
+  cutoffIso, fullQuarter, horizonDays, evidenceByRule, lordFor, onExplain, onGate,
+}: {
+  cutoffIso: string
+  fullQuarter: boolean
+  horizonDays: number
+  evidenceByRule: Map<number, RuleEvidence>
+  lordFor: (iso: string) => string | null
+  onExplain: (ruleId: number, ruleCode: string, label: string, x: number, y: number) => void
+  onGate: () => void
+}) {
   const [viewMode, setViewMode] = useState<ViewMode>('live')
   const [cursorYear, setCursorYear] = useState(() => new Date().getFullYear())
   const [cursorMonth, setCursorMonth] = useState(() => new Date().getMonth())
@@ -269,86 +299,21 @@ export default function AlmanacPage() {
     setCursorMonth(n.getMonth())
   }
 
-  const { data: mercuryAlmanac, isLoading: mercuryLoading } = useQuery({
+  const { data: almanac, isLoading } = useQuery({
     queryKey: ['mercury-almanac', rangeStart, rangeEnd],
     queryFn: () => fetchMercuryAlmanac(rangeStart, rangeEnd),
     staleTime: 15 * 60_000,
     retry: 1,
-    enabled: almanacType === 'mercury',
   })
-  const { data: bayerAlmanac, isLoading: bayerLoading } = useQuery({
-    queryKey: ['bayer-almanac', rangeStart, rangeEnd],
-    queryFn: () => fetchBayerAlmanac(rangeStart, rangeEnd),
-    staleTime: 15 * 60_000,
-    retry: 1,
-    enabled: almanacType === 'bayer',
-  })
-  const isLoading = almanacType === 'mercury' ? mercuryLoading : bayerLoading
-  const hasData = almanacType === 'mercury' ? !!mercuryAlmanac : !!bayerAlmanac
-  const events = almanacType === 'mercury' ? (mercuryAlmanac?.events ?? []) : (bayerAlmanac?.events ?? [])
-
-  const renderLanes = useMemo(() => {
-    if (almanacType === 'mercury') {
-      if (!mercuryAlmanac) return []
-      return [
-        { title: 'Journey', titleTooltip: undefined, segments: mercuryAlmanac.journey, color: LANE_COLORS.journey, sanskrit: true },
-        { title: 'Motion', titleTooltip: undefined, segments: mercuryAlmanac.motion, color: LANE_COLORS.motion, sanskrit: false },
-        { title: 'Combust', titleTooltip: undefined, segments: mercuryAlmanac.combust, color: LANE_COLORS.combust, sanskrit: false },
-      ]
-    }
-    if (!bayerAlmanac) return []
-    return bayerAlmanac.lanes.map(lane => ({
-      title: lane.title,
-      titleTooltip: BAYER_RULES.find(r => r.code === lane.ruleCode)?.label,
-      segments: lane.segments, color: bayerLaneColor(lane.ruleCode),
-      sanskrit: lane.ruleCode === RULE_JOURNEY,
-    }))
-  }, [almanacType, mercuryAlmanac, bayerAlmanac])
-
-  const { data: evidenceRows } = useQuery({
-    queryKey: ['rule-engine', 'evidence'],
-    queryFn: fetchEvidence,
-    staleTime: 5 * 60_000,
-    retry: 1,
-  })
-  const evidenceByRule = useMemo(
-    () => new Map((evidenceRows ?? []).map(e => [e.rule_id, e])),
-    [evidenceRows],
-  )
 
   const today = todayIso()
   const todayInRange = today >= rangeStart && today <= rangeEnd
   const todayLeft = xPct(today, rangeStart, totalDays)
   const cutoffLeft = xPct(cutoffIso, rangeStart, totalDays)
 
-  // ── Day-lord (vara) tag — pure calendar fact, mirrors the owner's Excel
-  // LORD column. Not a scored signal (see DN-*-MER-* rules, unpromoted).
-  const { data: planets } = usePlanets()
-  const { data: daysOfWeek } = useDaysOfWeek()
-  const { data: dayLords } = useDayLords()
-  const lordByWeekday = useMemo(() => {
-    const map: Record<number, string> = {}
-    if (!planets || !daysOfWeek || !dayLords) return map
-    const planetName = new Map(planets.map(p => [p.id, p.name]))
-    const dayName = new Map(daysOfWeek.map(d => [d.id, d.name]))
-    for (const dl of dayLords) {
-      if (!dl.is_primary) continue
-      const name = dayName.get(dl.day_id)
-      const idx = name ? WEEKDAY_INDEX[name] : undefined
-      const planet = planetName.get(dl.planet_id)
-      if (idx !== undefined && planet) map[idx] = planet
-    }
-    return map
-  }, [planets, daysOfWeek, dayLords])
-  const lordFor = (iso: string): string | null => {
-    const planet = lordByWeekday[new Date(`${iso}T00:00:00`).getDay()]
-    return planet ?? null
-  }
-
-  // ── Mercury-ruled sectors — static astrological reference, not a
-  // performance claim (no return data attached).
   const { data: sectors } = useSectors()
   const { data: sectorLords } = useSectorLords()
+  const { data: planets } = usePlanets()
   const mercurySectorNames = useMemo(() => {
     if (!sectors || !sectorLords || !planets) return []
     const mercuryId = planets.find(p => p.name === 'Mercury')?.id
@@ -361,9 +326,6 @@ export default function AlmanacPage() {
       .sort()
   }, [sectors, sectorLords, planets])
 
-  // ── India VIX — plain context per event date, not a scored input.
-  // Clamp the fetch to whichever of rangeEnd/today is earlier — no VIX data
-  // exists for future dates when browsing Month/Year ahead of today.
   const vixUntil = rangeEnd < today ? rangeEnd : today
   const { data: vixSeries } = useQuery({
     queryKey: ['almanac-vix', rangeStart, vixUntil],
@@ -376,18 +338,18 @@ export default function AlmanacPage() {
 
   const handleSegmentClick = (seg: LaneSegment, e: React.MouseEvent) => {
     e.stopPropagation()
-    setExplainAt({ x: e.clientX, y: e.clientY, ruleCode: seg.ruleCode, ruleId: seg.ruleId, label: `${glyphForRule(seg.ruleCode, almanacType)} ${seg.label}` })
+    onExplain(seg.ruleId, seg.ruleCode, `☿ ${seg.label}`, e.clientX, e.clientY)
   }
   const handleEventClick = (ev: AlmanacEvent, e: React.MouseEvent) => {
-    if (ev.date > cutoffIso) { setGateOpen(true); return }
-    setExplainAt({ x: e.clientX, y: e.clientY, ruleCode: ev.ruleCode, ruleId: ev.ruleId, label: `${glyphForRule(ev.ruleCode, almanacType)} ${ev.label}` })
+    if (ev.date > cutoffIso) { onGate(); return }
+    onExplain(ev.ruleId, ev.ruleCode, `☿ ${ev.label}`, e.clientX, e.clientY)
   }
   const handleLockedClick = (e: React.MouseEvent) => {
     e.stopPropagation()
-    setGateOpen(true)
+    onGate()
   }
 
-  const visibleEvents = events.filter(ev => ev.date >= rangeStart && ev.date <= rangeEnd)
+  const visibleEvents = (almanac?.events ?? []).filter(ev => ev.date >= rangeStart && ev.date <= rangeEnd)
 
   const rangeLabel = viewMode === 'live'
     ? `${PAST_DAYS}d back → ${horizonDays}d ahead`
@@ -396,41 +358,7 @@ export default function AlmanacPage() {
       : String(cursorYear)
 
   return (
-    <div style={{ padding: '20px 24px 60px', maxWidth: 1400, margin: '0 auto' }}>
-      <PageHeader
-        eyebrow="Astro Layer"
-        title={almanacType === 'mercury' ? 'Mercury' : 'Bayer'}
-        titleEm={almanacType === 'mercury' ? 'Almanac' : 'Rules'}
-        lead={almanacType === 'mercury'
-          ? 'Motion · Combust & Rise · Journey'
-          : "George Bayer's 1940 trading rules · one lane per rule"}
-      />
-
-      {/* Type selector */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 14 }}>
-        <label style={{
-          fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono, monospace)',
-          textTransform: 'uppercase', letterSpacing: '0.06em',
-        }}>
-          Almanac
-        </label>
-        <select
-          value={almanacType}
-          onChange={e => setAlmanacType(e.target.value as AlmanacType)}
-          style={{
-            padding: '4px 10px', borderRadius: 6, fontSize: 12, cursor: 'pointer',
-            fontFamily: 'var(--font-mono, monospace)', background: 'var(--card)',
-            border: '1px solid var(--border)', color: 'var(--text-primary)',
-          }}
-        >
-          {ALMANAC_TYPES.map(t => (
-            <option key={t.id} value={t.id} disabled={!t.enabled}>
-              {t.label}{!t.enabled ? ' (coming soon)' : ''}
-            </option>
-          ))}
-        </select>
-      </div>
-
+    <>
       {/* Live / Month / Year nav */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '14px 0' }}>
         {(['live', 'month', 'year'] as ViewMode[]).map(m => (
@@ -450,56 +378,38 @@ export default function AlmanacPage() {
         ))}
         {viewMode !== 'live' && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 4 }}>
-            <button
-              onClick={handlePrev}
-              aria-label={`Previous ${viewMode}`}
-              style={{
-                width: 24, height: 24, borderRadius: 6, cursor: 'pointer',
-                border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-secondary)',
-              }}
-            >
-              ‹
-            </button>
+            <button onClick={handlePrev} aria-label={`Previous ${viewMode}`} style={{
+              width: 24, height: 24, borderRadius: 6, cursor: 'pointer',
+              border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-secondary)',
+            }}>‹</button>
             <span style={{
               fontSize: 12, fontFamily: 'var(--font-mono, monospace)', color: 'var(--text-primary)',
               minWidth: 96, textAlign: 'center',
             }}>
               {rangeLabel}
             </span>
-            <button
-              onClick={handleNext}
-              aria-label={`Next ${viewMode}`}
-              style={{
-                width: 24, height: 24, borderRadius: 6, cursor: 'pointer',
-                border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-secondary)',
-              }}
-            >
-              ›
-            </button>
+            <button onClick={handleNext} aria-label={`Next ${viewMode}`} style={{
+              width: 24, height: 24, borderRadius: 6, cursor: 'pointer',
+              border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-secondary)',
+            }}>›</button>
             {!todayInRange && (
-              <button
-                onClick={handleJumpToday}
-                style={{
-                  marginLeft: 6, padding: '3px 10px', borderRadius: 6, fontSize: 10.5, cursor: 'pointer',
-                  border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-secondary)',
-                }}
-              >
-                Today
-              </button>
+              <button onClick={handleJumpToday} style={{
+                marginLeft: 6, padding: '3px 10px', borderRadius: 6, fontSize: 10.5, cursor: 'pointer',
+                border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-secondary)',
+              }}>Today</button>
             )}
           </div>
         )}
       </div>
 
       {isLoading ? (
-        <DristiQLoader message={almanacType === 'mercury' ? "Reading Mercury's transits…" : "Reading Bayer's rules…"} />
-      ) : !hasData ? (
+        <DristiQLoader message="Reading Mercury's transits…" />
+      ) : !almanac ? (
         <div style={{ padding: 60, textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>
-          No {almanacType === 'mercury' ? 'Mercury' : 'Bayer'} data available.
+          No Mercury data available.
         </div>
       ) : (
         <>
-          {/* Horizon banner */}
           {!fullQuarter && (
             <div style={{
               display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14,
@@ -510,29 +420,21 @@ export default function AlmanacPage() {
             }}>
               <span>🔒</span>
               <span>Your plan shows the next {horizonDays} days. History is unlimited on every plan.</span>
-              <button
-                onClick={() => setGateOpen(true)}
-                style={{
-                  marginLeft: 'auto', fontSize: 11, padding: '3px 10px', borderRadius: 6,
-                  border: '1px solid color-mix(in srgb, var(--caution) 45%, transparent)',
-                  background: 'transparent', color: 'var(--caution)', cursor: 'pointer',
-                  fontFamily: 'inherit',
-                }}
-              >
+              <button onClick={onGate} style={{
+                marginLeft: 'auto', fontSize: 11, padding: '3px 10px', borderRadius: 6,
+                border: '1px solid color-mix(in srgb, var(--caution) 45%, transparent)',
+                background: 'transparent', color: 'var(--caution)', cursor: 'pointer', fontFamily: 'inherit',
+              }}>
                 Unlock the full quarter
               </button>
             </div>
           )}
 
-          {/* Timeline */}
-          <div
-            style={{
-              overflowX: 'auto', borderRadius: 12, border: '1px solid var(--border)',
-              background: 'var(--card)', padding: '16px 16px 10px', marginBottom: 24,
-            }}
-          >
+          <div style={{
+            overflowX: 'auto', borderRadius: 12, border: '1px solid var(--border)',
+            background: 'var(--card)', padding: '16px 16px 10px', marginBottom: 24,
+          }}>
             <div style={{ position: 'relative', minWidth: 900 }}>
-              {/* Today cursor + cutoff shading — spans all three lanes */}
               <div style={{ position: 'relative' }}>
                 {todayInRange && (
                   <>
@@ -559,18 +461,20 @@ export default function AlmanacPage() {
                   }} />
                 )}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  {renderLanes.map(lane => (
-                    <TimelineLane key={lane.title} title={lane.title} titleTooltip={lane.titleTooltip} segments={lane.segments}
-                      rangeStart={rangeStart} totalDays={totalDays} cutoffIso={cutoffIso}
-                      color={lane.color} lordFor={lordFor} sanskrit={lane.sanskrit}
-                      onSegmentClick={handleSegmentClick} onLockedClick={handleLockedClick} />
-                  ))}
+                  <TimelineLane title="Journey" segments={almanac.journey} rangeStart={rangeStart} totalDays={totalDays}
+                    cutoffIso={cutoffIso} color={LANE_COLORS.journey} lordFor={lordFor} sanskrit
+                    onSegmentClick={handleSegmentClick} onLockedClick={handleLockedClick} />
+                  <TimelineLane title="Motion" segments={almanac.motion} rangeStart={rangeStart} totalDays={totalDays}
+                    cutoffIso={cutoffIso} color={LANE_COLORS.motion} lordFor={lordFor}
+                    onSegmentClick={handleSegmentClick} onLockedClick={handleLockedClick} />
+                  <TimelineLane title="Combust" segments={almanac.combust} rangeStart={rangeStart} totalDays={totalDays}
+                    cutoffIso={cutoffIso} color={LANE_COLORS.combust} lordFor={lordFor}
+                    onSegmentClick={handleSegmentClick} onLockedClick={handleLockedClick} />
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Event list */}
           <div style={{ borderRadius: 12, border: '1px solid var(--border)', background: 'var(--card)', overflow: 'hidden' }}>
             <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)' }}>
               <div style={{
@@ -579,7 +483,7 @@ export default function AlmanacPage() {
               }}>
                 Events · {rangeLabel}
               </div>
-              {almanacType === 'mercury' && mercurySectorNames.length > 0 && (
+              {mercurySectorNames.length > 0 && (
                 <div style={{ marginTop: 4, fontSize: 10.5, color: 'color-mix(in srgb, var(--text-primary) 40%, transparent)' }}>
                   ☿ Mercury-ruled sectors (astrological reference, not a performance claim): {mercurySectorNames.join(' · ')}
                 </div>
@@ -618,7 +522,7 @@ export default function AlmanacPage() {
                     title={isJourney && displayEventLabel !== ev.label ? `English: ${ev.label}` : undefined}
                     style={{ flexShrink: 0, fontSize: 12, color: 'var(--text-primary)', minWidth: 140 }}
                   >
-                    {glyphForRule(ev.ruleCode, almanacType)} {displayEventLabel}
+                    ☿ {displayEventLabel}
                   </span>
                   {ev.days > 0 && (
                     <span
@@ -645,7 +549,6 @@ export default function AlmanacPage() {
                   )}
                   {(locked || read || vix) && (
                     <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'stretch', minHeight: 20 }}>
-                      {/* Column 1 — the pattern read (or lock message) */}
                       <div style={{
                         width: 260, flexShrink: 0, display: 'flex', alignItems: 'center',
                         fontSize: 10.5, color: locked ? 'var(--text-muted)' : 'var(--text-secondary)',
@@ -653,16 +556,12 @@ export default function AlmanacPage() {
                       }}>
                         {locked ? "🔒 unlock to see this event's history" : read ? read.hover : ''}
                       </div>
-
-                      {/* Visible divider between the two right-side columns */}
                       {vix && (
                         <div style={{
                           width: 1, alignSelf: 'stretch', margin: '0 14px',
                           background: 'color-mix(in srgb, var(--text-primary) 18%, transparent)',
                         }} />
                       )}
-
-                      {/* Column 2 — VIX context, colored by direction */}
                       {vix && (() => {
                         const EPS = 0.15
                         const rising = vix.trendPct > EPS
@@ -689,6 +588,226 @@ export default function AlmanacPage() {
             })}
           </div>
         </>
+      )}
+    </>
+  )
+}
+
+// ── Bayer body ───────────────────────────────────────────────────────────────
+
+function BayerRulesBody({
+  cutoffIso, evidenceByRule, lordFor, onExplain,
+}: {
+  cutoffIso: string
+  evidenceByRule: Map<number, RuleEvidence>
+  lordFor: (iso: string) => string | null
+  onExplain: (ruleId: number, ruleCode: string, label: string, x: number, y: number) => void
+}) {
+  const today = todayIso()
+  // Fixed window, not tied to any nav — a status view answers "right now",
+  // not a browsable period. Forward margin generous enough that even the
+  // rarest rule (R3, roughly once a year) usually has a next occurrence.
+  const since = useMemo(() => addDays(today, -30), [today])
+  const until = useMemo(() => addDays(today, 400), [today])
+
+  const { data: statuses, isLoading } = useQuery({
+    queryKey: ['bayer-status', since, until, today],
+    queryFn: () => fetchBayerStatus(since, until, today),
+    staleTime: 15 * 60_000,
+    retry: 1,
+  })
+
+  const { data: vixSeries } = useQuery({
+    queryKey: ['almanac-vix', addDays(today, -10), today],
+    queryFn: () => fetchVixSeries(addDays(today, -10), today),
+    staleTime: 15 * 60_000,
+    retry: 1,
+  })
+  const todayVix = vixContextForDate((vixSeries ?? []) as VixPoint[], today)
+
+  const lord = lordFor(today)
+  const weekday = WEEKDAY_ABBR[new Date(`${today}T00:00:00`).getDay()]
+
+  if (isLoading) return <DristiQLoader message="Reading Bayer's rules…" />
+  if (!statuses) {
+    return (
+      <div style={{ padding: 60, textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>
+        No Bayer data available.
+      </div>
+    )
+  }
+
+  return (
+    <>
+      {/* Today context — shared ambient facts, not scored claims */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 14, margin: '14px 0',
+        fontSize: 11, fontFamily: 'var(--font-mono, monospace)', color: 'var(--text-secondary)',
+      }}>
+        <span>Today · {fmtD(today)}</span>
+        {lord && (
+          <span title={`${weekday}day · ${lord}'s day (vara lord)`}>
+            {PLANET_GLYPH[lord] ?? ''} {lord}'s day
+          </span>
+        )}
+        {todayVix && (
+          <span title="India VIX — reference only, not scored">
+            VIX {todayVix.close.toFixed(1)} {todayVix.trendPct >= 0 ? '▲' : '▼'}{Math.abs(todayVix.trendPct).toFixed(1)}%
+          </span>
+        )}
+      </div>
+
+      <div style={{
+        display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(270px, 1fr))', gap: 12,
+      }}>
+        {statuses.map(s => {
+          const color = bayerRuleColor(s.ruleCode)
+          const glyph = bayerGlyph(s.ruleCode)
+          const ev = evidenceByRule.get(s.ruleId)
+          const read = ev ? buildRuleRead(ev) : null
+          const nextLocked = !!s.next && s.next.from > cutoffIso
+          const biasColor = s.def.baseBias === 'bullish' ? 'var(--bull)'
+            : s.def.baseBias === 'bearish' ? 'var(--bear)' : 'var(--caution)'
+
+          return (
+            <div
+              key={s.ruleCode}
+              onClick={e => onExplain(s.ruleId, s.ruleCode, `${glyph} ${s.def.label}`, e.clientX, e.clientY)}
+              style={{
+                border: `1px solid color-mix(in srgb, ${color} 30%, transparent)`,
+                borderRadius: 10, padding: 14, cursor: 'pointer', background: 'var(--card)',
+                display: 'flex', flexDirection: 'column', gap: 8,
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: 16, color, lineHeight: 1 }}>{glyph}</span>
+                <span style={{ fontSize: 10.5, fontFamily: 'var(--font-mono, monospace)', color: 'var(--text-muted)' }}>
+                  {s.def.ruleNum}
+                </span>
+                <span style={{ fontSize: 12, color: 'var(--text-primary)', fontWeight: 600 }}>
+                  {s.def.label}
+                </span>
+              </div>
+
+              <div>
+                {s.active ? (
+                  <span style={{
+                    fontSize: 10, padding: '2px 8px', borderRadius: 4,
+                    background: 'color-mix(in srgb, var(--accent) 18%, transparent)',
+                    color: 'var(--accent)', fontFamily: 'var(--font-mono, monospace)',
+                  }}>
+                    ● active {s.active.isPoint ? 'today' : `until ${fmtD(s.active.to)}`}
+                  </span>
+                ) : (
+                  <span style={{
+                    fontSize: 10, padding: '2px 8px', borderRadius: 4,
+                    background: 'color-mix(in srgb, var(--text-primary) 8%, transparent)',
+                    color: 'var(--text-muted)', fontFamily: 'var(--font-mono, monospace)',
+                  }}>
+                    ○ not active
+                  </span>
+                )}
+              </div>
+
+              <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
+                {s.next
+                  ? nextLocked
+                    ? "🔒 next window beyond your plan's horizon"
+                    : `Next: ${fmtD(s.next.from)}${s.next.isPoint ? '' : ` → ${fmtD(s.next.to)}`}`
+                  : 'No upcoming window in the next ~400 days'}
+              </div>
+
+              <div style={{ fontSize: 10.5, color: 'color-mix(in srgb, var(--text-primary) 55%, transparent)', minHeight: 28 }}>
+                {read ? read.hover : 'No evidence yet'}
+              </div>
+
+              <div
+                title="Bayer's own 1940 claim — a hypothesis to weigh against the evidence above, not a verified fact"
+                style={{ fontSize: 9.5, color: biasColor, fontFamily: 'var(--font-mono, monospace)' }}
+              >
+                Bayer's claim: {s.def.baseBias} (unverified)
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </>
+  )
+}
+
+// ── Page shell ───────────────────────────────────────────────────────────────
+
+export default function AlmanacPage() {
+  const { cutoffIso, fullQuarter, days: horizonDays } = useAstroHorizon()
+  const [gateOpen, setGateOpen] = useState(false)
+  const [explainAt, setExplainAt] = useState<{ x: number; y: number; ruleCode: string; ruleId: number; label: string } | null>(null)
+  const [almanacType, setAlmanacType] = useState<AlmanacType>('mercury')
+
+  const { data: evidenceRows } = useQuery({
+    queryKey: ['rule-engine', 'evidence'],
+    queryFn: fetchEvidence,
+    staleTime: 5 * 60_000,
+    retry: 1,
+  })
+  const evidenceByRule = useMemo(
+    () => new Map((evidenceRows ?? []).map(e => [e.rule_id, e])),
+    [evidenceRows],
+  )
+
+  const lordByWeekday = useLordByWeekday()
+  const lordFor = (iso: string): string | null => lordByWeekday[new Date(`${iso}T00:00:00`).getDay()] ?? null
+
+  const onExplain = (ruleId: number, ruleCode: string, label: string, x: number, y: number) => {
+    setExplainAt({ x, y, ruleCode, ruleId, label })
+  }
+
+  return (
+    <div style={{ padding: '20px 24px 60px', maxWidth: 1400, margin: '0 auto' }}>
+      <PageHeader
+        eyebrow="Astro Layer"
+        title={almanacType === 'mercury' ? 'Mercury' : 'Bayer'}
+        titleEm={almanacType === 'mercury' ? 'Almanac' : 'Rules'}
+        lead={almanacType === 'mercury'
+          ? 'Motion · Combust & Rise · Journey'
+          : "George Bayer's 1940 trading rules · which are active, right now"}
+      />
+
+      {/* Type selector */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 14 }}>
+        <label style={{
+          fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono, monospace)',
+          textTransform: 'uppercase', letterSpacing: '0.06em',
+        }}>
+          Almanac
+        </label>
+        <select
+          value={almanacType}
+          onChange={e => setAlmanacType(e.target.value as AlmanacType)}
+          style={{
+            padding: '4px 10px', borderRadius: 6, fontSize: 12, cursor: 'pointer',
+            fontFamily: 'var(--font-mono, monospace)', background: 'var(--card)',
+            border: '1px solid var(--border)', color: 'var(--text-primary)',
+          }}
+        >
+          {ALMANAC_TYPES.map(t => (
+            <option key={t.id} value={t.id} disabled={!t.enabled}>
+              {t.label}{!t.enabled ? ' (coming soon)' : ''}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {almanacType === 'mercury' ? (
+        <MercuryAlmanacBody
+          cutoffIso={cutoffIso} fullQuarter={fullQuarter} horizonDays={horizonDays}
+          evidenceByRule={evidenceByRule} lordFor={lordFor}
+          onExplain={onExplain} onGate={() => setGateOpen(true)}
+        />
+      ) : (
+        <BayerRulesBody
+          cutoffIso={cutoffIso} evidenceByRule={evidenceByRule} lordFor={lordFor}
+          onExplain={onExplain}
+        />
       )}
 
       {explainAt && (
