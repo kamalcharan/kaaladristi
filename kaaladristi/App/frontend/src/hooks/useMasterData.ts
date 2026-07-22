@@ -5,6 +5,8 @@ import {
   fetchNakshatraLords,
   fetchZodiacSigns,
   fetchZodiacLords,
+  fetchDaysOfWeek,
+  fetchDayLords,
   fetchSectors,
   fetchSectorLords,
   fetchIndices,
@@ -37,6 +39,14 @@ export function useZodiacSigns() {
 
 export function useZodiacLords() {
   return useQuery({ queryKey: ['km', 'zodiac_lords'], queryFn: fetchZodiacLords, ...MASTER_OPTS });
+}
+
+export function useDaysOfWeek() {
+  return useQuery({ queryKey: ['km', 'days_of_week'], queryFn: fetchDaysOfWeek, ...MASTER_OPTS });
+}
+
+export function useDayLords() {
+  return useQuery({ queryKey: ['km', 'day_lords'], queryFn: fetchDayLords, ...MASTER_OPTS });
 }
 
 export function useSectors() {

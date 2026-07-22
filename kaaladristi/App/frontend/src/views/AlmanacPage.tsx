@@ -16,11 +16,24 @@ import { fetchEvidence, type RuleEvidence } from '@/pages/RuleEngine/ruleService
 import { buildRuleRead } from '@/services/ruleInterpretation'
 import { useAstroHorizon } from '@/hooks/useAstroHorizon'
 import { ASTRO_GROUP_OVERLAYS } from '@/constants/astroGroupOverlays'
+import { fetchVixSeries, vixContextForDate, type VixPoint } from '@/services/almanacVix'
+import { usePlanets, useDaysOfWeek, useDayLords, useSectors, useSectorLords } from '@/hooks/useMasterData'
 import OverlayExplainPopover from '@/components/domain/VaNi/OverlayExplainPopover'
 import InlineGate from '@/components/workspace/InlineGate'
 
 const MERCURY_COLOR =
   ASTRO_GROUP_OVERLAYS.find(g => g.tag === 'Mercury')?.color ?? 'var(--accent)'
+
+// Classical graha glyphs — same set used in Intraday's PlanetsSidebar.
+const PLANET_GLYPH: Record<string, string> = {
+  Sun: '☉', Moon: '☽', Mars: '♂', Mercury: '☿',
+  Jupiter: '♃', Venus: '♀', Saturn: '♄',
+}
+const WEEKDAY_ABBR = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+// km_days_of_week.name → JS Date#getDay() index (Sunday = 0).
+const WEEKDAY_INDEX: Record<string, number> = {
+  Sunday: 0, Monday: 1, Tuesday: 2, Wednesday: 3, Thursday: 4, Friday: 5, Saturday: 6,
+}
 
 const TOTAL_DAYS = PAST_DAYS + FUTURE_DAYS
 const DAY_MS = 86400000
@@ -56,7 +69,7 @@ const LANE_COLORS: Record<string, string> = {
 // ── Lane row ──────────────────────────────────────────────────────────────
 
 function TimelineLane({
-  title, segments, rangeStart, cutoffIso, color, onSegmentClick, onLockedClick,
+  title, segments, rangeStart, cutoffIso, color, onSegmentClick, onLockedClick, lordFor,
 }: {
   title: string
   segments: LaneSegment[]
@@ -65,6 +78,7 @@ function TimelineLane({
   color: string
   onSegmentClick: (seg: LaneSegment, e: React.MouseEvent) => void
   onLockedClick: (e: React.MouseEvent) => void
+  lordFor?: (iso: string) => string | null
 }) {
   return (
     <div style={{ display: 'flex', alignItems: 'stretch', minHeight: 40 }}>
@@ -82,11 +96,13 @@ function TimelineLane({
           const right = xPct(seg.to, rangeStart)
           const width = Math.max(right - left, 0.4)
           const locked = seg.from > cutoffIso
+          const lord = lordFor?.(seg.from)
+          const startTitle = lord ? `${seg.label} · ${fmtD(seg.from)} → ${fmtD(seg.to)} · starts on ${lord}'s day` : `${seg.label} · ${fmtD(seg.from)} → ${fmtD(seg.to)}`
           return (
             <div
               key={`${seg.ruleCode}-${seg.from}`}
               onClick={e => locked ? onLockedClick(e) : onSegmentClick(seg, e)}
-              title={locked ? 'Beyond your plan’s horizon' : `${seg.label} · ${fmtD(seg.from)} → ${fmtD(seg.to)}`}
+              title={locked ? 'Beyond your plan’s horizon' : startTitle}
               style={{
                 position: 'absolute', left: `${left}%`, width: `${width}%`,
                 top: 4, bottom: 4, borderRadius: 4, cursor: 'pointer',
@@ -145,6 +161,55 @@ export default function AlmanacPage() {
   const today = todayIso()
   const todayLeft = xPct(today, rangeStart)
   const cutoffLeft = xPct(cutoffIso, rangeStart)
+
+  // ── Day-lord (vara) tag — pure calendar fact, mirrors the owner's Excel
+  // LORD column. Not a scored signal (see DN-*-MER-* rules, unpromoted).
+  const { data: planets } = usePlanets()
+  const { data: daysOfWeek } = useDaysOfWeek()
+  const { data: dayLords } = useDayLords()
+  const lordByWeekday = useMemo(() => {
+    const map: Record<number, string> = {}
+    if (!planets || !daysOfWeek || !dayLords) return map
+    const planetName = new Map(planets.map(p => [p.id, p.name]))
+    const dayName = new Map(daysOfWeek.map(d => [d.id, d.name]))
+    for (const dl of dayLords) {
+      if (!dl.is_primary) continue
+      const name = dayName.get(dl.day_id)
+      const idx = name ? WEEKDAY_INDEX[name] : undefined
+      const planet = planetName.get(dl.planet_id)
+      if (idx !== undefined && planet) map[idx] = planet
+    }
+    return map
+  }, [planets, daysOfWeek, dayLords])
+  const lordFor = (iso: string): string | null => {
+    const planet = lordByWeekday[new Date(`${iso}T00:00:00`).getDay()]
+    return planet ?? null
+  }
+
+  // ── Mercury-ruled sectors — static astrological reference, not a
+  // performance claim (no return data attached).
+  const { data: sectors } = useSectors()
+  const { data: sectorLords } = useSectorLords()
+  const mercurySectorNames = useMemo(() => {
+    if (!sectors || !sectorLords || !planets) return []
+    const mercuryId = planets.find(p => p.name === 'Mercury')?.id
+    if (mercuryId === undefined) return []
+    const sectorName = new Map(sectors.map(s => [s.id, s.name]))
+    return sectorLords
+      .filter(sl => sl.planet_id === mercuryId)
+      .map(sl => sectorName.get(sl.sector_id))
+      .filter((n): n is string => !!n)
+      .sort()
+  }, [sectors, sectorLords, planets])
+
+  // ── India VIX — plain context per event date, not a scored input.
+  const { data: vixSeries } = useQuery({
+    queryKey: ['almanac-vix', rangeStart, today],
+    queryFn: () => fetchVixSeries(rangeStart, today),
+    staleTime: 15 * 60_000,
+    retry: 1,
+  })
+  const vixFor = (iso: string) => vixContextForDate((vixSeries ?? []) as VixPoint[], iso)
 
   const handleSegmentClick = (seg: LaneSegment, e: React.MouseEvent) => {
     e.stopPropagation()
@@ -237,13 +302,13 @@ export default function AlmanacPage() {
                 )}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                   <TimelineLane title="Journey" segments={almanac.journey} rangeStart={rangeStart}
-                    cutoffIso={cutoffIso} color={LANE_COLORS.journey}
+                    cutoffIso={cutoffIso} color={LANE_COLORS.journey} lordFor={lordFor}
                     onSegmentClick={handleSegmentClick} onLockedClick={handleLockedClick} />
                   <TimelineLane title="Motion" segments={almanac.motion} rangeStart={rangeStart}
-                    cutoffIso={cutoffIso} color={LANE_COLORS.motion}
+                    cutoffIso={cutoffIso} color={LANE_COLORS.motion} lordFor={lordFor}
                     onSegmentClick={handleSegmentClick} onLockedClick={handleLockedClick} />
                   <TimelineLane title="Combust" segments={almanac.combust} rangeStart={rangeStart}
-                    cutoffIso={cutoffIso} color={LANE_COLORS.combust}
+                    cutoffIso={cutoffIso} color={LANE_COLORS.combust} lordFor={lordFor}
                     onSegmentClick={handleSegmentClick} onLockedClick={handleLockedClick} />
                 </div>
               </div>
@@ -252,16 +317,27 @@ export default function AlmanacPage() {
 
           {/* Event list */}
           <div style={{ borderRadius: 12, border: '1px solid var(--border)', background: 'var(--card)', overflow: 'hidden' }}>
-            <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)',
-              fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-mono, monospace)',
-              textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-              Events · {PAST_DAYS}d back → {horizonDays}d ahead
+            <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)' }}>
+              <div style={{
+                fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-mono, monospace)',
+                textTransform: 'uppercase', letterSpacing: '0.08em',
+              }}>
+                Events · {PAST_DAYS}d back → {horizonDays}d ahead
+              </div>
+              {mercurySectorNames.length > 0 && (
+                <div style={{ marginTop: 4, fontSize: 10.5, color: 'color-mix(in srgb, var(--text-primary) 40%, transparent)' }}>
+                  ☿ Mercury-ruled sectors (astrological reference, not a performance claim): {mercurySectorNames.join(' · ')}
+                </div>
+              )}
             </div>
             {visibleEvents.map((ev, i) => {
               const locked = ev.date > cutoffIso
               const ev2 = evidenceByRule.get(ev.ruleId)
               const read = ev2 ? buildRuleRead(ev2) : null
               const isPast = ev.date < today
+              const lord = lordFor(ev.date)
+              const weekday = WEEKDAY_ABBR[new Date(`${ev.date}T00:00:00`).getDay()]
+              const vix = locked ? null : vixFor(ev.date)
               return (
                 <div
                   key={`${ev.date}-${ev.ruleCode}-${ev.label}-${i}`}
@@ -282,6 +358,18 @@ export default function AlmanacPage() {
                   <span style={{ flexShrink: 0, fontSize: 12, color: 'var(--text-primary)', minWidth: 140 }}>
                     ☿ {ev.label}
                   </span>
+                  {lord && (
+                    <span
+                      title={`${weekday}day · ${lord}'s day (vara lord)`}
+                      style={{
+                        flexShrink: 0, fontSize: 10, fontFamily: 'var(--font-mono, monospace)',
+                        color: lord === 'Mercury' ? MERCURY_COLOR : 'var(--text-muted)',
+                        display: 'flex', alignItems: 'center', gap: 3, width: 58,
+                      }}
+                    >
+                      {PLANET_GLYPH[lord] ?? ''} {weekday}
+                    </span>
+                  )}
                   {locked ? (
                     <span style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono, monospace)' }}>
                       🔒 unlock to see this event's history
@@ -291,6 +379,17 @@ export default function AlmanacPage() {
                       {read.hover}
                     </span>
                   ) : null}
+                  {vix && (
+                    <span
+                      title="India VIX as of this date — reference only, not scored"
+                      style={{
+                        marginLeft: 'auto', flexShrink: 0, fontSize: 10, fontFamily: 'var(--font-mono, monospace)',
+                        color: 'color-mix(in srgb, var(--text-primary) 40%, transparent)', whiteSpace: 'nowrap',
+                      }}
+                    >
+                      VIX {vix.close.toFixed(1)} {vix.trendPct >= 0 ? '▲' : '▼'}{Math.abs(vix.trendPct).toFixed(1)}%
+                    </span>
+                  )}
                 </div>
               )
             })}
