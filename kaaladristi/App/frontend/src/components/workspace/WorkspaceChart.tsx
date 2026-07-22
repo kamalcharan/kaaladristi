@@ -47,7 +47,9 @@ export default function WorkspaceChart({ instrument, overlays: overlaysProp, sta
 
   const playerBarIndex = useChartSyncStore(s => s.playerBarIndex)
   const { setTotalBars, setActiveBarIndex, setVisibleRange } = useChartSyncStore.getState()
-  const astroBands = useAstroOverlayBands(effectiveOverlays)
+  // Astro is INDEX-ONLY (owner 2026-07-22) — equity blocks get no bands/ribbon.
+  const isIndexChart = instrument.type === 'index'
+  const astroBands = useAstroOverlayBands(isIndexChart ? effectiveOverlays : NO_OVERLAYS)
   const [zoneExplain, setZoneExplain] = useState<ZoneExplain | null>(null)
 
   const handleZoneClick = useCallback((band: AstroBand, clientX: number, clientY: number, coincident?: AstroBand[]) => {
@@ -93,8 +95,9 @@ export default function WorkspaceChart({ instrument, overlays: overlaysProp, sta
   return (
     <div ref={containerRef} style={{ display: 'flex', flexDirection: 'column', height: '100%', position: 'relative' }}>
       {/* Mercury story chip — floats over the chart top (Study's ribbon,
-          overlay-styled: the workspace block has no spare layout row). */}
-      {!isLoading && <MercuryStoryRibbon overlay />}
+          overlay-styled: the workspace block has no spare layout row).
+          Index charts only — astro is index-only (owner 2026-07-22). */}
+      {!isLoading && isIndexChart && <MercuryStoryRibbon overlay />}
       {isLoading && (
         <div style={{
           position: 'absolute', top: HEADER_H, left: 0, right: 0,

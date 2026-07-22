@@ -5,10 +5,12 @@
 // The "next:" tail is horizon-clamped (§Phase C); a lock chip marks that more
 // exists beyond the horizon for free/quarterly users.
 
+import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { fetchMercuryStory, type MercuryEvent } from '@/services/mercuryStory'
 import { useAstroHorizon } from '@/hooks/useAstroHorizon'
 import { ASTRO_GROUP_OVERLAYS } from '@/constants/astroGroupOverlays'
+import OverlayExplainPopover from '@/components/domain/VaNi/OverlayExplainPopover'
 
 const MERCURY_COLOR =
   ASTRO_GROUP_OVERLAYS.find(g => g.tag === 'Mercury')?.color ?? 'var(--accent)'
@@ -20,6 +22,10 @@ function fmtD(iso: string): string {
 
 export default function MercuryStoryRibbon({ overlay = false }: { overlay?: boolean }) {
   const { cutoffIso, fullQuarter } = useAstroHorizon()
+  // Clicking the ribbon opens the full Mercury read — THE discoverable entry
+  // (owner 2026-07-22: "how will users know about these options?"). The same
+  // popover right-click uses, so VaNi's card plugs into the same door later.
+  const [explainAt, setExplainAt] = useState<{ x: number; y: number } | null>(null)
 
   const { data: story } = useQuery({
     queryKey: ['mercury-story'],
@@ -39,11 +45,15 @@ export default function MercuryStoryRibbon({ overlay = false }: { overlay?: bool
   const zone = story.watchZone && story.watchZone.until >= today ? story.watchZone : null
 
   return (
-    <div style={{
+    <>
+    <div
+      onClick={e => setExplainAt({ x: e.clientX, y: e.clientY })}
+      title="Mercury now — click for the full read"
+      style={{
       display: 'flex', alignItems: 'center', gap: 8,
       flexWrap: overlay ? 'nowrap' : 'wrap',
       padding: '4px 10px',
-      borderRadius: 6,
+      borderRadius: 6, cursor: 'pointer',
       border: `1px solid color-mix(in srgb, ${MERCURY_COLOR} 18%, transparent)`,
       background: overlay
         ? 'color-mix(in srgb, var(--card) 88%, transparent)'
@@ -54,7 +64,7 @@ export default function MercuryStoryRibbon({ overlay = false }: { overlay?: bool
         ? {
             position: 'absolute' as const, top: 6, left: '50%',
             transform: 'translateX(-50%)', zIndex: 15,
-            pointerEvents: 'none' as const, whiteSpace: 'nowrap' as const,
+            whiteSpace: 'nowrap' as const,
             maxWidth: 'calc(100% - 90px)', overflow: 'hidden',
           }
         : { marginBottom: 6 }),
@@ -107,6 +117,19 @@ export default function MercuryStoryRibbon({ overlay = false }: { overlay?: bool
           🔒 +{lockedCount} this quarter
         </span>
       )}
+      {/* Visible affordance — no hidden gesture required */}
+      <span style={{ fontSize: 9, color: 'color-mix(in srgb, var(--text-primary) 32%, transparent)', whiteSpace: 'nowrap', marginLeft: lockedCount > 0 && !fullQuarter ? 0 : 'auto' }}>
+        read ▸
+      </span>
     </div>
+    {explainAt && (
+      <OverlayExplainPopover
+        tag="Mercury"
+        anchorX={explainAt.x}
+        anchorY={explainAt.y}
+        onClose={() => setExplainAt(null)}
+      />
+    )}
+    </>
   )
 }
