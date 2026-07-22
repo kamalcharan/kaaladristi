@@ -24,3 +24,4 @@ kaaladristi/App/backend/data/logs/
 # Docs — local HTML prototypes
 docs/*.html
 .claude/worktrees/
+.claude/settings.local.json
