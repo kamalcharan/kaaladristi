@@ -1,5 +1,12 @@
 # Astro Layer — Narrative Contract & Launch Decisions
 
+> **The founding use case (owner, 2026-07-21):** *"70% of times I get good
+> profit — I take Mercury on break. This signal tells me in advance saying
+> event is coming, so be ready. It is not about bull or bear — it is about
+> READINESS."* Every Mercury surface serves this: advance notice of watch
+> days, the ±2d zone, the prev-day high/low as the reference level. The
+> product never says which way — it says WHEN to be ready.
+
 **Date:** 2026-07-21 · **Status:** direction agreed with owner; Mercury slice first.
 Companion references: `MERCURY_SLICE_PLAN.md` (repo root), `docs/claude/rules-engine.md`,
 `docs/claude/VIX-Upgrade.md`, `docs/finastro/` (owner's almanac sheets + source PDFs).

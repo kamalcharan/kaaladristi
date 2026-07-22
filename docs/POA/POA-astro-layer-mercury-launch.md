@@ -74,18 +74,23 @@ the calendar, and the pricing gateway)
 ### Phase A — Storytelling on the chart
 Mercury's narrative arc rendered on the user's own chart (Study + My Space,
 shared `TradingChart` pipeline — already the band substrate):
-1. **Boundary markers** — vertical glyph-tagged lines on watch days (ingress
-   days ☿→sign; stations) distinct from window shading. The bands say "you
-   were in a window"; the markers say "this exact day was a watch day."
-   **⏳ REMAINING** (ingress ticks in the canvas draw pass).
+1. **Boundary markers** — ✅ **BUILT 2026-07-21**: watch-day ticks (bottom
+   stub + ◈, planet-colored) on ingress days and station days in the
+   TradingChart canvas — past AND horizon-visible future.
 2. **Story ribbon** — ✅ **BUILT 2026-07-21** (`MercuryStoryRibbon.tsx` +
-   `services/mercuryStory.ts`, rendered above the Study chart in ChartView):
-   *"☿ direct in Cancer · combust (ghora) until 24 Jul · next: enters Leo
-   6 Aug ◈"* — watch-day events marked ◈; "next:" tail horizon-clamped with
-   a 🔒 "+N this quarter" chip for free/quarterly.
-3. THE PATTERN tooltip (done) stays the click-through evidence layer.
-**DoD:** a user scrolling any chart can read where Mercury's story was, is,
-and (within their tier horizon) goes next, without leaving the chart.
+   `services/mercuryStory.ts`): Study chart (inline) + My Space chart
+   (floating overlay chip). *"☿ direct in Cancer · combust (ghora) until
+   24 Jul · next: enters Leo 6 Aug ◈"* — horizon-clamped, 🔒 "+N this
+   quarter" for free/quarterly.
+3. **Readiness state** — ✅ **BUILT 2026-07-21** (the founding use case:
+   *"signal tells me in advance — event is coming, be ready; not bull or
+   bear, READINESS"*): when a watch-day's ±2d orb contains today, the ribbon
+   leads with an accent chip — *"◈ WATCH ±2d · enters Leo 6 Aug · prev-day
+   H/L in focus."*
+4. THE PATTERN tooltip (done) stays the click-through evidence layer.
+**Phase A: COMPLETE.** A user on any chart reads where Mercury's story was,
+is, whether TODAY is inside a watch zone, and (within tier horizon) what's
+next — without leaving the chart.
 
 ### Phase B — The Calendar (presentation decided: the owner's Excel as lanes)
 Route `/almanac`. Not a month grid — a **three-lane timeline**, which is

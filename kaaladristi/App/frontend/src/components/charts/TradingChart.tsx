@@ -1088,6 +1088,38 @@ export default function TradingChart({ data, height = 900, compact = false, work
         ctx.restore();
       }
 
+      // ── Watch-day ticks (readiness — POA §Phase A item 1) ────────────────
+      // The bands say "you were in a window"; these ticks say "this exact
+      // day was a watch day" (ingress / station — the boundary days whose
+      // ±2d orb carries the transition evidence). Bottom stubs + ◈ so a
+      // year of ingress days reads as a rhythm, not clutter.
+      const watchTicks = new Map<string, string>()   // date → color
+      for (const b of nonPanchak) {
+        const c = planetColorOfRuleCode(b.ruleCode) ?? b.color
+        if (b.ruleCode === 'TRN-MER-MAN-TRN') {
+          watchTicks.set(b.from, c)
+        } else if (b.ruleCode === 'TR-MER-RET') {
+          watchTicks.set(b.from, c)
+          watchTicks.set(b.to, c)
+        }
+      }
+      for (const [d, c] of watchTicks) {
+        const x = ts.timeToCoordinate(d as Time)
+        if (x == null) continue
+        ctx.save()
+        ctx.strokeStyle = hexToRgba(c, 0.55)
+        ctx.lineWidth = 1
+        ctx.beginPath()
+        ctx.moveTo(x, h - 24)
+        ctx.lineTo(x, h)
+        ctx.stroke()
+        ctx.fillStyle = hexToRgba(c, 0.95)
+        ctx.font = '10px sans-serif'
+        ctx.textAlign = 'center'
+        ctx.fillText('◈', x, h - 27)
+        ctx.restore()
+      }
+
       // ── Future-event pins — band starts within the next 15 days ─────────
       // Animated pill: glyph + Nd countdown. Pulses via sine wave on opacity
       // and a gentle vertical bob so it catches the eye without being garish.

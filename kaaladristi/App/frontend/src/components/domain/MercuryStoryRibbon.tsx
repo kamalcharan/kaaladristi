@@ -18,7 +18,7 @@ function fmtD(iso: string): string {
   return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
 }
 
-export default function MercuryStoryRibbon() {
+export default function MercuryStoryRibbon({ overlay = false }: { overlay?: boolean }) {
   const { cutoffIso, fullQuarter } = useAstroHorizon()
 
   const { data: story } = useQuery({
@@ -33,18 +33,47 @@ export default function MercuryStoryRibbon() {
   const visible: MercuryEvent[] = story.upcoming.filter(e => e.date <= cutoffIso)
   const lockedCount = story.upcoming.length - visible.length
   const next = visible.slice(0, 2)
+  const today = new Date().toISOString().slice(0, 10)
+  // Readiness (owner's core use: advance notice — "event is coming, be
+  // ready"; not bull or bear). Zone = watch-day ±2 sessions.
+  const zone = story.watchZone && story.watchZone.until >= today ? story.watchZone : null
 
   return (
     <div style={{
-      display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
-      padding: '4px 10px', marginBottom: 6,
+      display: 'flex', alignItems: 'center', gap: 8,
+      flexWrap: overlay ? 'nowrap' : 'wrap',
+      padding: '4px 10px',
       borderRadius: 6,
       border: `1px solid color-mix(in srgb, ${MERCURY_COLOR} 18%, transparent)`,
-      background: `color-mix(in srgb, ${MERCURY_COLOR} 5%, transparent)`,
+      background: overlay
+        ? 'color-mix(in srgb, var(--card) 88%, transparent)'
+        : `color-mix(in srgb, ${MERCURY_COLOR} 5%, transparent)`,
       fontSize: 11, fontFamily: 'var(--font-mono, monospace)',
       color: 'var(--text-secondary)',
+      ...(overlay
+        ? {
+            position: 'absolute' as const, top: 6, left: '50%',
+            transform: 'translateX(-50%)', zIndex: 15,
+            pointerEvents: 'none' as const, whiteSpace: 'nowrap' as const,
+            maxWidth: 'calc(100% - 90px)', overflow: 'hidden',
+          }
+        : { marginBottom: 6 }),
     }}>
       <span style={{ fontSize: 13, lineHeight: 1 }}>☿</span>
+      {zone && (
+        <span
+          title="Watch window — trend changes have historically clustered within ±2 days of this event; the previous day's high/low is the reference level"
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: 4,
+            padding: '1px 7px', borderRadius: 4,
+            background: 'color-mix(in srgb, var(--accent) 18%, transparent)',
+            border: '1px solid color-mix(in srgb, var(--accent) 45%, transparent)',
+            color: 'var(--accent)', fontWeight: 600, letterSpacing: '0.04em',
+          }}
+        >
+          ◈ WATCH ±2d · {zone.label} {fmtD(zone.date)} · prev-day H/L in focus
+        </span>
+      )}
       <span>
         {story.motion} {story.sign ? `in ${story.sign}` : ''}
         {story.combustUntil && (
