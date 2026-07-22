@@ -221,10 +221,40 @@ ALL future astro rendering (bands, future pins, tooltips) through it; ribbon
 "next:" tail + lock chip obey it. Remaining: the Almanac future zone (with
 Phase B) and the post-launch server-side enforcement note.
 
+### Phase D — Bayer Rules type (owner rescope 2026-07-23: Bayer next, not Venus)
+Owner chose to focus the second Almanac type on **Bayer Rules** ("Stock &
+Commodity Traders Hand-Book of Trend Determination", George Bayer, 1940)
+rather than Venus. Checked against `km_astro_rule_master.tags` before
+building — exactly **10 rules tagged `Bayer`**, no hidden extras:
+- **9 have live transit + evidence data**, now built as one Almanac lane
+  each (`services/bayerAlmanac.ts`): R1 (`TRN-MER-MAN-TRN`), R2
+  (`BAY-R02-MAR-MER-SPD`), R3 (`BAY-R03-VEN-RET`), R4A
+  (`TRN-MER-RIS-W-BUL`), R6 (`BAY-R06-MAR-1635`), R9 (`TR-MER-CMB-E-BEA`),
+  R21 (`CON-MER-VEN-CD-BEA`), R22 (`CON-SUN-MER-TRN`), R27
+  (`BAY-R27-MER-SPD`). Evidence check before building: only **R27** (64.8%
+  vs 53.0% base, n=108) and **R21** (44.4% vs 56.3% base, n=45, bearish-
+  leaning) show a real tilt — neither is boundary-orb-verified yet, so
+  both render orientation-only same as the rest, no watch-day promotion.
+- **1 excluded on purpose** — `BAY-R14-VEN-LON` (Venus longitude unit
+  cycle): 12,963 windows across the backfill, effectively a continuous
+  oscillator rather than a discrete event; sits at its own base rate
+  anyway (52.8% vs 53.0%). Revisit only if a different presentation
+  (e.g. a cycle-phase strip, not a lane) is wanted later.
+- **~35+ rules remain blocked** (4B, 5, 7, 8, 10-13, 15-20, 23-26, 28-48) —
+  `docs/claude/rules-engine.md` is explicit: original 1940 handbook needed,
+  do not guess/approximate. Unblock path: owner sourcing the material.
+- **Type-selector dropdown** built alongside (Mercury / Bayer enabled;
+  Venus / Panchak / Major Transits shown disabled) — the shell principle
+  #4 called for, now backed by a second real type instead of a placeholder.
+**Status: 9-rule Bayer Almanac + type selector BUILT 2026-07-23.** Pending
+owner's live check (same as every Almanac surface).
+
 ### Later (explicitly deferred by owner, in this order of likelihood)
 - **VaNi narration** of watch days / Morning Brief lines — after A–C.
+- **Bayer handbook sourcing** — unblocks ~35+ parked rules, no other path.
 - **Slow-planet ingress replication check** — only after Mercury is fully in
-  place; then Venus slice (same pipeline; request owner's Venus sheet then).
+  place; then Venus slice (same pipeline; request owner's Venus sheet then)
+  — behind Bayer in the queue per the 2026-07-23 rescope above.
 
 ### Parked (unchanged)
 VIX ~2008 backfill · pseudo-sector history · stock-level astro stats ·
