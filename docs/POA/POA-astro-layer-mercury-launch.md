@@ -153,7 +153,9 @@ Route `/almanac`. Not a month grid — a **three-lane timeline**, which is
 exactly the owner's own Excel rendered as UI (Motion / Combust & Rise /
 Journey are the three tables in the sheet):
 - **Lane 1 · Journey:** sign segments as colored spans (ingress boundaries =
-  watch-day ticks).
+  watch-day ticks). ✅ Sanskrit rashi names (Panchang style — Makara, Kumbha,
+  ...), English kept in tooltip. ✅ Alternating segment tint + boundary seam
+  so a fully-covered lane reads as continuous, not patchy.
 - **Lane 2 · Motion:** direct/retrograde spans (stations as ticks).
 - **Lane 3 · Combust:** glare-zone windows (asta/udaya edges, stage label).
 - **Today cursor** vertical line; past is dimmed; future extends exactly to
@@ -161,11 +163,36 @@ Journey are the three tables in the sheet):
   prompt ("Unlock the full quarter").
 - **Event list** below the lanes: chronological rows with exact IST
   timestamps + the threshold-driven texture line (shared `patternLines()`
-  helper extracted from TradingChart into a service).
+  helper extracted from TradingChart into a service). ✅ Day-lord (vara) tag
+  per row (pure calendar fact, English/Sanskrit distinct from the
+  unpromoted `DN-*-MER-*` predictive rules). ✅ India VIX level/trend per
+  row, explicitly labeled reference-only (small sample, not scored). ✅
+  Mercury-ruled sector list (static astrological reference). ✅ Two-column
+  split (pattern-read | VIX) with a visible divider; VIX arrow colored
+  red/green/amber by direction. ✅ Window-length "Nd" badge + combust stage
+  suffix, matching the owner's "TOTAL NO. OF DAYS" column.
 - **Window detail on click:** full evidence read from `km_rule_evidence`.
+- ✅ **Date-boundary fix (2026-07-23):** retrograde/Journey/station-direct
+  windows were deriving `start_date`/`end_date` from a coarse once-daily
+  (11:00 IST) classification table instead of the precise ephemeris
+  timestamp already computed alongside it — landed a day early when the
+  true station/ingress fell before that day's snapshot (caught live: a
+  July 2026 "stations direct" showed 23 Jul instead of the true 24 Jul
+  04:28 IST). Fixed at the generator (`ist_date_of(ts)`, same method
+  Combust already used) so every downstream consumer inherits the fix, not
+  just the Almanac. Owner re-ran `generate_mercury_windows.py` on the VPS
+  and confirmed corrected; `compute_rule_evidence.py` re-run still pending
+  to rescore evidence against the corrected boundaries.
 **DoD:** owner can retire the Excel for Mercury 2026 planning; every number
 traces to `km_rule_transits`/`km_rule_evidence`; horizon gate visibly works
 per tier.
+**Status: functionally complete, pending final live sign-off.** Remaining
+before Phase B closes: (1) owner's live pass/fail on everything above, (2)
+ribbon simplification — drop the "next:" list + lock chip from
+`MercuryStoryRibbon`, add an explicit "full calendar →" link to `/almanac`,
+(3) year/month nav on the Almanac (Live / Month / Year view modes), (4) a
+disabled type-selector shell (Mercury only, Venus/Panchak/Bayer greyed out)
+so the UI shape is ready without building a second planet's evidence yet.
 
 ### Phase C — Pricing gateway (forward-horizon gating)
 How far ahead a user can see astro events (ribbon "next:" tail + calendar
