@@ -21,7 +21,7 @@ import {
   fetchMercuryAlmanac, PAST_DAYS, FUTURE_DAYS, RULE_JOURNEY,
   type LaneSegment, type AlmanacEvent,
 } from '@/services/mercuryAlmanac'
-import { fetchBayerStatus } from '@/services/bayerAlmanac'
+import { fetchBayerStatus, fetchBayerRuleWindows, BAYER_RULES } from '@/services/bayerAlmanac'
 import { fetchEvidence, type RuleEvidence } from '@/pages/RuleEngine/ruleService'
 import { buildRuleRead } from '@/services/ruleInterpretation'
 import { useAstroHorizon } from '@/hooks/useAstroHorizon'
@@ -145,6 +145,118 @@ const LANE_COLORS: Record<string, string> = {
   combust: 'var(--caution)',
 }
 
+// ── Live / Month / Year range — shared by Mercury's body and the Bayer
+// per-rule timeline drill-down (each rule's own history is a coherent
+// single-lane story, unlike merging all 9 rules into one shared timeline).
+
+function useAlmanacRange(horizonDays: number) {
+  const [viewMode, setViewMode] = useState<ViewMode>('live')
+  const [cursorYear, setCursorYear] = useState(() => new Date().getFullYear())
+  const [cursorMonth, setCursorMonth] = useState(() => new Date().getMonth())
+
+  const { rangeStart, rangeEnd } = useMemo(() => {
+    if (viewMode === 'month') {
+      const r = monthRange(cursorYear, cursorMonth)
+      return { rangeStart: r.start, rangeEnd: r.end }
+    }
+    if (viewMode === 'year') {
+      const r = yearRange(cursorYear)
+      return { rangeStart: r.start, rangeEnd: r.end }
+    }
+    return { rangeStart: startIso(), rangeEnd: endIso() }
+  }, [viewMode, cursorYear, cursorMonth])
+  const totalDays = Math.max(1, daysBetween(rangeStart, rangeEnd))
+
+  const handlePrev = () => {
+    if (viewMode === 'month') {
+      if (cursorMonth === 0) { setCursorMonth(11); setCursorYear(y => y - 1) }
+      else setCursorMonth(m => m - 1)
+    } else if (viewMode === 'year') {
+      setCursorYear(y => y - 1)
+    }
+  }
+  const handleNext = () => {
+    if (viewMode === 'month') {
+      if (cursorMonth === 11) { setCursorMonth(0); setCursorYear(y => y + 1) }
+      else setCursorMonth(m => m + 1)
+    } else if (viewMode === 'year') {
+      setCursorYear(y => y + 1)
+    }
+  }
+  const handleJumpToday = () => {
+    const n = new Date()
+    setCursorYear(n.getFullYear())
+    setCursorMonth(n.getMonth())
+  }
+
+  const today = todayIso()
+  const todayInRange = today >= rangeStart && today <= rangeEnd
+  const rangeLabel = viewMode === 'live'
+    ? `${PAST_DAYS}d back → ${horizonDays}d ahead`
+    : viewMode === 'month'
+      ? new Date(`${rangeStart}T00:00:00`).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })
+      : String(cursorYear)
+
+  return {
+    viewMode, setViewMode, rangeStart, rangeEnd, totalDays, today, todayInRange, rangeLabel,
+    handlePrev, handleNext, handleJumpToday,
+  }
+}
+
+function AlmanacRangeNav({ viewMode, setViewMode, rangeLabel, todayInRange, onPrev, onNext, onToday }: {
+  viewMode: ViewMode
+  setViewMode: (m: ViewMode) => void
+  rangeLabel: string
+  todayInRange: boolean
+  onPrev: () => void
+  onNext: () => void
+  onToday: () => void
+}) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '14px 0' }}>
+      {(['live', 'month', 'year'] as ViewMode[]).map(m => (
+        <button
+          key={m}
+          onClick={() => setViewMode(m)}
+          style={{
+            padding: '4px 12px', borderRadius: 6, fontSize: 11, textTransform: 'capitalize',
+            cursor: 'pointer', fontFamily: 'var(--font-mono, monospace)',
+            background: viewMode === m ? 'color-mix(in srgb, var(--accent) 18%, transparent)' : 'transparent',
+            border: `1px solid ${viewMode === m ? 'color-mix(in srgb, var(--accent) 45%, transparent)' : 'var(--border)'}`,
+            color: viewMode === m ? 'var(--accent)' : 'var(--text-secondary)',
+          }}
+        >
+          {m}
+        </button>
+      ))}
+      {viewMode !== 'live' && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 4 }}>
+          <button onClick={onPrev} aria-label={`Previous ${viewMode}`} style={{
+            width: 24, height: 24, borderRadius: 6, cursor: 'pointer',
+            border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-secondary)',
+          }}>‹</button>
+          <span style={{
+            fontSize: 12, fontFamily: 'var(--font-mono, monospace)', color: 'var(--text-primary)',
+            minWidth: 96, textAlign: 'center',
+          }}>
+            {rangeLabel}
+          </span>
+          <button onClick={onNext} aria-label={`Next ${viewMode}`} style={{
+            width: 24, height: 24, borderRadius: 6, cursor: 'pointer',
+            border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-secondary)',
+          }}>›</button>
+          {!todayInRange && (
+            <button onClick={onToday} style={{
+              marginLeft: 6, padding: '3px 10px', borderRadius: 6, fontSize: 10.5, cursor: 'pointer',
+              border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-secondary)',
+            }}>Today</button>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Day-lord (vara) lookup — shared by both bodies ─────────────────────────
 
 function useLordByWeekday() {
@@ -260,44 +372,10 @@ function MercuryAlmanacBody({
   onExplain: (ruleId: number, ruleCode: string, label: string, x: number, y: number) => void
   onGate: () => void
 }) {
-  const [viewMode, setViewMode] = useState<ViewMode>('live')
-  const [cursorYear, setCursorYear] = useState(() => new Date().getFullYear())
-  const [cursorMonth, setCursorMonth] = useState(() => new Date().getMonth())
-
-  const { rangeStart, rangeEnd } = useMemo(() => {
-    if (viewMode === 'month') {
-      const r = monthRange(cursorYear, cursorMonth)
-      return { rangeStart: r.start, rangeEnd: r.end }
-    }
-    if (viewMode === 'year') {
-      const r = yearRange(cursorYear)
-      return { rangeStart: r.start, rangeEnd: r.end }
-    }
-    return { rangeStart: startIso(), rangeEnd: endIso() }
-  }, [viewMode, cursorYear, cursorMonth])
-  const totalDays = Math.max(1, daysBetween(rangeStart, rangeEnd))
-
-  const handlePrev = () => {
-    if (viewMode === 'month') {
-      if (cursorMonth === 0) { setCursorMonth(11); setCursorYear(y => y - 1) }
-      else setCursorMonth(m => m - 1)
-    } else if (viewMode === 'year') {
-      setCursorYear(y => y - 1)
-    }
-  }
-  const handleNext = () => {
-    if (viewMode === 'month') {
-      if (cursorMonth === 11) { setCursorMonth(0); setCursorYear(y => y + 1) }
-      else setCursorMonth(m => m + 1)
-    } else if (viewMode === 'year') {
-      setCursorYear(y => y + 1)
-    }
-  }
-  const handleJumpToday = () => {
-    const n = new Date()
-    setCursorYear(n.getFullYear())
-    setCursorMonth(n.getMonth())
-  }
+  const {
+    viewMode, setViewMode, rangeStart, rangeEnd, totalDays, today, todayInRange, rangeLabel,
+    handlePrev, handleNext, handleJumpToday,
+  } = useAlmanacRange(horizonDays)
 
   const { data: almanac, isLoading } = useQuery({
     queryKey: ['mercury-almanac', rangeStart, rangeEnd],
@@ -306,8 +384,6 @@ function MercuryAlmanacBody({
     retry: 1,
   })
 
-  const today = todayIso()
-  const todayInRange = today >= rangeStart && today <= rangeEnd
   const todayLeft = xPct(today, rangeStart, totalDays)
   const cutoffLeft = xPct(cutoffIso, rangeStart, totalDays)
 
@@ -351,56 +427,12 @@ function MercuryAlmanacBody({
 
   const visibleEvents = (almanac?.events ?? []).filter(ev => ev.date >= rangeStart && ev.date <= rangeEnd)
 
-  const rangeLabel = viewMode === 'live'
-    ? `${PAST_DAYS}d back → ${horizonDays}d ahead`
-    : viewMode === 'month'
-      ? new Date(`${rangeStart}T00:00:00`).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })
-      : String(cursorYear)
-
   return (
     <>
-      {/* Live / Month / Year nav */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '14px 0' }}>
-        {(['live', 'month', 'year'] as ViewMode[]).map(m => (
-          <button
-            key={m}
-            onClick={() => setViewMode(m)}
-            style={{
-              padding: '4px 12px', borderRadius: 6, fontSize: 11, textTransform: 'capitalize',
-              cursor: 'pointer', fontFamily: 'var(--font-mono, monospace)',
-              background: viewMode === m ? 'color-mix(in srgb, var(--accent) 18%, transparent)' : 'transparent',
-              border: `1px solid ${viewMode === m ? 'color-mix(in srgb, var(--accent) 45%, transparent)' : 'var(--border)'}`,
-              color: viewMode === m ? 'var(--accent)' : 'var(--text-secondary)',
-            }}
-          >
-            {m}
-          </button>
-        ))}
-        {viewMode !== 'live' && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 4 }}>
-            <button onClick={handlePrev} aria-label={`Previous ${viewMode}`} style={{
-              width: 24, height: 24, borderRadius: 6, cursor: 'pointer',
-              border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-secondary)',
-            }}>‹</button>
-            <span style={{
-              fontSize: 12, fontFamily: 'var(--font-mono, monospace)', color: 'var(--text-primary)',
-              minWidth: 96, textAlign: 'center',
-            }}>
-              {rangeLabel}
-            </span>
-            <button onClick={handleNext} aria-label={`Next ${viewMode}`} style={{
-              width: 24, height: 24, borderRadius: 6, cursor: 'pointer',
-              border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-secondary)',
-            }}>›</button>
-            {!todayInRange && (
-              <button onClick={handleJumpToday} style={{
-                marginLeft: 6, padding: '3px 10px', borderRadius: 6, fontSize: 10.5, cursor: 'pointer',
-                border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-secondary)',
-              }}>Today</button>
-            )}
-          </div>
-        )}
-      </div>
+      <AlmanacRangeNav
+        viewMode={viewMode} setViewMode={setViewMode} rangeLabel={rangeLabel} todayInRange={todayInRange}
+        onPrev={handlePrev} onNext={handleNext} onToday={handleJumpToday}
+      />
 
       {isLoading ? (
         <DristiQLoader message="Reading Mercury's transits…" />
@@ -593,16 +625,142 @@ function MercuryAlmanacBody({
   )
 }
 
-// ── Bayer body ───────────────────────────────────────────────────────────────
+// ── Bayer per-rule timeline drill-down ──────────────────────────────────────
+// A single rule's own history over time IS a coherent story (unlike merging
+// all 9 into one shared timeline) — same Live/Month/Year browsing as
+// Mercury, just scoped to the one rule the user drilled into.
 
-function BayerRulesBody({
-  cutoffIso, evidenceByRule, lordFor, onExplain,
+function BayerRuleDetail({
+  ruleCode, ruleId, cutoffIso, horizonDays, evidenceByRule, lordFor, onExplain, onGate, onBack,
 }: {
+  ruleCode: string
+  ruleId: number
   cutoffIso: string
+  horizonDays: number
   evidenceByRule: Map<number, RuleEvidence>
   lordFor: (iso: string) => string | null
   onExplain: (ruleId: number, ruleCode: string, label: string, x: number, y: number) => void
+  onGate: () => void
+  onBack: () => void
 }) {
+  const def = BAYER_RULES.find(r => r.code === ruleCode)
+  const {
+    viewMode, setViewMode, rangeStart, rangeEnd, totalDays, todayInRange, rangeLabel,
+    handlePrev, handleNext, handleJumpToday,
+  } = useAlmanacRange(horizonDays)
+
+  const { data: segments, isLoading } = useQuery({
+    queryKey: ['bayer-rule-windows', ruleCode, rangeStart, rangeEnd],
+    queryFn: () => fetchBayerRuleWindows(ruleCode, rangeStart, rangeEnd),
+    staleTime: 15 * 60_000,
+    retry: 1,
+  })
+
+  if (!def) return null
+  const color = bayerRuleColor(ruleCode)
+  const glyph = bayerGlyph(ruleCode)
+  const ev = evidenceByRule.get(ruleId)
+  const read = ev ? buildRuleRead(ev) : null
+
+  const handleSegmentClick = (seg: LaneSegment, e: React.MouseEvent) => {
+    e.stopPropagation()
+    onExplain(seg.ruleId, seg.ruleCode, `${glyph} ${seg.label}`, e.clientX, e.clientY)
+  }
+  const handleLockedClick = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    onGate()
+  }
+
+  return (
+    <>
+      <button
+        onClick={onBack}
+        style={{
+          marginTop: 14, fontSize: 11, fontFamily: 'var(--font-mono, monospace)',
+          color: 'var(--text-secondary)', background: 'none', border: 'none', cursor: 'pointer', padding: 0,
+        }}
+      >
+        ← All rules
+      </button>
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '10px 0' }}>
+        <span style={{ fontSize: 18, color, lineHeight: 1 }}>{glyph}</span>
+        <span style={{ fontSize: 11, fontFamily: 'var(--font-mono, monospace)', color: 'var(--text-muted)' }}>{def.ruleNum}</span>
+        <span style={{ fontSize: 14, color: 'var(--text-primary)', fontWeight: 600 }}>{def.label}</span>
+      </div>
+      {read && (
+        <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 6 }}>{read.hover}</div>
+      )}
+
+      <AlmanacRangeNav
+        viewMode={viewMode} setViewMode={setViewMode} rangeLabel={rangeLabel} todayInRange={todayInRange}
+        onPrev={handlePrev} onNext={handleNext} onToday={handleJumpToday}
+      />
+
+      {isLoading ? (
+        <DristiQLoader message={`Reading ${def.label}'s windows…`} />
+      ) : !segments || segments.length === 0 ? (
+        <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>
+          No windows in this range.
+        </div>
+      ) : (
+        <>
+          <div style={{
+            overflowX: 'auto', borderRadius: 12, border: '1px solid var(--border)',
+            background: 'var(--card)', padding: '16px 16px 10px', marginBottom: 16,
+          }}>
+            <div style={{ minWidth: 900 }}>
+              <TimelineLane title={def.ruleNum} segments={segments} rangeStart={rangeStart} totalDays={totalDays}
+                cutoffIso={cutoffIso} color={color} lordFor={lordFor}
+                onSegmentClick={handleSegmentClick} onLockedClick={handleLockedClick} />
+            </div>
+          </div>
+
+          <div style={{ borderRadius: 12, border: '1px solid var(--border)', background: 'var(--card)', overflow: 'hidden' }}>
+            {segments.map((seg, i) => {
+              const locked = seg.from > cutoffIso
+              const days = daysBetween(seg.from, seg.to)
+              return (
+                <div
+                  key={`${seg.from}-${i}`}
+                  onClick={e => locked ? handleLockedClick(e) : handleSegmentClick(seg, e)}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 12, padding: '9px 16px', cursor: 'pointer',
+                    borderBottom: '1px solid color-mix(in srgb, var(--text-primary) 5%, transparent)',
+                    opacity: locked ? 0.6 : 1,
+                  }}
+                >
+                  <span style={{ fontSize: 12, color: 'var(--text-primary)', minWidth: 220 }}>
+                    {locked ? '🔒 ' : ''}{fmtD(seg.from)}{seg.isPoint ? '' : ` → ${fmtD(seg.to)}`}
+                  </span>
+                  {!seg.isPoint && (
+                    <span style={{ fontSize: 10, fontFamily: 'var(--font-mono, monospace)', color: 'var(--text-muted)' }}>
+                      {days}d
+                    </span>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </>
+      )}
+    </>
+  )
+}
+
+// ── Bayer body ───────────────────────────────────────────────────────────────
+
+function BayerRulesBody({
+  cutoffIso, horizonDays, evidenceByRule, lordFor, onExplain, onGate,
+}: {
+  cutoffIso: string
+  horizonDays: number
+  evidenceByRule: Map<number, RuleEvidence>
+  lordFor: (iso: string) => string | null
+  onExplain: (ruleId: number, ruleCode: string, label: string, x: number, y: number) => void
+  onGate: () => void
+}) {
+  const [detailRule, setDetailRule] = useState<{ code: string; ruleId: number } | null>(null)
   const today = todayIso()
   // Fixed window, not tied to any nav — a status view answers "right now",
   // not a browsable period. Forward margin generous enough that even the
@@ -615,6 +773,7 @@ function BayerRulesBody({
     queryFn: () => fetchBayerStatus(since, until, today),
     staleTime: 15 * 60_000,
     retry: 1,
+    enabled: !detailRule,
   })
 
   const { data: vixSeries } = useQuery({
@@ -622,11 +781,22 @@ function BayerRulesBody({
     queryFn: () => fetchVixSeries(addDays(today, -10), today),
     staleTime: 15 * 60_000,
     retry: 1,
+    enabled: !detailRule,
   })
   const todayVix = vixContextForDate((vixSeries ?? []) as VixPoint[], today)
 
   const lord = lordFor(today)
   const weekday = WEEKDAY_ABBR[new Date(`${today}T00:00:00`).getDay()]
+
+  if (detailRule) {
+    return (
+      <BayerRuleDetail
+        ruleCode={detailRule.code} ruleId={detailRule.ruleId}
+        cutoffIso={cutoffIso} horizonDays={horizonDays} evidenceByRule={evidenceByRule} lordFor={lordFor}
+        onExplain={onExplain} onGate={onGate} onBack={() => setDetailRule(null)}
+      />
+    )
+  }
 
   if (isLoading) return <DristiQLoader message="Reading Bayer's rules…" />
   if (!statuses) {
@@ -672,10 +842,9 @@ function BayerRulesBody({
           return (
             <div
               key={s.ruleCode}
-              onClick={e => onExplain(s.ruleId, s.ruleCode, `${glyph} ${s.def.label}`, e.clientX, e.clientY)}
               style={{
                 border: `1px solid color-mix(in srgb, ${color} 30%, transparent)`,
-                borderRadius: 10, padding: 14, cursor: 'pointer', background: 'var(--card)',
+                borderRadius: 10, padding: 14, background: 'var(--card)',
                 display: 'flex', flexDirection: 'column', gap: 8,
               }}
             >
@@ -726,6 +895,27 @@ function BayerRulesBody({
                 style={{ fontSize: 9.5, color: biasColor, fontFamily: 'var(--font-mono, monospace)' }}
               >
                 Bayer's claim: {s.def.baseBias} (unverified)
+              </div>
+
+              <div style={{ display: 'flex', gap: 14, marginTop: 2, borderTop: '1px solid var(--border)', paddingTop: 8 }}>
+                <button
+                  onClick={e => onExplain(s.ruleId, s.ruleCode, `${glyph} ${s.def.label}`, e.clientX, e.clientY)}
+                  style={{
+                    fontSize: 10.5, color: 'var(--text-secondary)', background: 'none', border: 'none',
+                    cursor: 'pointer', padding: 0, fontFamily: 'inherit',
+                  }}
+                >
+                  Explain ▸
+                </button>
+                <button
+                  onClick={() => setDetailRule({ code: s.ruleCode, ruleId: s.ruleId })}
+                  style={{
+                    fontSize: 10.5, color, background: 'none', border: 'none',
+                    cursor: 'pointer', padding: 0, fontFamily: 'inherit',
+                  }}
+                >
+                  Timeline ▸
+                </button>
               </div>
             </div>
           )
@@ -805,8 +995,8 @@ export default function AlmanacPage() {
         />
       ) : (
         <BayerRulesBody
-          cutoffIso={cutoffIso} evidenceByRule={evidenceByRule} lordFor={lordFor}
-          onExplain={onExplain}
+          cutoffIso={cutoffIso} horizonDays={horizonDays} evidenceByRule={evidenceByRule} lordFor={lordFor}
+          onExplain={onExplain} onGate={() => setGateOpen(true)}
         />
       )}
 

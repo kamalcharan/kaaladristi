@@ -23,6 +23,7 @@
 // weigh against the evidence, never as a verified fact.
 
 import { from } from './postgrest'
+import type { LaneSegment } from './mercuryAlmanac'
 
 export interface BayerRuleDef {
   code: string
@@ -105,4 +106,36 @@ export async function fetchBayerStatus(since: string, until: string, today: stri
       ruleCode: def.code, ruleId: codeToId.get(def.code) ?? 0, def, active, next,
     }
   }).filter(s => s.ruleId !== 0)
+}
+
+/** One rule's own windows in [since, until] — the timeline drill-down from
+ * a status card. A single rule's history over time IS a coherent story
+ * (unlike merging all 9 rules into one shared timeline), so this reuses
+ * the exact same LaneSegment shape/TimelineLane component Mercury uses. */
+export async function fetchBayerRuleWindows(ruleCode: string, since: string, until: string): Promise<LaneSegment[] | null> {
+  const def = BAYER_RULES.find(r => r.code === ruleCode)
+  if (!def) return null
+
+  const { data: rules, error: rErr } = await from('km_astro_rule_master')
+    .select('id,rule_code')
+    .eq('rule_code', ruleCode)
+    .execute()
+  if (rErr || !rules || rules.length === 0) return null
+  const ruleId = (rules as { id: number }[])[0].id
+
+  const { data: transits, error: tErr } = await from('km_rule_transits')
+    .select('start_date,end_date,sign,combustion_type')
+    .eq('rule_id', ruleId)
+    .gte('end_date', since)
+    .lte('start_date', until)
+    .order('start_date', { ascending: true })
+    .execute()
+  if (tErr || !transits) return null
+
+  return (transits as { start_date: string; end_date: string; sign: string | null; combustion_type: string | null }[])
+    .map(row => ({
+      ruleCode, ruleId, from: row.start_date, to: row.end_date,
+      label: row.sign ?? (row.combustion_type ? `${def.label} (${row.combustion_type})` : def.label),
+      isPoint: row.start_date === row.end_date,
+    }))
 }
