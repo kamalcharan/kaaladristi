@@ -13,9 +13,7 @@ import { astroGroupPillLabel } from '@/constants/astroGroupOverlays'
 import { useActiveRuleToday } from '@/hooks/useRuleInsight'
 import OverlayExplainPopover from '@/components/domain/VaNi/OverlayExplainPopover'
 import WorkspaceBlock from './WorkspaceBlock'
-import WorkspaceActionIsland from './WorkspaceActionIsland'
 import CatalogDrawer from '@/components/domain/Catalog/CatalogDrawer'
-import { useVisibleOverlayPairs, ConfluencePairMonitor } from '@/hooks/useConfluenceDetection'
 import { effectiveDotColor } from './overlayColors'
 import IndexDropdown from '@/components/domain/IndexDropdown'
 
@@ -258,8 +256,7 @@ interface Props {
   islandOffset?: number
 }
 
-export default function WorkspaceCanvas({ framework, onOpenDrawer, onMorningBrief, islandOffset = 0 }: Props) {
-  const confluencePairs = useVisibleOverlayPairs()
+export default function WorkspaceCanvas({ framework }: Props) {
   const [editMode, setEditMode] = useState(false)
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [drawerContext, setDrawerContext] = useState<'overlay' | 'block'>('block')
@@ -764,20 +761,15 @@ export default function WorkspaceCanvas({ framework, onOpenDrawer, onMorningBrie
         />
       )}
 
-      <WorkspaceActionIsland onOpen={onOpenDrawer ?? (() => {})} onMorningBrief={onMorningBrief} bottomOffset={islandOffset} />
-
-      {/* VaNi confluence monitors — one per visible overlay pair, no render output */}
-      {confluencePairs.map(([a, b]) => (
-        <ConfluencePairMonitor key={`${a}:${b}`} itemA={a} itemB={b} />
-      ))}
-
-      {/* Intra-group overlap monitors — SUSPENDED (owner 2026-07-22).
-          This is astro-only by construction (astro_group: tags), so it's
-          the same "no base rate, directional language, near-constant firing"
-          problem as the pair monitor above, at group scale (up to 6 pairs
-          per group). Not deleted — GroupOverlapMonitor stays importable if
-          this confluence engine is ever rebuilt on km_rule_evidence's
-          base-rate framework instead. */}
+      {/* VaNi Confluence engine — HIDDEN (owner 2026-07-22): island, header
+          pills, and drawer all suspended (unpolished, known cache bug, and
+          for astro pairs showed unvetted directional stats with no base
+          rate — see POA-astro-layer-mercury-launch.md). With no surface left
+          to show results, the pair/group monitors are stopped too rather
+          than firing /api/correlation/compute into the void. Components
+          (WorkspaceActionIsland, ConfluencePairMonitor, GroupOverlapMonitor,
+          CorrelationDrawer) are all kept, unimported — a straightforward
+          revert if this engine is rebuilt on the base-rate framework. */}
     </div>
   )
 }
