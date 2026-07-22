@@ -1,19 +1,21 @@
-// Mercury story ribbon — one compact line above the chart naming the current
-// chapter and (within the tier's forward horizon) what comes next.
-// POA-astro-layer §Phase A. Orientation language only — no verdicts.
-//   ☿ direct in Cancer · combust (glare) until 24 Jul · next: enters Leo 6 Aug
-// The "next:" tail is horizon-clamped (§Phase C); a lock chip marks that more
-// exists beyond the horizon for free/quarterly users.
+// Mercury story ribbon — one compact line above the chart naming Mercury's
+// current chapter. POA-astro-layer §Phase A. Orientation language only — no
+// verdicts.
+//   ☿ direct in Cancer · combust (glare) until 24 Jul
+// This ribbon owns "what's Mercury doing right now" only — "what's coming"
+// lives on the Almanac (/almanac), linked via the "full calendar →"
+// affordance (simplified 2026-07-23: dropped the horizon-clamped "next:"
+// event tail + lock chip that used to live here, now the Almanac's job).
 //
-// Click → the SAME 'index.astro_now' VaNi intent the header "Ask VaNi"
-// button lists on this page (owner 2026-07-22: "local page-level VaNi and
-// global VaNi both coordinate to show the same intents required in the
-// page" — one system, not a bespoke popover). Answered deterministically
+// Click the ribbon body → the SAME 'index.astro_now' VaNi intent the header
+// "Ask VaNi" button lists on this page (owner 2026-07-22: "local page-level
+// VaNi and global VaNi both coordinate to show the same intents required in
+// the page" — one system, not a bespoke popover). Answered deterministically
 // server-side (lib/astro_narration.py, no LLM) and cached in km_vani_cache.
 
 import { useQuery } from '@tanstack/react-query'
-import { fetchMercuryStory, type MercuryEvent } from '@/services/mercuryStory'
-import { useAstroHorizon } from '@/hooks/useAstroHorizon'
+import { useNavigate } from 'react-router-dom'
+import { fetchMercuryStory } from '@/services/mercuryStory'
 import { ASTRO_GROUP_OVERLAYS } from '@/constants/astroGroupOverlays'
 import { useVaNiStore } from '@/stores/vaniStore'
 
@@ -26,8 +28,8 @@ function fmtD(iso: string): string {
 }
 
 export default function MercuryStoryRibbon({ overlay = false }: { overlay?: boolean }) {
-  const { cutoffIso, fullQuarter } = useAstroHorizon()
   const openWithIntent = useVaNiStore(s => s.openWithIntent)
+  const navigate = useNavigate()
 
   const { data: story } = useQuery({
     queryKey: ['mercury-story'],
@@ -38,9 +40,6 @@ export default function MercuryStoryRibbon({ overlay = false }: { overlay?: bool
 
   if (!story) return null
 
-  const visible: MercuryEvent[] = story.upcoming.filter(e => e.date <= cutoffIso)
-  const lockedCount = story.upcoming.length - visible.length
-  const next = visible.slice(0, 2)
   const today = new Date().toISOString().slice(0, 10)
   // Readiness (owner's core use: advance notice — "event is coming, be
   // ready"; not bull or bear). Zone = watch-day ±2 sessions.
@@ -93,33 +92,18 @@ export default function MercuryStoryRibbon({ overlay = false }: { overlay?: bool
           </span>
         )}
       </span>
-      {next.length > 0 && (
-        <span style={{ color: 'var(--text-muted)' }}>
-          · next:{' '}
-          {next.map((e, i) => (
-            <span key={`${e.date}-${e.label}`}>
-              {i > 0 && ' · '}
-              <span style={{ color: e.watchDay ? 'var(--accent)' : 'var(--text-secondary)' }}>
-                {e.label} {fmtD(e.date)}{e.watchDay ? ' ◈' : ''}
-              </span>
-            </span>
-          ))}
-        </span>
-      )}
-      {!fullQuarter && lockedCount > 0 && (
-        <span
-          title={`${lockedCount} more event${lockedCount > 1 ? 's' : ''} this quarter — annual plan sees 90 days ahead`}
-          style={{
-            marginLeft: 'auto', fontSize: 10,
-            color: 'color-mix(in srgb, var(--text-primary) 40%, transparent)',
-            whiteSpace: 'nowrap', cursor: 'default',
-          }}
-        >
-          🔒 +{lockedCount} this quarter
-        </span>
-      )}
+      <span
+        onClick={e => { e.stopPropagation(); navigate('/almanac') }}
+        title="See the full Mercury calendar"
+        style={{
+          marginLeft: 'auto', fontSize: 10, whiteSpace: 'nowrap',
+          color: MERCURY_COLOR,
+        }}
+      >
+        ◈ full calendar →
+      </span>
       {/* Visible affordance — no hidden gesture required */}
-      <span style={{ fontSize: 9, color: 'color-mix(in srgb, var(--text-primary) 32%, transparent)', whiteSpace: 'nowrap', marginLeft: lockedCount > 0 && !fullQuarter ? 0 : 'auto' }}>
+      <span style={{ fontSize: 9, color: 'color-mix(in srgb, var(--text-primary) 32%, transparent)', whiteSpace: 'nowrap' }}>
         ✦ ask VaNi ▸
       </span>
     </div>

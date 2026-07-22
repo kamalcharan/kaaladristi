@@ -47,8 +47,9 @@ function sanskritSign(sign: string): string {
   return ZODIAC_SANSKRIT[sign] ?? sign
 }
 
-const TOTAL_DAYS = PAST_DAYS + FUTURE_DAYS
 const DAY_MS = 86400000
+
+type ViewMode = 'live' | 'month' | 'year'
 
 function todayIso(): string {
   return new Date().toISOString().slice(0, 10)
@@ -58,14 +59,34 @@ function startIso(): string {
   return new Date(Date.now() - PAST_DAYS * DAY_MS).toISOString().slice(0, 10)
 }
 
+function endIso(): string {
+  return new Date(Date.now() + FUTURE_DAYS * DAY_MS).toISOString().slice(0, 10)
+}
+
+function pad2(n: number): string {
+  return String(n).padStart(2, '0')
+}
+
+/** month is 0-indexed (JS Date convention). */
+function monthRange(year: number, month: number): { start: string; end: string } {
+  const start = `${year}-${pad2(month + 1)}-01`
+  const lastDay = new Date(Date.UTC(year, month + 1, 0)).getUTCDate()
+  const end = `${year}-${pad2(month + 1)}-${pad2(lastDay)}`
+  return { start, end }
+}
+
+function yearRange(year: number): { start: string; end: string } {
+  return { start: `${year}-01-01`, end: `${year}-12-31` }
+}
+
 function daysBetween(a: string, b: string): number {
   return Math.round((new Date(`${b}T00:00:00Z`).getTime() - new Date(`${a}T00:00:00Z`).getTime()) / DAY_MS)
 }
 
 /** % position along the timeline for a given ISO date, clamped to [0,100]. */
-function xPct(date: string, rangeStart: string): number {
+function xPct(date: string, rangeStart: string, totalDays: number): number {
   const d = daysBetween(rangeStart, date)
-  return Math.max(0, Math.min(100, (d / TOTAL_DAYS) * 100))
+  return Math.max(0, Math.min(100, (d / totalDays) * 100))
 }
 
 function fmtD(iso: string): string {
@@ -81,11 +102,12 @@ const LANE_COLORS: Record<string, string> = {
 // ── Lane row ──────────────────────────────────────────────────────────────
 
 function TimelineLane({
-  title, segments, rangeStart, cutoffIso, color, onSegmentClick, onLockedClick, lordFor, sanskrit,
+  title, segments, rangeStart, totalDays, cutoffIso, color, onSegmentClick, onLockedClick, lordFor, sanskrit,
 }: {
   title: string
   segments: LaneSegment[]
   rangeStart: string
+  totalDays: number
   cutoffIso: string
   color: string
   onSegmentClick: (seg: LaneSegment, e: React.MouseEvent) => void
@@ -106,8 +128,8 @@ function TimelineLane({
       <div style={{ position: 'relative', flex: 1, minWidth: 900, height: 34, borderRadius: 6,
         background: 'color-mix(in srgb, var(--text-primary) 3%, transparent)' }}>
         {segments.map((seg, i) => {
-          const left = xPct(seg.from, rangeStart)
-          const right = xPct(seg.to, rangeStart)
+          const left = xPct(seg.from, rangeStart, totalDays)
+          const right = xPct(seg.to, rangeStart, totalDays)
           const width = Math.max(right - left, 0.4)
           const locked = seg.from > cutoffIso
           const lord = lordFor?.(seg.from)
@@ -164,9 +186,51 @@ export default function AlmanacPage() {
   const [gateOpen, setGateOpen] = useState(false)
   const [explainAt, setExplainAt] = useState<{ x: number; y: number; ruleCode: string; ruleId: number; label: string } | null>(null)
 
+  // ── Live / Month / Year nav — history is unrestricted for every tier
+  // (Phase C), so Month/Year can browse any past period freely; the future
+  // edge still clamps through cutoffIso same as Live.
+  const [viewMode, setViewMode] = useState<ViewMode>('live')
+  const [cursorYear, setCursorYear] = useState(() => new Date().getFullYear())
+  const [cursorMonth, setCursorMonth] = useState(() => new Date().getMonth())
+
+  const { rangeStart, rangeEnd } = useMemo(() => {
+    if (viewMode === 'month') {
+      const r = monthRange(cursorYear, cursorMonth)
+      return { rangeStart: r.start, rangeEnd: r.end }
+    }
+    if (viewMode === 'year') {
+      const r = yearRange(cursorYear)
+      return { rangeStart: r.start, rangeEnd: r.end }
+    }
+    return { rangeStart: startIso(), rangeEnd: endIso() }
+  }, [viewMode, cursorYear, cursorMonth])
+  const totalDays = Math.max(1, daysBetween(rangeStart, rangeEnd))
+
+  const handlePrev = () => {
+    if (viewMode === 'month') {
+      if (cursorMonth === 0) { setCursorMonth(11); setCursorYear(y => y - 1) }
+      else setCursorMonth(m => m - 1)
+    } else if (viewMode === 'year') {
+      setCursorYear(y => y - 1)
+    }
+  }
+  const handleNext = () => {
+    if (viewMode === 'month') {
+      if (cursorMonth === 11) { setCursorMonth(0); setCursorYear(y => y + 1) }
+      else setCursorMonth(m => m + 1)
+    } else if (viewMode === 'year') {
+      setCursorYear(y => y + 1)
+    }
+  }
+  const handleJumpToday = () => {
+    const n = new Date()
+    setCursorYear(n.getFullYear())
+    setCursorMonth(n.getMonth())
+  }
+
   const { data: almanac, isLoading } = useQuery({
-    queryKey: ['mercury-almanac'],
-    queryFn: fetchMercuryAlmanac,
+    queryKey: ['mercury-almanac', rangeStart, rangeEnd],
+    queryFn: () => fetchMercuryAlmanac(rangeStart, rangeEnd),
     staleTime: 15 * 60_000,
     retry: 1,
   })
@@ -182,10 +246,10 @@ export default function AlmanacPage() {
     [evidenceRows],
   )
 
-  const rangeStart = startIso()
   const today = todayIso()
-  const todayLeft = xPct(today, rangeStart)
-  const cutoffLeft = xPct(cutoffIso, rangeStart)
+  const todayInRange = today >= rangeStart && today <= rangeEnd
+  const todayLeft = xPct(today, rangeStart, totalDays)
+  const cutoffLeft = xPct(cutoffIso, rangeStart, totalDays)
 
   // ── Day-lord (vara) tag — pure calendar fact, mirrors the owner's Excel
   // LORD column. Not a scored signal (see DN-*-MER-* rules, unpromoted).
@@ -228,11 +292,15 @@ export default function AlmanacPage() {
   }, [sectors, sectorLords, planets])
 
   // ── India VIX — plain context per event date, not a scored input.
+  // Clamp the fetch to whichever of rangeEnd/today is earlier — no VIX data
+  // exists for future dates when browsing Month/Year ahead of today.
+  const vixUntil = rangeEnd < today ? rangeEnd : today
   const { data: vixSeries } = useQuery({
-    queryKey: ['almanac-vix', rangeStart, today],
-    queryFn: () => fetchVixSeries(rangeStart, today),
+    queryKey: ['almanac-vix', rangeStart, vixUntil],
+    queryFn: () => fetchVixSeries(rangeStart, vixUntil),
     staleTime: 15 * 60_000,
     retry: 1,
+    enabled: rangeStart <= vixUntil,
   })
   const vixFor = (iso: string) => vixContextForDate((vixSeries ?? []) as VixPoint[], iso)
 
@@ -249,7 +317,13 @@ export default function AlmanacPage() {
     setGateOpen(true)
   }
 
-  const visibleEvents = (almanac?.events ?? []).filter(ev => ev.date >= rangeStart)
+  const visibleEvents = (almanac?.events ?? []).filter(ev => ev.date >= rangeStart && ev.date <= rangeEnd)
+
+  const rangeLabel = viewMode === 'live'
+    ? `${PAST_DAYS}d back → ${horizonDays}d ahead`
+    : viewMode === 'month'
+      ? new Date(`${rangeStart}T00:00:00`).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })
+      : String(cursorYear)
 
   return (
     <div style={{ padding: '20px 24px 60px', maxWidth: 1400, margin: '0 auto' }}>
@@ -259,6 +333,66 @@ export default function AlmanacPage() {
         titleEm="Almanac"
         lead="Motion · Combust & Rise · Journey"
       />
+
+      {/* Live / Month / Year nav */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '14px 0' }}>
+        {(['live', 'month', 'year'] as ViewMode[]).map(m => (
+          <button
+            key={m}
+            onClick={() => setViewMode(m)}
+            style={{
+              padding: '4px 12px', borderRadius: 6, fontSize: 11, textTransform: 'capitalize',
+              cursor: 'pointer', fontFamily: 'var(--font-mono, monospace)',
+              background: viewMode === m ? 'color-mix(in srgb, var(--accent) 18%, transparent)' : 'transparent',
+              border: `1px solid ${viewMode === m ? 'color-mix(in srgb, var(--accent) 45%, transparent)' : 'var(--border)'}`,
+              color: viewMode === m ? 'var(--accent)' : 'var(--text-secondary)',
+            }}
+          >
+            {m}
+          </button>
+        ))}
+        {viewMode !== 'live' && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 4 }}>
+            <button
+              onClick={handlePrev}
+              aria-label={`Previous ${viewMode}`}
+              style={{
+                width: 24, height: 24, borderRadius: 6, cursor: 'pointer',
+                border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-secondary)',
+              }}
+            >
+              ‹
+            </button>
+            <span style={{
+              fontSize: 12, fontFamily: 'var(--font-mono, monospace)', color: 'var(--text-primary)',
+              minWidth: 96, textAlign: 'center',
+            }}>
+              {rangeLabel}
+            </span>
+            <button
+              onClick={handleNext}
+              aria-label={`Next ${viewMode}`}
+              style={{
+                width: 24, height: 24, borderRadius: 6, cursor: 'pointer',
+                border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-secondary)',
+              }}
+            >
+              ›
+            </button>
+            {!todayInRange && (
+              <button
+                onClick={handleJumpToday}
+                style={{
+                  marginLeft: 6, padding: '3px 10px', borderRadius: 6, fontSize: 10.5, cursor: 'pointer',
+                  border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-secondary)',
+                }}
+              >
+                Today
+              </button>
+            )}
+          </div>
+        )}
+      </div>
 
       {isLoading ? (
         <div style={{ padding: 60, textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>
@@ -305,19 +439,23 @@ export default function AlmanacPage() {
             <div style={{ position: 'relative', minWidth: 900 }}>
               {/* Today cursor + cutoff shading — spans all three lanes */}
               <div style={{ position: 'relative' }}>
-                <div style={{
-                  position: 'absolute', left: `${todayLeft}%`, top: 0, bottom: 0,
-                  width: 1, background: 'color-mix(in srgb, var(--text-primary) 30%, transparent)',
-                  zIndex: 2, pointerEvents: 'none',
-                }} />
-                <div style={{
-                  position: 'absolute', left: `${todayLeft}%`, top: -14,
-                  transform: 'translateX(-50%)', fontSize: 9, color: 'var(--text-secondary)',
-                  fontFamily: 'var(--font-mono, monospace)', zIndex: 2, pointerEvents: 'none',
-                }}>
-                  today
-                </div>
-                {!fullQuarter && (
+                {todayInRange && (
+                  <>
+                    <div style={{
+                      position: 'absolute', left: `${todayLeft}%`, top: 0, bottom: 0,
+                      width: 1, background: 'color-mix(in srgb, var(--text-primary) 30%, transparent)',
+                      zIndex: 2, pointerEvents: 'none',
+                    }} />
+                    <div style={{
+                      position: 'absolute', left: `${todayLeft}%`, top: -14,
+                      transform: 'translateX(-50%)', fontSize: 9, color: 'var(--text-secondary)',
+                      fontFamily: 'var(--font-mono, monospace)', zIndex: 2, pointerEvents: 'none',
+                    }}>
+                      today
+                    </div>
+                  </>
+                )}
+                {!fullQuarter && cutoffIso >= rangeStart && cutoffIso <= rangeEnd && (
                   <div style={{
                     position: 'absolute', left: `${cutoffLeft}%`, right: 0, top: 0, bottom: 0,
                     background: 'color-mix(in srgb, var(--text-primary) 2%, transparent)',
@@ -326,13 +464,13 @@ export default function AlmanacPage() {
                   }} />
                 )}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  <TimelineLane title="Journey" segments={almanac.journey} rangeStart={rangeStart}
+                  <TimelineLane title="Journey" segments={almanac.journey} rangeStart={rangeStart} totalDays={totalDays}
                     cutoffIso={cutoffIso} color={LANE_COLORS.journey} lordFor={lordFor} sanskrit
                     onSegmentClick={handleSegmentClick} onLockedClick={handleLockedClick} />
-                  <TimelineLane title="Motion" segments={almanac.motion} rangeStart={rangeStart}
+                  <TimelineLane title="Motion" segments={almanac.motion} rangeStart={rangeStart} totalDays={totalDays}
                     cutoffIso={cutoffIso} color={LANE_COLORS.motion} lordFor={lordFor}
                     onSegmentClick={handleSegmentClick} onLockedClick={handleLockedClick} />
-                  <TimelineLane title="Combust" segments={almanac.combust} rangeStart={rangeStart}
+                  <TimelineLane title="Combust" segments={almanac.combust} rangeStart={rangeStart} totalDays={totalDays}
                     cutoffIso={cutoffIso} color={LANE_COLORS.combust} lordFor={lordFor}
                     onSegmentClick={handleSegmentClick} onLockedClick={handleLockedClick} />
                 </div>
@@ -347,7 +485,7 @@ export default function AlmanacPage() {
                 fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-mono, monospace)',
                 textTransform: 'uppercase', letterSpacing: '0.08em',
               }}>
-                Events · {PAST_DAYS}d back → {horizonDays}d ahead
+                Events · {rangeLabel}
               </div>
               {mercurySectorNames.length > 0 && (
                 <div style={{ marginTop: 4, fontSize: 10.5, color: 'color-mix(in srgb, var(--text-primary) 40%, transparent)' }}>

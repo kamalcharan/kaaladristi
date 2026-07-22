@@ -1,8 +1,11 @@
 // Mercury Almanac data — the owner's Excel (Motion / Combust & Rise / Journey)
 // productized as three timeline lanes. POA-astro-layer §Phase B.
-// Fetches PAST_DAYS back through FUTURE_DAYS ahead — the CALLER clamps
-// display through useAstroHorizon() (same client-side gating pattern as the
-// chart ribbon; server enforcement is the documented post-launch path).
+// Fetches whatever [since, until] range the caller asks for — the Almanac
+// page's Live/Month/Year nav picks the range; history is unrestricted for
+// every tier (owner-confirmed), only the FUTURE edge is clamped, and that
+// clamp happens at display time via useAstroHorizon() (same client-side
+// gating pattern as the chart ribbon; server enforcement is the documented
+// post-launch path), not in this fetch.
 
 import { from } from './postgrest'
 
@@ -10,6 +13,7 @@ export const RULE_JOURNEY = 'TRN-MER-MAN-TRN'
 export const RULE_MOTION = 'TR-MER-RET'
 export const RULE_COMBUST = 'TR-MER-CMB-E-BEA'
 
+// Default "Live" view window — today-60d back through today+90d ahead.
 export const PAST_DAYS = 60
 export const FUTURE_DAYS = 90
 
@@ -53,11 +57,7 @@ function daysBetweenDates(a: string, b: string): number {
   return Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86400000)
 }
 
-export async function fetchMercuryAlmanac(): Promise<MercuryAlmanac | null> {
-  const today = new Date()
-  const since = new Date(today.getTime() - PAST_DAYS * 86400000).toISOString().slice(0, 10)
-  const until = new Date(today.getTime() + FUTURE_DAYS * 86400000).toISOString().slice(0, 10)
-
+export async function fetchMercuryAlmanac(since: string, until: string): Promise<MercuryAlmanac | null> {
   const { data: rules, error: rErr } = await from('km_astro_rule_master')
     .select('id,rule_code')
     .in('rule_code', [RULE_JOURNEY, RULE_MOTION, RULE_COMBUST])
