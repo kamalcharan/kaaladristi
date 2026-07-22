@@ -14,7 +14,13 @@ const STORY_RULES = [RULE_JOURNEY, RULE_MOTION, RULE_COMBUST]
 export interface MercuryEvent {
   date: string      // YYYY-MM-DD
   label: string     // "enters Leo" / "turns retrograde" / "exits combust"
-  watchDay: boolean // ingress days carry the transition evidence
+  /** True ONLY for sign-ingress days — the sole family confirmed against
+   *  km_rule_evidence (56.1% flip vs 48.9% base, clears the +/-5pt honesty
+   *  threshold). Motion (retrograde/station) and combust boundaries measure
+   *  within that threshold — ordinary days — so they render as orientation,
+   *  never the WATCH framing, matching ruleInterpretation.ts's per-boundary
+   *  gate. Checked live 2026-07-22; revisit only on an evidence refresh. */
+  watchDay: boolean
 }
 
 export interface MercuryStory {
@@ -83,20 +89,16 @@ export async function fetchMercuryStory(): Promise<MercuryStory | null> {
         watchEvents.push({ date: row.start_date, label: `enters ${row.sign}` })
       }
     } else if (code === RULE_MOTION) {
+      // Motion boundaries are orientation only — not a confirmed watch day
+      // (TR-MER-RET start/end sit at 50.9%/47.1% vs a 48.9% base, inside
+      // the honesty threshold). Never added to watchEvents.
       if (active) {
         story.motion = 'retrograde'
-        watchEvents.push({ date: row.start_date, label: 'turns retrograde' })
         if (row.end_date >= today) {
-          story.upcoming.push({ date: row.end_date, label: 'stations direct', watchDay: true })
-          watchEvents.push({ date: row.end_date, label: 'stations direct' })
+          story.upcoming.push({ date: row.end_date, label: 'stations direct', watchDay: false })
         }
       } else if (row.start_date > today) {
-        story.upcoming.push({ date: row.start_date, label: 'turns retrograde', watchDay: true })
-        watchEvents.push({ date: row.start_date, label: 'turns retrograde' })
-      } else if (row.end_date < today) {
-        // Just-ended retro (fetched via the 2-day backfill) — the station-
-        // direct moment may still hold its readiness zone open.
-        watchEvents.push({ date: row.end_date, label: 'stationed direct' })
+        story.upcoming.push({ date: row.start_date, label: 'turns retrograde', watchDay: false })
       }
     } else if (code === RULE_COMBUST) {
       if (active) {

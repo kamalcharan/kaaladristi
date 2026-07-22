@@ -66,6 +66,7 @@ try:
         get_cached as _vani_pcache_get,
         set_cached as _vani_pcache_set,
     )
+    from lib.astro_narration import build_mercury_readiness_text  # noqa: E402
     _AI_OPTIONAL_OK = True
 except ImportError:
     _AI_SKILLS = {}
@@ -79,6 +80,7 @@ except ImportError:
     _vani_pcache_key = lambda intent_id, ctx: None   # noqa: E731
     _vani_pcache_get = lambda db, key: None          # noqa: E731
     _vani_pcache_set = lambda *a, **k: False         # noqa: E731
+    build_mercury_readiness_text = lambda db, date_str: None  # noqa: E731
 
 try:
     from app.middleware.interaction_logger import log_llm_interaction as _log_interaction  # noqa: E402
@@ -4843,6 +4845,37 @@ def vani_ask(req: VaNiAskRequest):
                 entity_type=req.entity_type or 'equity',
             )
             user_msg = format_equity_user_message(intent_id, ctx) if ctx else None
+
+        elif prefix == 'index':
+            # Deterministic (astro_narration.py) — no LLM ever needed for this
+            # intent; persistent cache is a performance layer only (owner
+            # 2026-07-22). Universal across indices (Mercury's sky state
+            # doesn't depend on which index is being viewed), so date-keyed.
+            _pcache_key = _vani_pcache_key(intent_id, {'v': 1, 'date': date_str})
+            _cached_text = _vani_pcache_get(db, _pcache_key) if _pcache_key else None
+            if _cached_text:
+                return {
+                    'intent_id': intent_id, 'date': date_str,
+                    'response': _cached_text,
+                    'ai': False, 'cached': True, 'provider': 'rule',
+                }
+            text = build_mercury_readiness_text(db, date_str)
+            if not text:
+                return {
+                    'intent_id': intent_id, 'date': date_str,
+                    'response': None, 'ai': False, 'cached': False,
+                    'provider': None, 'error': 'No astro data available for this date',
+                }
+            if _pcache_key:
+                _vani_pcache_set(
+                    db, _pcache_key, intent_id, _pcache_key.rsplit(':', 1)[-1],
+                    text, intent.cache_ttl_hours, llm_provider='rule', llm_model=None,
+                )
+            return {
+                'intent_id': intent_id, 'date': date_str,
+                'response': text,
+                'ai': False, 'cached': False, 'provider': 'rule',
+            }
 
         elif prefix == 'scanner':
             if not req.preset_id:

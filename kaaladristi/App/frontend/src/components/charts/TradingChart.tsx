@@ -1018,17 +1018,16 @@ export default function TradingChart({ data, height = 900, compact = false, work
 
       // ── Watch-day ticks (readiness — POA §Phase A item 1) ────────────────
       // The bands say "you were in a window"; these ticks say "this exact
-      // day was a watch day" (ingress / station — the boundary days whose
-      // ±2d orb carries the transition evidence). Bottom stubs + ◈ so a
-      // year of ingress days reads as a rhythm, not clutter.
+      // day was a watch day". ONLY sign-ingress days qualify — confirmed
+      // 2026-07-22 against km_rule_evidence (TRN-MER-MAN-TRN 'start' 56.1%
+      // vs 48.9% base). TR-MER-RET's own boundaries sit at 50.9%/47.1% —
+      // inside the honesty threshold, i.e. ordinary days — so retrograde/
+      // station ticks were removed (they overclaimed before this fix).
+      // Bottom stubs + ◈ so a year of ingress days reads as a rhythm.
       const watchTicks = new Map<string, string>()   // date → color
       for (const b of nonPanchak) {
-        const c = planetColorOfRuleCode(b.ruleCode) ?? b.color
         if (b.ruleCode === 'TRN-MER-MAN-TRN') {
-          watchTicks.set(b.from, c)
-        } else if (b.ruleCode === 'TR-MER-RET') {
-          watchTicks.set(b.from, c)
-          watchTicks.set(b.to, c)
+          watchTicks.set(b.from, planetColorOfRuleCode(b.ruleCode) ?? b.color)
         }
       }
       for (const [d, c] of watchTicks) {

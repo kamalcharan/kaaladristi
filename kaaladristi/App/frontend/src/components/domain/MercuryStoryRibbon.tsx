@@ -4,13 +4,18 @@
 //   ☿ direct in Cancer · combust (glare) until 24 Jul · next: enters Leo 6 Aug
 // The "next:" tail is horizon-clamped (§Phase C); a lock chip marks that more
 // exists beyond the horizon for free/quarterly users.
+//
+// Click → the SAME 'index.astro_now' VaNi intent the header "Ask VaNi"
+// button lists on this page (owner 2026-07-22: "local page-level VaNi and
+// global VaNi both coordinate to show the same intents required in the
+// page" — one system, not a bespoke popover). Answered deterministically
+// server-side (lib/astro_narration.py, no LLM) and cached in km_vani_cache.
 
-import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { fetchMercuryStory, type MercuryEvent } from '@/services/mercuryStory'
 import { useAstroHorizon } from '@/hooks/useAstroHorizon'
 import { ASTRO_GROUP_OVERLAYS } from '@/constants/astroGroupOverlays'
-import OverlayExplainPopover from '@/components/domain/VaNi/OverlayExplainPopover'
+import { useVaNiStore } from '@/stores/vaniStore'
 
 const MERCURY_COLOR =
   ASTRO_GROUP_OVERLAYS.find(g => g.tag === 'Mercury')?.color ?? 'var(--accent)'
@@ -22,10 +27,7 @@ function fmtD(iso: string): string {
 
 export default function MercuryStoryRibbon({ overlay = false }: { overlay?: boolean }) {
   const { cutoffIso, fullQuarter } = useAstroHorizon()
-  // Clicking the ribbon opens the full Mercury read — THE discoverable entry
-  // (owner 2026-07-22: "how will users know about these options?"). The same
-  // popover right-click uses, so VaNi's card plugs into the same door later.
-  const [explainAt, setExplainAt] = useState<{ x: number; y: number } | null>(null)
+  const openWithIntent = useVaNiStore(s => s.openWithIntent)
 
   const { data: story } = useQuery({
     queryKey: ['mercury-story'],
@@ -45,10 +47,9 @@ export default function MercuryStoryRibbon({ overlay = false }: { overlay?: bool
   const zone = story.watchZone && story.watchZone.until >= today ? story.watchZone : null
 
   return (
-    <>
     <div
-      onClick={e => setExplainAt({ x: e.clientX, y: e.clientY })}
-      title="Mercury now — click for the full read"
+      onClick={() => openWithIntent('index.astro_now')}
+      title="Ask VaNi — What's Mercury doing right now?"
       style={{
       display: 'flex', alignItems: 'center', gap: 8,
       flexWrap: overlay ? 'nowrap' : 'wrap',
@@ -119,17 +120,8 @@ export default function MercuryStoryRibbon({ overlay = false }: { overlay?: bool
       )}
       {/* Visible affordance — no hidden gesture required */}
       <span style={{ fontSize: 9, color: 'color-mix(in srgb, var(--text-primary) 32%, transparent)', whiteSpace: 'nowrap', marginLeft: lockedCount > 0 && !fullQuarter ? 0 : 'auto' }}>
-        read ▸
+        ✦ ask VaNi ▸
       </span>
     </div>
-    {explainAt && (
-      <OverlayExplainPopover
-        tag="Mercury"
-        anchorX={explainAt.x}
-        anchorY={explainAt.y}
-        onClose={() => setExplainAt(null)}
-      />
-    )}
-    </>
   )
 }

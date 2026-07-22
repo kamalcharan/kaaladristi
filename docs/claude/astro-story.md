@@ -224,3 +224,42 @@ free badge → Almanac view → VaNi narration → slow-planet replication → V
    under an INFERENCE label. THIS CHART line unchanged.
 6. Almanac view (flagship premium surface) + free active-window badge.
 7. VaNi Morning Brief window narration.
+
+## 8. VaNi unification + a caught accuracy bug (2026-07-22)
+
+Owner correction on the interaction model: local (ribbon) and global
+("Ask VaNi" header button) must show and answer the SAME intents, not two
+disconnected systems. Investigation found the chart page had **zero VaNi
+wiring** — no page registered in `lib/vani_intents.py` / `config/vaniIntents.ts`,
+so the global button fell back to the dashboard's 8 generic questions on
+any chart. Fixed with the *existing* scanner/equity pattern, not a new one:
+
+- New intent **`index.astro_now`** (`page="index_vp"` — already the
+  registered page for `/chart/index/:id` per `usePageContext.ts`, it just
+  had no intents) registered in both the backend and frontend registries.
+- **Deterministic, no LLM** (`lib/astro_narration.py`) per owner directive:
+  *"we don't need LLM everywhere... insert the data into the cache
+  table... LLM won't be invoked."* Computed server-side, written straight
+  into the existing persistent `km_vani_cache` — the same mechanism
+  `scanner.explain_preset`/`equity.*` already use — so the LLM branch in
+  `vani_ask()` is never reached for this intent in practice.
+  The ribbon's click now calls `useVaNiStore().openWithIntent('index.astro_now')`
+  — the same store the header button reads from — replacing the earlier
+  bespoke popover trigger. One system, one source of truth.
+- **Right-click stays separate** (`OverlayExplainPopover` + `RuleEvidenceRead`,
+  deterministic, client-side) — it answers a different, more granular
+  question ("why does THIS specific band matter") than the chart-level
+  "what's Mercury doing right now." Not unified; revisit if wanted later.
+
+**⚠ Accuracy bug caught while wiring this (same session, before it shipped
+to users):** the chart ribbon, canvas ticks, and the first draft of
+`astro_narration.py` all marked BOTH sign-ingress AND motion boundaries
+(retrograde-turn, station-direct) as "watch days." Re-checking against
+`km_rule_evidence`: `TR-MER-RET` start/end sit at **50.9%/47.1% vs a 48.9%
+base** — INSIDE the ±5pt honesty threshold, i.e. ordinary days. Only
+`TRN-MER-MAN-TRN` 'start' (56.1% vs 48.9%) actually clears it. Fixed across
+all three surfaces (ribbon, canvas ticks, narration) in one pass — motion
+and combust boundaries now render as orientation only, never the WATCH
+framing. Exactly the failure mode principle #2 exists to prevent, caught
+by manually tracing the logic against live data before shipping rather
+than after.
