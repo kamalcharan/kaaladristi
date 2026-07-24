@@ -36,76 +36,67 @@ from dotenv import load_dotenv
 load_dotenv(os.path.join(script_dir, '..', '.env'))
 
 from lib.config import DATABASE_URL
+from lib.breadth_common import load_closes, adjust_close_cliffs  # noqa: F401 — load_closes re-exported for pipeline2/handlers.py
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
 EMA_SPANS = [20, 50, 150]
 WEIGHTS   = {20: 0.50, 50: 0.30, 150: 0.20}
 
-# ── Data loading ──────────────────────────────────────────────────────────────
-
-def load_closes(conn) -> pd.DataFrame:
-    """
-    Load all NSE equity close prices.
-    Returns a DataFrame: index=trade_date (datetime), columns=equity_id.
-    """
-    sql = """
-        SELECT e.trade_date, e.equity_id, e.close
-        FROM   km_equity_eod    e
-        JOIN   km_equity_symbols s ON s.id = e.equity_id
-        WHERE  s.exchange = 'NSE'
-          AND  e.close    IS NOT NULL
-        ORDER  BY e.trade_date
-    """
-    with conn.cursor() as cur:
-        cur.execute(sql)
-        rows = cur.fetchall()
-
-    if not rows:
-        print('  No NSE equity EOD data found.')
-        sys.exit(1)
-
-    df = pd.DataFrame(rows, columns=['trade_date', 'equity_id', 'close'])
-    df['trade_date'] = pd.to_datetime(df['trade_date'])
-    df['close']      = df['close'].astype(float)
-
-    pivot = df.pivot(index='trade_date', columns='equity_id', values='close')
-    pivot = pivot.sort_index()
-    print(f'  Loaded {len(pivot.columns):,} stocks × {len(pivot):,} dates')
-    return pivot
-
 # ── Computation ───────────────────────────────────────────────────────────────
+
+def _ema_traded_bars(closes: pd.DataFrame, span: int) -> pd.DataFrame:
+    """
+    EMA per stock over its OWN traded bars only.
+
+    A full-frame ewm() carries the EMA forward through NaN closes, so a
+    delisted/suspended stock keeps a "valid" EMA forever and silently counts
+    as "below MA" in every denominator (~120 phantom stocks depressing the
+    score by ~3 pts, found 2026-07-24). Computing on each stock's dropna
+    series and reindexing back leaves an EMA value only on days the stock
+    actually traded — matching the per-stock indicator-column semantics.
+    """
+    cols = {}
+    for col in closes.columns:
+        s = closes[col].dropna()
+        if len(s) >= span:
+            cols[col] = s.ewm(span=span, min_periods=span, adjust=False).mean()
+    return pd.DataFrame(cols).reindex(index=closes.index, columns=closes.columns)
+
 
 def compute_breadth(closes: pd.DataFrame) -> pd.DataFrame:
     """
-    For each date compute pct_above_20/50/150 + breadth_score (the existing
-    MA-participation score, unchanged) PLUS the movers/thrust dimensions:
-    universe/above counts and daily/5-day extreme-mover counts.
+    For each date compute pct_above_20/50/150 + breadth_score PLUS the
+    movers/thrust dimensions: universe/above counts and daily/5-day
+    extreme-mover counts.
 
-    The count columns share ONE daily universe = stocks with a valid 150-day MA
-    (the most conservative set), so above+below reconciles to universe and every
-    dimension uses the same denominator — matching the reference layout.
+    Hygiene (2026-07-24 fix — score previously read systematically low vs
+    reference breadth sources):
+      - closes are cliff-adjusted first (unadjusted splits/bonuses inflated
+        long EMAs → stocks read "below 150-EMA" for months after a split)
+      - every denominator requires the stock to have TRADED that day with a
+        warmed-up MA (no phantom delisted/suspended stocks)
 
+    The count columns share ONE daily universe = stocks with a valid 150-day
+    MA (the most conservative set), so above+below reconciles to universe.
     Drops early dates where the 150-day MA hasn't warmed up yet.
     """
+    closes = adjust_close_cliffs(closes)
+
     pct = {}
-    above_cnt = {}
-    ema_by_span = {}
-    valid_mask = pd.DataFrame(index=closes.index, dtype=bool)
+    above_by_span = {}
+    valid_150 = None
 
     for span in EMA_SPANS:
-        ema   = closes.ewm(span=span, min_periods=span, adjust=False).mean()
-        above = (closes > ema)
+        ema   = _ema_traded_bars(closes, span)
+        above = closes > ema          # False wherever close or EMA is NaN
+        valid = ema.notna()           # traded that day + span bars of history
 
-        # Per-date: only count stocks that have a valid MA (per-span, for pct)
-        has_ema = ema.notna()
-        n_valid = has_ema.sum(axis=1).replace(0, np.nan)
-        n_above = (above & has_ema).sum(axis=1)
-
-        pct[span] = (n_above / n_valid * 100).round(2)
-        valid_mask[span] = n_valid.notna()
-        ema_by_span[span] = ema
-        above_cnt[span] = above  # boolean frame; re-counted vs the 150-universe below
+        n_valid = valid.sum(axis=1).replace(0, np.nan)
+        pct[span] = (above.sum(axis=1) / n_valid * 100).round(2)
+        above_by_span[span] = above
+        if span == 150:
+            valid_150 = valid
 
     out = pd.DataFrame(index=closes.index)
     out['pct_above_20']  = pct[20]
@@ -118,26 +109,30 @@ def compute_breadth(closes: pd.DataFrame) -> pd.DataFrame:
         out['pct_above_150'] * WEIGHTS[150]
     ).round(2)
 
-    # ── Shared universe = stocks with a valid 150-MA that day ─────────────────
-    universe = ema_by_span[150].notna() & closes.notna()   # boolean frame
+    # ── Shared universe = stocks traded today with a valid 150-MA ─────────────
+    universe = valid_150
     n_universe = universe.sum(axis=1)
     out['stock_count']    = n_universe.astype(int)   # kept for back-compat
     out['universe_count'] = n_universe.astype(int)
 
     # Above-counts recounted against the SINGLE 150-universe (above+below=universe)
     for span in EMA_SPANS:
-        out[f'above_{span}'] = (above_cnt[span] & universe).sum(axis=1).astype(int)
+        out[f'above_{span}'] = (above_by_span[span] & universe).sum(axis=1).astype(int)
 
     # ── Movers / thrust — over the same 150-universe ──────────────────────────
-    ret_1d = closes.pct_change(1)  * 100
-    ret_5d = closes.pct_change(5)  * 100
+    # Manual ffill/shift instead of pct_change: identical padding semantics on
+    # every pandas version, and cliff-adjusted closes mean a split ex-date no
+    # longer registers as a fake −50% mover.
+    cf = closes.ffill()
+    ret_1d = (cf / cf.shift(1) - 1) * 100
+    ret_5d = (cf / cf.shift(5) - 1) * 100
     out['up_5pct']       = ((ret_1d >  5) & universe).sum(axis=1).astype(int)
     out['down_5pct']     = ((ret_1d < -5) & universe).sum(axis=1).astype(int)
     out['up_20pct_5d']   = ((ret_5d >  20) & universe).sum(axis=1).astype(int)
     out['down_20pct_5d'] = ((ret_5d < -20) & universe).sum(axis=1).astype(int)
 
-    # Drop warmup rows (where 150 MA hasn't kicked in)
-    out = out[valid_mask[150]]
+    # Drop warmup rows (where no stock has a valid 150 MA yet)
+    out = out[out['pct_above_150'].notna()]
     out.index = out.index.date   # convert to date objects for DB insertion
     return out
 
