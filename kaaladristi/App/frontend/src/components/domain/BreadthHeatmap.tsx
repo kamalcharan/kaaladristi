@@ -69,14 +69,37 @@ function fmtDate(d: string): string {
 // Vivid, fully-saturated cells (like FlowIntensityMap) — navy is used ONLY for
 // empty/zero cells, never blended into a live value (that's what muddied them).
 
-/** Participation: absolute diverging bands — low % = red … high % = green. */
+/**
+ * Participation: absolute diverging bands — low % = red … high % = green.
+ * Calibrated against the actual km_market_breadth distribution (2024-07 →
+ * 2026-07, 496 sessions): median pct_above_* ≈ 45%, ≥60% is roughly the top
+ * quintile. The old bands painted 50–60% green-ish, which read "healthy"
+ * while breadth was collapsing (2026-07-20..23 went 50.8 → 41.0 → 33.6 and
+ * the row stayed green/amber). Now: green is reserved for genuinely strong
+ * participation, ~median reads amber, bottom-third reads red.
+ */
 function divergingBg(v: number | null): string {
   if (v == null) return NAVY;
-  if (v >= 60) return 'var(--risk-green)';                                       // healthy
-  if (v >= 50) return 'color-mix(in srgb, var(--risk-green) 70%, var(--risk-amber))'; // yellow-green
-  if (v >= 42) return 'var(--risk-amber)';                                       // neutral
-  if (v >= 33) return 'color-mix(in srgb, var(--risk-red) 60%, var(--risk-amber))';   // orange
-  return 'var(--risk-red)';                                                      // weak
+  if (v >= 60) return 'var(--risk-green)';                                       // strong (top ~quintile)
+  if (v >= 52) return 'color-mix(in srgb, var(--risk-green) 60%, var(--risk-amber))'; // above average
+  if (v >= 45) return 'var(--risk-amber)';                                       // around median
+  if (v >= 36) return 'color-mix(in srgb, var(--risk-red) 60%, var(--risk-amber))';   // below average
+  return 'var(--risk-red)';                                                      // weak (bottom ~third)
+}
+
+/**
+ * Day-over-day breakdown/thrust marker for participation rows. A level-only
+ * cell is blind to speed — a −10 pt single-session collapse at a mid-range
+ * level looked as calm as a flat day. ±8 pts in one session is a genuine
+ * regime event (breadth normally drifts 1–3 pts/day), so mark it.
+ */
+const DELTA_MARK = 8;
+function deltaMark(v: number | null, prevSession: number | null): string | null {
+  if (v == null || prevSession == null) return null;
+  const d = v - prevSession;
+  if (d <= -DELTA_MARK) return 'var(--risk-red)';
+  if (d >= DELTA_MARK) return 'var(--risk-green)';
+  return null;
 }
 
 /** Mover: solid green/red — navy when zero, a brighter step on strong days. */
@@ -174,12 +197,19 @@ export default function BreadthHeatmap({
                   const bg = row.scale === 'diverging'
                     ? divergingBg(v)
                     : intensityBg(v, row.peak, row.scale);
+                  // Newest is left, so the previous session lives at i + 1.
+                  const mark = row.scale === 'diverging'
+                    ? deltaMark(v, row.vals[i + 1] ?? null)
+                    : null;
+                  const delta = v != null && row.vals[i + 1] != null ? v - (row.vals[i + 1] as number) : null;
+                  const deltaTip = mark && delta != null ? ` (${delta > 0 ? '+' : ''}${delta.toFixed(1)} vs prev)` : '';
                   return (
                     <div
                       key={d.trade_date}
-                      title={`${fmtDate(d.trade_date)} · ${row.label}: ${v != null ? v.toFixed(1) + '%' : 'n/a'}`}
+                      title={`${fmtDate(d.trade_date)} · ${row.label}: ${v != null ? v.toFixed(1) + '%' : 'n/a'}${deltaTip}`}
                       style={{ flex: 1, minWidth: 6, height: 20, borderRadius: 2, background: bg,
-                        border: '1px solid color-mix(in srgb, var(--text-primary) 7%, transparent)' }}
+                        border: '1px solid color-mix(in srgb, var(--text-primary) 7%, transparent)',
+                        boxShadow: mark ? `inset 0 -3px 0 0 ${mark === 'var(--risk-red)' ? 'color-mix(in srgb, var(--risk-red) 60%, black)' : 'color-mix(in srgb, var(--risk-green) 55%, black)'}` : undefined }}
                     />
                   );
                 })}
@@ -190,7 +220,7 @@ export default function BreadthHeatmap({
       </div>
 
       <div className="mt-2 text-[9px] text-muted" style={{ marginLeft: 150 }}>
-        Participation rows: red = weak (few above average) · green = healthy. Mover rows: intensity vs window peak · universe ≈ {maxUniverse.toLocaleString()} stocks
+        Participation rows: red = weak · amber ≈ typical · green = strong (vs 2-yr norms) · dark underline = ±{DELTA_MARK} pt one-session shift. Mover rows: intensity vs window peak · universe ≈ {maxUniverse.toLocaleString()} stocks
         {rows.every(r => !r.mover) && ' · mover rows hidden (universe too small)'}
       </div>
     </div>
