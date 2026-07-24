@@ -32,7 +32,6 @@ import argparse
 import psycopg2
 import psycopg2.extras
 import pandas as pd
-import numpy as np
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, script_dir)
@@ -41,35 +40,7 @@ from dotenv import load_dotenv
 load_dotenv(os.path.join(script_dir, '..', '.env'))
 
 from lib.config import DATABASE_URL
-
-# ── Data loading ──────────────────────────────────────────────────────────────
-
-def load_closes(conn) -> pd.DataFrame:
-    """Load all NSE equity close prices as a pivot (index=date, cols=equity_id)."""
-    sql = """
-        SELECT e.trade_date, e.equity_id, e.close
-        FROM   km_equity_eod    e
-        JOIN   km_equity_symbols s ON s.id = e.equity_id
-        WHERE  s.exchange = 'NSE'
-          AND  e.close    IS NOT NULL
-        ORDER  BY e.trade_date
-    """
-    with conn.cursor() as cur:
-        cur.execute(sql)
-        rows = cur.fetchall()
-
-    if not rows:
-        print('  No NSE equity EOD data found.')
-        sys.exit(1)
-
-    df = pd.DataFrame(rows, columns=['trade_date', 'equity_id', 'close'])
-    df['trade_date'] = pd.to_datetime(df['trade_date'])
-    df['close']      = df['close'].astype(float)
-
-    pivot = df.pivot(index='trade_date', columns='equity_id', values='close')
-    pivot = pivot.sort_index()
-    print(f'  Loaded {len(pivot.columns):,} stocks × {len(pivot):,} dates')
-    return pivot
+from lib.breadth_common import load_closes, adjust_close_cliffs  # noqa: F401 — load_closes re-exported for pipeline2/handlers.py
 
 # ── Computation ───────────────────────────────────────────────────────────────
 
@@ -77,7 +48,13 @@ def compute_roc(closes: pd.DataFrame) -> pd.DataFrame:
     """
     For each date compute roc_13, roc_55, sma_breadth.
     Drops early warmup rows where 5-period SMA of ROC_13 isn't available.
+
+    Closes are cliff-adjusted first (2026-07-24): unadjusted splits/bonuses
+    registered as fake −50% ROC readings that dragged the GroupAvg for the
+    full 13/55-day lookback after every ex-date.
     """
+    closes = adjust_close_cliffs(closes)
+
     # Per-stock ROC: (Close - Close[N]) / Close[N] * 100
     roc_13_stocks = (closes - closes.shift(13)) / closes.shift(13) * 100
     roc_55_stocks = (closes - closes.shift(55)) / closes.shift(55) * 100

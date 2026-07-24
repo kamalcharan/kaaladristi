@@ -124,11 +124,11 @@ function BreadthTooltip({ active, payload }: any) {
         <span className="mono text-[var(--text-secondary)]">{fmtPct(d.pct_above_20)}</span>
       </div>
       <div className="flex justify-between gap-4 mb-0.5">
-        <span className="text-muted">Above 50 SMA</span>
+        <span className="text-muted">Above 50 EMA</span>
         <span className="mono text-[var(--text-secondary)]">{fmtPct(d.pct_above_50)}</span>
       </div>
       <div className="flex justify-between gap-4">
-        <span className="text-muted">Above 150 SMA</span>
+        <span className="text-muted">Above 150 EMA</span>
         <span className="mono text-[var(--text-secondary)]">{fmtPct(d.pct_above_150)}</span>
       </div>
     </div>
@@ -207,8 +207,8 @@ export default function MarketBreadthChart({
           {!tooSmall && (
             <div className="flex items-center gap-4 pl-2 border-l border-kd-border">
               <EmaStat label="20 EMA"  value={latest?.pct_above_20  ?? null} prev={prev?.pct_above_20  ?? null} />
-              <EmaStat label="50 SMA"  value={latest?.pct_above_50  ?? null} prev={prev?.pct_above_50  ?? null} />
-              <EmaStat label="150 SMA" value={latest?.pct_above_150 ?? null} prev={prev?.pct_above_150 ?? null} />
+              <EmaStat label="50 EMA"  value={latest?.pct_above_50  ?? null} prev={prev?.pct_above_50  ?? null} />
+              <EmaStat label="150 EMA" value={latest?.pct_above_150 ?? null} prev={prev?.pct_above_150 ?? null} />
             </div>
           )}
 
@@ -225,7 +225,7 @@ export default function MarketBreadthChart({
       <div className="flex items-start justify-between mb-2">
         <div>
           <div className="text-[11px] font-bold text-[var(--text-secondary)]">Breadth Score Trend</div>
-          <div className="text-[9px] text-muted">50% Above 20 EMA · 30% Above 50 SMA · 20% Above 150 SMA</div>
+          <div className="text-[9px] text-muted">50% Above 20 EMA · 30% Above 50 EMA · 20% Above 150 EMA</div>
           {zoneMode === 'provisional' && (
             <div className="text-[9px] text-risk-amber mt-0.5">* Provisional — short index history</div>
           )}

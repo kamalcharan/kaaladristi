@@ -49,8 +49,8 @@ function ratio(count: number | null | undefined, universe: number | null | undef
 
 const ROWS: RowDef[] = [
   { key: 'a20',  label: '% Above 20 EMA',    scale: 'diverging', mover: false, value: d => d.pct_above_20 },
-  { key: 'a50',  label: '% Above 50 SMA',    scale: 'diverging', mover: false, value: d => d.pct_above_50 },
-  { key: 'a150', label: '% Above 150 SMA',   scale: 'diverging', mover: false, value: d => d.pct_above_150 },
+  { key: 'a50',  label: '% Above 50 EMA',    scale: 'diverging', mover: false, value: d => d.pct_above_50 },
+  { key: 'a150', label: '% Above 150 EMA',   scale: 'diverging', mover: false, value: d => d.pct_above_150 },
   { key: 'up5',  label: '% Up >5% Today',    scale: 'up',        mover: true,  value: d => ratio(d.up_5pct, d.universe_count) },
   { key: 'dn5',  label: '% Down >5% Today',  scale: 'down',      mover: true,  value: d => ratio(d.down_5pct, d.universe_count) },
   { key: 'up20', label: '% Up >20% (5D)',    scale: 'up',        mover: true,  value: d => ratio(d.up_20pct_5d, d.universe_count) },
