@@ -21,7 +21,7 @@ export const ASTRO_GROUP_PREFIX = 'astro_group:'
  * its windows/confidence are verified. Empty check + this allowlist together
  * gate the Group Overlays pill row in CatalogAstroSection.
  */
-export const LAUNCH_ACTIVE_GROUP_TAGS: string[] = ['Mercury']
+export const LAUNCH_ACTIVE_GROUP_TAGS: string[] = ['Mercury', 'Gola']
 
 /** A group overlay is a CatalogItem (so it flows through addOverlay) + its source tag. */
 export interface AstroGroupOverlay extends CatalogItem {
@@ -82,6 +82,19 @@ export const ASTRO_GROUP_OVERLAYS: AstroGroupOverlay[] = [
     tier_required: 'free',
   },
   {
+    id: 'astro_group:Gola',
+    display_name: 'Golārambha',
+    tag: 'Gola',
+    color: '#EAB308',          // gold — the Sun's family
+    description: 'Gola halves (Sun north/south of the celestial equator) + equinox turn windows',
+    block_type: 'astro_rule',
+    placement: 'chart_overlay',
+    overlay_type: 'astro_zone',
+    data_source: 'rule_engine',
+    applicable_to: ['index'],
+    tier_required: 'free',
+  },
+  {
     id: 'astro_group:MajorTransit',
     display_name: 'Major Transits',
     tag: 'MajorTransit',
@@ -128,6 +141,7 @@ export type AstroGroupId = `astro_group:${string}`
 const ASTRO_GROUP_GLYPHS: Record<string, string> = {
   'astro_group:Mercury': '☿',
   'astro_group:Venus': '♀',
+  'astro_group:Gola': '☉',
   'astro_group:Bayer': '⬡',
   'astro_group:MajorTransit': '⟳',
   'astro_group:Panchak': '◈',

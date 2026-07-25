@@ -22,6 +22,7 @@ import {
   type LaneSegment, type AlmanacEvent,
 } from '@/services/mercuryAlmanac'
 import { fetchBayerStatus, fetchBayerRuleWindows, BAYER_RULES } from '@/services/bayerAlmanac'
+import { fetchGolaAlmanac, RULE_DWIN } from '@/services/golaAlmanac'
 import { fetchEvidence, type RuleEvidence } from '@/pages/RuleEngine/ruleService'
 import { buildRuleRead } from '@/services/ruleInterpretation'
 import { useAstroHorizon } from '@/hooks/useAstroHorizon'
@@ -39,14 +40,17 @@ const MARS_COLOR =
   ASTRO_GROUP_OVERLAYS.find(g => g.tag === 'Gandanta')?.color ?? 'var(--caution)'
 const BAYER_COLOR =
   ASTRO_GROUP_OVERLAYS.find(g => g.tag === 'Bayer')?.color ?? 'var(--caution)'
+const GOLA_COLOR =
+  ASTRO_GROUP_OVERLAYS.find(g => g.tag === 'Gola')?.color ?? 'var(--caution)'
 
-type AlmanacType = 'mercury' | 'bayer'
-/** Type-selector dropdown — Mercury and Bayer have live evidence; the rest
- * are shown disabled (principle #4: one planet/rule-set at a time, provably
- * correct before the next). */
+type AlmanacType = 'mercury' | 'bayer' | 'gola'
+/** Type-selector dropdown — Mercury, Bayer, and Golārambha have live
+ * evidence; the rest are shown disabled (principle #4: one planet/rule-set
+ * at a time, provably correct before the next). */
 const ALMANAC_TYPES: { id: AlmanacType | string; label: string; enabled: boolean }[] = [
   { id: 'mercury', label: 'Mercury', enabled: true },
   { id: 'bayer', label: 'Bayer Rules', enabled: true },
+  { id: 'gola', label: 'Golārambha', enabled: true },
   { id: 'venus', label: 'Venus', enabled: false },
   { id: 'panchak', label: 'Panchak', enabled: false },
   { id: 'major-transit', label: 'Major Transits', enabled: false },
@@ -925,6 +929,173 @@ function BayerRulesBody({
   )
 }
 
+// ── Golārambha body ──────────────────────────────────────────────────────────
+// The Sun's hemisphere story: two gola halves + the ±1-day turn windows at
+// each equinox seam. Like Mercury, this IS one continuous story (the Sun is
+// always in exactly one gola), so lanes fit naturally. Windows are tropical
+// crossings from generate_golarambh_windows.py — NOT the sidereal sankranti.
+
+const GOLA_STUDY_LINES = [
+  'Uttara halves (Mar→Sep): 15 of 18 positive · mean +12.8% — NIFTY 50, 2008–2025',
+  'Dakshina halves (Sep→Mar): 10 of 19 positive · mean −1.2% · hosted every major drawdown of the era',
+  'Turn windows ±1d: range breakouts UP continued 8/12 at 3 months; breakdowns FAILED 6/9 (historically an exhaustion marker, not a continuation signal)',
+]
+
+function GolaAlmanacBody({
+  cutoffIso, horizonDays, lordFor, onExplain, onGate,
+}: {
+  cutoffIso: string
+  horizonDays: number
+  lordFor: (iso: string) => string | null
+  onExplain: (ruleId: number, ruleCode: string, label: string, x: number, y: number) => void
+  onGate: () => void
+}) {
+  const {
+    viewMode, setViewMode, rangeStart, rangeEnd, totalDays, today, todayInRange, rangeLabel,
+    handlePrev, handleNext, handleJumpToday,
+  } = useAlmanacRange(horizonDays)
+
+  const { data: almanac, isLoading } = useQuery({
+    queryKey: ['gola-almanac', rangeStart, rangeEnd],
+    queryFn: () => fetchGolaAlmanac(rangeStart, rangeEnd),
+    staleTime: 15 * 60_000,
+    retry: 1,
+  })
+
+  // Status facts — computed on a fixed today-centred window so they don't
+  // change as the user browses months/years (same reasoning as Bayer's
+  // status view: "right now" is not a browsable period).
+  const { data: statusAlmanac } = useQuery({
+    queryKey: ['gola-almanac-status'],
+    queryFn: () => fetchGolaAlmanac(addDays(todayIso(), -370), addDays(todayIso(), 370)),
+    staleTime: 60 * 60_000,
+    retry: 1,
+  })
+  const currentHalf = useMemo(() => {
+    if (!statusAlmanac) return null
+    return [...statusAlmanac.uttara, ...statusAlmanac.dakshina]
+      .find(s => s.from <= today && s.to >= today) ?? null
+  }, [statusAlmanac, today])
+  const nextWindow = useMemo(() => {
+    if (!statusAlmanac) return null
+    return statusAlmanac.windows.find(w => w.from > today) ?? null
+  }, [statusAlmanac, today])
+
+  const handleSegmentClick = (seg: LaneSegment, e: React.MouseEvent) => {
+    e.stopPropagation()
+    onExplain(seg.ruleId, seg.ruleCode, `☉ ${seg.label}`, e.clientX, e.clientY)
+  }
+  const handleLockedClick = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    onGate()
+  }
+
+  return (
+    <>
+      {/* Status strip — current gola + next seam */}
+      <div style={{
+        display: 'flex', flexWrap: 'wrap', gap: 20, alignItems: 'baseline',
+        margin: '16px 0 4px', padding: '12px 16px', borderRadius: 12,
+        border: '1px solid var(--border)', background: 'var(--card)',
+      }}>
+        <div>
+          <div style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono, monospace)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Now</div>
+          <div style={{ fontSize: 14, fontWeight: 600, color: currentHalf?.label === 'Uttara Gola' ? 'var(--bull)' : 'var(--bear)' }}>
+            {currentHalf ? currentHalf.label : '—'}
+          </div>
+          {currentHalf && (
+            <div style={{ fontSize: 10.5, color: 'var(--text-muted)' }}>
+              {fmtD(currentHalf.from)} → {fmtD(currentHalf.to)}
+            </div>
+          )}
+        </div>
+        <div>
+          <div style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono, monospace)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Next turn window</div>
+          <div style={{ fontSize: 14, fontWeight: 600, color: GOLA_COLOR }}>
+            {nextWindow ? nextWindow.label : '—'}
+          </div>
+          {nextWindow && (
+            <div style={{ fontSize: 10.5, color: 'var(--text-muted)' }}>
+              {fmtD(nextWindow.from)} → {fmtD(nextWindow.to)} · in {daysBetween(today, nextWindow.from)}d
+              {nextWindow.ruleCode === RULE_DWIN ? ' · historically the weakest of the four seasonal seams' : ''}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Backtest observation lines — observational, never predictive */}
+      <div style={{ margin: '0 0 4px', padding: '10px 16px', borderRadius: 12, border: '1px solid var(--border)', background: 'var(--card)' }}>
+        <div style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono, monospace)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>
+          Backtest observation · NIFTY 50 · historical tendency, not a prediction
+        </div>
+        {GOLA_STUDY_LINES.map(line => (
+          <div key={line} style={{ fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.7 }}>{line}</div>
+        ))}
+      </div>
+
+      <AlmanacRangeNav
+        viewMode={viewMode} setViewMode={setViewMode} rangeLabel={rangeLabel} todayInRange={todayInRange}
+        onPrev={handlePrev} onNext={handleNext} onToday={handleJumpToday}
+      />
+
+      {isLoading ? (
+        <DristiQLoader message="Reading the Sun's hemisphere story…" />
+      ) : !almanac || (almanac.uttara.length === 0 && almanac.dakshina.length === 0 && almanac.windows.length === 0) ? (
+        <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>
+          No Golārambha windows in this range — run generate_golarambh_windows.py after migration 166.
+        </div>
+      ) : (
+        <>
+          <div style={{
+            overflowX: 'auto', borderRadius: 12, border: '1px solid var(--border)',
+            background: 'var(--card)', padding: '16px 16px 10px', marginBottom: 16,
+          }}>
+            <div style={{ minWidth: 900, display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <TimelineLane title="Uttara" segments={almanac.uttara} rangeStart={rangeStart} totalDays={totalDays}
+                cutoffIso={cutoffIso} color="var(--bull)" lordFor={lordFor}
+                onSegmentClick={handleSegmentClick} onLockedClick={handleLockedClick} />
+              <TimelineLane title="Dakshina" segments={almanac.dakshina} rangeStart={rangeStart} totalDays={totalDays}
+                cutoffIso={cutoffIso} color="var(--bear)" lordFor={lordFor}
+                onSegmentClick={handleSegmentClick} onLockedClick={handleLockedClick} />
+              <TimelineLane title="Turn ±1d" segments={almanac.windows} rangeStart={rangeStart} totalDays={totalDays}
+                cutoffIso={cutoffIso} color={GOLA_COLOR} lordFor={lordFor}
+                onSegmentClick={handleSegmentClick} onLockedClick={handleLockedClick} />
+            </div>
+          </div>
+
+          {/* Turn-window list for the browsed range */}
+          {almanac.windows.length > 0 && (
+            <div style={{ borderRadius: 12, border: '1px solid var(--border)', background: 'var(--card)', overflow: 'hidden' }}>
+              {almanac.windows.map((seg, i) => {
+                const locked = seg.from > cutoffIso
+                return (
+                  <div
+                    key={`${seg.from}-${i}`}
+                    onClick={e => locked ? handleLockedClick(e) : handleSegmentClick(seg, e)}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 12, padding: '9px 16px', cursor: 'pointer',
+                      borderBottom: '1px solid color-mix(in srgb, var(--text-primary) 5%, transparent)',
+                      opacity: locked ? 0.6 : 1,
+                    }}
+                  >
+                    <span style={{ fontSize: 14, color: GOLA_COLOR, lineHeight: 1 }}>☉</span>
+                    <span style={{ fontSize: 12, color: 'var(--text-primary)', minWidth: 200 }}>
+                      {locked ? '🔒 ' : ''}{seg.label}
+                    </span>
+                    <span style={{ fontSize: 11, fontFamily: 'var(--font-mono, monospace)', color: 'var(--text-secondary)' }}>
+                      {fmtD(seg.from)} → {fmtD(seg.to)}
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </>
+      )}
+    </>
+  )
+}
+
 // ── Page shell ───────────────────────────────────────────────────────────────
 
 export default function AlmanacPage() {
@@ -955,11 +1126,13 @@ export default function AlmanacPage() {
     <div style={{ padding: '20px 24px 60px', maxWidth: 1400, margin: '0 auto' }}>
       <PageHeader
         eyebrow="Astro Layer"
-        title={almanacType === 'mercury' ? 'Mercury' : 'Bayer'}
-        titleEm={almanacType === 'mercury' ? 'Almanac' : 'Rules'}
+        title={almanacType === 'mercury' ? 'Mercury' : almanacType === 'gola' ? 'Golārambha' : 'Bayer'}
+        titleEm={almanacType === 'mercury' ? 'Almanac' : almanacType === 'gola' ? 'Almanac' : 'Rules'}
         lead={almanacType === 'mercury'
           ? 'Motion · Combust & Rise · Journey'
-          : "George Bayer's 1940 trading rules · which are active, right now"}
+          : almanacType === 'gola'
+            ? "The Sun's hemisphere story · Uttara & Dakshina Gola · equinox turn windows"
+            : "George Bayer's 1940 trading rules · which are active, right now"}
       />
 
       {/* Type selector */}
@@ -993,6 +1166,11 @@ export default function AlmanacPage() {
           evidenceByRule={evidenceByRule} lordFor={lordFor}
           onExplain={onExplain} onGate={() => setGateOpen(true)}
         />
+      ) : almanacType === 'gola' ? (
+        <GolaAlmanacBody
+          cutoffIso={cutoffIso} horizonDays={horizonDays} lordFor={lordFor}
+          onExplain={onExplain} onGate={() => setGateOpen(true)}
+        />
       ) : (
         <BayerRulesBody
           cutoffIso={cutoffIso} horizonDays={horizonDays} evidenceByRule={evidenceByRule} lordFor={lordFor}
@@ -1002,7 +1180,7 @@ export default function AlmanacPage() {
 
       {explainAt && (
         <OverlayExplainPopover
-          tag={almanacType === 'mercury' ? 'Mercury' : 'Bayer'}
+          tag={almanacType === 'mercury' ? 'Mercury' : almanacType === 'gola' ? 'Gola' : 'Bayer'}
           focusRuleId={explainAt.ruleId}
           focusRuleLabel={explainAt.label}
           anchorX={explainAt.x}
