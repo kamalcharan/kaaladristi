@@ -32,11 +32,37 @@ function clearSession(): void {
   localStorage.removeItem(SESSION_KEY);
 }
 
+/** True when the JWT carries an `exp` that has passed (60s skew allowance).
+ *  kd_auth_login tokens live 7 days (migration 003); before this check the
+ *  frontend kept the localStorage session forever, so day-8 visitors looked
+ *  logged-in but every API call 401'd — profile never loaded, ProtectedRoute
+ *  bounced them to /setup, and the wizard's framework save could never
+ *  succeed ("stuck at Your framework", 2026-07-25). An unparseable token is
+ *  treated as expired — it can never authenticate a request anyway. */
+function tokenExpired(token: string): boolean {
+  try {
+    const part = token.split('.')[1];
+    if (!part) return true;
+    const b64 = part.replace(/-/g, '+').replace(/_/g, '/');
+    const padded = b64 + '='.repeat((4 - (b64.length % 4)) % 4);
+    const payload = JSON.parse(atob(padded));
+    if (typeof payload.exp !== 'number') return false;
+    return payload.exp * 1000 <= Date.now() + 60_000;
+  } catch {
+    return true;
+  }
+}
+
 export function getStoredSession(): KdSession | null {
   try {
     const raw = localStorage.getItem(SESSION_KEY);
     if (!raw) return null;
-    return JSON.parse(raw) as KdSession;
+    const session = JSON.parse(raw) as KdSession;
+    if (!session?.access_token || tokenExpired(session.access_token)) {
+      clearSession();
+      return null;
+    }
+    return session;
   } catch {
     return null;
   }

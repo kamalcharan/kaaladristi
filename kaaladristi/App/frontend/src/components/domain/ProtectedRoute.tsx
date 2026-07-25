@@ -8,7 +8,7 @@ interface ProtectedRouteProps {
 }
 
 export default function ProtectedRoute({ requireOnboarded = true }: ProtectedRouteProps) {
-  const { user, profile, isLoading } = useAuthStore();
+  const { user, profile, isLoading, authError } = useAuthStore();
 
   // Still initializing auth
   if (isLoading) {
@@ -24,12 +24,20 @@ export default function ProtectedRoute({ requireOnboarded = true }: ProtectedRou
     return <Navigate to="/" replace />;
   }
 
+  // Profile FAILED to load (network/server error, token already handled by a
+  // clean sign-out in authStore) → back to the landing/login page, never into
+  // the /setup wizard: an onboarded user whose profile fetch hiccuped once
+  // must not be re-onboarded (repeat-/setup nuisance, 2026-07-25).
+  if (!profile && authError) {
+    return <Navigate to="/" replace />;
+  }
+
   // Authenticated but not onboarded → send to setup.
   // profile === null is treated as NOT onboarded: once auth initialization is
-  // done (isLoading handled above), a null profile means the km_profiles row
-  // is missing or unreadable — that must never skip onboarding. LoginPage
-  // awaits refreshProfile() before navigating, so onboarded users don't hit
-  // this with a transiently-null profile.
+  // done (isLoading handled above), a null profile with NO fetch error means
+  // the km_profiles row is genuinely missing — that must never skip
+  // onboarding. LoginPage awaits refreshProfile() before navigating, so
+  // onboarded users don't hit this with a transiently-null profile.
   if (requireOnboarded && !profile?.onboarded) {
     return <Navigate to="/setup" replace />;
   }
