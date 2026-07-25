@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useAuthStore } from '@/stores/authStore'
+import { useAuthStore, isAuthError } from '@/stores/authStore'
 import { useFrameworkStore } from '@/stores/frameworkStore'
-import { updateProfile } from '@/services/auth'
+import { updateProfile, signOut } from '@/services/auth'
 import { resolveSpotlightIntent } from '@/services/spotlight'
 import { isValidIndianMobile, normalizeIndianMobile } from '@/lib/phone'
 import { PAID_TIERS } from '@/constants/frameworkConstants'
@@ -621,6 +621,17 @@ export default function ProfileSetup() {
   const [browseIntent, setBrowseIntent] = useState(false)  // "Customize in Catalog" path → theme step → /catalog
   const [error,       setError]       = useState<string | null>(null)
 
+  // Guard: an ONBOARDED user must never sit in this wizard. Users used to
+  // land here via the transiently-null-profile bounce in ProtectedRoute and
+  // then re-walk the whole wizard (re-applying the starter template over
+  // their customized framework). If the profile says onboarded, leave —
+  // unless we're the ones flipping the flag right now (finishOnboarding).
+  const completingRef = useRef(false)
+  useEffect(() => {
+    if (completingRef.current) return
+    if (profile?.onboarded) navigate('/workspace', { replace: true })
+  }, [profile?.onboarded, navigate])
+
   // Resume: a returning user who built their framework (icp_mode saved) but
   // never completed the final step lands here (ProtectedRoute forces /setup
   // while onboarded is false). Skip the wizard and drop them on the last step
@@ -666,12 +677,29 @@ export default function ProfileSetup() {
 
   function errMessage(e: unknown): string {
     const raw = e instanceof Error ? e.message : String(e)
+    if (isAuthError(e)) {
+      return 'Your session has expired — please log in again.'
+    }
     // Network / HTTP failures reaching the framework service (pipeline API) are
     // the common cause — give the user something actionable instead of a stack.
     if (/framework service|HTTP \d|Failed to fetch|NetworkError|load failed/i.test(raw)) {
       return 'Couldn\'t reach the server to save your workspace. Check your connection and try again.'
     }
     return 'Something went wrong setting up your workspace. Please try again.'
+  }
+
+  // A dead token can never succeed on retry — the ONLY exit is a fresh login.
+  // Show the message briefly, then sign out (clears the stale session) so the
+  // user lands on the login page instead of retrying forever at "Your
+  // framework" (the stuck-wizard bug, 2026-07-25).
+  async function handleCommitError(e: unknown) {
+    setError(errMessage(e))
+    setCommitting(false)
+    if (isAuthError(e)) {
+      setTimeout(() => {
+        void signOut().then(() => navigate('/', { replace: true }))
+      }, 2500)
+    }
   }
 
   // Ensure the starter framework is actually persisted BEFORE the caller marks
@@ -688,13 +716,19 @@ export default function ProfileSetup() {
       await loadFramework(profile.id)
     }
     if (!useFrameworkStore.getState().framework) {
-      throw new Error('framework service unavailable')
+      // Surface the store's real fetch error (e.g. "HTTP 401") so the caller
+      // can distinguish a dead session from a down server.
+      const storeErr = useFrameworkStore.getState().error
+      throw new Error(storeErr || 'framework service unavailable')
     }
 
     const template = getTemplateForICP(icp, blend)
     applyTemplate(template)
     const saved = await saveFramework()
-    if (!saved) throw new Error('framework service: save failed')
+    if (!saved) {
+      const storeErr = useFrameworkStore.getState().error
+      throw new Error(storeErr || 'framework service: save failed')
+    }
   }
 
   // "Start here →" — apply template + save icp_mode, then go to the final
@@ -715,8 +749,7 @@ export default function ProfileSetup() {
       setCommitting(false)
       setStep(4)
     } catch (e) {
-      setError(errMessage(e))
-      setCommitting(false)
+      await handleCommitError(e)
     }
   }
 
@@ -742,7 +775,14 @@ export default function ProfileSetup() {
 
   // Theme step "Enter DristiQ" — the single place onboarding completes.
   async function finishOnboarding() {
-    await completeOnboarding()  // onboarded → true
+    completingRef.current = true  // suppress the onboarded-guard redirect — we navigate ourselves
+    try {
+      await completeOnboarding()  // onboarded → true
+    } catch (e) {
+      completingRef.current = false
+      await handleCommitError(e)
+      return
+    }
     if (browseIntent) { navigate('/catalog', { replace: true }); return }
     const dest = await resolveSpotlightIntent()
     navigate(dest ?? '/workspace', { replace: true })
@@ -762,8 +802,7 @@ export default function ProfileSetup() {
       setCommitting(false)
       setStep(5)
     } catch (e) {
-      setError(errMessage(e))
-      setCommitting(false)
+      await handleCommitError(e)
     }
   }
 
@@ -863,6 +902,15 @@ export default function ProfileSetup() {
               }}>
               Enter DristiQ →
             </button>
+            {error && (
+              <p role="alert" style={{ marginTop: 14, fontSize: 13, lineHeight: 1.5,
+                color: 'var(--risk-red)',
+                background: 'color-mix(in srgb, var(--risk-red) 8%, transparent)',
+                border: '1px solid color-mix(in srgb, var(--risk-red) 25%, transparent)',
+                borderRadius: 10, padding: '10px 14px' }}>
+                {error}
+              </p>
+            )}
           </div>
         </div>
       )}
