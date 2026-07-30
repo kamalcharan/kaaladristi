@@ -435,6 +435,17 @@ function Screen3({ template, isFree: _isFree, onAccept, onBrowse, isCommitting, 
   const [done, setDone]                 = useState(false)
   const logEndRef = useRef<HTMLDivElement>(null)
 
+  // Show a "still working…" retry surface if commit stays pending past 10s.
+  // rpc() now aborts at 15s and throws — but the retry link gives the user
+  // agency during the wait itself so they never feel trapped watching a
+  // spinner (the class of bug that stranded Charan repeatedly, 2026-07-30).
+  const [slowCommit, setSlowCommit] = useState(false)
+  useEffect(() => {
+    if (!isCommitting) { setSlowCommit(false); return }
+    const t = setTimeout(() => setSlowCommit(true), 10000)
+    return () => clearTimeout(t)
+  }, [isCommitting])
+
   useEffect(() => {
     const timers = animBlocks.map((_, i) =>
       setTimeout(() => setVisibleCount(i + 1), 350 * (i + 1))
@@ -547,6 +558,18 @@ function Screen3({ template, isFree: _isFree, onAccept, onBrowse, isCommitting, 
                   {errorMsg}
                 </p>
               )}
+              {slowCommit && !errorMsg && (
+                <p style={{ marginTop:14, fontSize:12, lineHeight:1.5,
+                  color:'var(--text-muted)', textAlign:'center' }}>
+                  Still working… if this doesn't move,{' '}
+                  <button type="button" onClick={onAccept}
+                    style={{ background:'none', border:'none', padding:0, cursor:'pointer',
+                      color:'var(--accent)', textDecoration:'underline', fontSize:12,
+                      fontFamily:'inherit' }}>
+                    tap here to retry
+                  </button>.
+                </p>
+              )}
             </div>
           )}
         </div>
@@ -634,14 +657,20 @@ export default function ProfileSetup() {
 
   // Resume: a returning user who built their framework (icp_mode saved) but
   // never completed the final step lands here (ProtectedRoute forces /setup
-  // while onboarded is false). Skip the wizard and drop them on the last step
-  // instead of making them redo everything. Runs once on mount.
-  const [resumeChecked, setResumeChecked] = useState(false)
+  // while onboarded is false). Skip the wizard and drop them on Plan (Step 4)
+  // instead of making them redo everything.
+  //
+  // 2026-07-30: this fires whenever the user is on Step ≤3 with icp_mode
+  // already saved — not just once on mount. The old "runs once on mount" guard
+  // let a user stall at Step 3 (screenshot from Charan) whenever the resume
+  // useEffect happened to run before the profile finished loading; after
+  // profile arrived the guard was already set and the jump never happened.
+  // The condition is idempotent (setStep(4) is a no-op if step is already 4).
   useEffect(() => {
-    if (resumeChecked || !profile) return
-    setResumeChecked(true)
-    if (!profile.onboarded && profile.icp_mode) setStep(4)
-  }, [profile, resumeChecked])
+    if (!profile) return
+    if (profile.onboarded) return
+    if (profile.icp_mode && step < 4) setStep(4)
+  }, [profile, step])
 
   // Screen 2: typing animation — reveal question after 1.4s
   useEffect(() => {
