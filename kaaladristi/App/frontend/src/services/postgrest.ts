@@ -50,6 +50,26 @@ function getAuthToken(): string {
   return anonKey || '';
 }
 
+// Default per-request timeout. A hung fetch used to spin the onboarding
+// wizard's "Setting up…" button forever with no error surface. 15s covers
+// the slowest real RPC (rule discovery, framework save w/ big blocks) with
+// margin; anything longer is a network/upstream hang the user should see.
+const FETCH_TIMEOUT_MS = 15000;
+
+async function fetchWithTimeout(
+  url: string,
+  init: RequestInit,
+  timeoutMs = FETCH_TIMEOUT_MS,
+): Promise<Response> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: ctrl.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /** Build default headers for PostgREST requests */
 function getHeaders(extra?: Record<string, string>): Record<string, string> {
   const token = getAuthToken();
@@ -289,7 +309,7 @@ class QueryBuilder {
     const headers = getHeaders(this.state.headers);
 
     try {
-      const resp = await fetch(url, {
+      const resp = await fetchWithTimeout(url, {
         method: this.state.method,
         headers,
         body: this.state.body ? JSON.stringify(this.state.body) : undefined,
@@ -331,11 +351,14 @@ class QueryBuilder {
 
       return { data, error: null, count };
     } catch (err) {
+      const aborted = err instanceof DOMException && err.name === 'AbortError';
       return {
         data: null,
         error: {
-          message: err instanceof Error ? err.message : 'Network error',
-          code: 'NETWORK_ERROR',
+          message: aborted
+            ? `Request timed out after ${Math.round(FETCH_TIMEOUT_MS / 1000)}s`
+            : err instanceof Error ? err.message : 'Network error',
+          code: aborted ? 'TIMEOUT' : 'NETWORK_ERROR',
         },
       };
     }
@@ -356,7 +379,7 @@ export async function rpc(
 ): Promise<{ data: any; error: PostgRESTError | null }> {
   const url = `${BASE_URL}/rpc/${fnName}`;
   try {
-    const resp = await fetch(url, {
+    const resp = await fetchWithTimeout(url, {
       method: 'POST',
       headers: getHeaders(),
       body: JSON.stringify(params || {}),
@@ -371,9 +394,15 @@ export async function rpc(
     const data = await resp.json();
     return { data, error: null };
   } catch (err) {
+    const aborted = err instanceof DOMException && err.name === 'AbortError';
     return {
       data: null,
-      error: { message: err instanceof Error ? err.message : 'Network error', code: 'NETWORK_ERROR' },
+      error: {
+        message: aborted
+          ? `Request timed out after ${Math.round(FETCH_TIMEOUT_MS / 1000)}s`
+          : err instanceof Error ? err.message : 'Network error',
+        code: aborted ? 'TIMEOUT' : 'NETWORK_ERROR',
+      },
     };
   }
 }
