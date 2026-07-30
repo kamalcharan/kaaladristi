@@ -16,6 +16,38 @@ function authHeaders(): Record<string, string> {
   return token ? { Authorization: `Bearer ${token}` } : {}
 }
 
+// Same 15s cap the postgrest client enforces — so a hung pipeline API
+// (the /api/framework/* PUT this store calls during onboarding) surfaces as
+// a real error instead of an infinite "Setting up…" spinner. Any HTTP error
+// body is folded into the thrown message so callers see WHY it failed, not
+// just the status code.
+const FRAMEWORK_FETCH_TIMEOUT_MS = 15000
+
+async function frameworkFetch(url: string, init: RequestInit): Promise<Response> {
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), FRAMEWORK_FETCH_TIMEOUT_MS)
+  try {
+    return await fetch(url, { ...init, signal: ctrl.signal })
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+async function extractError(res: Response): Promise<string> {
+  try {
+    const body = await res.text()
+    if (body) {
+      try {
+        const j = JSON.parse(body)
+        return `HTTP ${res.status} — ${j.detail || j.message || j.error || body.slice(0, 200)}`
+      } catch {
+        return `HTTP ${res.status} — ${body.slice(0, 200)}`
+      }
+    }
+  } catch { /* fall through */ }
+  return `HTTP ${res.status}`
+}
+
 // ── Debounce ──────────────────────────────────────────────────────────────────
 
 let _saveTimer: ReturnType<typeof setTimeout> | null = null
@@ -141,10 +173,10 @@ export const useFrameworkStore = create<FrameworkStore>((set, get) => ({
   loadFramework: async (userId: string) => {
     set({ isLoading: true, error: null })
     try {
-      const res = await fetch(`${pipelineUrl}/api/framework/${userId}`, {
+      const res = await frameworkFetch(`${pipelineUrl}/api/framework/${userId}`, {
         headers: authHeaders(),
       })
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      if (!res.ok) throw new Error(await extractError(res))
       const raw = await res.json()
       const data: UserFramework = raw
 
@@ -241,7 +273,12 @@ export const useFrameworkStore = create<FrameworkStore>((set, get) => ({
         }
       }
     } catch (err) {
-      set({ error: String(err), isLoading: false })
+      const aborted = err instanceof DOMException && err.name === 'AbortError'
+      const msg = aborted
+        ? `Framework service request timed out after ${Math.round(FRAMEWORK_FETCH_TIMEOUT_MS / 1000)}s`
+        : String(err)
+      console.error('[framework] loadFramework failed:', msg)
+      set({ error: msg, isLoading: false })
     }
   },
 
@@ -255,12 +292,12 @@ export const useFrameworkStore = create<FrameworkStore>((set, get) => ({
     if (!framework) return false
     set({ isSaving: true })
     try {
-      const res = await fetch(`${pipelineUrl}/api/framework/${framework.user_id}`, {
+      const res = await frameworkFetch(`${pipelineUrl}/api/framework/${framework.user_id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify(framework),
       })
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      if (!res.ok) throw new Error(await extractError(res))
       const updated: UserFramework = await res.json()
       // Sync server-assigned version + updated_at back into local state
       set(s => ({
@@ -269,7 +306,12 @@ export const useFrameworkStore = create<FrameworkStore>((set, get) => ({
       }))
       return true
     } catch (err) {
-      set({ isSaving: false, error: String(err) })
+      const aborted = err instanceof DOMException && err.name === 'AbortError'
+      const msg = aborted
+        ? `Framework service request timed out after ${Math.round(FRAMEWORK_FETCH_TIMEOUT_MS / 1000)}s`
+        : String(err)
+      console.error('[framework] saveFramework failed:', msg)
+      set({ isSaving: false, error: msg })
       return false
     }
   },

@@ -709,9 +709,19 @@ export default function ProfileSetup() {
     if (isAuthError(e)) {
       return 'Your session has expired — please log in again.'
     }
-    // Network / HTTP failures reaching the framework service (pipeline API) are
-    // the common cause — give the user something actionable instead of a stack.
-    if (/framework service|HTTP \d|Failed to fetch|NetworkError|load failed/i.test(raw)) {
+    // Surface the actual server response when it's an HTTP error — the old
+    // "check your connection" fallback hid every real cause (401/403/500/etc.)
+    // and was indistinguishable from an actual network drop, which is exactly
+    // why we kept guessing wrong (2026-07-30). Real network failures still
+    // show the friendly line; anything with a status code is worth reading.
+    if (/HTTP \d/i.test(raw)) {
+      const short = raw.replace(/^Error:\s*/, '').slice(0, 220)
+      return `Server rejected the save: ${short}. Try again in a moment.`
+    }
+    if (/timed out/i.test(raw)) {
+      return 'The server took too long to respond. Try again in a moment.'
+    }
+    if (/framework service|Failed to fetch|NetworkError|load failed/i.test(raw)) {
       return 'Couldn\'t reach the server to save your workspace. Check your connection and try again.'
     }
     return 'Something went wrong setting up your workspace. Please try again.'
