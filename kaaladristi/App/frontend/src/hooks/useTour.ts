@@ -5,9 +5,17 @@
 //   · tab-aware navigation: switch the host page's tab, wait for the target
 //     element to mount, THEN move — steps whose element never appears are
 //     skipped silently (e.g. widget removed from the user's framework)
-//   · once-per-user persistence (localStorage, same precedent as
-//     BetaWelcomeModal) + auto-start sequenced AFTER the welcome modal is
-//     acknowledged (listens for the 'kd:welcome-acked' window event)
+//   · SERVER-BACKED once-per-user persistence (km_profiles.tours_seen, jsonb
+//     map { tourId: isoTs }, migration 167). Previously the flag lived only
+//     in localStorage keyed by user, which meant every new browser / device /
+//     incognito / evicted-storage session re-fired the walk — reported as
+//     "guided walk shows every login". localStorage is kept as an instant
+//     cache to avoid a flash between mount and the first profile hydrate.
+//   · Auto-start is suppressed when profile.guided_tours_enabled === false
+//     (user opted out during onboarding). The `?` launcher still replays
+//     any tour on demand — this only disables the AUTO fire.
+//   · Auto-start sequenced AFTER the welcome modal is acknowledged (listens
+//     for the 'kd:welcome-acked' window event).
 //
 // The popover is skinned with theme tokens in styles/tour.css (.kd-tour-popover).
 
@@ -16,6 +24,8 @@ import { driver, type Driver, type DriveStep } from 'driver.js'
 import 'driver.js/dist/driver.css'
 import '@/styles/tour.css'
 import type { TourStep } from '@/config/tours/workspaceTour'
+import { useAuthStore } from '@/stores/authStore'
+import { updateProfile } from '@/services/auth'
 
 const seenKey = (tourId: string, userId: string) => `kd_tour_${tourId}_${userId}`
 const welcomeAckKey = (userId: string) => `kd_welcome_ack_${userId}`
@@ -51,22 +61,47 @@ interface UseTourOptions<Tab extends string> {
 export function useTour<Tab extends string>(opts: UseTourOptions<Tab>) {
   const { tourId, steps, userId, enabled = true, autoStart = true, onTabChange } = opts
 
+  // Reactive slices of the auth profile — hasSeen re-evaluates the moment the
+  // profile hydrates, so an unseen tour on a fresh session still auto-fires
+  // once the profile lands (see effect below with `profileReady` in deps).
+  const toursSeen           = useAuthStore((s) => s.profile?.tours_seen)
+  const guidedToursEnabled  = useAuthStore((s) => s.profile?.guided_tours_enabled)
+  const profileReady        = useAuthStore((s) => s.profile != null)
+  const refreshProfile      = useAuthStore((s) => s.refreshProfile)
+
   const driverRef = useRef<Driver | null>(null)
-  // live refs so the driver callbacks never close over stale props
+  // live refs so the driver callbacks never close over stale props / state
   const stepsRef = useRef(steps)
   stepsRef.current = steps
   const onTabChangeRef = useRef(onTabChange)
   onTabChangeRef.current = onTabChange
+  const toursSeenRef = useRef(toursSeen)
+  toursSeenRef.current = toursSeen
 
   const hasSeen = useCallback((): boolean => {
     if (!userId) return true
-    try { return !!localStorage.getItem(seenKey(tourId, userId)) } catch { return true }
-  }, [tourId, userId])
+    // DB is truth: profile.tours_seen[tourId] set ⇒ done, on any device.
+    if (toursSeen && toursSeen[tourId]) return true
+    // localStorage is a per-device cache — treat as seen if present so the
+    // walk doesn't flash before the profile hydrates on a slow network.
+    try { if (localStorage.getItem(seenKey(tourId, userId))) return true } catch { /* ignore */ }
+    return false
+  }, [tourId, userId, toursSeen])
 
   const markSeen = useCallback(() => {
     if (!userId) return
-    try { localStorage.setItem(seenKey(tourId, userId), new Date().toISOString()) } catch { /* ignore */ }
-  }, [tourId, userId])
+    const now = new Date().toISOString()
+    // 1. Instant-cache: writes even if the network is dead so a page refresh
+    //    doesn't re-fire the tour while the DB write is in flight.
+    try { localStorage.setItem(seenKey(tourId, userId), now) } catch { /* ignore */ }
+    // 2. Server truth: full-object write (no partial-key jsonb merge on the
+    //    backend). Concurrent tab races are effectively impossible — a user
+    //    can't complete two different tours in the same millisecond.
+    const next = { ...(toursSeenRef.current ?? {}), [tourId]: now }
+    updateProfile({ tours_seen: next })
+      .then(() => refreshProfile())
+      .catch((err) => console.warn('[useTour] tours_seen persist failed:', err))
+  }, [tourId, userId, refreshProfile])
 
   /**
    * Prepare step `index` (switch tab, wait for mount). Walks forward/backward
@@ -134,7 +169,16 @@ export function useTour<Tab extends string>(opts: UseTourOptions<Tab>) {
 
   // ── First-visit auto-start, sequenced after the beta welcome modal ──
   useEffect(() => {
-    if (!autoStart || !enabled || !userId || hasSeen()) return
+    if (!autoStart || !enabled || !userId) return
+    // Wait for the profile to hydrate before deciding — hasSeen() would
+    // otherwise return false during the pre-profile window and re-fire the
+    // walk on every full reload for a user who's already completed it.
+    if (!profileReady) return
+    // User opted out during onboarding → the ? launcher still works but we
+    // never auto-fire. This is the single "off switch" that suppresses every
+    // page tour globally without needing to seed tours_seen for each id.
+    if (guidedToursEnabled === false) return
+    if (hasSeen()) return
 
     let timer: number | undefined
     const begin = (delay: number) => { timer = window.setTimeout(() => void startTour(), delay) }
@@ -152,7 +196,7 @@ export function useTour<Tab extends string>(opts: UseTourOptions<Tab>) {
       window.removeEventListener('kd:welcome-acked', onAck)
       window.clearTimeout(timer)
     }
-  }, [autoStart, enabled, userId, hasSeen, startTour])
+  }, [autoStart, enabled, userId, profileReady, guidedToursEnabled, hasSeen, startTour])
 
   // unmount safety — never leave a dangling overlay on route change
   useEffect(() => () => { driverRef.current?.destroy() }, [])

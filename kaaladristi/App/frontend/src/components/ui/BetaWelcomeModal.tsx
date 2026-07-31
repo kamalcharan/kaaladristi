@@ -1,11 +1,17 @@
 import { useState, useEffect } from 'react';
 import { useAuthStore } from '@/stores/authStore';
+import { updateProfile } from '@/services/auth';
 
-// Shown once per user per browser: acknowledgement is persisted in
-// localStorage keyed by user id, so the welcome + non-advisory disclaimer
-// survives refreshes and only re-appears on a new device/browser (which is
-// desirable for a disclaimer). Mounted in ProtectedRoute so it fires on
-// whichever protected page the user lands on first — not just /dashboard.
+// Shown once per user, tracked SERVER-SIDE (km_profiles.welcome_acked_at,
+// migration 167). Previously the ack lived only in localStorage keyed by user
+// id, so the modal re-appeared on every new browser / device / incognito
+// window — which is defensible for a legal disclaimer but not for a beta
+// welcome speech. The legal disclaimer lives in Terms; this modal is a
+// welcome and needs to appear once, ever.
+//
+// localStorage kept as an instant cache so the modal doesn't flash between
+// component mount and the first profile hydrate. Mounted in ProtectedRoute so
+// it fires on whichever protected page the user lands on first.
 //
 // The open trigger stays in useEffect (not a useState lazy initializer):
 // React.StrictMode double-invokes initializers, while an effect's state
@@ -13,23 +19,38 @@ import { useAuthStore } from '@/stores/authStore';
 const ackKey = (userId: string) => `kd_welcome_ack_${userId}`;
 
 export default function BetaWelcomeModal() {
-  const user = useAuthStore((s) => s.user);
+  const user             = useAuthStore((s) => s.user);
+  const welcomeAckedAt   = useAuthStore((s) => s.profile?.welcome_acked_at);
+  const profileReady     = useAuthStore((s) => s.profile != null);
+  const refreshProfile   = useAuthStore((s) => s.refreshProfile);
   const [isOpen, setIsOpen] = useState(false);
 
   useEffect(() => {
     if (!user?.id) return;
+    // Wait for the profile — hasSeen on the DB is the source of truth, and
+    // showing the modal before the profile lands would re-flash it on every
+    // reload for someone who's already acked.
+    if (!profileReady) return;
+    if (welcomeAckedAt) return; // acked on any device — never show again
+    // Instant-cache check (this device already acked; the DB write may not
+    // have hydrated into `profile` yet on this reload).
     try {
-      if (!localStorage.getItem(ackKey(user.id))) setIsOpen(true);
-    } catch {
-      // storage unavailable — fall back to showing once per mount
-      setIsOpen(true);
-    }
-  }, [user?.id]);
+      if (localStorage.getItem(ackKey(user.id))) return;
+    } catch { /* storage unavailable — fall through and show */ }
+    setIsOpen(true);
+  }, [user?.id, profileReady, welcomeAckedAt]);
 
   function acknowledge() {
-    try {
-      if (user?.id) localStorage.setItem(ackKey(user.id), new Date().toISOString());
-    } catch { /* storage unavailable — modal simply reappears next session */ }
+    const userId = user?.id;
+    const now = new Date().toISOString();
+    if (userId) {
+      // 1. Instant-cache: survive a reload before the DB write completes.
+      try { localStorage.setItem(ackKey(userId), now) } catch { /* ignore */ }
+      // 2. Server truth: persist so the modal never returns on any device.
+      updateProfile({ welcome_acked_at: now })
+        .then(() => refreshProfile())
+        .catch((err) => console.warn('[BetaWelcomeModal] ack persist failed:', err));
+    }
     setIsOpen(false);
     // sequencing hook: lets the page explainer walk (useTour) start only
     // after this modal is out of the way on a user's very first visit

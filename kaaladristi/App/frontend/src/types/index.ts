@@ -151,6 +151,10 @@ export interface KmProfile {
   theme?: string;       // active UI theme id; undefined = 'kaaladristi'
   mode?: 'dark' | 'light' | 'system'; // active UI color mode; undefined = 'dark'
   icp_mode?: 'astro' | 'technical'; // workspace tab default; undefined treated as 'astro'
+  // Guided-walk state (migration 167) — replaces per-device localStorage flags.
+  tours_seen?: Record<string, string>;   // { tourId: isoTimestamp }
+  welcome_acked_at?: string | null;      // beta welcome modal ack
+  guided_tours_enabled?: boolean;        // false ⇒ auto-tours suppressed globally
 }
 
 // ── Index / Equity Symbol Tables (new restructured schema) ──

@@ -642,6 +642,11 @@ export default function ProfileSetup() {
   const [s2Typed,     setS2Typed]     = useState(false)
   const [committing,  setCommitting]  = useState(false)
   const [browseIntent, setBrowseIntent] = useState(false)  // "Customize in Catalog" path → theme step → /catalog
+  // Guided-walk preference (Step 5). Default true — most first-time users
+  // benefit from the auto-fired page tours; "No" persists as
+  // guided_tours_enabled=false and suppresses every auto-tour globally.
+  // The ? launcher still replays on demand either way.
+  const [tourPref,    setTourPref]    = useState<boolean>(true)
   const [error,       setError]       = useState<string | null>(null)
 
   // Guard: an ONBOARDED user must never sit in this wizard. Users used to
@@ -792,11 +797,14 @@ export default function ProfileSetup() {
     }
   }
 
-  // Complete onboarding — the single place onboarded flips to true.
+  // Complete onboarding — the single place onboarded flips to true. Also
+  // persists the tour preference chosen on Step 5 so the auto-walk behavior
+  // is decided upfront and never re-asked (see useTour.ts — the DB flag is
+  // the single off-switch that suppresses every auto-fire globally).
   async function completeOnboarding() {
-    await updateProfile({ onboarded: true })
+    await updateProfile({ onboarded: true, guided_tours_enabled: tourPref })
     try { await refreshProfile() } catch {
-      if (profile) setProfile({ ...profile, onboarded: true })
+      if (profile) setProfile({ ...profile, onboarded: true, guided_tours_enabled: tourPref })
     }
   }
 
@@ -926,9 +934,57 @@ export default function ProfileSetup() {
 
             <div style={{
               padding: '20px 22px', borderRadius: 16,
-              background: 'var(--card)', border: '1px solid var(--border)', marginBottom: 24,
+              background: 'var(--card)', border: '1px solid var(--border)', marginBottom: 16,
             }}>
               <ThemeSettings />
+            </div>
+
+            {/* Guided-walk preference — persists as guided_tours_enabled so
+                the page-tour auto-fire never re-appears per device. */}
+            <div style={{
+              padding: '18px 22px', borderRadius: 16,
+              background: 'var(--card)', border: '1px solid var(--border)', marginBottom: 24,
+            }}>
+              <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)',
+                marginBottom: 4, fontFamily: 'var(--font-body)' }}>
+                Guided walks
+              </div>
+              <p style={{ fontSize: 12.5, color: 'var(--text-muted)', marginBottom: 14, lineHeight: 1.5 }}>
+                A short intro pops up the first time you open each page. You can replay any
+                walk from the <span style={{ color: 'var(--text-secondary)' }}>?</span> icon
+                in the header.
+              </p>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                {([
+                  { val: true,  label: 'Yes, show me',            sub: 'Auto-explain each page' },
+                  { val: false, label: "No, I'll explore myself", sub: 'Silent — replay on demand' },
+                ] as const).map(opt => {
+                  const active = tourPref === opt.val
+                  return (
+                    <button
+                      key={String(opt.val)}
+                      type="button"
+                      onClick={() => setTourPref(opt.val)}
+                      style={{
+                        padding: '12px 14px', borderRadius: 12, cursor: 'pointer',
+                        textAlign: 'left', fontFamily: 'var(--font-body)',
+                        background: active
+                          ? 'color-mix(in srgb, var(--accent) 12%, transparent)'
+                          : 'color-mix(in srgb, var(--text-primary) 3%, transparent)',
+                        border: `1px solid ${active ? 'var(--accent)' : 'var(--border)'}`,
+                        color: 'var(--text-primary)',
+                        transition: 'all .15s ease',
+                      }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 2 }}>
+                        {opt.label}
+                      </div>
+                      <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                        {opt.sub}
+                      </div>
+                    </button>
+                  )
+                })}
+              </div>
             </div>
 
             <button
