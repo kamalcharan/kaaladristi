@@ -92,12 +92,42 @@ def _normalize_row(raw_row: dict, col_map: dict) -> dict:
     return out
 
 
+#: NSE UDiFF reports turnover in Rupees; the older bhavcopy reported Lakhs.
+_NSE_VALUE_RUPEE_KEYS = ('TtlTrfVal', 'TTLTRFVAL')
+_NSE_VALUE_LAKH_KEYS = ('TOTTRDVAL',)
+
+
+def _nse_value_to_crores(value_raw: float | None, raw_row: dict) -> float | None:
+    """
+    Convert NSE bhavcopy turnover to true Crores.
+
+    _NSE_BHAV_MAP funnels 'TOTTRDVAL' (Lakhs) and 'TtlTrfVal' (Rupees) into the
+    same 'value' field, so the divisor has to come from the header that was
+    actually present rather than from the value itself. Getting this wrong is a
+    silent 1e5x error — the column stays fully populated, so every fill-rate
+    health check still reads green.
+    """
+    if not value_raw:
+        return None
+
+    keys = {str(k).strip() for k in raw_row.keys()}
+    if keys & set(_NSE_VALUE_LAKH_KEYS):
+        return round(value_raw / 100, 4)          # Lakhs -> Crores
+    if keys & set(_NSE_VALUE_RUPEE_KEYS):
+        return round(value_raw / 1e7, 4)          # Rupees -> Crores
+
+    # Unknown header: assume the current (UDiFF) format rather than the retired one.
+    return round(value_raw / 1e7, 4)
+
+
 def parse_nse_bhav(csv_path: str, trade_date: date) -> list[dict]:
     """
     Parse NSE CM bhav copy CSV.
     Returns list of normalized dicts with: symbol, open, high, low, close,
     prev_close, volume, value_cr, trade_date.
-    All CM-segment series are included; SymbolMatcher filters to known symbols.
+    All CM-segment series are included; 'series' is carried on each record so
+    symbol_registrar can admit equity listings (EQ/BE/BZ/SM/ST) into the master
+    and leave debt/GS out. SymbolMatcher then filters to known symbols.
     """
     records = []
 
@@ -120,11 +150,18 @@ def parse_nse_bhav(csv_path: str, trade_date: date) -> list[dict]:
 
             volume = _safe_int(row.get('volume'))
             value_raw = _safe_float(row.get('value'))
-            # NSE value is in lakhs, convert to crores
-            value_cr = round(value_raw / 100, 4) if value_raw else None
+            # Turnover units differ by bhavcopy format and the column map funnels
+            # both spellings into 'value', so scale off whichever header was present:
+            #   UDiFF  'TtlTrfVal'  -> Rupees        -> / 1e7
+            #   legacy 'TOTTRDVAL'  -> Lakhs         -> / 100
+            # Both yield true Crores. BSE (parse_bse_bhav) already stores true Crores.
+            value_cr = _nse_value_to_crores(value_raw, raw)
 
             records.append({
                 'symbol': symbol,
+                # Kept so the symbol registrar can tell an equity apart from a
+                # bond/GS listing. upsert_equity_eod() drops it via EOD_COLUMNS.
+                'series': (row.get('series') or '').strip().upper() or None,
                 'trade_date': str(trade_date),
                 'open': o,
                 'high': h,
