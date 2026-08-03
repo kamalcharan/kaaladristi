@@ -8,6 +8,41 @@ Market analysis and forecasting platform combining NSE/BSE market data with plan
 
 ---
 
+## Settled Decisions — DO NOT RE-OPEN
+
+Owner decisions that are final. Do not re-litigate these, do not present them as
+open questions, do not ask the owner to choose again. Implement against them.
+
+### Universe: FULL NSE + BSE COVERAGE
+
+The target universe is **every listed equity on both exchanges** — not index
+members, not a curated liquid subset. Any gap between that and what's in
+`km_equity_symbols` is a **bug to fix**, never a design choice to confirm.
+
+This has been restated by the owner many times and keeps resurfacing because
+nothing recorded it. It is recorded here now.
+
+**Current state (audited 2026-08-03) — the intent is NOT met:**
+
+- `km_equity_symbols` holds **1,445 NSE** rows; only **1,334** get bars on a
+  given day. The real NSE listed universe is ~2,100+.
+- Root cause: the NSE master was seeded from **index membership**, not the
+  listed universe — `seed_equity_metadata.py` sources from NSE *index* APIs
+  (NIFTY TOTAL MARKET 750 → NIFTY 500 → sectorals). The only INSERT path is the
+  one-time `DBscripts/seed_index_equity.py`. A stock in no index was never
+  eligible to enter the master, and **no ongoing path adds one**.
+- `pipeline/processors/symbol_matcher.py:52-54` silently drops every bhavcopy
+  symbol not already in the master — the master *is* the universe filter
+  (`parser.py:100`). Daily: **3,440 parsed → 1,334 inserted → 2,104 dropped.**
+- Consequence: smallcaps that aren't index members can never appear in any
+  scanner. This is why big movers "don't come into DristiQ".
+
+**Implied by this decision (do not re-ask):** admit all equity series, backfill
+history for newly-registered symbols, and rebuild breadth history afterwards
+(universe size moves every breadth denominator — see D44).
+
+---
+
 ## Commands
 
 
@@ -587,6 +622,7 @@ These are in `LESSONS_LEARNED.md` in full; summary for quick reference:
 - **RLS on pipeline-computed tables**: don't add RLS to aggregate tables (`km_industry_eod`, etc.) — they contain no user data and RLS creates silent access bugs when `kd_app` role differs from `authenticated`.
 - **`auth.*` is Supabase-only — this deployment shimmed it in migration 149 (2026-07-14)**: RLS policies and `public.is_admin()` call `auth.uid()`/`auth.role()`/`auth.jwt()`, which exist on Supabase but NOT on self-hosted PostgREST. For a long time no migration DEFINED them (8 referenced, 0 defined), so every `auth.*`-based policy *errored at evaluation* — hidden because most tables have RLS OFF and admin writes go via FastAPI (`kd_app`). It surfaced as "permission denied"→then a silent `is_admin()` error on `km_index_constituents` (the one RLS-ON table with an `is_admin()` write policy) when custom-index saves (direct PostgREST) broke. Migration 149 defines `auth.uid/role/email/jwt` over `current_setting('request.jwt.claims', true)` — the same idiom `kd_update_profile` uses. If you add a new RLS policy, `auth.uid()`/`is_admin()` now work; if `is_admin()` ever "does nothing," first check the `auth` schema still exists. Also: two DB roles matter — logged-in users are `authenticated` (migration 144 reverted `kd_auth_login` to issue that for everyone, admins included), so any RLS-ON table needing admin writes must grant the verb to `authenticated` AND rely on `is_admin()` for authorization (e.g. migration 148).
 - **Coverage metrics**: `coverage_pct NUMERIC(5,2)` overflows on multi-date RPC results. Use `NUMERIC(7,2)` and cap at 999.99 in Python.
+- **Health checks measure PRESENCE, not CORRECTNESS — and nothing pushes** (audited 2026-08-03). All ~20 checks in `lib/health_checks.py` / `pipeline2/health.py` reduce to column fill-rate, row count, or step exceptions. The 19:30 gap sweep auto-enqueues `fix` jobs for `missing`/`partial` days — it is a self-healing loop, not a monitoring loop, and only logs on its own infra failure. There is **no alert channel anywhere in the backend** (`grep alert|notify|smtp|telegram|webhook` over `pipeline2/`+`lib/` → zero hits); the Pipeline Dashboard is pull-only. Consequence: three real bugs ran green for months — NSE `value_cr` inflated 1e5× (column 100% populated → green), 2,104 NSE symbols dropped daily (1,334 rows arrive consistently → green), and `dot_svd`/`dot_sbd`/`dot_syd` all-`false` since 2026-04-06 (columns populated, just degenerate → green). Worst part: `unmatched_count: 2104` **is already written to `km_pipeline_runs.metadata` every run and nothing ever reads it**. Three check classes are missing: **reconciliation** (parsed vs inserted — would have fired at 61% on day one), **invariant/plausibility** (e.g. `value_cr ≈ volume*close/1e7`, cross-exchange consistency), and **signal staleness** (boolean column with zero TRUE across the universe for N days). Add the check class, not just the one-off fix.
 - **KaalaDristi voice is observational**: "Strength Confluence" not "Power Buy". Surface conditions, don't issue trade commands.
 - **D39 — ROC badge language (SEBI)**: ROC badge states use neutral participation vocabulary — `expanding / slowing / turning / contracting / warming_up`. Never use bull/bear/uptrend/downtrend in any badge, label, or tooltip. `ROC_BADGE_MAP` in `BreadthRocChart.tsx` is the single source of truth.
 - **D40 — Breadth formula uses ema_20 + sma_50 + sma_150**: `fetchIndexBreadth` uses `ema_20` (true EMA) for p20, and `sma_50`/`sma_150` (SMAs) for p50/p150. This is a conscious deviation from Breadth_ROC_Spec_v1.0 §2 which specifies EMA50/EMA150 — those columns don't exist in `km_equity_eod`. Adding them is deferred; the signal quality difference at these window lengths is minimal. NOTE this describes the per-index CONSTITUENT breadth only — the market-wide `km_market_breadth` score (D44) is all-EMA, computed in Python, and is a different pipeline.
