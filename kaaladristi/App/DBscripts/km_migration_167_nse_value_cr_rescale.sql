@@ -63,6 +63,23 @@
 
 BEGIN;
 
+-- ── 0. Connection guard ───────────────────────────────────────────────────
+-- This project runs TWO databases: kaala_dristi_db (all market data) and
+-- vani_db (VaNi AI layer only). Pointing pgAdmin at the wrong one yields a bare
+-- 'relation "km_equity_eod" does not exist', which reads like a missing table
+-- rather than a wrong connection. Fail with something actionable instead.
+DO $mig167$
+BEGIN
+    IF current_database() <> 'kaala_dristi_db' THEN
+        RAISE EXCEPTION 'Migration 167 targets kaala_dristi_db but this session is connected to "%". Reconnect and re-run.', current_database();
+    END IF;
+
+    IF to_regclass('public.km_equity_eod') IS NULL THEN
+        RAISE EXCEPTION 'public.km_equity_eod not found in database "%". Wrong server?', current_database();
+    END IF;
+END
+$mig167$;
+
 -- ── 1. Before ─────────────────────────────────────────────────────────────
 SELECT 'BEFORE'                                   AS phase,
        s.exchange,
@@ -71,9 +88,9 @@ SELECT 'BEFORE'                                   AS phase,
        round(avg(e.volume * e.close / 1e7), 2)    AS avg_true_value_cr,
        round(avg(e.value_cr) /
              NULLIF(avg(e.volume * e.close / 1e7), 0), 3) AS ratio
-  FROM km_equity_eod e
-  JOIN km_equity_symbols s ON s.id = e.equity_id
- WHERE e.trade_date = (SELECT max(trade_date) FROM km_equity_eod)
+  FROM public.km_equity_eod e
+  JOIN public.km_equity_symbols s ON s.id = e.equity_id
+ WHERE e.trade_date = (SELECT max(trade_date) FROM public.km_equity_eod)
    AND e.value_cr IS NOT NULL
    AND e.volume > 0
    AND e.close  > 0
@@ -94,9 +111,9 @@ SELECT 'BEFORE'                                   AS phase,
 -- of history where NSE value_cr is NULL anyway:
 --     AND e.trade_date >= DATE '2025-01-01'
 -- Safe either way — the identity guard still decides what actually changes.
-UPDATE km_equity_eod e
+UPDATE public.km_equity_eod e
    SET value_cr = e.value_cr / 1e5
-  FROM km_equity_symbols s
+  FROM public.km_equity_symbols s
  WHERE s.id = e.equity_id
    AND s.exchange = 'NSE'
    AND e.value_cr IS NOT NULL
@@ -112,9 +129,9 @@ SELECT 'AFTER'                                    AS phase,
        round(avg(e.volume * e.close / 1e7), 2)    AS avg_true_value_cr,
        round(avg(e.value_cr) /
              NULLIF(avg(e.volume * e.close / 1e7), 0), 3) AS ratio
-  FROM km_equity_eod e
-  JOIN km_equity_symbols s ON s.id = e.equity_id
- WHERE e.trade_date = (SELECT max(trade_date) FROM km_equity_eod)
+  FROM public.km_equity_eod e
+  JOIN public.km_equity_symbols s ON s.id = e.equity_id
+ WHERE e.trade_date = (SELECT max(trade_date) FROM public.km_equity_eod)
    AND e.value_cr IS NOT NULL
    AND e.volume > 0
    AND e.close  > 0
@@ -126,8 +143,8 @@ SELECT 'AFTER'                                    AS phase,
 SELECT 'RESIDUAL'                                 AS phase,
        s.exchange,
        count(*)                                   AS rows_still_off_scale
-  FROM km_equity_eod e
-  JOIN km_equity_symbols s ON s.id = e.equity_id
+  FROM public.km_equity_eod e
+  JOIN public.km_equity_symbols s ON s.id = e.equity_id
  WHERE e.value_cr IS NOT NULL
    AND e.volume > 0
    AND e.close  > 0
