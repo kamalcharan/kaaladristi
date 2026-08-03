@@ -131,20 +131,24 @@ def run_update(target_date: str):
     """
     UPDATE km_equity_eod for target_date using window functions over full history.
 
-    avg_amt formula: delivery value in Crores = value_cr (Rs) / 1e7 * delivery_pct / 100
+    avg_amt formula: delivery value in Crores = value_cr * delivery_pct / 100
     Matches the nightly pipeline in compute_engine.py (compute_rolling_range).
+
+    value_cr is true Crores on both exchanges — parser.py normalises NSE
+    (Rupees under UDiFF, Lakhs under the legacy bhavcopy) and BSE (Rupees) at
+    parse time. The exchange-aware CASE WHEN that used to live here compensated
+    for NSE value_cr being 1e5x inflated; that is fixed at source, so the join
+    to km_equity_symbols is no longer needed for scaling.
+
+    NOTE: run this only against data already rescaled by the value_cr backfill
+    migration — on un-migrated NSE rows it will read 1e5x high.
 
     score_5d/22d logic mirrors migration 111 SQL exactly.
     """
     sql = """
 WITH eod AS (
-    -- Exchange-aware delivery-value scaling: NSE value_cr is ~1e5x inflated vs
-    -- true crores, BSE value_cr is true crores. The deliv formula is calibrated to
-    -- NSE's scale, so BSE is scaled to match (÷100 not ÷1e7). LEFT JOIN keeps every
-    -- row; NULL/NSE exchange takes the unchanged ÷1e7 path (NSE byte-identical).
-    SELECT e.*, s.exchange
+    SELECT e.*
     FROM km_equity_eod e
-    LEFT JOIN km_equity_symbols s ON s.id = e.equity_id
 ),
 base AS (
     SELECT
@@ -170,19 +174,19 @@ base AS (
         -- delivery value rolling averages in Crores
         -- value_cr (Rs) / 1e7 * delivery_pct / 100 = delivery Cr per bar
         ROUND(AVG(ROUND(
-            (COALESCE(value_cr, 0) / CASE WHEN exchange = 'BSE' THEN 100.0 ELSE 10000000.0 END * COALESCE(delivery_pct, 0) / 100.0)::numeric
+            (COALESCE(value_cr, 0) * COALESCE(delivery_pct, 0) / 100.0)::numeric
         , 4)) OVER (
             PARTITION BY equity_id ORDER BY trade_date
             ROWS BETWEEN 4 PRECEDING AND CURRENT ROW
         ), 4) AS amt5,
         ROUND(AVG(ROUND(
-            (COALESCE(value_cr, 0) / CASE WHEN exchange = 'BSE' THEN 100.0 ELSE 10000000.0 END * COALESCE(delivery_pct, 0) / 100.0)::numeric
+            (COALESCE(value_cr, 0) * COALESCE(delivery_pct, 0) / 100.0)::numeric
         , 4)) OVER (
             PARTITION BY equity_id ORDER BY trade_date
             ROWS BETWEEN 21 PRECEDING AND CURRENT ROW
         ), 4) AS amt22,
         ROUND(AVG(ROUND(
-            (COALESCE(value_cr, 0) / CASE WHEN exchange = 'BSE' THEN 100.0 ELSE 10000000.0 END * COALESCE(delivery_pct, 0) / 100.0)::numeric
+            (COALESCE(value_cr, 0) * COALESCE(delivery_pct, 0) / 100.0)::numeric
         , 4)) OVER (
             PARTITION BY equity_id ORDER BY trade_date
             ROWS BETWEEN 65 PRECEDING AND CURRENT ROW
@@ -234,7 +238,7 @@ base AS (
         , 2) AS bklevel,
         -- deliv_value_cr = delivery value in Crores for this bar
         ROUND(
-            (COALESCE(value_cr, 0) / CASE WHEN exchange = 'BSE' THEN 100.0 ELSE 10000000.0 END * COALESCE(delivery_pct, 0) / 100.0)::numeric
+            (COALESCE(value_cr, 0) * COALESCE(delivery_pct, 0) / 100.0)::numeric
         , 4) AS deliv_cr_bar
     FROM eod
 ), scored AS (

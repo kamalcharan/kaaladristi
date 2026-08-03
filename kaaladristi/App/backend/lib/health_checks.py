@@ -649,9 +649,104 @@ def check_breadth_roc(db, trading_days, skip_dates):
     }
 
 
+# ── Reconciliation: parsed vs inserted ───────────────────────────────────────
+#
+# Every other check here measures PRESENCE — is the column populated, did rows
+# arrive, did a step throw. None of them can see a row that was silently dropped
+# before insert, because the rows that *do* arrive look perfectly healthy.
+#
+# That blind spot hid a real bug for months: the NSE bhavcopy parsed ~3,440 rows
+# a day and only ~1,334 reached km_equity_eod, because the symbol master was
+# seeded from index membership and SymbolMatcher drops anything absent from it.
+# The drop count was already being written to km_pipeline_runs.metadata as
+# 'unmatched_count' on every single run — nothing ever read it.
+#
+# Denominator note: a raw matched/parsed ratio is NOT the signal. The NSE CM
+# bhavcopy legitimately carries debt (N1..N9), government securities (GS),
+# warrants and rights that are correctly excluded, so a healthy day still reads
+# ~40% on matched/parsed. What matters is the EQUITY rows: of the equity-series
+# symbols in today's file, how many landed? That should sit at ~100%.
+
+def _reconciliation_by_date(db, exchange: str, from_date: str, to_date: str
+                            ) -> dict[str, tuple[int, int]]:
+    """
+    Returns {date_str: (equity_rows_in_file, equity_rows_inserted)} from the
+    insert step's metadata. Falls back to (0, 0) for runs predating the
+    reconciliation fields, which render as 'missing' rather than silently 'ok'.
+    """
+    sql = """
+        SELECT DISTINCT ON (trade_date)
+               trade_date, metadata
+          FROM km_pipeline_runs
+         WHERE exchange = %s
+           AND step = 'insert'
+           AND trade_date BETWEEN %s AND %s
+           AND metadata IS NOT NULL
+         ORDER BY trade_date DESC, id DESC
+    """
+    try:
+        import psycopg2.extras
+        conn = db._conn()
+        try:
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                cur.execute(sql, [exchange, from_date, to_date])
+                out: dict[str, tuple[int, int]] = {}
+                for r in cur.fetchall():
+                    meta = r.get('metadata') or {}
+                    matched = meta.get('matched_count')
+                    if matched is None:
+                        continue
+                    by_series = meta.get('unmatched_by_series') or {}
+                    if exchange.upper() == 'NSE':
+                        from pipeline.processors.symbol_registrar import NSE_EQUITY_SERIES
+                        missed = sum(n for s, n in by_series.items()
+                                     if s in NSE_EQUITY_SERIES)
+                    else:
+                        # parse_bse_bhav already gates to equities, so every
+                        # unmatched BSE row is a genuine miss.
+                        missed = int(meta.get('unmatched_count') or 0)
+                    out[str(r['trade_date'])] = (int(matched) + missed, int(matched))
+                return out
+        finally:
+            db._put(conn)
+    except Exception as e:
+        print(f'  [health] reconciliation query error: {e}')
+        return {}
+
+
+def _reconciliation_check(db, trading_days, skip_dates, exchange: str,
+                          row_id: str, label: str):
+    coverage = _reconciliation_by_date(
+        db, exchange, str(trading_days[0]), str(trading_days[-1]))
+    return {
+        'id': row_id, 'layer': 'download', 'label': label,
+        'latest_date': _latest_date_from_coverage(coverage, min_frac=0.99),
+        # Tight thresholds on purpose: an equity row present in the bhavcopy and
+        # absent from the DB is a defect, not noise. 0.99/0.95 would have flagged
+        # the 61% drop on day one.
+        'days': _build_day_statuses_coverage(trading_days, coverage, skip_dates,
+                                             ok_threshold=0.99,
+                                             partial_threshold=0.95),
+    }
+
+
+def check_nse_reconciliation(db, trading_days, skip_dates):
+    """NSE: equity rows in the bhavcopy vs rows actually inserted."""
+    return _reconciliation_check(db, trading_days, skip_dates, 'NSE',
+                                 'nse_reconciliation', 'NSE Parsed vs Inserted')
+
+
+def check_bse_reconciliation(db, trading_days, skip_dates):
+    """BSE: equity rows in the bhavcopy vs rows actually inserted."""
+    return _reconciliation_check(db, trading_days, skip_dates, 'BSE',
+                                 'bse_reconciliation', 'BSE Parsed vs Inserted')
+
+
 # ── Registry ─────────────────────────────────────────────────────────────────
 
 HEALTH_CHECKS = [
+    check_nse_reconciliation,
+    check_bse_reconciliation,
     # Layer: download
     check_nse_equities,
     check_bse_equities,
