@@ -1089,6 +1089,9 @@ function scanDistributionWarning(bundle: ScanDataBundle): ScanStock[] {
     .slice(0, 25);
 }
 
+/** Minimum 22-day average delivery value, in true Crores. See the gate below. */
+const CONVICTION_MIN_AVG_AMT_22D = 1.5;
+
 /** Scan 7: Conviction Flow */
 function scanConvictionFlow(bundle: ScanDataBundle): ScanStock[] {
   const results: ScanStock[] = [];
@@ -1107,7 +1110,13 @@ function scanConvictionFlow(bundle: ScanDataBundle): ScanStock[] {
     if (!stock) continue;
 
     // Filter gates use client-side computed delivery scores (value_cr × delivery_pct/100)
-    if ((stock.avg_amt_22d ?? 0) <= 1.5) continue;
+    // CONVICTION_MIN_AVG_AMT_22D is a delivery-value floor in true Crores.
+    // Until migration 167 this column was 100x understated for NSE (and ~1e7x for
+    // BSE, which is why no BSE stock ever cleared it), so the literal 1.5 here
+    // behaved as a ~150 Cr large-cap-only gate. On the corrected scale 1.5 means
+    // what the comment always claimed — Rs 1.5 Cr — so this now admits the
+    // small/mid caps it was always meant to. Retune here if that reads too loose.
+    if ((stock.avg_amt_22d ?? 0) <= CONVICTION_MIN_AVG_AMT_22D) continue;
     if ((stock.delivery_surge_x ?? 0) <= 1.5) continue;
 
     // Price returns over N trading days (history sorted desc: [0]=today, [N]=N days ago)
@@ -2604,8 +2613,13 @@ async function loadManipulationData(lookbackDays: number): Promise<ManipulationW
  * Eligibility gate — manipulation requires operator capability.
  * Large-caps with deep float can't be operator-pumped/dumped.
  *
- * Uses value_cr (daily turnover in crores) when available (~50% populated).
+ * Uses value_cr (daily turnover in true Crores on both exchanges) when available.
  * Falls back to volume × close proxy when value_cr is NULL.
+ *
+ * Before migration 167, NSE value_cr was inflated 1e5x, so `turnover <= 25` was
+ * false for every NSE stock and this returned false for the entire NSE universe —
+ * Manipulation Watch could only ever flag BSE rows. Fixed at source; no
+ * exchange-aware branch is needed here.
  *
  *   > 25 cr daily = too liquid for operator manipulation
  *   < 1 cr daily = untradeable noise

@@ -57,6 +57,7 @@ from pipeline.downloaders.nse_index_bhav import (
 from pipeline.downloaders.nse_fiidii import download_nse_fiidii, upsert_fii_dii
 from pipeline.processors.parser import parse_nse_bhav, parse_nse_delivery, parse_bse_bhav, parse_bse_delivery
 from pipeline.processors.symbol_matcher import SymbolMatcher
+from pipeline.processors.symbol_registrar import register_new_symbols
 from pipeline.processors.inserter import upsert_equity_eod, update_delivery, sync_isin_from_bhav
 from pipeline.utils.coverage import get_step_coverage, count_active_symbols
 from scripts.backfill_supertrend import compute_supertrend_for_date
@@ -240,8 +241,26 @@ def run_nse_pipeline(db, trade_date: date, dry_run: bool = False,
         mark_day_status(db, trade_date, 'NSE', 'no_data')
         return False
 
+    # ── Step 2b: Register newly listed equities ──
+    # The master is the universe filter (SymbolMatcher drops anything absent from
+    # it), so a symbol that never enters the master can never appear in any
+    # scanner. Owner decision: full NSE+BSE listed coverage — see CLAUDE.md
+    # "Settled Decisions". Runs before matching so today's new listings get bars
+    # on their very first day rather than from the next run onward.
+    reg = {}
+    try:
+        matcher = SymbolMatcher(db, exchange='NSE')
+        reg = register_new_symbols(db, records, exchange='NSE',
+                                   known=matcher.known_symbols)
+        if reg.get('registered'):
+            matcher.reload()
+    except Exception as e:
+        # Never fail the day's ingest over registration — bars for known symbols
+        # still matter more than admitting new ones.
+        print(f'  [registrar] Non-critical error: {e}')
+        matcher = SymbolMatcher(db, exchange='NSE')
+
     # ── Step 3: Match symbols ──
-    matcher = SymbolMatcher(db, exchange='NSE')
     matched, unmatched = matcher.match_records(records)
     print(f'  [match] {len(matched)} matched, {len(unmatched)} unmatched of {len(records)} parsed')
 
@@ -253,6 +272,12 @@ def run_nse_pipeline(db, trade_date: date, dry_run: bool = False,
         tracker.complete('insert', rows=count, rows_expected=expected_symbols, metadata={
             'unmatched_count': len(unmatched),
             'unmatched_sample': unmatched[:20],
+            # Reconciliation inputs — parsed vs inserted. Nothing read
+            # unmatched_count for months; these make the drop legible.
+            'parsed_count': len(records),
+            'matched_count': len(matched),
+            'registered_count': reg.get('registered', 0),
+            'unmatched_by_series': matcher.unmatched_series_breakdown(records),
         })
     except Exception as e:
         tracker.fail('insert', str(e))
@@ -552,7 +577,20 @@ def run_bse_pipeline(db, trade_date: date, dry_run: bool = False,
         return False
 
     # ── Step 3: Match symbols ──
-    matcher = SymbolMatcher(db, exchange='BSE')
+    # Register new BSE scrips before matching. parse_bse_bhav has already gated
+    # on FinInstrmTp=STK / Sgmt=CM / valid group, so anything unmatched here is a
+    # genuine equity the master hasn't seen yet.
+    reg = {}
+    try:
+        matcher = SymbolMatcher(db, exchange='BSE')
+        reg = register_new_symbols(db, records, exchange='BSE',
+                                   known=matcher.known_symbols)
+        if reg.get('registered'):
+            matcher.reload()
+    except Exception as e:
+        print(f'  [registrar] Non-critical error: {e}')
+        matcher = SymbolMatcher(db, exchange='BSE')
+
     matched, unmatched = matcher.match_records(records)
     print(f'  [match] {len(matched)} matched, {len(unmatched)} unmatched of {len(records)} parsed')
 
@@ -562,6 +600,9 @@ def run_bse_pipeline(db, trade_date: date, dry_run: bool = False,
         count = upsert_equity_eod(db, matched)
         tracker.complete('insert', rows=count, metadata={
             'unmatched_count': len(unmatched),
+            'parsed_count': len(records),
+            'matched_count': len(matched),
+            'registered_count': reg.get('registered', 0),
         })
     except Exception as e:
         tracker.fail('insert', str(e))

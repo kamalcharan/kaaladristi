@@ -24,6 +24,17 @@ class SymbolMatcher:
         self._loaded = True
         print(f'  [matcher] Loaded {len(self._map)} {self.exchange} symbols')
 
+    def reload(self):
+        """Re-read the master. Call after SymbolRegistrar admits new symbols."""
+        self._load()
+
+    @property
+    def known_symbols(self) -> set[str]:
+        """Symbols currently in the master — lets the registrar skip a round-trip."""
+        if not self._loaded:
+            self._load()
+        return set(self._map.keys())
+
     def get_id(self, symbol: str) -> int | None:
         """Return equity_id for a symbol, or None if not in master table."""
         if not self._loaded:
@@ -44,12 +55,16 @@ class SymbolMatcher:
 
         matched = []
         unmatched = set()
+        unmatched_by_series: dict[str, int] = {}
 
         for rec in records:
             symbol = rec.get('symbol', '').upper()
             eq_id = self._map.get(symbol)
 
             if eq_id is None:
+                if symbol not in unmatched:
+                    series = (rec.get('series') or '').strip().upper() or 'UNKNOWN'
+                    unmatched_by_series[series] = unmatched_by_series.get(series, 0) + 1
                 unmatched.add(symbol)
                 continue
 
@@ -61,10 +76,32 @@ class SymbolMatcher:
 
         unmatched_list = sorted(unmatched)
         if unmatched_list:
-            print(f'  [matcher] {len(unmatched_list)} unmatched symbols (not in master): '
-                  f'{", ".join(unmatched_list[:10])}{"..." if len(unmatched_list) > 10 else ""}')
+            # Report by series, NOT an alphabetical sample. Numeric-prefixed debt
+            # ('1003IIFL29', '1018GS2026') sorts first, so a truncated sorted list
+            # made a 2,104-symbol drop look like harmless bond noise for months.
+            breakdown = ', '.join(
+                f'{s}={n}' for s, n in
+                sorted(unmatched_by_series.items(), key=lambda kv: -kv[1])
+            )
+            print(f'  [matcher] {len(unmatched_list)} unmatched symbols (not in master) '
+                  f'by series: {breakdown}')
 
         return matched, unmatched_list
+
+    def unmatched_series_breakdown(self, records: list[dict]) -> dict[str, int]:
+        """Series histogram of symbols absent from the master — reconciliation input."""
+        if not self._loaded:
+            self._load()
+        seen: set[str] = set()
+        out: dict[str, int] = {}
+        for rec in records:
+            symbol = (rec.get('symbol') or '').upper()
+            if not symbol or symbol in seen or symbol in self._map:
+                continue
+            seen.add(symbol)
+            series = (rec.get('series') or '').strip().upper() or 'UNKNOWN'
+            out[series] = out.get(series, 0) + 1
+        return out
 
     @property
     def total_symbols(self) -> int:

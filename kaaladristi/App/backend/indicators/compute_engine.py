@@ -247,8 +247,14 @@ def compute_rolling_range(df: pd.DataFrame) -> dict:
     d365_pct_chng = close.pct_change(periods=252).mul(100).round(2)  # ~1 year  (252 trading days)
 
     # ── Delivery value rolling averages (in Crores) ───────────────────────
-    # value_cr is stored in Rupees; divide by 1e7 to get Crores.
+    # value_cr is true Crores on BOTH exchanges (parser.py normalises NSE
+    # Rupees/Lakhs and BSE Rupees at parse time), so no rescaling here.
     # delivery_pct is a whole-number percentage (e.g. 45 = 45%).
+    #
+    # This previously divided by 1e7 on the belief that value_cr held Rupees.
+    # It held Rupees/100 for NSE (parser divided by 100) and true Crores for BSE,
+    # so the result came out 100x low for NSE and ~1e7x low for BSE — which is
+    # why no BSE stock ever cleared Conviction Flow's avg_amt_22d floor.
     value_cr_col  = df.get('value_cr', None)
     delivery_pct  = df.get('delivery_pct', None)
     if value_cr_col is None or (hasattr(value_cr_col, 'empty') and value_cr_col.empty):
@@ -256,7 +262,7 @@ def compute_rolling_range(df: pd.DataFrame) -> dict:
     if delivery_pct is None or (hasattr(delivery_pct, 'empty') and delivery_pct.empty):
         delivery_pct = pd.Series(np.nan, index=df.index)
 
-    deliv_cr    = (pd.to_numeric(value_cr_col, errors='coerce') / 1e7) * (pd.to_numeric(delivery_pct, errors='coerce') / 100.0)
+    deliv_cr    = pd.to_numeric(value_cr_col, errors='coerce') * (pd.to_numeric(delivery_pct, errors='coerce') / 100.0)
     avg_amt_5d  = deliv_cr.rolling(window=5,  min_periods=1).mean().round(4)
     avg_amt_22d = deliv_cr.rolling(window=22, min_periods=1).mean().round(4)
     avg_amt_66d = deliv_cr.rolling(window=66, min_periods=3).mean().round(4)
