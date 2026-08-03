@@ -3,6 +3,11 @@
 -- Target database: kaala_dristi_db
 -- =============================================================================
 --
+-- Portability: plain SQL only — no psql backslash meta-commands (\echo etc.),
+-- so this runs unchanged in pgAdmin, DBeaver and psql. The before/after
+-- summaries come back as labelled result sets (pgAdmin shows the last grid;
+-- switch tabs or run the blocks individually to see each one).
+--
 -- WHAT WAS WRONG
 -- --------------
 -- parse_nse_bhav() divided the bhavcopy turnover column by 100, on the
@@ -58,22 +63,37 @@
 
 BEGIN;
 
--- ── Before ────────────────────────────────────────────────────────────────
-\echo '--- BEFORE ---'
-SELECT s.exchange,
-       count(*)                            AS rows_with_value,
-       round(avg(e.value_cr), 2)           AS avg_stored_value_cr,
-       round(avg(e.volume * e.close / 1e7), 2) AS avg_true_value_cr
+-- ── 1. Before ─────────────────────────────────────────────────────────────
+SELECT 'BEFORE'                                   AS phase,
+       s.exchange,
+       count(*)                                   AS rows_with_value,
+       round(avg(e.value_cr), 2)                  AS avg_stored_value_cr,
+       round(avg(e.volume * e.close / 1e7), 2)    AS avg_true_value_cr,
+       round(avg(e.value_cr) /
+             NULLIF(avg(e.volume * e.close / 1e7), 0), 3) AS ratio
   FROM km_equity_eod e
   JOIN km_equity_symbols s ON s.id = e.equity_id
  WHERE e.trade_date = (SELECT max(trade_date) FROM km_equity_eod)
-   AND e.value_cr IS NOT NULL AND e.volume > 0 AND e.close > 0
+   AND e.value_cr IS NOT NULL
+   AND e.volume > 0
+   AND e.close  > 0
  GROUP BY s.exchange;
 
--- ── Rescale ───────────────────────────────────────────────────────────────
+-- ── 2. Rescale ────────────────────────────────────────────────────────────
 -- Guard: only rows at least 1000x above the volume*close identity are rescaled.
 -- Genuine crore-scale rows sit near 1.0, so already-corrected data is skipped
 -- and re-running this migration changes nothing.
+--
+-- RUNTIME: km_equity_eod holds ~15.5M rows and there is no index supporting this
+-- predicate, so expect a sequential scan — roughly 1-3 minutes, as one
+-- transaction. That is normal for a one-off migration; let it finish rather than
+-- cancelling midway. Measured scope: ~30.7k rows in July 2026 alone, ~383k NSE
+-- rows carry value_cr from 2025-06 onward (the UDiFF cutover).
+--
+-- If the full scan is too slow on your box, add a date floor to skip the years
+-- of history where NSE value_cr is NULL anyway:
+--     AND e.trade_date >= DATE '2025-01-01'
+-- Safe either way — the identity guard still decides what actually changes.
 UPDATE km_equity_eod e
    SET value_cr = e.value_cr / 1e5
   FROM km_equity_symbols s
@@ -84,17 +104,34 @@ UPDATE km_equity_eod e
    AND e.close  > 0
    AND e.value_cr > (e.volume * e.close / 1e7) * 1000;
 
--- ── After ─────────────────────────────────────────────────────────────────
-\echo '--- AFTER (ratio should be ~1.0 on both exchanges) ---'
-SELECT s.exchange,
-       count(*)                                AS rows_with_value,
-       round(avg(e.value_cr), 2)               AS avg_stored_value_cr,
-       round(avg(e.volume * e.close / 1e7), 2) AS avg_true_value_cr,
-       round(avg(e.value_cr) / NULLIF(avg(e.volume * e.close / 1e7), 0), 3) AS ratio
+-- ── 3. After — ratio should read ~1.0 on BOTH exchanges ───────────────────
+SELECT 'AFTER'                                    AS phase,
+       s.exchange,
+       count(*)                                   AS rows_with_value,
+       round(avg(e.value_cr), 2)                  AS avg_stored_value_cr,
+       round(avg(e.volume * e.close / 1e7), 2)    AS avg_true_value_cr,
+       round(avg(e.value_cr) /
+             NULLIF(avg(e.volume * e.close / 1e7), 0), 3) AS ratio
   FROM km_equity_eod e
   JOIN km_equity_symbols s ON s.id = e.equity_id
  WHERE e.trade_date = (SELECT max(trade_date) FROM km_equity_eod)
-   AND e.value_cr IS NOT NULL AND e.volume > 0 AND e.close > 0
+   AND e.value_cr IS NOT NULL
+   AND e.volume > 0
+   AND e.close  > 0
+ GROUP BY s.exchange;
+
+-- ── 4. Residual check — expect ZERO rows returned ─────────────────────────
+-- Any row here is still off-scale across the whole history, not just the
+-- latest bar. An empty result set is the pass condition.
+SELECT 'RESIDUAL'                                 AS phase,
+       s.exchange,
+       count(*)                                   AS rows_still_off_scale
+  FROM km_equity_eod e
+  JOIN km_equity_symbols s ON s.id = e.equity_id
+ WHERE e.value_cr IS NOT NULL
+   AND e.volume > 0
+   AND e.close  > 0
+   AND e.value_cr > (e.volume * e.close / 1e7) * 1000
  GROUP BY s.exchange;
 
 COMMIT;
