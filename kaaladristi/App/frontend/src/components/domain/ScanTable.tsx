@@ -26,6 +26,15 @@ const PRESET_COL_OVERRIDES: Partial<Record<string, string[]>> = {
     'fpb_compression_score', 'fpb_atr_compression', 'fpb_vol_death', 'fpb_setup_days',
     'delivery_pct', 'rvol', 'magic_rs',
   ],
+
+  // Volume Drive selects ON the dot, so the dot leads — without it the grid
+  // gives no clue why a row is present. Delivery follows because it is the
+  // ranking key and the VaNi chip's threshold (dot_svd + deliv >= 50 measured
+  // 23.7% next-day vs 7.1% for the dot alone), then the volume evidence.
+  volume_drive: [
+    'symbol', 'dot_signal', 'delivery_pct', 'close', 'pct_chng',
+    'rvol', 'delivery_surge_x', 'ret_5d', 'magic_rs', 'rsi_14', 'flow_type',
+  ],
 }
 
 const DEFAULT_SORT: Record<string, { key: string; dir: 'asc' | 'desc' }> = {
@@ -40,6 +49,12 @@ const DEFAULT_SORT: Record<string, { key: string; dir: 'asc' | 'desc' }> = {
   breakout_surge:   { key: 'score_5d',          dir: 'desc' },
   // Tightest compression first — bursts (high quality) still sort near the top.
   flower_pot_burst: { key: 'fpb_compression_score', dir: 'desc' },
+  // Delivery-first, matching fetchVolumeDrive's engine ranking. Without an
+  // entry here the table falls through to magic_rs desc, which silently
+  // discards that ranking — and magic_rs measured 0.85x (INVERTED) against a
+  // next-day move, so it would sort the list by a feature with no predictive
+  // value.
+  volume_drive:     { key: 'delivery_pct',      dir: 'desc' },
 }
 
 function getDefaultSort(presetId: string) {
