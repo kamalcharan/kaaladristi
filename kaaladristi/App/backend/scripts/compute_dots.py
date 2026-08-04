@@ -37,12 +37,38 @@ instead. The two track closely but are not identical — SMA over 30 weekly
 samples is not the same as SMA over 150 daily samples. If km_equity_weekly is
 ever brought current, switch to the literal form.
 
-NOT COMPUTED: dot_syd
----------------------
-`dot_syd` ("Distribution Signal") is left untouched — its screener definition
-was never supplied, and inventing a bearish mirror of SBD would put fabricated
-signal into a column the UI already renders. It stays all-FALSE until the spec
-arrives.
+  SYD — "Distribution Signal", the bearish mirror of SBD
+      close  <  prev close
+      close  <  open                          (red candle)
+      volume >  prev volume
+      volume >= SMA(volume, 50) * 3           (SMA excludes the current bar)
+      close  <  low + 0.33 * (high - low)     (close in the BOTTOM THIRD)
+      close * SMA(volume, 20) >= 50,000,000   (Rs 5 Cr turnover; SMA INCLUDES
+                                               the current bar — the screener
+                                               says "Daily Sma(Daily Volume,20)"
+                                               with no "1 day ago" qualifier)
+
+SYD RESOLUTION MISMATCH — READ BEFORE TRUSTING dot_syd
+------------------------------------------------------
+The owner's SYD screener ("SYD - ID") is a **15-MINUTE INTRADAY** screener; the
+SBD one is daily/weekly/monthly. Every price/volume condition in SYD is written
+against 15-minute bars, and km_equity_15m is empty (0 rows), so the literal
+screener is not computable here.
+
+What this script writes is the DAILY ANALOGUE: the same five mirrored
+conditions applied to daily bars, plus the screener's own daily liquidity gate
+(which was already expressed in daily terms). It is a faithful translation of
+the SHAPE, not of the resolution — a 15-minute distribution bar and a daily one
+are different events, and dot_syd will fire less often and later than the
+owner's screener does. Treat it as directionally equivalent, not identical.
+
+Two further deviations, both deliberate:
+  * The screener restricts to the NIFTY 500 segment; this computes universe-wide
+    (the column lives on every km_equity_eod row). Filter at the scanner layer.
+  * "Market Cap >= 5" is omitted — mcap_cr coverage is poor (BSE ~12%), so the
+    gate would silently drop rows for missing data rather than for weak
+    fundamentals. The Rs 5 Cr turnover gate does similar work on data we
+    actually have.
 
 Usage:
     # Full history (all dates in km_equity_eod)
@@ -79,6 +105,21 @@ SVD_VOL_MULT = 10      # x SMA(volume, 5)
 SVD_VOL_SMA = 5
 SVD_CLOSE_POS = 0.50   # top half of range
 SVD_MIN_PCT_CHG = 9    # %
+SYD_VOL_MULT = 3       # x SMA(volume, 50) — same multiple as SBD, mirrored
+SYD_VOL_SMA = 50
+SYD_CLOSE_POS = 0.33   # BOTTOM third of range
+SYD_LIQ_SMA = 20       # close x SMA(volume, 20) must clear SYD_MIN_TURNOVER
+SYD_MIN_TURNOVER = 50000000   # Rs 5 Cr, in rupees — from the screener literally
+
+
+# SYD reuses SBD's volume-SMA window (sma_vol_sbd / n_sbd) because both are
+# SMA(volume, 50). Retuning SYD_VOL_SMA alone would silently evaluate SYD
+# against SBD's frame instead of its own, which is the kind of drift that reads
+# as a threshold problem for weeks. Fail loudly instead.
+assert SYD_VOL_SMA == SBD_VOL_SMA, (
+    f'SYD_VOL_SMA ({SYD_VOL_SMA}) must equal SBD_VOL_SMA ({SBD_VOL_SMA}), or SYD '
+    'needs its own window in the CTE — see dot_syd in _SQL.'
+)
 
 
 def get_conn():
@@ -127,7 +168,14 @@ WITH base AS (
         COUNT(*) OVER (
             PARTITION BY equity_id ORDER BY trade_date
             ROWS BETWEEN {svd_sma} PRECEDING AND 1 PRECEDING
-        ) AS n_svd
+        ) AS n_svd,
+        -- SYD liquidity gate: the screener reads "Daily Sma(Daily Volume, 20)",
+        -- which INCLUDES the current bar (no "1 day ago" qualifier), unlike the
+        -- spike SMAs above.
+        AVG(volume) OVER (
+            PARTITION BY equity_id ORDER BY trade_date
+            ROWS BETWEEN {syd_liq_sma} PRECEDING AND CURRENT ROW
+        ) AS sma_vol_liq
     FROM km_equity_eod
     WINDOW w AS (PARTITION BY equity_id ORDER BY trade_date)
 )
@@ -153,6 +201,19 @@ UPDATE km_equity_eod e
            AND b.volume  > {svd_mult} * b.sma_vol_svd
            AND b.close   > b.low + {svd_pos} * (b.high - b.low)
            AND b.close  >= b.sma_150
+       , FALSE),
+       dot_syd = COALESCE(
+           b.n_sbd = {syd_sma}
+           AND b.high > b.low
+           AND b.prev_close IS NOT NULL
+           AND b.prev_vol   IS NOT NULL
+           AND b.sma_vol_sbd > 0
+           AND b.close  <  b.prev_close
+           AND b.close  <  b.open
+           AND b.volume >  b.prev_vol
+           AND b.volume >= {syd_mult} * b.sma_vol_sbd
+           AND b.close  <  b.low + {syd_pos} * (b.high - b.low)
+           AND b.close * b.sma_vol_liq >= {syd_turnover}
        , FALSE)
   FROM base b
  WHERE e.id = b.id
@@ -164,7 +225,9 @@ SELECT s.exchange,
        count(*)                          AS rows,
        count(*) FILTER (WHERE e.dot_sbd) AS sbd_fires,
        count(*) FILTER (WHERE e.dot_svd) AS svd_fires,
-       count(*) FILTER (WHERE e.dot_svd AND NOT e.dot_sbd) AS svd_not_in_sbd
+       count(*) FILTER (WHERE e.dot_syd) AS syd_fires,
+       count(*) FILTER (WHERE e.dot_svd AND NOT e.dot_sbd) AS svd_not_in_sbd,
+       count(*) FILTER (WHERE e.dot_sbd AND e.dot_syd)     AS sbd_syd_conflict
   FROM km_equity_eod e
   JOIN km_equity_symbols s ON s.id = e.equity_id
  WHERE e.trade_date = %s
@@ -186,6 +249,8 @@ def build_sql(date_from=None, date_to=None, single_date=None):
         sbd_sma=SBD_VOL_SMA, sbd_mult=SBD_VOL_MULT, sbd_pos=SBD_CLOSE_POS,
         svd_sma=SVD_VOL_SMA, svd_mult=SVD_VOL_MULT, svd_pos=SVD_CLOSE_POS,
         svd_pct=SVD_MIN_PCT_CHG,
+        syd_sma=SYD_VOL_SMA, syd_mult=SYD_VOL_MULT, syd_pos=SYD_CLOSE_POS,
+        syd_liq_sma=SYD_LIQ_SMA, syd_turnover=SYD_MIN_TURNOVER,
         date_clause=clause,
     )
 
@@ -205,10 +270,14 @@ def run_verify(conn, target_date):
     for r in rows:
         print(f"    {r['exchange']}: {r['rows']:>6} rows | "
               f"SBD {r['sbd_fires']:>4} | SVD {r['svd_fires']:>4} | "
-              f"SVD outside SBD {r['svd_not_in_sbd']:>3}")
+              f"SYD {r['syd_fires']:>4} | SVD outside SBD {r['svd_not_in_sbd']:>3} | "
+              f"SBD+SYD both {r['sbd_syd_conflict']:>3}")
     print('\n  Expect SVD to be a near-subset of SBD (same shape, higher '
           'thresholds). A large "SVD outside SBD" means the definitions have '
           'drifted apart — check the tunables at the top of this file.')
+    print('  "SBD+SYD both" MUST be 0 — SBD needs a green candle and SYD a red '
+          'one, so a bar firing both means a sign error in the mirrored '
+          'conditions.')
 
 
 def main():
