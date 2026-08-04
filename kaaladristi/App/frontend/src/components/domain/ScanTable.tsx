@@ -10,6 +10,7 @@ import { getFieldsForGroup } from '@/fieldAvailability'
 import VaNiTrigger from '@/components/domain/VaNiTrigger'
 import BookmarkToggle from '@/components/domain/BookmarkToggle'
 import FloatingHScrollbar from '@/components/ui/FloatingHScrollbar'
+import { DOT_LABELS, dotLabel, type DotSignal } from '@/constants/signalScale'
 
 // ── Preset column overrides ─────────────────────────────────────────────────────
 
@@ -410,6 +411,20 @@ export default function ScanTable({ stocks, presetId, onRowClick }: ScanTablePro
                           }} />
                           {text}
                         </span>
+                      ) : colKey === 'dot_signal' ? (
+                        // Colour comes from DOT_LABELS (signalScale.ts) so the grid,
+                        // the chart markers and the card tags cannot drift apart again.
+                        rawVal ? (
+                          <Tooltip content={DOT_LABELS[rawVal as DotSignal]?.description ?? ''}>
+                            <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'flex-end', gap: 5 }}>
+                              <span style={{
+                                display: 'inline-block', width: 8, height: 8, borderRadius: '50%',
+                                background: dotLabel(rawVal as string).color, flexShrink: 0,
+                              }} />
+                              <span style={{ color: dotLabel(rawVal as string).color }}>{String(rawVal)}</span>
+                            </span>
+                          </Tooltip>
+                        ) : <span style={{ color: 'var(--text-faint)' }}>—</span>
                       ) : text}
                     </td>
                   )

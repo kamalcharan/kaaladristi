@@ -139,3 +139,45 @@ export const FLOW_LABELS: Record<string, { label: string; color: string }> = {
 export function flowLabel(flowType: string | null | undefined): { label: string; color: string } {
   return FLOW_LABELS[flowType ?? ''] ?? { label: flowType ?? '—', color: 'text-muted' };
 }
+
+// ── 4. Dot Signals (SVD / SBD / SYD) ──────────────────────────────────────────
+//
+// CANONICAL source for the three dot signals. Before this existed, the chart
+// (TradingChart) and the card view (StockCard) hardcoded DIFFERENT colours for
+// the same three signals — purple/blue/yellow on the chart, green/cyan/red on
+// the cards. Both now import from here.
+//
+// The chart palette won: it is what the owner reads dots on daily, and it is
+// deliberately NON-directional. The card palette encoded green=up / red=down,
+// which collides with D39 (no directional language or colour in badges).
+//
+// Definitions are rebuilt nightly by scripts/compute_dots.py from the owner's
+// Chartink screeners. All three fire ON the move day — they mark what happened,
+// not what is about to.
+
+export type DotSignal = 'SVD' | 'SBD' | 'SYD';
+
+export const DOT_LABELS: Record<DotSignal, { label: string; color: string; description: string }> = {
+  SVD: {
+    label: 'Volume Drive',
+    color: '#8b5cf6',
+    description: 'Move >9% on >10x its 5-day volume, close in the upper half of range, above the 150-SMA. The extreme tail of the SBD shape.',
+  },
+  SBD: {
+    label: 'Accumulation',
+    color: '#3b82f6',
+    description: 'Green candle, volume >=3x its 50-day average, close in the top third of range. The broader form.',
+  },
+  SYD: {
+    label: 'Distribution',
+    color: '#eab308',
+    description: 'The bearish mirror — red candle, volume spike, close in the bottom third of range.',
+  },
+};
+
+export const DOT_OPTIONS: DotSignal[] = ['SVD', 'SBD', 'SYD'];
+
+export function dotLabel(dot: string | null | undefined): { label: string; color: string } {
+  const d = DOT_LABELS[(dot ?? '') as DotSignal];
+  return d ? { label: d.label, color: d.color } : { label: '—', color: 'var(--text-muted)' };
+}
