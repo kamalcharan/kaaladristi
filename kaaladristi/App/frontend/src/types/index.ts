@@ -501,6 +501,11 @@ export interface ScanStock {
   has_recent_svd: boolean;
   has_recent_sbd: boolean;
   has_recent_syd: boolean;
+  /** Which dot fired, as a table-renderable label ('SVD' | 'SBD' | 'SYD').
+   *  The three booleans above are only surfaced in card view and the XLS
+   *  export; the table has no boolean renderer, so scans that SELECT on a dot
+   *  set this to make the selection criterion visible in the grid. */
+  dot_signal?: string | null;
   // Migration 042 additions
   ema_20: number | null;
   atr_14: number | null;

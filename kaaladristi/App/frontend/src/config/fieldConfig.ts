@@ -187,6 +187,14 @@ export const ALL_FIELDS: Record<string, FieldConfig> = {
     },
   },
 
+  dot_signal: {
+    key: 'dot_signal',
+    label: 'Dot',
+    tooltip: 'Which dot fired on this bar. SVD (Volume Drive) = move >9% on >10x its 5-day volume, close in the upper half of range, above the 150-SMA. SBD (Accumulation) = the broader form — green candle, >=3x its 50-day volume, close in the top third. SVD is the extreme tail of the same shape, and historically the stronger of the two. Both fire ON the move day.',
+    type: 'category',
+    width: 60,
+  },
+
   stage: {
     key: 'stage',
     label: 'Stage',
