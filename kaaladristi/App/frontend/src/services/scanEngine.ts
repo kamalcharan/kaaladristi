@@ -1450,6 +1450,10 @@ async function fetchVolumeDrive(exchangeFilter: ExchangeFilter): Promise<ScanSto
       has_recent_svd:       !!row.dot_svd,
       has_recent_sbd:       !!row.dot_sbd,
       has_recent_syd:       !!row.dot_syd,
+      // The dot IS this scan's selection criterion, so it has to be visible in
+      // the grid. The three booleans above only render in card view and the XLS
+      // export — the table has no boolean renderer.
+      dot_signal:           row.dot_svd ? 'SVD' : row.dot_sbd ? 'SBD' : row.dot_syd ? 'SYD' : null,
       pctBelow52wHigh:      row.pct_below_52w_high ?? null,
       reward:               ema20 && atr14 ? (ema20 + atr14) - row.close : null,
       rewardPct:            ema20 && atr14 && atr14 > 0 ? ((ema20 + atr14) - row.close) / atr14 : null,

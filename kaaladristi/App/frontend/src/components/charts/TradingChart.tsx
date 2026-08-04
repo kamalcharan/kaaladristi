@@ -1,3 +1,4 @@
+import { DOT_LABELS } from '@/constants/signalScale'
 /**
  * TradingChart — Multi-pane financial chart using TradingView Lightweight Charts v5.
  *
@@ -501,9 +502,11 @@ export default function TradingChart({ data, height = 900, compact = false, work
       // Signal dots — color IS the vocabulary (owner 2026-07-07: no text
       // labels): SVD violet, SBD blue, SYD yellow. Swing pivots stay as
       // bare arrows (red down = swing high, green up = swing low).
-      if (d.dot_svd) markers.push({ time: toTime(d.trade_date), position: 'belowBar', color: '#8b5cf6', shape: 'circle' });
-      if (d.dot_sbd) markers.push({ time: toTime(d.trade_date), position: 'belowBar', color: '#3b82f6', shape: 'circle' });
-      if (d.dot_syd) markers.push({ time: toTime(d.trade_date), position: 'aboveBar', color: '#eab308', shape: 'circle' });
+      // Colours come from DOT_LABELS so the chart, the scan grid and the card
+      // tags cannot drift apart (they previously used three different palettes).
+      if (d.dot_svd) markers.push({ time: toTime(d.trade_date), position: 'belowBar', color: DOT_LABELS.SVD.color, shape: 'circle' });
+      if (d.dot_sbd) markers.push({ time: toTime(d.trade_date), position: 'belowBar', color: DOT_LABELS.SBD.color, shape: 'circle' });
+      if (d.dot_syd) markers.push({ time: toTime(d.trade_date), position: 'aboveBar', color: DOT_LABELS.SYD.color, shape: 'circle' });
       if (d.swing_high) markers.push({ time: toTime(d.trade_date), position: 'aboveBar', color: C.riskRed, shape: 'arrowDown' });
       if (d.swing_low) markers.push({ time: toTime(d.trade_date), position: 'belowBar', color: C.riskGreen, shape: 'arrowUp' });
       if (bmColorByDate.has(d.trade_date)) markers.push({ time: toTime(d.trade_date), position: 'aboveBar', color: bmColorByDate.get(d.trade_date)!, shape: 'circle', text: '₹' });

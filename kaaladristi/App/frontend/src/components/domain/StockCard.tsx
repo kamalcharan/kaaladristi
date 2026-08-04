@@ -1,3 +1,4 @@
+import { DOT_LABELS } from '@/constants/signalScale'
 /**
  * Shared Stock Card Components
  * ============================
@@ -378,9 +379,12 @@ export function StockCard({
         {/* Signal dots */}
         {(stock.has_recent_svd || stock.has_recent_sbd || stock.has_recent_syd) && (
           <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '7px' }}>
-            {stock.has_recent_svd && <DotTag label="Volume Drive" color="var(--bull)" />}
-            {stock.has_recent_sbd && <DotTag label="Rising Flow" color="#06b6d4" />}
-            {stock.has_recent_syd && <DotTag label="Falling Flow" color="var(--bear)" />}
+            {/* Labels and colours from DOT_LABELS — the card used to encode
+                green=up / red=down here, which both collided with D39 (no
+                directional colour in badges) and disagreed with the chart. */}
+            {stock.has_recent_svd && <DotTag label={DOT_LABELS.SVD.label} color={DOT_LABELS.SVD.color} />}
+            {stock.has_recent_sbd && <DotTag label={DOT_LABELS.SBD.label} color={DOT_LABELS.SBD.color} />}
+            {stock.has_recent_syd && <DotTag label={DOT_LABELS.SYD.label} color={DOT_LABELS.SYD.color} />}
           </div>
         )}
       </div>

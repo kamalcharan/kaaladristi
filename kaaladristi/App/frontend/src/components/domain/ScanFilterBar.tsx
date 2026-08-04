@@ -1,5 +1,6 @@
 import React, { useMemo, useRef, useState, useEffect } from 'react';
 import type { ScanStock } from '@/types';
+import { DOT_OPTIONS } from '@/constants/signalScale';
 
 // ─── Interface ────────────────────────────────────────────────────────────────
 
@@ -28,6 +29,9 @@ export interface ScanFilters {
   tightnessMin?: number;
   /** Minimum consecutive coiled days in the last 22 sessions (fpb_setup_days). */
   coiledDaysMin?: number;
+  // ── Volume Drive-specific ──
+  /** Which dot signals to keep. Empty/undefined = all. Values: 'SVD' | 'SBD' | 'SYD'. */
+  dots?: string[];
 }
 
 export const EMPTY_FILTERS: ScanFilters = {};
@@ -48,13 +52,14 @@ const STAGE_PRESETS = new Set([
   'stage_3_watch', 'stage_4_leaders', 'vani_exit_watch',
 ]);
 
-type FilterGroup = 'stage' | 'conviction' | 'breakout' | 'fpb' | 'standard';
+type FilterGroup = 'stage' | 'conviction' | 'breakout' | 'fpb' | 'drive' | 'standard';
 
 function getFilterGroup(presetId: string): FilterGroup {
   if (STAGE_PRESETS.has(presetId)) return 'stage';
   if (presetId === 'conviction_flow') return 'conviction';
   if (presetId === 'breakout_surge') return 'breakout';
   if (presetId === 'flower_pot_burst') return 'fpb';
+  if (presetId === 'volume_drive') return 'drive';
   return 'standard';
 }
 
@@ -64,7 +69,7 @@ export function applyFilters(stocks: ScanStock[], filters: ScanFilters): ScanSto
   const { mcapMin, mcapMax, industries, move5dMax, move22dMax, move66dMax,
     surgeMin, deliveryPctMin, rvolMin, pctFromBreakoutMin, pctFromBreakoutMax,
     score5dMin, score22dMin, accelerating,
-    fpbPhase, tightnessMin, coiledDaysMin } = filters;
+    fpbPhase, tightnessMin, coiledDaysMin, dots } = filters;
 
   if (
     mcapMin == null && mcapMax == null &&
@@ -73,7 +78,8 @@ export function applyFilters(stocks: ScanStock[], filters: ScanFilters): ScanSto
     surgeMin == null && deliveryPctMin == null && rvolMin == null &&
     pctFromBreakoutMin == null && pctFromBreakoutMax == null &&
     score5dMin == null && score22dMin == null && !accelerating &&
-    (!fpbPhase || fpbPhase === 'all') && tightnessMin == null && coiledDaysMin == null
+    (!fpbPhase || fpbPhase === 'all') && tightnessMin == null && coiledDaysMin == null &&
+    (!dots || dots.length === 0)
   ) return stocks;
 
   return stocks.filter((s) => {
@@ -95,6 +101,9 @@ export function applyFilters(stocks: ScanStock[], filters: ScanFilters): ScanSto
     if (accelerating && !((s.score_5d ?? 0) > 0 && (s.score_5d ?? 0) >= (s.score_22d ?? 0))) return false;
     if (tightnessMin != null && (s.fpb_compression_score ?? 0) < tightnessMin) return false;
     if (coiledDaysMin != null && (s.fpb_setup_days ?? 0) < coiledDaysMin) return false;
+    // Dot filter: a row with no dot is excluded whenever any dot is selected —
+    // the point of the control is "show me only these signals".
+    if (dots && dots.length > 0 && !dots.includes(s.dot_signal ?? '')) return false;
     if (fpbPhase && fpbPhase !== 'all') {
       const want = fpbPhase === 'burst' ? 'BURST' : fpbPhase === 'shatter' ? 'SHATTER' : 'SETUP';
       if (s.fpb_phase !== want) return false;
@@ -111,7 +120,8 @@ export function hasActiveFilters(f: ScanFilters): boolean {
     f.surgeMin != null || f.deliveryPctMin != null || f.rvolMin != null ||
     f.pctFromBreakoutMin != null || f.pctFromBreakoutMax != null ||
     f.score5dMin != null || f.score22dMin != null || !!f.accelerating ||
-    (f.fpbPhase != null && f.fpbPhase !== 'all') || f.tightnessMin != null || f.coiledDaysMin != null
+    (f.fpbPhase != null && f.fpbPhase !== 'all') || f.tightnessMin != null || f.coiledDaysMin != null ||
+    (f.dots != null && f.dots.length > 0)
   );
 }
 
@@ -171,10 +181,13 @@ function IndustryMultiSelect({
   options,
   selected,
   onChange,
+  label: fieldLabel = 'Industry',
 }: {
   options: string[];
   selected: string[];
   onChange: (v: string[]) => void;
+  /** Field caption. Defaults to 'Industry' — the original sole use. */
+  label?: string;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -200,7 +213,7 @@ function IndustryMultiSelect({
 
   return (
     <div style={fieldStyle}>
-      <span style={labelStyle}>Industry</span>
+      <span style={labelStyle}>{fieldLabel}</span>
       <div ref={ref} style={{ position: 'relative' }}>
         <button
           onClick={() => setOpen((o) => !o)}
@@ -424,6 +437,19 @@ export function ScanFilterBar({ presetId, stocks, filters, onFiltersChange }: Sc
               <NumInput label="Delivery% Min" value={filters.deliveryPctMin} onChange={(v) => set('deliveryPctMin', v)} placeholder="%" />
               <NumInput label="5D Move <" value={filters.move5dMax} onChange={(v) => set('move5dMax', v)} placeholder="%" />
               <NumInput label="22D Move <" value={filters.move22dMax} onChange={(v) => set('move22dMax', v)} placeholder="%" />
+            </>
+          )}
+
+          {group === 'drive' && (
+            <>
+              <IndustryMultiSelect
+                label="Dot"
+                options={DOT_OPTIONS as unknown as string[]}
+                selected={filters.dots ?? []}
+                onChange={(v) => set('dots', v.length ? v : undefined)}
+              />
+              <NumInput label="Delivery% Min" value={filters.deliveryPctMin} onChange={(v) => set('deliveryPctMin', v)} placeholder="50" />
+              <NumInput label="RVOL Min" value={filters.rvolMin} onChange={(v) => set('rvolMin', v)} placeholder="1.0" />
             </>
           )}
 
