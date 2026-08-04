@@ -82,7 +82,8 @@ INSERT INTO public.kd_scan_presets (
     'Volume Drive',
     'Stocks printing a volume-drive or accumulation bar — ranked by delivery conviction',
     'Bars where volume broke sharply above its own baseline and the close held in the upper part of the range. Ranked by delivery percentage: the VaNi chip marks names where a volume-drive bar came with delivery above 50%, historically the highest-conviction subset. Surfaces continuation, not prediction.',
-    9,      -- after breakout_surge (8)
+    10,     -- 9 is already occupied by BOTH flower_pot_burst and stage_2_leaders;
+            -- a third at 9 would leave tab order undefined between them.
     60,
     TRUE,
     'flow', 'Flow', '#3b82f6', 3,
@@ -95,6 +96,7 @@ INSERT INTO public.kd_scan_presets (
     FALSE   -- not a default tab until the owner has watched it for a few days
 )
 ON CONFLICT (id) DO UPDATE SET
+    sort_order       = EXCLUDED.sort_order,
     name             = EXCLUDED.name,
     description      = EXCLUDED.description,
     tooltip          = EXCLUDED.tooltip,
