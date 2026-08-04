@@ -364,9 +364,17 @@ def run_nse_pipeline(db, trade_date: date, dry_run: bool = False,
             _conn = _pg2.connect(_DBURL, connect_timeout=30)
             try:
                 with _conn.cursor(cursor_factory=_pg2x.RealDictCursor) as _cur:
+                    # Deployed signature is (text, text, integer, date). Passing
+                    # only three positional args binds the date to p_benchmark_id
+                    # (integer) and PostgreSQL raises "function ... does not
+                    # exist" — the step then fails while every other step
+                    # succeeds, so magic_rs silently stays NULL. NULL benchmark
+                    # auto-detects NIFTY 500 inside the function.
+                    # pipeline2/handlers.py passes all four by name; keep these
+                    # two call sites in step.
                     _cur.execute(
                         "SELECT * FROM compute_all_magic_rs"
-                        "(%s::text, %s::text, %s::date)",
+                        "(%s::text, %s::text, NULL::int, %s::date)",
                         ['km_equity_eod', 'equity_id', str(trade_date)],
                     )
                     _rows = _cur.fetchall()
