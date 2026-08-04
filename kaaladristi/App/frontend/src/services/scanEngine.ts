@@ -37,6 +37,7 @@ export const SCAN_PRESETS: ScanDefinition[] = [
   { id: 'distribution_warning', name: 'Falling Flow Warnings', description: 'Previously strong stocks showing signs of institutional exit',                             limit: 25,  universe: 'NSE_BSE',  category: 'market',        category_label: 'Market',        category_color: '#8b5cf6', category_sort: 4, is_default_tab: false, timeframe: 'daily', vani_rule: 'is_vani_distrib_and_weakness' },
   { id: 'conviction_flow',      name: 'Conviction Flow',       description: 'Stocks where 5-day delivery value is outpacing the 22-day norm',                          limit: 50,  universe: 'NSE_ONLY', category: 'flow',          category_label: 'Flow',          category_color: '#3b82f6', category_sort: 3, is_default_tab: true,  timeframe: 'daily', vani_rule: 'is_vani_surge_or_breakout' },
   { id: 'breakout_surge',       name: 'Breakout Surge',        description: 'NSE stocks closing above their 20-day high on a green day — ranked by Score 5D',        limit: 500, universe: 'NSE_ONLY', category: 'price_action',  category_label: 'Price Action',  category_color: '#f59e0b', category_sort: 1, is_default_tab: true,  timeframe: 'daily', vani_rule: 'is_vani_surge_or_breakout' },
+  { id: 'volume_drive',         name: 'Volume Drive',          description: 'Stocks printing a volume-drive or accumulation bar — ranked by delivery conviction',                                limit: 60,  universe: 'NSE_BSE',  category: 'flow',          category_label: 'Flow',          category_color: '#3b82f6', category_sort: 3, is_default_tab: false, timeframe: 'daily', vani_rule: 'svd_delivery_conviction' },
   { id: 'flower_pot_burst',     name: 'Flower Pot Burst',      description: 'Stocks coiling in tight compression — dying volume, contracting range — plus the rare session when a coil releases with an explosive volume-and-range expansion',  limit: 60,  universe: 'NSE_ONLY', category: 'price_action',  category_label: 'Price Action',  category_color: '#f59e0b', category_sort: 1, is_default_tab: false, timeframe: 'daily', vani_rule: null },
   { id: 'stage_2_leaders',      name: 'Stage 2 Leaders',       description: 'Stocks in confirmed Weinstein Stage 2 — SMA200 rising, proper 52-week position',          limit: 500, universe: 'NSE_ONLY', category: 'stage_analysis', category_label: 'Stage Analysis', category_color: '#22c55e', category_sort: 2, is_default_tab: false, timeframe: 'daily', vani_rule: 'is_vani_s2' },
   { id: 'stage_2_watch',        name: 'Stage 2 Watch',         description: 'Stocks approaching Stage 2 — MA stacking confirmed, SMA200 not yet rising. Watch for Stage 2 breakout.', limit: 100, universe: 'NSE_ONLY', category: 'stage_analysis', category_label: 'Stage Analysis', category_color: '#22c55e', category_sort: 2, is_default_tab: true, timeframe: 'daily', vani_rule: 'is_vani_s2' },
@@ -838,6 +839,8 @@ interface VaniRow {
   rvol?: number | null;
   close?: number | null;
   w52_high?: number | null;
+  dot_svd?: boolean | null;
+  delivery_pct?: number | null;
 }
 
 function computeVaniOpportunity(row: VaniRow, vaniRule: string | null | undefined): boolean {
@@ -852,6 +855,19 @@ function computeVaniOpportunity(row: VaniRow, vaniRule: string | null | undefine
         && (row.close ?? 0) >= (row.w52_high ?? 0) * 0.98;
     case 'is_vani_surge_or_breakout':
       return !!row.is_vani_surge || !!row.is_vani_breakout;
+    case 'svd_delivery_conviction':
+      // Volume Drive's conviction marker. Measured over 2026-05-01..2026-08-03
+      // on NSE closes >= 10, against a next-day >= 10% move (base rate 0.686%):
+      //   dot_svd alone .................  7.14%  (10.4x)
+      //   dot_svd AND delivery_pct >= 50  23.73%  (34.6x)
+      // Delivery does NO work on the general population (0.96x) and a great deal
+      // on an already-selected one — it is a multiplier, not a filter, which is
+      // why it marks a subset here rather than gating the scan.
+      //
+      // Deliberately NOT is_vani_surge_or_breakout: those flags measure 0.53%
+      // (0.8x, BELOW base rate) on their own, and stacking them onto this scan
+      // cut it from 59 signals to 5 while lowering the hit rate to 20%.
+      return !!row.dot_svd && (row.delivery_pct ?? 0) >= 50;
     case 'is_vani_distrib_and_weakness':
       // OR logic — is_vani_distrib is sparse (typically 1–5 stocks/day)
       // so OR ensures the bearish scanners still surface weakness signals
@@ -1294,6 +1310,178 @@ async function fetchBreakoutSurge(exchangeFilter: ExchangeFilter): Promise<ScanS
  *  Returns all stocks where stage = 'S2' on the latest trade date.
  *  VaNi = is_vani_s2 from DB. ISIN-deduped (NSE preferred).
  */
+/** Scan: Volume Drive — dot_svd / dot_sbd bars, ranked by delivery conviction.
+ *
+ *  The dots are rebuilt nightly by scripts/compute_dots.py from the owner's
+ *  Chartink screener definitions (SVD = volume > 10x SMA(vol,5), pct_chng > 9,
+ *  close in top half of range, close >= sma_150; SBD = the broader 3x/top-third
+ *  green-candle form). SVD is the extreme tail of the same shape as SBD, not a
+ *  separate signal, so both qualify here and ranking separates them.
+ *
+ *  Measured 2026-05-01..2026-08-03, NSE, close >= 10, vs a next-day >= 10% move
+ *  (base rate 0.686%):
+ *      dot_svd ......................  7.14%  (10.4x)
+ *      dot_sbd ......................  3.74%  ( 5.4x)
+ *      dot_svd AND delivery >= 50 ... 23.73%  (34.6x)  <- the VaNi chip
+ *
+ *  What this scan does NOT catch, and cannot: stocks that explode from a quiet
+ *  base. STEELCITY traded 8,728 shares the session before a +16% move. There is
+ *  no daily-bar signal there — that cohort needs the intraday feed.
+ *
+ *  Ranking is delivery-first within dot tier, NOT by pct_chng: the move already
+ *  happened, so ranking by size of move just sorts yesterday's news. Delivery is
+ *  what separates a real bid from churn.
+ */
+async function fetchVolumeDrive(exchangeFilter: ExchangeFilter): Promise<ScanStock[]> {
+  const completedDates = await fetchRecentDates(1);
+  const latestDate: string | null = completedDates[0] ?? null;
+  if (!latestDate) return [];
+
+  const COLS = [
+    'equity_id', 'trade_date', 'close', 'open', 'high', 'low',
+    'pct_chng', 'magic_rs', 'magic_rs_zone', 'rss_value', 'rss_spread',
+    'rsi_14', 'rvol', 'flow_type', 'supertrend_dir',
+    'sma_50', 'sma_150', 'sma_200', 'ema_20', 'atr_14',
+    'w52_high', 'w52_low', 'lifetime_high',
+    'avg_amt_5d', 'avg_amt_22d', 'avg_amt_66d', 'delivery_surge_x',
+    'sniper_inst', 'sniper_hot', 'accum_distrib',
+    'volume_divergence_flag', 'delivery_pct', 'deliv_value_cr',
+    'dot_svd', 'dot_sbd', 'dot_syd', 'stage',
+    'score_5d', 'score_22d', 'ret_5d', 'ret_22d', 'ret_66d',
+    'breakout_level', 'pct_from_breakout', 'pct_below_52w_high',
+    'is_vani_surge', 'is_vani_breakout',
+    'km_equity_symbols(id,symbol,company_name,exchange,industry,mcap_cr,isin)',
+  ].join(',');
+
+  // The QueryBuilder has no .or() — two queries merged by equity_id instead of
+  // touching shared infra. SVD is NOT a strict subset of SBD (SVD needs
+  // pct_chng > 9 but no green candle, so a gap-up that closes below its open
+  // fires SVD only — URBANCO did exactly that on 2026-08-03), so both are
+  // needed.
+  const [svdRes, sbdRes] = await Promise.all([
+    from('km_equity_eod').select(COLS).eq('trade_date', latestDate)
+      .is('dot_svd', 'true').limit(2000).execute(),
+    from('km_equity_eod').select(COLS).eq('trade_date', latestDate)
+      .is('dot_sbd', 'true').limit(2000).execute(),
+  ]);
+
+  const byId = new Map<number, any>();
+  for (const r of [...((svdRes.data ?? []) as any[]), ...((sbdRes.data ?? []) as any[])]) {
+    byId.set(r.equity_id, r);
+  }
+  const eodRows = Array.from(byId.values());
+
+  // Zero results is ambiguous: "quiet day" vs "compute_dots.py never ran".
+  // The dots were all-FALSE universe-wide for four months without anything
+  // noticing (house lesson: a populated column can still be dead), so probe
+  // rather than silently return an empty list.
+  if (eodRows.length === 0) {
+    const { data: probe } = await from('km_equity_eod')
+      .select('equity_id')
+      .eq('trade_date', latestDate)
+      .is('dot_svd', 'true')
+      .limit(1)
+      .execute();
+    if (!probe || probe.length === 0) {
+      console.warn(`[volume_drive] no dot_svd/dot_sbd TRUE on ${latestDate} — if this persists for days, compute_dots.py has stopped running`);
+    }
+    return [];
+  }
+
+  // ISIN-dedup: prefer NSE over BSE; apply exchange filter
+  const isinMap = new Map<string, any>();
+  for (const row of eodRows) {
+    const sym = row.km_equity_symbols;
+    if (!sym) continue;
+    if (exchangeFilter === 'NSE' && sym.exchange !== 'NSE') continue;
+    if (exchangeFilter === 'BSE' && sym.exchange !== 'BSE') continue;
+    const isin = sym.isin;
+    if (!isin) { isinMap.set(`noisin:${row.equity_id}`, row); continue; }
+    const existing = isinMap.get(isin);
+    if (!existing || sym.exchange === 'NSE') isinMap.set(isin, row);
+  }
+
+  const vaniRule = getPresetMeta('volume_drive')?.vani_rule;
+  const resultLimit = getPresetMeta('volume_drive')?.limit ?? 60;
+
+  const results = Array.from(isinMap.values()).map((row): ScanStock => {
+    const sym = row.km_equity_symbols;
+    const ema20 = row.ema_20 ?? null;
+    const atr14 = row.atr_14 ?? null;
+    return {
+      equity_id:            row.equity_id,
+      symbol:               sym?.symbol ?? String(row.equity_id),
+      company_name:         sym?.company_name ?? null,
+      industry:             sym?.industry ?? null,
+      exchange:             sym?.exchange ?? null,
+      mcap_cr:              sym?.mcap_cr ?? null,
+      trade_date:           row.trade_date,
+      close:                row.close,
+      open:                 row.open ?? null,
+      high:                 row.high ?? null,
+      low:                  row.low ?? null,
+      pct_chng:             row.pct_chng ?? null,
+      magic_rs:             row.magic_rs ?? null,
+      magic_rs_zone:        row.magic_rs_zone ?? null,
+      rss_value:            row.rss_value ?? null,
+      rss_spread:           row.rss_spread ?? null,
+      rsi_14:               row.rsi_14 ?? null,
+      rvol:                 row.rvol ?? null,
+      flow_type:            row.flow_type ?? null,
+      supertrend_dir:       row.supertrend_dir ?? null,
+      sma_50:               row.sma_50 ?? null,
+      sma_150:              row.sma_150 ?? null,
+      sma_200:              row.sma_200 ?? null,
+      ema_20:               ema20,
+      atr_14:               atr14,
+      w52_high:             row.w52_high ?? null,
+      w52_low:              row.w52_low ?? null,
+      lifetime_high:        row.lifetime_high ?? null,
+      avg_amt_5d:           row.avg_amt_5d ?? null,
+      avg_amt_22d:          row.avg_amt_22d ?? null,
+      avg_amt_66d:          row.avg_amt_66d ?? null,
+      delivery_surge_x:     row.delivery_surge_x ?? null,
+      sniper_inst:          row.sniper_inst ?? null,
+      sniper_hot:           row.sniper_hot ?? null,
+      accum_distrib:        row.accum_distrib ?? null,
+      volume_divergence_flag: row.volume_divergence_flag ?? null,
+      delivery_pct:         row.delivery_pct ?? null,
+      deliv_value_cr:       row.deliv_value_cr ?? null,
+      has_recent_svd:       !!row.dot_svd,
+      has_recent_sbd:       !!row.dot_sbd,
+      has_recent_syd:       !!row.dot_syd,
+      pctBelow52wHigh:      row.pct_below_52w_high ?? null,
+      reward:               ema20 && atr14 ? (ema20 + atr14) - row.close : null,
+      rewardPct:            ema20 && atr14 && atr14 > 0 ? ((ema20 + atr14) - row.close) / atr14 : null,
+      magicRsTrend:         [],
+      score_5d:             row.score_5d  != null ? Number(row.score_5d)  : null,
+      score_22d:            row.score_22d != null ? Number(row.score_22d) : null,
+      ret_5d:               row.ret_5d  ?? null,
+      ret_22d:              row.ret_22d ?? null,
+      ret_66d:              row.ret_66d ?? null,
+      xAmt:                 null,
+      rel_5d_n50:           null, rel_22d_n50:  null, rel_66d_n50:  null,
+      rel_5d_n500:          null, rel_22d_n500: null, rel_66d_n500: null,
+      vaniOpportunity:      computeVaniOpportunity(row, vaniRule),
+      stage:                row.stage ?? null,
+      d_pct:                row.pct_chng != null ? Math.round(Number(row.pct_chng) * 100) / 100 : null,
+      breakout_level:       row.breakout_level    != null ? Number(row.breakout_level)    : null,
+      pct_from_breakout:    row.pct_from_breakout != null ? Number(row.pct_from_breakout) : null,
+    };
+  });
+
+  // SVD tier first (10.4x vs 5.4x), then delivery conviction, then 5-day
+  // momentum — the strongest continuous feature measured (ret_5d 3.15 vs 0.32).
+  results.sort((a, b) => {
+    if (a.has_recent_svd !== b.has_recent_svd) return a.has_recent_svd ? -1 : 1;
+    const ad = a.delivery_pct ?? -1;
+    const bd = b.delivery_pct ?? -1;
+    if (ad !== bd) return bd - ad;
+    return (b.ret_5d ?? -999) - (a.ret_5d ?? -999);
+  });
+  return results.slice(0, resultLimit);
+}
+
 async function fetchStage2Leaders(exchangeFilter: ExchangeFilter): Promise<ScanStock[]> {
   // Use km_trading_calendar completed dates — immune to mid-pipeline partial ingestion.
   const completedDates = await fetchRecentDates(1);
@@ -2323,6 +2511,7 @@ export async function executeScan(
   date: string = '',
 ): Promise<ScanStock[]> {
   // Direct DB query scans — skip bundle entirely
+  if (scanId === 'volume_drive')         return fetchVolumeDrive(exchangeFilter);
   if (scanId === 'flower_pot_burst')     return fetchFlowerPotBurst(exchangeFilter);
   if (scanId === 'stage_2_leaders')      return fetchStage2Leaders(exchangeFilter);
   if (scanId === 'stage_2_watch')        return fetchStage2Watch(exchangeFilter);
