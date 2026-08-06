@@ -51,6 +51,11 @@ DAILY_STEPS: list[tuple[str, Optional[str]]] = [
     ('d365',                  None),
     ('stage_classification',  None),
     ('vani_flags',            None),
+    # Period aggregates — must follow rolling_metrics/stage/vani_flags because
+    # aggregate_*_bars runs its own indicator chain over the aggregated bars.
+    # No-ops except on Fridays / month-end (boundary check lives in the handler).
+    ('equity_weekly',         None),
+    ('equity_monthly',        None),
     ('index_returns',         None),
     ('industry_composites',   None),
     ('market_breadth',        None),

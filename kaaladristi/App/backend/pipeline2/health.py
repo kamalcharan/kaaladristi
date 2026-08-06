@@ -32,6 +32,23 @@ import psycopg2.extras
 #   ok_threshold: fraction (0..1) at/above which fill-rate is 'healthy'
 
 DIMENSION_HEALTH: dict[str, tuple[str, str | None, list[str] | None, float | None]] = {
+    # Reconciliation — equity rows in the bhavcopy vs rows actually inserted.
+    # Every other check in this table measures PRESENCE (is the column filled,
+    # did rows arrive), which cannot see a row dropped BEFORE insert: 1,853 NSE
+    # equities were silently discarded daily for months while every check read
+    # green. Threshold is 0.99 — any sustained equity-series drop is a bug.
+    'nse_reconciliation':    ('km_pipeline_runs',  None,        None, 0.99),
+    'bse_reconciliation':    ('km_pipeline_runs',  None,        None, 0.99),
+
+    # Period aggregates, keyed by week_start / month_start (not trade_date).
+    # They ran only in legacy daily_pipeline steps 6e/6f, both gated on
+    # `not skip_indicators` — and pipeline2 passes skip_indicators=True, so both
+    # stopped the day production moved to pipeline2 (weekly stale from
+    # 2026-05-18, monthly from 2026-05-01). Same failure mode as rs_percentile
+    # and index_returns. Registered here so the nightly sweep keeps them current.
+    'equity_weekly':         ('km_equity_weekly',  'equity_id', None, None),
+    'equity_monthly':        ('km_equity_monthly', 'equity_id', None, None),
+
     # Download dimensions — row-count checks only. `columns` / `ok_threshold`
     # are unused; expected row counts live in DOWNLOAD_EXPECTED below.
     'index_eod_download':    ('km_index_eod',    'index_id',  None, None),
@@ -92,6 +109,10 @@ DOWNLOAD_DIMENSIONS = set(DOWNLOAD_EXPECTED.keys())
 # Display labels — hand-curated so NSE/BSE/RS/ROC render with correct casing.
 # A generic title() would produce "Nse Equity Indicators" and "Bse Magic Rs".
 LABELS: dict[str, str] = {
+    'equity_weekly':         'Equity Weekly Bars',
+    'equity_monthly':        'Equity Monthly Bars',
+    'nse_reconciliation':    'NSE Parsed vs Inserted',
+    'bse_reconciliation':    'BSE Parsed vs Inserted',
     'index_eod_download':    'Index EOD Download',
     'nse_eod_download':      'NSE EOD Download',
     'bse_eod_download':      'BSE EOD Download',
@@ -250,6 +271,54 @@ def fill_rate(conn, dimension: str, trade_date: date) -> float:
             if n >= min_expected:
                 return 100.0
             return round(n / min_expected * 100.0, 2)
+
+        # Reconciliation: of the EQUITY rows in the day's bhavcopy, how many
+        # reached km_equity_eod? Debt/GS/warrants are legitimately excluded, so a
+        # raw matched/parsed ratio reads ~40% on a healthy day — the denominator
+        # is matched + equity-series unmatched, which should sit at 100%.
+        if dimension in ('nse_reconciliation', 'bse_reconciliation'):
+            exch = 'NSE' if dimension.startswith('nse') else 'BSE'
+            cur.execute(
+                "SELECT metadata FROM km_pipeline_runs "
+                "WHERE exchange = %s AND step = 'insert' AND trade_date = %s "
+                "  AND metadata IS NOT NULL "
+                "ORDER BY id DESC LIMIT 1",
+                [exch, str(trade_date)],
+            )
+            row = cur.fetchone()
+            if not row or not row[0]:
+                return 0.0
+            meta = row[0]
+            matched = meta.get('matched_count')
+            if matched is None:
+                # Run predates the reconciliation fields — unknown, not healthy.
+                return 0.0
+            if exch == 'NSE':
+                from pipeline.processors.symbol_registrar import NSE_EQUITY_SERIES
+                by_series = meta.get('unmatched_by_series') or {}
+                missed = sum(v for k, v in by_series.items() if k in NSE_EQUITY_SERIES)
+            else:
+                # parse_bse_bhav already gates to equities — every miss is real.
+                missed = int(meta.get('unmatched_count') or 0)
+            total = int(matched) + int(missed)
+            if total <= 0:
+                return 0.0
+            return round(int(matched) / total * 100.0, 2)
+
+        # Weekly / monthly aggregates are keyed by week_start / month_start, not
+        # trade_date, so "fill rate for this date" means: does the period that
+        # CONTAINS trade_date have rows? Anything > 0 is complete — the aggregate
+        # writes every equity for the period in one pass or none at all.
+        if dimension in ('equity_weekly', 'equity_monthly'):
+            weekly = dimension == 'equity_weekly'
+            period_col = 'week_start' if weekly else 'month_start'
+            unit = 'week' if weekly else 'month'
+            cur.execute(
+                f"SELECT COUNT(*) FROM {table} "
+                f"WHERE {period_col} = date_trunc('{unit}', %s::date)::date",
+                [str(trade_date)],
+            )
+            return 100.0 if (cur.fetchone()[0] or 0) > 0 else 0.0
 
         if dimension == 'industry_composites':
             cur.execute(
@@ -511,6 +580,11 @@ DIMENSION_ORDER = [
     'industry_composites',
     'market_breadth',
     'breadth_roc',
+    'equity_weekly',
+    'equity_monthly',
+    # ── Reconciliation (parsed vs inserted) ──────────────────────────
+    'nse_reconciliation',
+    'bse_reconciliation',
 ]
 
 

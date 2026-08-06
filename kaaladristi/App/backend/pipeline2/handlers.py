@@ -21,7 +21,7 @@ Principles:
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timedelta
 from typing import Callable, Optional
 
 import psycopg2
@@ -539,6 +539,68 @@ def handle_breadth_roc(conn, trade_date: date, force: bool,
 
 # ── Scanner materialized-view refresh (migration 147) ────────────────────
 
+def _handle_period_aggregate(dim: str, conn, trade_date: date, force: bool,
+                             on_progress: ProgressFn, is_boundary, aggregate_fn,
+                             label: str) -> HandlerResult:
+    """
+    Shared body for the weekly / monthly equity aggregates.
+
+    These ran only in daily_pipeline steps 6e/6f, both gated on
+    `not skip_indicators` — and pipeline2 calls run_nse_pipeline with
+    skip_indicators=True. So they silently stopped the day production moved to
+    pipeline2: km_equity_weekly stale from 2026-05-18, km_equity_monthly from
+    2026-05-01. Identical failure to rs_percentile and index_returns.
+
+    Boundary semantics are preserved from the legacy steps: weekly runs on
+    Fridays, monthly on the last calendar day. On any other date the step is a
+    no-op and reports 'completed' rather than 'failed' — a Tuesday genuinely has
+    no weekly bar to write, and marking it failed would have the 19:30 gap sweep
+    re-enqueue it every single day.
+    """
+    before = fill_rate(conn, dim, trade_date)
+    on_progress(f'before fill_rate = {before:.1f}%', 5)
+
+    if not is_boundary(trade_date) and not force:
+        on_progress(f'{trade_date} is not a {label} boundary — nothing to aggregate', 100)
+        return HandlerResult('completed', before, before, 0)
+
+    on_progress(f'aggregating {label} bars through {trade_date}', 30)
+    try:
+        # aggregate_*_bars takes the db_client (not a raw psycopg2 conn) and a
+        # from_date, and rebuilds every period from that date forward. Passing the
+        # period start keeps the run bounded to the current period.
+        from lib.db_client import DBClient
+        db = DBClient()
+        if label == 'weekly':
+            from_date = trade_date - timedelta(days=trade_date.isoweekday() - 1)
+        else:
+            from_date = trade_date.replace(day=1)
+        rows = int(aggregate_fn(db, from_date=from_date, run_indicators=True, verbose=False) or 0)
+    except Exception as e:
+        conn.rollback()
+        return HandlerResult('failed', before, before, 0, error_msg=str(e)[:500])
+
+    after = fill_rate(conn, dim, trade_date)
+    status = 'completed' if after >= 100.0 else 'failed'
+    return HandlerResult(status, before, after, rows)
+
+
+def handle_equity_weekly(conn, trade_date: date, force: bool,
+                         exchange: Optional[str], on_progress: ProgressFn) -> HandlerResult:
+    from daily_pipeline import is_week_end
+    from pipeline.compute import aggregate_weekly_bars
+    return _handle_period_aggregate('equity_weekly', conn, trade_date, force,
+                                    on_progress, is_week_end, aggregate_weekly_bars, 'weekly')
+
+
+def handle_equity_monthly(conn, trade_date: date, force: bool,
+                          exchange: Optional[str], on_progress: ProgressFn) -> HandlerResult:
+    from daily_pipeline import is_month_end
+    from pipeline.compute import aggregate_monthly_bars
+    return _handle_period_aggregate('equity_monthly', conn, trade_date, force,
+                                    on_progress, is_month_end, aggregate_monthly_bars, 'monthly')
+
+
 def handle_scan_refresh(conn, trade_date: date, force: bool,
                         exchange: Optional[str], on_progress: ProgressFn) -> HandlerResult:
     """Refresh the scanner materialized views (km_scan_results + companion
@@ -793,6 +855,10 @@ def handle(dimension: str, conn, trade_date: date, force: bool,
         return handle_supertrend(conn, trade_date, force, exchange, on_progress)
     if dimension == 'rolling_metrics':
         return handle_rolling_metrics(conn, trade_date, force, exchange, on_progress)
+    if dimension == 'equity_weekly':
+        return handle_equity_weekly(conn, trade_date, force, exchange, on_progress)
+    if dimension == 'equity_monthly':
+        return handle_equity_monthly(conn, trade_date, force, exchange, on_progress)
     if dimension == 'rs_percentile':
         return handle_rs_percentile(conn, trade_date, force, exchange, on_progress)
     if dimension == 'd365':
