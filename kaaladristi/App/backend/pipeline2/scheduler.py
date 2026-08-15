@@ -144,9 +144,10 @@ def _score_recent_transits(dsn: str) -> None:
 
 
 def _daily_gap_sweep(dsn: str) -> None:
-    """Runs at 19:30 IST — 90 min after the 18:00 daily run. Looks at the
-    last 3 trading days and enqueues a fix job for every (dimension, date)
-    still sitting at missing or partial.
+    """Runs at 19:30 and 21:30 IST Mon-Fri, plus 09:00 IST Saturday (late
+    bhav publishes — see start_scheduler). Looks at the last 3 trading days
+    and enqueues a fix job for every (dimension, date) still sitting at
+    missing or partial.
 
     Rules:
       * Only enqueues job_type='fix' — never backfill, never daily_run.
@@ -307,6 +308,32 @@ def start_scheduler(dsn: str) -> BackgroundScheduler:
         replace_existing=True,
     )
 
+    # 21:30 second sweep — NSE occasionally publishes bhav after 19:30
+    # (observed 2026-08-14, the evening before a long weekend). The sweep is
+    # idempotent (enqueues nothing when the grid is green), so an extra pass
+    # costs one health-grid query on normal days.
+    sched.add_job(
+        _daily_gap_sweep,
+        trigger=CronTrigger(hour=21, minute=30, day_of_week='mon-fri', timezone=IST),
+        id='pipeline2_gap_sweep_late',
+        name='Pipeline v2 late gap sweep (21:30 IST, Mon-Fri) — last 3 days',
+        args=[dsn],
+        replace_existing=True,
+    )
+
+    # Saturday 09:00 — the weekday-only sweeps leave a weekend hole: a Friday
+    # whose bhav lands after the 21:30 sweep would otherwise stay broken until
+    # Monday 19:30 (hit 2026-08-14/15, healed by a manual rerun). One Saturday
+    # pass closes it.
+    sched.add_job(
+        _daily_gap_sweep,
+        trigger=CronTrigger(hour=9, minute=0, day_of_week='sat', timezone=IST),
+        id='pipeline2_gap_sweep_weekend',
+        name='Pipeline v2 weekend gap sweep (09:00 IST, Sat) — last 3 days',
+        args=[dsn],
+        replace_existing=True,
+    )
+
     # 00:15 every day (not market-day-bound — subscriptions lapse on weekends
     # too). Max grace after expiry is therefore ~24h.
     sched.add_job(
@@ -320,7 +347,8 @@ def start_scheduler(dsn: str) -> BackgroundScheduler:
 
     sched.start()
     log.info('pipeline2 scheduler started (daily_run 18:00, transit_scoring 19:00, '
-             'gap_sweep 19:30 IST Mon-Fri; tier_expiry_sweep 00:15 IST daily)')
+             'gap_sweep 19:30 + 21:30 IST Mon-Fri, 09:00 IST Sat; '
+             'tier_expiry_sweep 00:15 IST daily)')
     return sched
 
 
