@@ -569,8 +569,8 @@ def _handle_period_aggregate(dim: str, conn, trade_date: date, force: bool,
         # aggregate_*_bars takes the db_client (not a raw psycopg2 conn) and a
         # from_date, and rebuilds every period from that date forward. Passing the
         # period start keeps the run bounded to the current period.
-        from lib.db_client import DBClient
-        db = DBClient()
+        from lib.db_client import get_db
+        db = get_db()
         if label == 'weekly':
             from_date = trade_date - timedelta(days=trade_date.isoweekday() - 1)
         else:
