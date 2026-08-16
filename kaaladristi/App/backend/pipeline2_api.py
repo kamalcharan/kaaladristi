@@ -266,25 +266,19 @@ class VaNiAskRequest(BaseModel):
     exchange: Optional[str] = None      # combined | NSE | BSE
 
 
-# Dependency order for the 'all' backfill — downloads first (so EOD data
-# exists before any compute), then the compute DAG. 15 jobs total.
-BACKFILL_ALL_ORDER = [
-    'index_eod_download',
-    'nse_eod_download',
-    'bse_eod_download',
-    'index_indicators',
-    'nse_equity_indicators',
-    'bse_equity_indicators',
-    'index_flow',
-    'nse_flow',
-    'bse_flow',
-    'index_magic_rs',
-    'nse_magic_rs',
-    'bse_magic_rs',
-    'industry_composites',
-    'market_breadth',
-    'breadth_roc',
-]
+# Dependency order for the 'all' backfill — DERIVED from the daily run's own
+# step order rather than hand-listed, so the two can never disagree again.
+#
+# The hand-written version covered 15 of the then-23 dimensions: rs_percentile,
+# supertrend, rolling_metrics, d365, stage_classification, vani_flags,
+# index_returns and scan_refresh were all silently absent, so an "All
+# dimensions" backfill left them unpopulated for every date in the range while
+# reporting success. DAILY_STEPS is the authoritative dependency order (it is
+# what the nightly run executes), so filter it to what a fix job can actually
+# run.
+from pipeline2.orchestrator import DAILY_STEPS as _DAILY_STEPS  # noqa: E402
+
+BACKFILL_ALL_ORDER = [dim for dim, _exch in _DAILY_STEPS if dim in FIXABLE_DIMENSIONS]
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────
@@ -481,9 +475,9 @@ def enqueue_daily_run(req: DailyRunRequest):
 def enqueue_backfill(req: BackfillRequest):
     """Queue a multi-date backfill, one job per dimension.
 
-    dimension='all' expands to BACKFILL_ALL_ORDER (11 compute dimensions
-    in dependency order). All inserted jobs share a batch_id so the UI
-    can render them as a group.
+    dimension='all' expands to BACKFILL_ALL_ORDER — every fixable dimension
+    of the daily run, in its dependency order. All inserted jobs share a
+    batch_id so the UI can render them as a group.
     """
     # ── Validate dates ──────────────────────────────────────────────
     try:
