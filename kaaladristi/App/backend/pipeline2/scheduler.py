@@ -159,7 +159,7 @@ def _daily_gap_sweep(dsn: str) -> None:
         Panel B.
     """
     # Lazy imports — avoid running health-grid queries at scheduler-start time.
-    from .health import health_grid
+    from .health import health_grid, OBSERVATIONAL_DIMENSIONS
 
     try:
         conn = psycopg2.connect(dsn)
@@ -181,6 +181,11 @@ def _daily_gap_sweep(dsn: str) -> None:
             for dim_row in grid:
                 dim_key = dim_row.get('dimension')
                 if not dim_key:
+                    continue
+                # Measurement-only rows (reconciliation) have no fix handler —
+                # their remedy is the *_eod_download fix the sweep already
+                # enqueues when the underlying day is short.
+                if dim_key in OBSERVATIONAL_DIMENSIONS:
                     continue
 
                 for day in dim_row.get('days') or []:
