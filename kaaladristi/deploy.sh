@@ -41,13 +41,30 @@ echo "[nginx] Reloading..."
 docker exec vikuna-nginx nginx -s reload
 
 # 7. Health check
-echo "[check] Waiting 8s for backend..."
-sleep 8
-if curl -sf http://localhost:8101/api/pipeline2/ping > /dev/null 2>&1; then
-    echo "[check] kd-pipeline-api2 OK"
-else
-    echo "[check] WARNING: health check failed — check logs:"
-    echo "  docker compose logs kd-pipeline-api2 --tail 30"
+#
+# Probe from INSIDE the container: pipeline-api2 has no host port mapping (it
+# is reachable only on the vikuna-net docker network), so a host-side
+# `curl localhost:8101` can never connect and this check warned on every
+# single deploy regardless of actual health. The image has no curl either —
+# use python, which is always present.
+#
+# Poll instead of a flat sleep: a cold start (uvicorn + pandas + ephemeris
+# imports + scheduler init) regularly needs more than 8s after a rebuild.
+echo "[check] Waiting for backend..."
+ok=0
+for i in $(seq 1 15); do
+    if docker exec kd-pipeline-api2 python -c \
+        "import urllib.request as u; u.urlopen('http://localhost:8101/api/pipeline2/ping', timeout=5)" \
+        > /dev/null 2>&1; then
+        ok=1
+        echo "[check] kd-pipeline-api2 OK (after ${i} attempt(s))"
+        break
+    fi
+    sleep 3
+done
+if [ "$ok" -ne 1 ]; then
+    echo "[check] WARNING: health check failed after ~45s — check logs:"
+    echo "  docker compose logs pipeline-api2 --tail 30"
 fi
 
 echo ""
