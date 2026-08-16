@@ -48,8 +48,16 @@
 -- reads from this matview), and the two client-side data-visibility caps the
 -- audit found (8,000-symbol / 1,000-industry-row) — those are frontend fixes.
 --
--- AFTER APPLYING: re-run the parity harness (both modes) before repointing any
--- scanner at this matview:
+-- DATA SAFETY: nothing is lost. A materialized view stores no original data --
+-- every column is derived from km_equity_eod / km_equity_symbols /
+-- km_industry_eod, none of which this migration touches. km_fpb_active (a real
+-- table holding accumulated FPB releases) is likewise untouched. Both views are
+-- created WITH DATA inside the single transaction below, so the swap is atomic:
+-- readers see the old populated views until COMMIT, the new populated ones
+-- after, and never an empty one. Re-running this file is safe.
+--
+-- AFTER APPLYING: no REFRESH is needed (WITH DATA already populated them). Just
+-- re-run the parity harness (both modes) before repointing any scanner here:
 --   cd scripts/qa/scan-parity && node build.mjs && node run-parity.mjs
 --
 -- Target database: kaala_dristi_db (PostgreSQL 17+).
@@ -687,7 +695,14 @@ SELECT 'flower_pot_burst', rnk::int, is_burst AS vani_flag,
        fpb_setup_days, fpb_vol_burst, fpb_range_exp, fpb_close_strength, fpb_quality
 FROM fpb
 
-WITH NO DATA;
+-- WITH DATA (not 147's WITH NO DATA): populate inside this transaction so the
+-- whole migration is atomic. Readers see the OLD populated matview right up to
+-- COMMIT and the NEW populated one immediately after — there is never a window
+-- where km_scan_results exists but is empty. That matters because Flower Pot
+-- Burst is served from this matview in production, and maintain_fpb_active()
+-- reads it to append to km_fpb_active; an empty window would quietly cost a
+-- day of FPB releases. Costs ~a minute of migration runtime instead.
+WITH DATA;
 
 -- CONCURRENTLY refresh requires a UNIQUE index; a stock never appears twice in one preset.
 CREATE UNIQUE INDEX ux_km_scan_results_pk   ON km_scan_results (preset_id, equity_id);
@@ -737,7 +752,9 @@ SELECT
   (SELECT count(*) FROM universe WHERE hist_len < 5)                       AS excluded_insufficient_history,
   (SELECT count(*) FROM km_scan_results r WHERE r.preset_id = p.preset_id) AS included_count
 FROM presets p
-WITH NO DATA;
+-- WITH DATA: km_scan_results is already populated above (same transaction), so
+-- included_count is correct at creation. Same atomicity argument as above.
+WITH DATA;
 
 CREATE UNIQUE INDEX ux_km_scan_excl_pk ON km_scan_exclusion_counts (preset_id, trade_date);
 
