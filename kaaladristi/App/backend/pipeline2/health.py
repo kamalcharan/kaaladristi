@@ -524,6 +524,89 @@ def _health_row(
             if status == 'ok':
                 latest_ok = ds
 
+    elif dimension in ('equity_weekly', 'equity_monthly'):
+        # Period aggregates are keyed by week_start/month_start, not trade_date.
+        # A day is 'ok' when the period CONTAINING it has rows — same semantics
+        # as fill_rate() below. Without this branch these dims fell through to
+        # the column-fill path with cols=None, which raised, so health_grid()
+        # returned them with days=[] / latest_ok=None and the dashboard showed
+        # them as never-run even while the aggregates were green (2026-08-15).
+        weekly = dimension == 'equity_weekly'
+        period_col = 'week_start' if weekly else 'month_start'
+        first_period = (from_dt - timedelta(days=from_dt.weekday())) if weekly \
+            else from_dt.replace(day=1)
+        with conn.cursor() as cur:
+            cur.execute(
+                f"SELECT DISTINCT {period_col} FROM {table} "
+                f"WHERE {period_col} BETWEEN %s AND %s",
+                [first_period, to_dt],
+            )
+            have = {r[0] for r in cur.fetchall()}
+        for d in trading_days:
+            ds = str(d)
+            if d > today:
+                days.append(DayStatus(ds, 'future'))
+                continue
+            if ds in skip_dates:
+                days.append(DayStatus(ds, skip_dates[ds]))
+                continue
+            period = (d - timedelta(days=d.weekday())) if weekly else d.replace(day=1)
+            ok = period in have
+            days.append(DayStatus(ds, 'ok' if ok else 'missing',
+                                  total=1, populated=1 if ok else 0,
+                                  fill_rate=100.0 if ok else 0.0))
+            if ok:
+                latest_ok = ds
+
+    elif dimension in ('nse_reconciliation', 'bse_reconciliation'):
+        # Parsed-vs-inserted, from the insert step's run metadata — the same
+        # math as fill_rate() below. Days whose insert run predates the
+        # reconciliation fields (pre migration-167 deploys) are 'no_data', not
+        # 'missing': unknown is not the same as broken, and these dims have no
+        # fix handler for the gap sweep to act on anyway (see
+        # OBSERVATIONAL_DIMENSIONS).
+        exch = 'NSE' if dimension.startswith('nse') else 'BSE'
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT DISTINCT ON (trade_date) trade_date, metadata "
+                "FROM km_pipeline_runs "
+                "WHERE exchange = %s AND step = 'insert' AND metadata IS NOT NULL "
+                "  AND trade_date BETWEEN %s AND %s "
+                "ORDER BY trade_date, id DESC",
+                [exch, from_dt, to_dt],
+            )
+            metas = {str(r[0]): r[1] for r in cur.fetchall()}
+        if exch == 'NSE':
+            from pipeline.processors.symbol_registrar import NSE_EQUITY_SERIES
+        for d in trading_days:
+            ds = str(d)
+            if d > today:
+                days.append(DayStatus(ds, 'future'))
+                continue
+            if ds in skip_dates:
+                days.append(DayStatus(ds, skip_dates[ds]))
+                continue
+            meta_row = metas.get(ds)
+            matched = meta_row.get('matched_count') if meta_row else None
+            if matched is None:
+                days.append(DayStatus(ds, 'no_data'))
+                continue
+            if exch == 'NSE':
+                by_series = meta_row.get('unmatched_by_series') or {}
+                missed = sum(v for k, v in by_series.items() if k in NSE_EQUITY_SERIES)
+            else:
+                missed = int(meta_row.get('unmatched_count') or 0)
+            total = int(matched) + int(missed)
+            if total <= 0:
+                days.append(DayStatus(ds, 'no_data'))
+                continue
+            frac = int(matched) / total
+            status = _classify(frac, ok_threshold)
+            days.append(DayStatus(ds, status, total=total, populated=int(matched),
+                                  fill_rate=round(frac * 100.0, 2)))
+            if status == 'ok':
+                latest_ok = ds
+
     else:
         exchange = _exchange_for(dimension)
         coverage = _coverage_by_date_column_fill(conn, table, cols, exchange, from_dt, to_dt)
@@ -586,6 +669,14 @@ DIMENSION_ORDER = [
     'nse_reconciliation',
     'bse_reconciliation',
 ]
+
+
+# Dimensions that MEASURE an outcome but have no fix handler of their own —
+# the remedy for a bad reconciliation day is re-running the eod download /
+# insert, which the gap sweep already enqueues via the *_eod_download dims.
+# The sweep must skip these or its fix jobs die in the worker with
+# "unknown dimension".
+OBSERVATIONAL_DIMENSIONS = {'nse_reconciliation', 'bse_reconciliation'}
 
 
 def health_grid(conn, days: int = 30) -> list[dict]:
