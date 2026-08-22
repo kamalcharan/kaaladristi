@@ -78,11 +78,23 @@ API_SLEEP_SECONDS = 0.3
 
 def _fetch_from_nse(session: NseSession, symbol: str) -> Optional[dict]:
     """NSE quote-equity endpoint. Returns None if the symbol is unknown to
-    NSE (BSE-only stock without an NSE vendor code) or the field is missing."""
+    NSE (BSE-only stock without an NSE vendor code) or the field is missing.
+
+    Two-hop pattern: hit the equity's quote HTML page first as a warmup so
+    NSE's edge cache/anti-bot sees the browser flow (page → API), then pass
+    the same page URL as Referer on the API call. Without this pair every
+    quote-equity request returns 403 even with fresh cookies."""
     from urllib.parse import quote
-    url = NSE_QUOTE_API.format(quote(symbol))
+    q = quote(symbol)
+    quote_page = f'https://www.nseindia.com/get-quotes/equity?symbol={q}'
+    api_url = NSE_QUOTE_API.format(q)
     try:
-        resp = session.get(url)
+        # Warmup: discard response, we only care about the cookies + edge state.
+        try:
+            session.get(quote_page, referer='https://www.nseindia.com/')
+        except Exception:
+            pass  # non-fatal — the API call still gets tried below
+        resp = session.get(api_url, referer=quote_page)
         data = resp.json()
         info = data.get('info', {}) or {}
         if not info.get('industry'):
