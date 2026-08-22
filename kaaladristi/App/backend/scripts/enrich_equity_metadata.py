@@ -121,41 +121,32 @@ def _fetch_from_yahoo(yahoo_ticker: str) -> Optional[dict]:
 
 
 def _find_targets(db, cap: Optional[int] = None) -> list[dict]:
-    """Return active equities that are traded but untagged. Ordered
-    newest-first-listed so recent additions get enriched before deep tails
-    when the run is capped."""
-    # Recency filter runs in Python (db_client's filter API doesn't support
-    # a JOIN / subquery). Pull the candidate active-untagged list first, then
-    # intersect with the recent-EOD set — same shape as seed_bse_metadata.py.
-    cutoff = None
-    try:
-        from datetime import date as _date, timedelta
-        cutoff = (_date.today() - timedelta(days=RECENT_EOD_WINDOW_DAYS)).isoformat()
-    except Exception:
-        pass
+    """Return active equities that are traded but untagged.
 
-    untagged_rows = db.select(
-        'km_equity_symbols',
-        'id,symbol,exchange,vendor_codes,isin',
-        filters={'is_active': True, 'industry': None},
-    )
+    One raw SQL query — the client's `filters={'industry': None}` shortcut
+    would compile to `industry = NULL` (never true in SQL); we need
+    `industry IS NULL`. `EXISTS` on km_equity_eod restricts to symbols
+    that actually traded in the recency window so we don't spend API
+    calls on dormant/delisted listings.
 
-    if not untagged_rows:
-        return []
-
-    if cutoff:
-        untagged_ids = [r['id'] for r in untagged_rows]
-        traded_recent = db.select(
-            'km_equity_eod',
-            'DISTINCT equity_id AS eid',
-            filters={'equity_id': ('in', untagged_ids), 'trade_date': ('gte', cutoff)},
-        ) if hasattr(db, 'select') else []
-        recent_set = {r['eid'] for r in traded_recent}
-        untagged_rows = [r for r in untagged_rows if r['id'] in recent_set]
-
+    Ordered id DESC so recently-registered symbols get enriched before
+    older tails when the run is capped.
+    """
+    sql = """
+      SELECT s.id, s.symbol, s.exchange, s.vendor_codes, s.isin
+      FROM km_equity_symbols s
+      WHERE s.is_active = TRUE
+        AND s.industry IS NULL
+        AND EXISTS (
+          SELECT 1 FROM km_equity_eod e
+          WHERE e.equity_id = s.id
+            AND e.trade_date >= CURRENT_DATE - INTERVAL '%s days'
+        )
+      ORDER BY s.id DESC
+    """ % RECENT_EOD_WINDOW_DAYS  # int constant, safe to inline; keeps params.py-agnostic
     if cap is not None:
-        untagged_rows = untagged_rows[:cap]
-    return untagged_rows
+        sql += f' LIMIT {int(cap)}'
+    return db.execute(sql)
 
 
 def enrich_untagged_equities(
