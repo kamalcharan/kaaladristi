@@ -30,10 +30,13 @@
 --      `industry_agg` CTE and INSERT them. The 5-stock-minimum filter and
 --      Magic-RS-based `industry_rank` are unchanged.
 --
---   4. Backfill: loop over the last 60 distinct trading dates and re-run
---      the RPC so IndustryTransitionView's 6-day rolling window has the
---      new return columns populated on day one — matches the pattern
---      migration 034 used when this table was first hardened.
+--   4. Backfill is DELIBERATELY NOT in this file (see backfill note at the
+--      bottom). Running 60 iterations of the RPC inside the same BEGIN/COMMIT
+--      as the schema change locks km_industry_eod for the whole 30+ minute
+--      duration, which is why the earlier attempt hung in pgAdmin. New rows
+--      get the return columns from tonight's pipeline run onward; the 5-day
+--      rolling window populates over 5 nightly runs. Standalone backfill
+--      script is provided separately (see bottom).
 --
 -- Target DB: kaala_dristi_db.
 -- ============================================================================
@@ -277,26 +280,43 @@ $$;
 
 GRANT EXECUTE ON FUNCTION compute_all_industry_composites(DATE) TO authenticated, kd_app, anon;
 
--- ── 4. Backfill the last 60 trading dates so the 6-day rolling window
---       consumed by IndustryTransitionView reads populated return columns
---       from day one. Mirrors migration 034's backfill.
-DO $$
-DECLARE
-  d DATE;
-  n INT;
-BEGIN
-  FOR d IN
-    SELECT DISTINCT trade_date
-    FROM km_equity_eod
-    ORDER BY trade_date DESC
-    LIMIT 60
-  LOOP
-    n := compute_all_industry_composites(d);
-    RAISE NOTICE 'Industry composites for %: % industries', d, n;
-  END LOOP;
-END;
-$$;
-
 NOTIFY pgrst, 'reload schema';
 
 COMMIT;
+
+-- ============================================================================
+-- BACKFILL — run separately after this migration commits.
+-- ----------------------------------------------------------------------------
+-- Do NOT run this inside the same BEGIN/COMMIT above: it holds a row-level
+-- lock on km_industry_eod for the entire loop, and 60 iterations of the RPC
+-- takes >30 minutes on live volumes — long enough that the pgAdmin client
+-- can appear hung. Running it after the migration commits keeps the schema
+-- change atomic AND lets each iteration commit independently, so you can
+-- Ctrl-C and resume with no state to unwind.
+--
+-- The feature does NOT require this backfill to ship. Once migration 171
+-- commits, tonight's pipeline run populates today's row via
+-- compute_all_industry_composites. The 5-day rolling window the UI reads
+-- fully populates over 5 nightly runs. UI shows `—` for missing days.
+--
+-- Only run this if you want the last 30-60 days populated immediately:
+--
+--   \set AUTOCOMMIT on
+--   DO $$
+--   DECLARE d DATE; n INT;
+--   BEGIN
+--     FOR d IN
+--       SELECT DISTINCT trade_date FROM km_equity_eod
+--       ORDER BY trade_date DESC LIMIT 30
+--     LOOP
+--       PERFORM compute_all_industry_composites(d);
+--       RAISE NOTICE 'Industry composites for %: done', d;
+--       COMMIT;   -- one commit per iteration — safe to interrupt
+--     END LOOP;
+--   END $$;
+--
+-- Expect ~1-3 min per iteration under normal load. Runs in the background;
+-- readers of km_industry_eod are not blocked between iterations. If total
+-- time exceeds ~2 hours something is wrong — likely another process
+-- (nightly pipeline) is competing for the same table; wait for it and retry.
+-- ============================================================================
