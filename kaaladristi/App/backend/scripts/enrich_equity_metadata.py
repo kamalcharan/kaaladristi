@@ -30,28 +30,24 @@ Two callers use the same function:
   2. `enrich_for_pipeline(conn, trade_date, force)` — pipeline2 handler
      shim. Caps per-run work so a big backfill can't stall a nightly job.
 
-Data source strategy
---------------------
-Yahoo Finance first for both exchanges — NSE's quote-equity API blocks the
-server-side client aggressively (fingerprint-level 403 that Referer/cookie
-tricks don't defeat, only Playwright would). yfinance is not rate-limited
-the same way, works for NSE (`SYMBOL.NS`) and BSE (`SYMBOL.BO`) without an
-auth wall, and returns industry + company name for the whole listed universe
-including small/mid caps outside index membership.
-
-NSE quote-equity is kept as a last-resort fallback (some tickers Yahoo
-doesn't have, and NSE captures `is_fno` which Yahoo does not); if NSE is
-blocked in the caller's environment, misses cascade to `failed` and the
-next run picks them up.
+Data source
+-----------
+Yahoo Finance only. NSE's /api/quote-equity blocks the server-side client
+at the TLS-fingerprint layer (Referer/cookie tricks don't defeat it, only
+Playwright would), and every 403 costs 15-20s of retry backoff. Yahoo has
+no equivalent block, covers the full NSE + BSE listed universe including
+small/mid caps outside index membership, and needs no auth or warmup.
 
   Yahoo yfinance.Ticker(<ticker>).info
         Ticker = vendor_codes.yahoo if populated, else SYMBOL.NS / SYMBOL.BO
         by exchange convention.
-  NSE   https://www.nseindia.com/api/quote-equity?symbol={sym}
-        Only tried when Yahoo misses. Rich payload (isFNOSec, listingDate,
-        etc.) but frequently 403'd from a headless client.
 
-Both writes go through db.patch — id-scoped, atomic, single-row.
+Missing fields (`is_fno`, real `listing_date`) are set to safe defaults;
+enrich them separately if needed. Yahoo misses are typically ETFs, brand-
+new listings, and some SMEs — they stay as `industry IS NULL` and the
+next run picks them up automatically once Yahoo has them.
+
+Writes go through db.patch — id-scoped, atomic, single-row.
 """
 
 import argparse
@@ -64,10 +60,7 @@ from typing import Optional
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from lib.db_client import get_db
-from pipeline.utils.nse_session import NseSession
 
-
-NSE_QUOTE_API = 'https://www.nseindia.com/api/quote-equity?symbol={}'
 
 # Per-run cap when invoked from the daily pipeline. A backfill catches up
 # in chunks over multiple runs rather than stalling one nightly job for
@@ -81,40 +74,6 @@ RECENT_EOD_WINDOW_DAYS = 30
 
 # Polite pacing. NSE has soft-blocked us on faster loops historically.
 API_SLEEP_SECONDS = 0.3
-
-
-def _fetch_from_nse(session: NseSession, symbol: str) -> Optional[dict]:
-    """NSE quote-equity endpoint. Returns None if the symbol is unknown to
-    NSE (BSE-only stock without an NSE vendor code) or the field is missing.
-
-    Two-hop pattern: hit the equity's quote HTML page first as a warmup so
-    NSE's edge cache/anti-bot sees the browser flow (page → API), then pass
-    the same page URL as Referer on the API call. Without this pair every
-    quote-equity request returns 403 even with fresh cookies."""
-    from urllib.parse import quote
-    q = quote(symbol)
-    quote_page = f'https://www.nseindia.com/get-quotes/equity?symbol={q}'
-    api_url = NSE_QUOTE_API.format(q)
-    try:
-        # Warmup: discard response, we only care about the cookies + edge state.
-        try:
-            session.get(quote_page, referer='https://www.nseindia.com/')
-        except Exception:
-            pass  # non-fatal — the API call still gets tried below
-        resp = session.get(api_url, referer=quote_page)
-        data = resp.json()
-        info = data.get('info', {}) or {}
-        if not info.get('industry'):
-            return None
-        return {
-            'company_name': info.get('companyName'),
-            'industry': info.get('industry'),
-            'is_fno': bool(info.get('isFNOSec', False)),
-            'is_etf': bool(info.get('isETFSec', False)),
-            'listing_date': info.get('listingDate') or None,
-        }
-    except Exception:
-        return None
 
 
 # One-time diagnostic flag so the yfinance import error is loud (printed
@@ -247,39 +206,30 @@ def enrich_untagged_equities(
                 print(f'    ... and {len(targets) - 10} more')
         return summary
 
-    session = None   # NseSession is lazily created — only if Yahoo misses
+    # Yahoo-only enrichment. NSE quote-equity is 403'd at the fingerprint
+    # layer from a headless client, so falling back to it just adds 15-20s
+    # of pointless retry backoff per miss. Any real Yahoo miss (Yahoo has
+    # no industry for many ETFs, brand-new listings, and some SMEs) is
+    # marked failed and can be resolved later with a manual step —
+    # dropping NSE from the daily loop keeps runtime linear.
     for i, eq in enumerate(targets, start=1):
         exchange = eq.get('exchange', '')
 
-        meta = None
-
-        # Yahoo Finance first for both exchanges — reliable, no 403 wall.
         yahoo_ticker = _yahoo_ticker_for(eq)
-        if yahoo_ticker:
-            meta = _fetch_from_yahoo(yahoo_ticker)
-            time.sleep(API_SLEEP_SECONDS)
-            if meta:
-                summary['yahoo_hits'] += 1
-
-        # Fallback to NSE quote-equity for anything Yahoo missed. NSE is
-        # frequently 403'd from a headless client; failures here just fall
-        # through to `failed` and get retried next run.
-        if not meta:
-            vc = eq.get('vendor_codes') or {}
-            nse_sym = eq['symbol'] if exchange == 'NSE' else vc.get('nse')
-            if nse_sym:
-                if session is None:
-                    session = NseSession()
-                meta = _fetch_from_nse(session, nse_sym)
-                time.sleep(API_SLEEP_SECONDS)
-                if meta:
-                    summary['nse_hits'] += 1
+        meta = _fetch_from_yahoo(yahoo_ticker) if yahoo_ticker else None
+        time.sleep(API_SLEEP_SECONDS)
 
         if not meta:
             summary['failed'] += 1
             if verbose and summary['failed'] <= 20:
-                print(f'    [miss] {exchange} {eq["symbol"]}  (isin={eq.get("isin")})')
+                print(f'    [miss]  {exchange} {eq["symbol"]:20} (isin={eq.get("isin")}, yahoo={yahoo_ticker})')
             continue
+
+        summary['yahoo_hits'] += 1
+        if verbose and summary['yahoo_hits'] <= 10:
+            # Log the first few hits so the user sees Yahoo working before
+            # the every-100 progress line kicks in on longer runs.
+            print(f'    [ok]    {exchange} {eq["symbol"]:20} -> {meta["industry"][:40]}')
 
         patch = {
             'company_name': meta['company_name'],
