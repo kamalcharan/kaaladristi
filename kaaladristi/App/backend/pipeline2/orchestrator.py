@@ -36,6 +36,12 @@ DAILY_STEPS: list[tuple[str, Optional[str]]] = [
     ('index_eod_download',    None),
     ('nse_eod_download',      'NSE'),
     ('bse_eod_download',      'BSE'),
+    # Enrich any newly-registered symbols with industry/company_name/is_fno
+    # before compute steps read them. Bhavcopy carries no industry column,
+    # so without this step every new listing lands untagged and drops out of
+    # every industry-aware view. Capped per run so a large backlog can't
+    # stall the nightly job; the backlog drains over multiple runs.
+    ('symbol_enrichment',     None),
     ('index_indicators',      None),
     ('nse_equity_indicators', 'NSE'),
     ('bse_equity_indicators', 'BSE'),

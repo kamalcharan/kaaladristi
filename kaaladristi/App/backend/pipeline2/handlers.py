@@ -46,7 +46,7 @@ FIXABLE_DIMENSIONS = frozenset({
     'supertrend', 'rolling_metrics', 'd365', 'stage_classification', 'vani_flags',
     'equity_weekly', 'equity_monthly',
     'index_returns', 'industry_composites', 'market_breadth', 'breadth_roc',
-    'scan_refresh',
+    'symbol_enrichment', 'scan_refresh',
 })
 
 
@@ -280,6 +280,17 @@ def handle_rolling_metrics(conn, trade_date: date, force: bool,
     from scripts.backfill_rolling_metrics import compute_rolling_metrics_for_date
     return _handle_script('rolling_metrics', conn, trade_date, force, on_progress,
                           compute_rolling_metrics_for_date)
+
+
+def handle_symbol_enrichment(conn, trade_date: date, force: bool,
+                             exchange: Optional[str], on_progress: ProgressFn) -> HandlerResult:
+    # Closes the untagged-symbol gap that used to accumulate silently every
+    # time symbol_registrar admitted a new bhavcopy symbol. Enriches
+    # industry/company_name/is_fno/is_etf/listing_date via NSE quote-equity
+    # (with Yahoo fallback for BSE-only). See scripts/enrich_equity_metadata.py.
+    from scripts.enrich_equity_metadata import enrich_for_pipeline
+    return _handle_script('symbol_enrichment', conn, trade_date, force, on_progress,
+                          enrich_for_pipeline)
 
 
 def handle_rs_percentile(conn, trade_date: date, force: bool,
@@ -856,6 +867,8 @@ def handle(dimension: str, conn, trade_date: date, force: bool,
         return handle_supertrend(conn, trade_date, force, exchange, on_progress)
     if dimension == 'rolling_metrics':
         return handle_rolling_metrics(conn, trade_date, force, exchange, on_progress)
+    if dimension == 'symbol_enrichment':
+        return handle_symbol_enrichment(conn, trade_date, force, exchange, on_progress)
     if dimension == 'equity_weekly':
         return handle_equity_weekly(conn, trade_date, force, exchange, on_progress)
     if dimension == 'equity_monthly':
@@ -907,5 +920,6 @@ KNOWN_DIMENSIONS = [
     'industry_composites',
     'market_breadth',
     'breadth_roc',
+    'symbol_enrichment',
     'scan_refresh',
 ]
