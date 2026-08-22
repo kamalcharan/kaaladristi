@@ -22,11 +22,16 @@ const CATEGORY_TABS: { id: CategoryFilter; label: string; activeClass: string }[
 
 // ── Sort ──────────────────────────────────────────────────────
 
-type SortKey = 'industryPercentile' | 'magic_rs' | 'rsi_14' | 'rss_value' | 'rvol' | 'pct_chng';
+type SortKey =
+  | 'industryPercentile' | 'magic_rs' | 'rsi_14' | 'rss_value' | 'rvol' | 'pct_chng'
+  | 'industryRet5d' | 'industryRet22d' | 'industryRet66d';
 type SortDir = 'asc' | 'desc';
 
 const SORT_OPTIONS: { key: SortKey; label: string }[] = [
   { key: 'industryPercentile', label: 'Industry %ile' },
+  { key: 'industryRet5d',      label: 'Ind 5D' },
+  { key: 'industryRet22d',     label: 'Ind 22D' },
+  { key: 'industryRet66d',     label: 'Ind 66D' },
   { key: 'magic_rs',           label: 'Magic RS' },
   { key: 'rsi_14',             label: 'RSI' },
   { key: 'rss_value',          label: 'RSS' },
@@ -51,6 +56,31 @@ function IndustryTag({ stock }: { stock: IndustryEnrichedStock }) {
       <span className="font-mono">{stock.industryPercentile}%ile</span>
       {stock.industryPercentileChange > 0 && <TrendingUp className="w-2.5 h-2.5" />}
       {stock.industryPercentileChange < 0 && <TrendingDown className="w-2.5 h-2.5" />}
+      <IndustryReturnPills
+        r5={stock.industryRet5d}
+        r22={stock.industryRet22d}
+        r66={stock.industryRet66d}
+      />
+    </span>
+  );
+}
+
+// Industry return-momentum clock — three tiny signed pills next to the
+// percentile so users can see the 5D/22D/66D clock alongside the Magic-RS
+// structural rank. Migration 171 + industryrotation.md Phase 1: the ranking
+// still uses avg_magic_rs; these are for eyeballing only, so a Phase 2
+// ranking-basis decision (5D lead, blend, toggle) has live evidence.
+function IndustryReturnPills({
+  r5, r22, r66,
+}: { r5: number | null; r22: number | null; r66: number | null }) {
+  const fmt = (v: number | null) => (v == null ? '—' : `${v >= 0 ? '+' : ''}${v.toFixed(1)}`);
+  const cls = (v: number | null) =>
+    v == null ? 'text-muted' : v > 0 ? 'text-risk-green' : v < 0 ? 'text-risk-red' : 'text-muted';
+  return (
+    <span className="inline-flex items-center gap-1 pl-1 ml-0.5 border-l border-current/20 font-mono">
+      <span className={cn('text-[9px]', cls(r5))}  title="Industry avg return, 5D">5D {fmt(r5)}</span>
+      <span className={cn('text-[9px]', cls(r22))} title="Industry avg return, 22D">22D {fmt(r22)}</span>
+      <span className={cn('text-[9px]', cls(r66))} title="Industry avg return, 66D">66D {fmt(r66)}</span>
     </span>
   );
 }
@@ -187,6 +217,9 @@ export default function IndustryTransitionView() {
         let va: number = 0, vb: number = 0;
         switch (sortKey) {
           case 'industryPercentile': va = a.industryPercentile; vb = b.industryPercentile; break;
+          case 'industryRet5d':  va = a.industryRet5d  ?? 0; vb = b.industryRet5d  ?? 0; break;
+          case 'industryRet22d': va = a.industryRet22d ?? 0; vb = b.industryRet22d ?? 0; break;
+          case 'industryRet66d': va = a.industryRet66d ?? 0; vb = b.industryRet66d ?? 0; break;
           case 'magic_rs':  va = a.magic_rs ?? 0; vb = b.magic_rs ?? 0; break;
           case 'rsi_14':    va = a.rsi_14 ?? 0; vb = b.rsi_14 ?? 0; break;
           case 'rss_value': va = a.rss_value ?? 0; vb = b.rss_value ?? 0; break;
