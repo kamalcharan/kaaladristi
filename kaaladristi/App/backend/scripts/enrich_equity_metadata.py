@@ -32,17 +32,24 @@ Two callers use the same function:
 
 Data source strategy
 --------------------
-Both exchanges enrich from the NSE quote-equity endpoint first because it's
-richer (returns industry, isFNOSec, isETFSec, listingDate, companyName). A
-BSE-only stock that lacks an NSE vendor code falls back to Yahoo Finance.
-Neither endpoint is billed; both are ratelimited.
+Yahoo Finance first for both exchanges — NSE's quote-equity API blocks the
+server-side client aggressively (fingerprint-level 403 that Referer/cookie
+tricks don't defeat, only Playwright would). yfinance is not rate-limited
+the same way, works for NSE (`SYMBOL.NS`) and BSE (`SYMBOL.BO`) without an
+auth wall, and returns industry + company name for the whole listed universe
+including small/mid caps outside index membership.
 
-  NSE  https://www.nseindia.com/api/quote-equity?symbol={sym}
-       Works for any NSE-listed symbol, and for BSE stocks whose
-       vendor_codes.nse is populated (about 3/4 of BSE via ISIN dedup).
-  Yahoo yfinance.Ticker(<yahoo_ticker>).info
-       Fallback for BSE-only stocks. Slower and noisier but covers the
-       long tail.
+NSE quote-equity is kept as a last-resort fallback (some tickers Yahoo
+doesn't have, and NSE captures `is_fno` which Yahoo does not); if NSE is
+blocked in the caller's environment, misses cascade to `failed` and the
+next run picks them up.
+
+  Yahoo yfinance.Ticker(<ticker>).info
+        Ticker = vendor_codes.yahoo if populated, else SYMBOL.NS / SYMBOL.BO
+        by exchange convention.
+  NSE   https://www.nseindia.com/api/quote-equity?symbol={sym}
+        Only tried when Yahoo misses. Rich payload (isFNOSec, listingDate,
+        etc.) but frequently 403'd from a headless client.
 
 Both writes go through db.patch — id-scoped, atomic, single-row.
 """
@@ -111,9 +118,9 @@ def _fetch_from_nse(session: NseSession, symbol: str) -> Optional[dict]:
 
 
 def _fetch_from_yahoo(yahoo_ticker: str) -> Optional[dict]:
-    """yfinance fallback for BSE-only stocks. yfinance returns 'sector' AND
-    'industry' — we take 'industry' to match the NSE vocabulary the rest of
-    the platform uses."""
+    """yfinance lookup — works for both NSE (SYMBOL.NS) and BSE (SYMBOL.BO
+    or scripcode.BO) tickers. Returns 'sector' AND 'industry' — we take
+    'industry' to match the NSE vocabulary the rest of the platform uses."""
     if not yahoo_ticker:
         return None
     try:
@@ -130,6 +137,25 @@ def _fetch_from_yahoo(yahoo_ticker: str) -> Optional[dict]:
         }
     except Exception:
         return None
+
+
+def _yahoo_ticker_for(equity: dict) -> Optional[str]:
+    """Derive a Yahoo ticker for an equity row. Uses vendor_codes.yahoo if
+    populated (BSE stocks usually have it); otherwise falls back to the
+    obvious SYMBOL.NS / SYMBOL.BO convention. Yahoo accepts both forms."""
+    vc = equity.get('vendor_codes') or {}
+    y = vc.get('yahoo')
+    if y:
+        return y
+    sym = (equity.get('symbol') or '').strip()
+    if not sym:
+        return None
+    ex = equity.get('exchange', '')
+    if ex == 'NSE':
+        return f'{sym}.NS'
+    if ex == 'BSE':
+        return f'{sym}.BO'
+    return None
 
 
 def _find_targets(db, cap: Optional[int] = None) -> list[dict]:
@@ -195,29 +221,33 @@ def enrich_untagged_equities(
                 print(f'    ... and {len(targets) - 10} more')
         return summary
 
-    session = NseSession()
+    session = None   # NseSession is lazily created — only if Yahoo misses
     for i, eq in enumerate(targets, start=1):
-        vc = eq.get('vendor_codes') or {}
         exchange = eq.get('exchange', '')
 
-        # NSE quote-equity accepts an NSE symbol directly; for BSE stocks it
-        # accepts the mapped nse vendor code when we have one.
-        nse_sym = eq['symbol'] if exchange == 'NSE' else vc.get('nse')
-
         meta = None
-        if nse_sym:
-            meta = _fetch_from_nse(session, nse_sym)
+
+        # Yahoo Finance first for both exchanges — reliable, no 403 wall.
+        yahoo_ticker = _yahoo_ticker_for(eq)
+        if yahoo_ticker:
+            meta = _fetch_from_yahoo(yahoo_ticker)
             time.sleep(API_SLEEP_SECONDS)
             if meta:
-                summary['nse_hits'] += 1
+                summary['yahoo_hits'] += 1
 
-        if not meta and exchange == 'BSE':
-            yahoo_ticker = vc.get('yahoo')
-            if yahoo_ticker:
-                meta = _fetch_from_yahoo(yahoo_ticker)
+        # Fallback to NSE quote-equity for anything Yahoo missed. NSE is
+        # frequently 403'd from a headless client; failures here just fall
+        # through to `failed` and get retried next run.
+        if not meta:
+            vc = eq.get('vendor_codes') or {}
+            nse_sym = eq['symbol'] if exchange == 'NSE' else vc.get('nse')
+            if nse_sym:
+                if session is None:
+                    session = NseSession()
+                meta = _fetch_from_nse(session, nse_sym)
                 time.sleep(API_SLEEP_SECONDS)
                 if meta:
-                    summary['yahoo_hits'] += 1
+                    summary['nse_hits'] += 1
 
         if not meta:
             summary['failed'] += 1
