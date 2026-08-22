@@ -117,14 +117,40 @@ def _fetch_from_nse(session: NseSession, symbol: str) -> Optional[dict]:
         return None
 
 
+# One-time diagnostic flag so the yfinance import error is loud (printed
+# once) instead of the silent per-call exception swallow that made the
+# missing-module case look like a bunch of Yahoo misses.
+_yf_probed = False
+_yf_module = None
+
+
+def _get_yfinance():
+    """Import yfinance lazily and cache the module. Print the import error
+    exactly once so a missing dependency shows up in the log immediately."""
+    global _yf_probed, _yf_module
+    if _yf_probed:
+        return _yf_module
+    _yf_probed = True
+    try:
+        import yfinance as yf
+        _yf_module = yf
+    except ImportError as e:
+        print(f'  [yahoo] yfinance not installed — pip install yfinance ({e})')
+    except Exception as e:
+        print(f'  [yahoo] yfinance import failed: {e}')
+    return _yf_module
+
+
 def _fetch_from_yahoo(yahoo_ticker: str) -> Optional[dict]:
     """yfinance lookup — works for both NSE (SYMBOL.NS) and BSE (SYMBOL.BO
     or scripcode.BO) tickers. Returns 'sector' AND 'industry' — we take
     'industry' to match the NSE vocabulary the rest of the platform uses."""
     if not yahoo_ticker:
         return None
+    yf = _get_yfinance()
+    if yf is None:
+        return None
     try:
-        import yfinance as yf
         info = yf.Ticker(yahoo_ticker).info or {}
         if not info.get('industry'):
             return None
