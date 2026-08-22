@@ -2508,6 +2508,190 @@ async function fetchFlowerPotBurstClientSide(exchangeFilter: ExchangeFilter): Pr
   return out.slice(0, lim);
 }
 
+// ── km_scan_results matview: 6 bundle-preset repoint (Phase 3) ─────────────
+//
+// Migration 170 refreshed the matview so its rows equal what the JS SCAN_FUNCTIONS
+// compute on the client. For daily-timeframe reads of these six presets we now hit
+// km_scan_results directly (one ~150-row query total) instead of downloading a
+// 175K-row EOD bundle and running the scan in the browser. The JS bundle path
+// stays wired as a fallback for any matview failure (empty response, stale refresh,
+// migration rollback) — same behaviour as the flower_pot_burst path uses today.
+//
+// Weekly / monthly timeframes are NOT in the matview yet; those keep the bundle
+// path unchanged.
+const MATVIEW_BUNDLE_PRESETS: ReadonlySet<string> = new Set([
+  'power_buy',
+  'power_sell',
+  'smart_money',
+  'quiet_accumulation',
+  'distribution_warning',
+  'conviction_flow',
+]);
+
+/** Map a km_scan_results row (one of the 6 bundle presets) to a ScanStock.
+ *  Mirrors fpbRowToScanStock's shape; fields the matview does not carry for
+ *  these presets stay null (they were null under the JS path too). */
+function scanRowToScanStock(r: any): ScanStock {
+  const num = (v: any) => (v == null ? null : Number(v));
+  const truthy = (v: any) => v === true || v === 't' || v === 'true' || v === 1;
+  const trendArr: Array<number | null> = Array.isArray(r.magic_rs_trend) ? r.magic_rs_trend : [];
+  const magicRsTrend: (boolean | null)[] = trendArr.map((v) => (v == null ? null : v === 1));
+  return {
+    equity_id: r.equity_id,
+    symbol: r.symbol ?? String(r.equity_id),
+    company_name: r.company_name ?? null,
+    industry: r.industry ?? null,
+    exchange: r.exchange ?? null,
+    mcap_cr: num(r.mcap_cr),
+    trade_date: r.trade_date,
+    close: Number(r.close),
+    open: null, high: null, low: null,
+    pct_chng: num(r.pct_chng),
+    rsi_14: null,
+    magic_rs: num(r.magic_rs),
+    magic_rs_zone: r.magic_rs_zone ?? null,
+    flow_type: r.flow_type ?? null,
+    rvol: num(r.rvol),
+    sniper_inst: num(r.sniper_inst),
+    sniper_hot: null,
+    accum_distrib: r.accum_distrib ?? null,
+    rss_value: num(r.rss_value),
+    rss_spread: null,
+    sma_150: num(r.sma_150),
+    volume_divergence_flag: r.volume_divergence_flag ?? null,
+    has_recent_svd: truthy(r.has_recent_svd),
+    has_recent_sbd: truthy(r.has_recent_sbd),
+    has_recent_syd: truthy(r.has_recent_syd),
+    ema_20: num(r.ema_20),
+    atr_14: num(r.atr_14),
+    delivery_pct: num(r.delivery_pct),
+    delivery_surge_x: num(r.delivery_surge_x),
+    avg_amt_22d: num(r.avg_amt_22d),
+    avg_amt_5d: null,
+    avg_amt_66d: null,
+    w52_high: num(r.w52_high),
+    sma_50: null,
+    sma_200: null,
+    w52_low: null,
+    supertrend_dir: null,
+    lifetime_high: null,
+    stage: null,
+    xAmt: num(r.xamt),
+    rel_5d_n50:   num(r.rel_5d_n50),
+    rel_22d_n50:  num(r.rel_22d_n50),
+    rel_66d_n50:  num(r.rel_66d_n50),
+    rel_5d_n500:  num(r.rel_5d_n500),
+    rel_22d_n500: num(r.rel_22d_n500),
+    rel_66d_n500: num(r.rel_66d_n500),
+    magicRsTrend,
+    reward:    num(r.reward),
+    rewardPct: num(r.reward_pct),
+    pctBelow52wHigh: num(r.pct_below_52w_high),
+    vaniOpportunity: truthy(r.vani_flag),
+    // Preset-specific (populated where applicable, null elsewhere)
+    ret_5d:  num(r.ret_5d),
+    ret_22d: num(r.ret_22d),
+    ret_66d: num(r.ret_66d),
+    d_pct:   num(r.d_pct),
+    deliv_value_cr: num(r.deliv_value_cr),
+  };
+}
+
+/** Combined-mode dedup on raw matview rows (isin+exchange+vani_flag are on the row).
+ *  Same policy as deduplicateByIsin: prefer vaniOpportunity, then NSE. */
+function dedupeMatviewRowsByIsin(rows: any[]): any[] {
+  const seen = new Map<string, any>();
+  for (const r of rows) {
+    const isin = r.isin;
+    if (!isin) continue;
+    const existing = seen.get(isin);
+    if (!existing) {
+      seen.set(isin, r);
+      continue;
+    }
+    const rVani = r.vani_flag === true;
+    const eVani = existing.vani_flag === true;
+    const rWins = (rVani && !eVani)
+      || (rVani === eVani && r.exchange === 'NSE' && existing.exchange !== 'NSE');
+    if (rWins) seen.set(isin, r);
+  }
+  return [...seen.values()];
+}
+
+/** Matview-first fetch for the 6 bundle presets. Returns null on any failure
+ *  so the caller can fall back to the JS bundle path. */
+async function fetchFromScanMatview(
+  presetId: string,
+  exchangeFilter: ExchangeFilter,
+): Promise<ScanStock[] | null> {
+  try {
+    const { data, error } = await from('km_scan_results')
+      .select('*')
+      .eq('preset_id', presetId)
+      .order('rank', { ascending: true })
+      .limit(500)
+      .execute();
+    if (error || !Array.isArray(data)) {
+      console.warn(`[scan] ${presetId}: matview unavailable, using bundle fallback`, error);
+      return null;
+    }
+    let rows = data as any[];
+    if (exchangeFilter === 'combined') {
+      rows = dedupeMatviewRowsByIsin(rows);
+    } else {
+      rows = rows.filter((r) => r.exchange === exchangeFilter);
+    }
+    return rows.map(scanRowToScanStock);
+  } catch (e) {
+    console.warn(`[scan] ${presetId}: matview read failed, using bundle fallback`, e);
+    return null;
+  }
+}
+
+/** One-query per-preset counts across all 6 bundle presets. Returns null on
+ *  failure so getAllScanCounts falls back to bundle iteration. */
+async function fetchAllScanCountsFromMatview(
+  exchangeFilter: ExchangeFilter,
+): Promise<{ counts: Record<string, number>; latestDate: string | null } | null> {
+  try {
+    const { data, error } = await from('km_scan_results')
+      .select('preset_id,exchange,isin,vani_flag,trade_date')
+      .in('preset_id', [...MATVIEW_BUNDLE_PRESETS])
+      .limit(2000)
+      .execute();
+    if (error || !Array.isArray(data)) {
+      console.warn('[scan] matview counts unavailable, using bundle fallback', error);
+      return null;
+    }
+    const rows = data as any[];
+    const perPreset = new Map<string, any[]>();
+    for (const r of rows) {
+      const arr = perPreset.get(r.preset_id) ?? [];
+      arr.push(r);
+      perPreset.set(r.preset_id, arr);
+    }
+    const counts: Record<string, number> = {};
+    let latestDate: string | null = null;
+    for (const [presetId, presetRows] of perPreset) {
+      const filtered = exchangeFilter === 'combined'
+        ? dedupeMatviewRowsByIsin(presetRows)
+        : presetRows.filter((r) => r.exchange === exchangeFilter);
+      counts[presetId] = filtered.length;
+      const d = presetRows[0]?.trade_date as string | undefined;
+      if (d && (!latestDate || d > latestDate)) latestDate = d;
+    }
+    // Presets with zero matview rows still need a 0 entry so the landing UI
+    // doesn't read them as "unknown".
+    for (const id of MATVIEW_BUNDLE_PRESETS) {
+      if (!(id in counts)) counts[id] = 0;
+    }
+    return { counts, latestDate };
+  } catch (e) {
+    console.warn('[scan] matview counts read failed, using bundle fallback', e);
+    return null;
+  }
+}
+
 export async function executeScan(
   scanId: string,
   exchangeFilter: ExchangeFilter = 'combined',
@@ -2524,6 +2708,14 @@ export async function executeScan(
   if (scanId === 'vani_exit_watch')      return fetchVaNiExitWatch(exchangeFilter);
   // breakout_surge_daily merged into breakout_surge (kept as alias for stale links)
   if (scanId === 'breakout_surge' || scanId === 'breakout_surge_daily') return fetchBreakoutSurge(exchangeFilter);
+
+  // Matview-first for the 6 daily bundle presets (Phase 3). The JS path below
+  // stays as fallback — matview outages degrade to today's slow-load behaviour
+  // rather than a blank scan page.
+  if (timeframe === 'daily' && MATVIEW_BUNDLE_PRESETS.has(scanId)) {
+    const matview = await fetchFromScanMatview(scanId, exchangeFilter);
+    if (matview) return matview;
+  }
 
   const fn = SCAN_FUNCTIONS[scanId];
   if (!fn) throw new Error(`Unknown scan: ${scanId}`);
@@ -2703,11 +2895,17 @@ export interface ScanCountsResult {
   latestDate: string | null;
 }
 
-/** Return result counts for all 9 scans — uses shared cached data */
+/** Return result counts for the 6 bundle scans — matview-first, one query. */
 export async function getAllScanCounts(
   exchangeFilter: ExchangeFilter = 'combined',
   timeframe: ScanTimeframe = 'daily',
 ): Promise<ScanCountsResult> {
+  // Matview-first for daily (Phase 3): one small query covers all 6 preset
+  // counts. Falls through to bundle iteration on failure or non-daily reads.
+  if (timeframe === 'daily') {
+    const mv = await fetchAllScanCountsFromMatview(exchangeFilter);
+    if (mv) return mv;
+  }
   const bundle = await loadScanData(timeframe);
   const counts: Record<string, number> = {};
   for (const [id, fn] of Object.entries(SCAN_FUNCTIONS)) {
