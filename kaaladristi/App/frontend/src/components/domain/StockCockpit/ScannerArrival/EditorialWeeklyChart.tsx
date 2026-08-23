@@ -39,6 +39,11 @@ interface Props {
   bars: WeeklyBar[];
   annotations: ChartAnnotations;
   personas: PersonaEntries;
+  /** Daily Big Money days — the SAME array TradingChart consumes.
+   *  Each daily event is mapped to its containing weekly bar and
+   *  rendered as a ₹ marker above that candle. Multiple same-week
+   *  events cluster into one badge. */
+  bigMoneyEvents?: { trade_date: string; price: number; label: string; color?: string }[];
 }
 
 // ── Design tokens scoped to this chart ────────────────────────────────────
@@ -66,17 +71,19 @@ const TOK = {
 
 // Fixed viewBox so text/marker sizes stay predictable regardless of the
 // container width. The <svg> scales via CSS width:100% + preserveAspect.
-const VB_W = 1280;
+const VB_W = 1200;
 const VB_H = 460;
-const MARGIN = { l: 20, r: 258, t: 40, b: 30 };
+const MARGIN = { l: 20, r: 130, t: 40, b: 30 };
 /** Minimum vertical spacing between right-axis labels + persona markers,
  *  in SVG units. Anything closer than this triggers stagger/offset. */
 const LABEL_MIN_GAP = 14;
-/** Persona marker sits this many SVG units past plot.x1 — past the
- *  structural-label column so the two don't overprint. */
-const PERSONA_MARKER_OFFSET = 96;
+/** Callouts sit INSIDE the plot area at the right edge, over the last
+ *  ~15% of bars. Semi-transparent so the candles behind remain visible. */
+const CALLOUT_W = 138;
+const CALLOUT_H = 20;
+const CALLOUT_RIGHT_PAD = 8; // gap from plot.x1 to callout right edge
 
-export default function EditorialWeeklyChart({ bars, annotations, personas }: Props) {
+export default function EditorialWeeklyChart({ bars, annotations, personas, bigMoneyEvents = [] }: Props) {
   if (bars.length === 0) {
     return (
       <div
@@ -180,20 +187,20 @@ export default function EditorialWeeklyChart({ bars, annotations, personas }: Pr
         all.push({ persona: 'swing', n: e.entryNo, price: e.price, color: TOK.sw, label: e.label });
       }
     }
-    // Marker sits at plot.x1 + PERSONA_MARKER_OFFSET (past the structural-
-    // label column so the two don't overprint). Callout boxY starts at
-    // marker y - CALLOUT_H/2, then shifts down when the previous callout's
-    // bottom overlaps it.
+    // Marker sits INSIDE the plot area at the right edge — just past the
+    // last few bars. Callout box extends leftward from the marker into
+    // the plot with a semi-transparent background so the recent candles
+    // are still visible through it.
     const withY = all.map((m) => ({ ...m, y: yOf(m.price) })).sort((a, b) => a.y - b.y);
-    const CALLOUT_H = 20;
     const CALLOUT_GAP = 3;
+    const markerX = plot.x1 - CALLOUT_RIGHT_PAD;
     const laid: Array<(typeof withY)[number] & { x: number; boxY: number }> = [];
     let lastBottom = -Infinity;
     for (const m of withY) {
       let boxY = m.y - CALLOUT_H / 2;
       if (boxY < lastBottom + CALLOUT_GAP) boxY = lastBottom + CALLOUT_GAP;
       lastBottom = boxY + CALLOUT_H;
-      laid.push({ ...m, x: plot.x1 + PERSONA_MARKER_OFFSET, boxY });
+      laid.push({ ...m, x: markerX, boxY });
     }
     return laid;
   }, [personas, yOf, plot.x1, inScale]);
@@ -231,6 +238,31 @@ export default function EditorialWeeklyChart({ bars, annotations, personas }: Pr
     return out;
   }, [bars, xOf]);
 
+  // ── Big Money aggregation — map each daily event to its containing
+  // weekly bar (find the first weekly bar whose date is >= event date).
+  // Same-week events cluster into one badge with combined color.
+  const bigMoneyByBar = useMemo(() => {
+    const byIdx = new Map<number, { count: number; totalCr: number; high: number }>();
+    if (bigMoneyEvents.length === 0 || bars.length === 0) return byIdx;
+    const barDates = bars.map((b) => b.trade_date);
+    for (const ev of bigMoneyEvents) {
+      let idx = -1;
+      for (let i = 0; i < barDates.length; i++) {
+        if (barDates[i] >= ev.trade_date) { idx = i; break; }
+      }
+      if (idx === -1) idx = bars.length - 1;
+      const prev = byIdx.get(idx) ?? { count: 0, totalCr: 0, high: 0 };
+      // Parse the label's Cr number (e.g. "₹24.7 Cr" → 24.7)
+      const crMatch = ev.label.match(/([0-9.]+)/);
+      const cr = crMatch ? Number(crMatch[1]) : 0;
+      prev.count += 1;
+      prev.totalCr += cr;
+      prev.high = Math.max(prev.high, bars[idx].high);
+      byIdx.set(idx, prev);
+    }
+    return byIdx;
+  }, [bigMoneyEvents, bars]);
+
   const lastBar = bars[N - 1];
   const lastX = xOf(N - 1);
   const lastY = yOf(lastBar.close);
@@ -244,11 +276,20 @@ export default function EditorialWeeklyChart({ bars, annotations, personas }: Pr
         role="img"
         aria-label="Editorial weekly chart with cycle bands, key levels, and persona entries"
       >
-        {/* 1 — cycle bands + rotated serif labels */}
+        {/* 1 — cycle bands + rotated serif labels. Size the label so the
+            rotated text (which runs the height of the chart at rotate(-90))
+            fits inside plot.h. Font is capped by BOTH band width and
+            available vertical space; charCount × per-char stride must not
+            exceed plot.h - 20 padding, or the label overprints the axis. */}
         {cycleRects.map((c, i) => {
           const midX = c.x + c.w / 2;
           const midY = plot.y0 + plot.h / 2;
-          const fontSize = Math.min(c.w * 0.15, 42);
+          // Per-char stride ≈ fontSize × 1.05 (Fraunces mono-caps + 0.06em spacing).
+          const availH = plot.h - 24;
+          const chars = c.label.length;
+          const maxByHeight = availH / (chars * 0.95);
+          const maxByWidth  = c.w * 0.35;
+          const fontSize = Math.max(11, Math.min(maxByHeight, maxByWidth, 22));
           return (
             <g key={`cyc-${i}`}>
               <rect x={c.x} y={plot.y0} width={c.w} height={plot.h} fill={c.fill} />
@@ -262,14 +303,14 @@ export default function EditorialWeeklyChart({ bars, annotations, personas }: Pr
                   strokeDasharray="2 4"
                 />
               )}
-              {c.w > 60 && (
+              {c.w > 40 && (
                 <g transform={`translate(${midX} ${midY}) rotate(-90)`}>
                   <text
                     textAnchor="middle"
                     fontFamily="Fraunces, Georgia, serif"
                     fontWeight={600}
                     fontSize={fontSize}
-                    letterSpacing="0.14em"
+                    letterSpacing="0.06em"
                     fill={c.text}
                     style={{ textTransform: 'uppercase' } as React.CSSProperties}
                   >
@@ -397,63 +438,20 @@ export default function EditorialWeeklyChart({ bars, annotations, personas }: Pr
           const short = shortEntryLabel(m.label);
           const priceStr = `₹${Math.round(m.price)}`;
           const tagStr = m.persona === 'lt' ? 'LT' : 'SW';
-          const boxX = m.x + 14;
-          const boxW = 138;
-          const boxH = 20;
-          const boxCY = m.boxY + boxH / 2;
-          const priceLineEndX = m.x - 9;
+          // Callout box extends LEFTWARD from the marker (which sits at
+          // the right edge INSIDE the plot). Background is semi-transparent
+          // so candles remain readable behind.
+          const boxX = m.x - 14 - CALLOUT_W;
+          const boxCY = m.boxY + CALLOUT_H / 2;
           const shifted = Math.abs(boxCY - m.y) > 0.5;
           return (
             <g key={`pm-${i}`}>
-              {/* soft leader from plot edge to marker on the price line */}
-              <line
-                x1={plot.x1}
-                y1={m.y}
-                x2={priceLineEndX}
-                y2={m.y}
-                stroke={m.color}
-                strokeWidth={0.6}
-                opacity={0.45}
-                strokeDasharray="2 3"
-              />
-              {/* when the callout box drifted off its price line, connect
-                  the box back to the marker so the "this box = that zone"
-                  read survives */}
-              {shifted && (
-                <line
-                  x1={m.x + 9}
-                  y1={m.y}
-                  x2={boxX}
-                  y2={boxCY}
-                  stroke={m.color}
-                  strokeWidth={0.5}
-                  opacity={0.5}
-                />
-              )}
-              {/* numbered badge on the price line */}
-              <circle
-                cx={m.x} cy={m.y} r={9}
-                fill={m.color} opacity={0.95}
-                stroke={`color-mix(in srgb, ${TOK.ground} 60%, transparent)`}
-                strokeWidth={0.5}
-              />
-              <text
-                x={m.x}
-                y={m.y + 3.5}
-                textAnchor="middle"
-                fontFamily="'JetBrains Mono', ui-monospace, monospace"
-                fontSize={10}
-                fontWeight={700}
-                fill={TOK.ground}
-              >
-                {m.n}
-              </text>
-              {/* editorial callout box */}
+              {/* editorial callout box — sits inside plot, over recent bars */}
               <rect
                 x={boxX} y={m.boxY}
-                width={boxW} height={boxH}
+                width={CALLOUT_W} height={CALLOUT_H}
                 rx={2}
-                fill={TOK.ground}
+                fill={`color-mix(in srgb, ${TOK.ground} 90%, transparent)`}
                 stroke={`color-mix(in srgb, ${m.color} 45%, transparent)`}
                 strokeWidth={0.7}
               />
@@ -480,8 +478,8 @@ export default function EditorialWeeklyChart({ bars, annotations, personas }: Pr
                 {short}
               </text>
               <text
-                x={boxX + boxW - 6}
-                y={m.boxY + boxH - 4}
+                x={boxX + CALLOUT_W - 6}
+                y={m.boxY + CALLOUT_H - 4}
                 textAnchor="end"
                 fontFamily="'JetBrains Mono', ui-monospace, monospace"
                 fontSize={9}
@@ -489,6 +487,72 @@ export default function EditorialWeeklyChart({ bars, annotations, personas }: Pr
                 fill={TOK.ink}
               >
                 {priceStr}
+              </text>
+              {/* leader from callout right edge to marker */}
+              {shifted && (
+                <line
+                  x1={boxX + CALLOUT_W}
+                  y1={boxCY}
+                  x2={m.x - 9}
+                  y2={m.y}
+                  stroke={m.color}
+                  strokeWidth={0.5}
+                  opacity={0.55}
+                />
+              )}
+              {/* numbered badge on the price line (inside plot right edge) */}
+              <circle
+                cx={m.x} cy={m.y} r={9}
+                fill={m.color} opacity={0.95}
+                stroke={`color-mix(in srgb, ${TOK.ground} 60%, transparent)`}
+                strokeWidth={0.5}
+              />
+              <text
+                x={m.x}
+                y={m.y + 3.5}
+                textAnchor="middle"
+                fontFamily="'JetBrains Mono', ui-monospace, monospace"
+                fontSize={10}
+                fontWeight={700}
+                fill={TOK.ground}
+              >
+                {m.n}
+              </text>
+            </g>
+          );
+        })}
+
+        {/* 7.5 — Big Money markers on the weekly bars that contain
+            institutional-footprint days. Small ₹ pill above the candle;
+            color = green for net-entry weeks, red for net-exit, gold for
+            mixed. Multiple daily events in the same week cluster into
+            one badge showing the combined ₹ value. */}
+        {Array.from(bigMoneyByBar.entries()).map(([idx, agg]) => {
+          const x = xOf(idx);
+          const y = yOf(agg.high) - 18;
+          const color = TOK.gold;
+          const crText = agg.count > 1
+            ? `₹${agg.totalCr.toFixed(0)}Cr · ${agg.count}d`
+            : `₹${agg.totalCr.toFixed(agg.totalCr >= 10 ? 0 : 1)}Cr`;
+          const boxW = crText.length * 5.6 + 10;
+          return (
+            <g key={`bm-${idx}`}>
+              <line x1={x} y1={y + 10} x2={x} y2={yOf(agg.high) + 2} stroke={color} strokeWidth={0.6} opacity={0.55} />
+              <rect
+                x={x - boxW / 2} y={y - 4}
+                width={boxW} height={12} rx={2}
+                fill={`color-mix(in srgb, ${TOK.ground} 92%, transparent)`}
+                stroke={color} strokeWidth={0.7}
+              />
+              <text
+                x={x} y={y + 5}
+                textAnchor="middle"
+                fontFamily="'JetBrains Mono', ui-monospace, monospace"
+                fontSize={8}
+                fontWeight={700}
+                fill={color}
+              >
+                {crText}
               </text>
             </g>
           );

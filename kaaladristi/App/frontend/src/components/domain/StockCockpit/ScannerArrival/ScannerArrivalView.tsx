@@ -34,6 +34,10 @@ import type { PersonaEntry, WhatConfirmsItem } from '@/services/thesis/setupAdap
 interface Props {
   equityId: number;
   setupKey: string;
+  /** Big Money daily events from ChartView (same array TradingChart
+   *  consumes). Flows through to the SVG chart so the editorial view
+   *  carries the ₹ institutional-footprint markers, not just Story Play. */
+  bigMoneyEvents?: { trade_date: string; price: number; label: string; color?: string }[];
 }
 
 // Scoped editorial palette — inherits Kāla-Drishti CSS vars where they map,
@@ -57,7 +61,7 @@ const SERIF = { fontFamily: "Fraunces, Georgia, serif" } as React.CSSProperties;
 const SANS  = { fontFamily: "Inter, system-ui, sans-serif" } as React.CSSProperties;
 const MONO  = { fontFamily: "'JetBrains Mono', ui-monospace, monospace", fontVariantNumeric: 'tabular-nums' } as React.CSSProperties;
 
-export default function ScannerArrivalView({ equityId, setupKey }: Props) {
+export default function ScannerArrivalView({ equityId, setupKey, bigMoneyEvents = [] }: Props) {
   const { data, weekly, isLoading, error } = useSetupData(equityId, setupKey);
 
   if (isLoading) {
@@ -152,6 +156,7 @@ export default function ScannerArrivalView({ equityId, setupKey }: Props) {
         bars={weekly}
         annotations={data.chartAnnotations}
         personas={data.personas}
+        bigMoneyEvents={bigMoneyEvents}
       />
 
       {/* ── SETUP GRID · 3 columns ─────────────────────────────── */}

@@ -1074,7 +1074,7 @@ export default function ChartView() {
               <StoryModeToggle mode={storyMode} onChange={setStoryMode} />
             )}
             {isEquity && setupParam && storyMode === 'view' ? (
-              <ScannerArrivalView equityId={numId} setupKey={setupParam} />
+              <ScannerArrivalView equityId={numId} setupKey={setupParam} bigMoneyEvents={bigMoneyChartLines} />
             ) : (
               replayTab
             )}
