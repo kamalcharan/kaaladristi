@@ -248,28 +248,54 @@ export default function ChartView() {
   }, [setupDataForPlay.data]);
   const setupEntriesForPlay = useMemo(() => {
     if (!setupDataForPlay.data) return [];
-    // Dedupe against structural levels: an entry whose price is within
-    // 0.5% of a structural level is redundant (same line, two labels) —
-    // let the structural label win, drop the entry line. Then only give
-    // the PRIMARY entry per persona (n=1) an axis label; secondary entries
-    // (n=2, n=3) draw as dotted references without label spam.
-    const structuralPrices = setupLevelsForPlay.map((l) => l.price);
-    const nearStructural = (p: number) =>
-      structuralPrices.some((sp) => Math.abs(sp - p) / p < 0.005);
-
+    // All entries render as thin dotted price lines. Native axis labels
+    // stay off (AnnotationOverlay renders editorial callout pills).
     const out: Array<{ price: number; label: string; persona: 'lt' | 'swing'; n: number; axisLabel?: boolean }> = [];
     for (const e of setupDataForPlay.data.personas.ltInvestor) {
       if (e.price == null || !Number.isFinite(e.price)) continue;
-      if (nearStructural(e.price)) continue;
-      out.push({ price: e.price, label: e.label, persona: 'lt', n: e.entryNo, axisLabel: e.entryNo === 1 });
+      out.push({ price: e.price, label: e.label, persona: 'lt', n: e.entryNo, axisLabel: false });
     }
     for (const e of setupDataForPlay.data.personas.swingTrader) {
       if (e.price == null || !Number.isFinite(e.price)) continue;
-      if (nearStructural(e.price)) continue;
-      out.push({ price: e.price, label: e.label, persona: 'swing', n: e.entryNo, axisLabel: e.entryNo === 1 });
+      out.push({ price: e.price, label: e.label, persona: 'swing', n: e.entryNo, axisLabel: false });
     }
     return out;
-  }, [setupDataForPlay.data, setupLevelsForPlay]);
+  }, [setupDataForPlay.data]);
+
+  /** Editorial overlay bundle for TradingChart — the SAME data both
+   *  Story View and Story Play chart use. Adding a new preset or a new
+   *  overlay layer only touches this one derivation.
+   *
+   *  bigMoney and storyPins are computed later once the underlying
+   *  daily-event arrays exist in scope; those layers are added to this
+   *  bundle in setupOverlayFull below. */
+  const setupOverlayCore = useMemo(() => {
+    if (!setupDataForPlay.data) return undefined;
+    const d = setupDataForPlay.data;
+    const cycleBands = d.chartAnnotations.cycleLabels.map((c) => ({
+      from: c.from, to: c.to, label: c.label, tone: c.tone,
+    }));
+    const short = (label: string) => ({
+      'Structural breakout zone': 'Breakout',
+      'Structural pivot zone':    'Pivot / EMA',
+      'Continuation zone':        'Continuation',
+      'Break-of-pivot zone':      'Break of R1',
+      'Mid-range zone':           'Mid-range',
+      'Support-test zone':        'Support test',
+    } as Record<string, string>)[label] ?? label;
+    const callouts: Array<{ persona: 'lt' | 'swing'; n: number; price: number; labelShort: string }> = [];
+    for (const e of d.personas.ltInvestor) {
+      if (e.price != null && Number.isFinite(e.price)) {
+        callouts.push({ persona: 'lt', n: e.entryNo, price: e.price, labelShort: short(e.label) });
+      }
+    }
+    for (const e of d.personas.swingTrader) {
+      if (e.price != null && Number.isFinite(e.price)) {
+        callouts.push({ persona: 'swing', n: e.entryNo, price: e.price, labelShort: short(e.label) });
+      }
+    }
+    return { cycleBands, callouts };
+  }, [setupDataForPlay.data]);
 
   // ── Chart data (full history for TradingChart) ──
   // dateKey: the main chart page is commonly left open through a session —
@@ -468,6 +494,36 @@ export default function ChartView() {
     () => ((isEquity || isIndex) && tf === 'daily' ? buildStoryEvents(rows, bigMoneyDates, sectorByDate) : []),
     [isEquity, isIndex, tf, rows, bigMoneyDates, sectorByDate],
   );
+
+  /** Full editorial overlay bundle passed to TradingChart. Combines the
+   *  setup-derived layers (cycle bands + callouts, from setupOverlayCore)
+   *  with the daily-event layers (Big Money badges + storyEvent pins).
+   *  Same object drives Story View and Story Play — the toggle only
+   *  controls what sits BELOW the chart, never what's on it. */
+  const setupOverlayFull = useMemo(() => {
+    if (!setupOverlayCore) return undefined;
+    const bigMoney = bigMoneyChartLines.map((b) => ({
+      trade_date: b.trade_date,
+      price: b.price,
+      amountCr: Number(b.label.match(/([0-9.]+)/)?.[1] ?? 0),
+      count: 1,
+    }));
+    const storyPins: Array<{
+      trade_date: string;
+      kind: 'flow' | 'conviction' | 'stage' | 'magic_rs' | 'big_money' | 'rs_breakaway' | 'fpb' | 'scan' | 'sector';
+      title: string;
+      tone: 'bull' | 'bear' | 'neutral';
+      price: number;
+    }> = storyEvents.map((e) => ({
+      trade_date: e.date,
+      kind: e.kind,
+      title: e.title,
+      tone: e.tone,
+      // storyEvents don't carry price; use the bar's close on that date
+      price: rows.find((r) => r.trade_date === e.date)?.close ?? 0,
+    })).filter((p) => p.price > 0);
+    return { ...setupOverlayCore, bigMoney, storyPins };
+  }, [setupOverlayCore, bigMoneyChartLines, storyEvents, rows]);
   // Latest Clean Breakaway/Breakdown within the rotation's plotted window —
   // storyEvents is indexed against `rows`, rotationPoints against `pulseBars`;
   // join by date (same pattern used for the story/playhead bridge below).
@@ -613,6 +669,7 @@ export default function ChartView() {
               bigMoneyEvents={bigMoneyChartLines}
               setupLevels={setupLevelsForPlay}
               setupEntries={setupEntriesForPlay}
+              overlay={setupOverlayFull}
               benchmarkIndexId={isIndex && id ? Number(id) : null}
               benchmarkName={isIndex ? name : null}
               storyBubble={storyBubble}
