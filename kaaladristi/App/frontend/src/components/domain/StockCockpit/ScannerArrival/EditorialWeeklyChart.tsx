@@ -66,12 +66,15 @@ const TOK = {
 
 // Fixed viewBox so text/marker sizes stay predictable regardless of the
 // container width. The <svg> scales via CSS width:100% + preserveAspect.
-const VB_W = 1200;
+const VB_W = 1280;
 const VB_H = 460;
-const MARGIN = { l: 20, r: 178, t: 40, b: 30 };
+const MARGIN = { l: 20, r: 258, t: 40, b: 30 };
 /** Minimum vertical spacing between right-axis labels + persona markers,
  *  in SVG units. Anything closer than this triggers stagger/offset. */
 const LABEL_MIN_GAP = 14;
+/** Persona marker sits this many SVG units past plot.x1 — past the
+ *  structural-label column so the two don't overprint. */
+const PERSONA_MARKER_OFFSET = 96;
 
 export default function EditorialWeeklyChart({ bars, annotations, personas }: Props) {
   if (bars.length === 0) {
@@ -160,12 +163,11 @@ export default function EditorialWeeklyChart({ bars, annotations, personas }: Pr
       .filter((v): v is NonNullable<typeof v> => v !== null);
   }, [annotations.cycleLabels, dateIndex, plot.x0, barW]);
 
-  // ── Persona markers — 4-column fan in the right margin.
-  // Two lists (LT + Swing), only entries with a price + inside the visible
-  // scale. Sorted by y (top→bottom); markers within LABEL_MIN_GAP of each
-  // other get pushed to the next column (col cycles 0→1→2→3 then wraps).
-  // Column 0 is closest to the plot; the tag ("LT"/"SW") sits to the left
-  // of column-0 markers only, so the right margin doesn't stack labels.
+  // ── Persona callouts — single-column stack in the right margin.
+  // Markers stay on their price line (no fan). The CALLOUT BOX shifts up
+  // or down when two markers cluster — a subtle leader line from the box's
+  // left edge back to the marker preserves the "this is that zone"
+  // reading even when the box drifted away from the price line.
   const markers = useMemo(() => {
     const all: Array<{ persona: 'lt' | 'swing'; n: number; price: number; color: string; label: string }> = [];
     for (const e of personas.ltInvestor) {
@@ -178,45 +180,39 @@ export default function EditorialWeeklyChart({ bars, annotations, personas }: Pr
         all.push({ persona: 'swing', n: e.entryNo, price: e.price, color: TOK.sw, label: e.label });
       }
     }
+    // Marker sits at plot.x1 + PERSONA_MARKER_OFFSET (past the structural-
+    // label column so the two don't overprint). Callout boxY starts at
+    // marker y - CALLOUT_H/2, then shifts down when the previous callout's
+    // bottom overlaps it.
     const withY = all.map((m) => ({ ...m, y: yOf(m.price) })).sort((a, b) => a.y - b.y);
-    const laid: Array<(typeof withY)[number] & { x: number; col: number }> = [];
-    // occupancy: track the y of the last marker placed in each column
-    const colY: number[] = [-Infinity, -Infinity, -Infinity, -Infinity];
+    const CALLOUT_H = 20;
+    const CALLOUT_GAP = 3;
+    const laid: Array<(typeof withY)[number] & { x: number; boxY: number }> = [];
+    let lastBottom = -Infinity;
     for (const m of withY) {
-      let col = 0;
-      while (col < 4 && Math.abs(m.y - colY[col]) < LABEL_MIN_GAP) col++;
-      if (col === 4) col = 0; // wrap
-      colY[col] = m.y;
-      laid.push({ ...m, col, x: plot.x1 + 14 + col * 22 });
+      let boxY = m.y - CALLOUT_H / 2;
+      if (boxY < lastBottom + CALLOUT_GAP) boxY = lastBottom + CALLOUT_GAP;
+      lastBottom = boxY + CALLOUT_H;
+      laid.push({ ...m, x: plot.x1 + PERSONA_MARKER_OFFSET, boxY });
     }
     return laid;
   }, [personas, yOf, plot.x1, inScale]);
 
-  // ── Structural key lines — filter to on-scale, then anti-collide labels
-  // so their text doesn't overprint (anchor y stays on the price line;
-  // only the LABEL box shifts vertically with a subtle leader gap).
+  // ── Structural key lines — single right-axis column with vertical
+  // anti-collision. If a label sits within LABEL_MIN_GAP of the previous
+  // one, push it down. A leader line runs from the price line to the
+  // label when the label had to shift off-line.
   const structuralLines = useMemo(() => {
     const raw = annotations.horizontalLines
       .filter((l) => Number.isFinite(l.price) && inScale(l.price))
       .map((l) => ({ ...l, y: yOf(l.price) }))
       .sort((a, b) => a.y - b.y);
-    // Two right-axis columns: col 0 close to axis, col 1 further right.
-    // A label within LABEL_MIN_GAP of the previous same-column label
-    // gets pushed to the other column (and its labelY shifted if needed).
-    const laid: Array<(typeof raw)[number] & { labelX: number; labelY: number; col: number }> = [];
-    const colLastY: number[] = [-Infinity, -Infinity];
+    const laid: Array<(typeof raw)[number] & { labelX: number; labelY: number }> = [];
+    let lastY = -Infinity;
     for (const l of raw) {
-      let col = 0;
-      if (Math.abs(l.y - colLastY[0]) < LABEL_MIN_GAP) col = 1;
-      if (Math.abs(l.y - colLastY[col]) < LABEL_MIN_GAP) {
-        // push labelY down to clear the previous label
-        const shiftedY = colLastY[col] + LABEL_MIN_GAP;
-        colLastY[col] = shiftedY;
-        laid.push({ ...l, labelX: 6 + col * 82, labelY: shiftedY, col });
-      } else {
-        colLastY[col] = l.y;
-        laid.push({ ...l, labelX: 6 + col * 82, labelY: l.y, col });
-      }
+      const labelY = l.y < lastY + LABEL_MIN_GAP ? lastY + LABEL_MIN_GAP : l.y;
+      lastY = labelY;
+      laid.push({ ...l, labelX: 6, labelY });
     }
     return laid;
   }, [annotations.horizontalLines, yOf, inScale]);
@@ -391,44 +387,112 @@ export default function EditorialWeeklyChart({ bars, annotations, personas }: Pr
           />
         ))}
 
-        {/* 7 — persona markers in the right margin (4-column fan) */}
-        {markers.map((m, i) => (
-          <g key={`pm-${i}`}>
-            <circle
-              cx={m.x} cy={m.y} r={9}
-              fill={m.color} opacity={0.95}
-              stroke={`color-mix(in srgb, ${TOK.ground} 60%, transparent)`}
-              strokeWidth={0.5}
-            />
-            <text
-              x={m.x}
-              y={m.y + 3.5}
-              textAnchor="middle"
-              fontFamily="'JetBrains Mono', ui-monospace, monospace"
-              fontSize={10}
-              fontWeight={700}
-              fill={TOK.ground}
-            >
-              {m.n}
-            </text>
-            {/* Persona tag ("LT" / "SW") sits to the left of column-0 markers only */}
-            {m.col === 0 && (
+        {/* 7 — editorial persona callouts. Each numbered marker gets a small
+            pill immediately to its right with the persona tag, short zone
+            label (e.g. "Breakout"), and price. A leader line from the marker
+            back to the price line on the plot gives the "this number means
+            THIS zone" reading. Reference decks (Solara/KPL) use this exact
+            pattern — the number without a label is a dead symbol. */}
+        {markers.map((m, i) => {
+          const short = shortEntryLabel(m.label);
+          const priceStr = `₹${Math.round(m.price)}`;
+          const tagStr = m.persona === 'lt' ? 'LT' : 'SW';
+          const boxX = m.x + 14;
+          const boxW = 138;
+          const boxH = 20;
+          const boxCY = m.boxY + boxH / 2;
+          const priceLineEndX = m.x - 9;
+          const shifted = Math.abs(boxCY - m.y) > 0.5;
+          return (
+            <g key={`pm-${i}`}>
+              {/* soft leader from plot edge to marker on the price line */}
+              <line
+                x1={plot.x1}
+                y1={m.y}
+                x2={priceLineEndX}
+                y2={m.y}
+                stroke={m.color}
+                strokeWidth={0.6}
+                opacity={0.45}
+                strokeDasharray="2 3"
+              />
+              {/* when the callout box drifted off its price line, connect
+                  the box back to the marker so the "this box = that zone"
+                  read survives */}
+              {shifted && (
+                <line
+                  x1={m.x + 9}
+                  y1={m.y}
+                  x2={boxX}
+                  y2={boxCY}
+                  stroke={m.color}
+                  strokeWidth={0.5}
+                  opacity={0.5}
+                />
+              )}
+              {/* numbered badge on the price line */}
+              <circle
+                cx={m.x} cy={m.y} r={9}
+                fill={m.color} opacity={0.95}
+                stroke={`color-mix(in srgb, ${TOK.ground} 60%, transparent)`}
+                strokeWidth={0.5}
+              />
               <text
-                x={m.x - 12}
+                x={m.x}
                 y={m.y + 3.5}
-                textAnchor="end"
+                textAnchor="middle"
+                fontFamily="'JetBrains Mono', ui-monospace, monospace"
+                fontSize={10}
+                fontWeight={700}
+                fill={TOK.ground}
+              >
+                {m.n}
+              </text>
+              {/* editorial callout box */}
+              <rect
+                x={boxX} y={m.boxY}
+                width={boxW} height={boxH}
+                rx={2}
+                fill={TOK.ground}
+                stroke={`color-mix(in srgb, ${m.color} 45%, transparent)`}
+                strokeWidth={0.7}
+              />
+              <text
+                x={boxX + 7}
+                y={m.boxY + 9}
                 fontFamily="Inter, system-ui, sans-serif"
-                fontSize={9}
-                fontWeight={600}
-                letterSpacing="0.12em"
+                fontSize={8}
+                fontWeight={700}
+                letterSpacing="0.10em"
                 fill={m.color}
                 style={{ textTransform: 'uppercase' } as React.CSSProperties}
               >
-                {m.persona === 'lt' ? 'LT' : 'SW'}
+                {tagStr}-{m.n}
               </text>
-            )}
-          </g>
-        ))}
+              <text
+                x={boxX + 32}
+                y={m.boxY + 9}
+                fontFamily="Inter, system-ui, sans-serif"
+                fontSize={8.5}
+                fontWeight={500}
+                fill={TOK.ink2}
+              >
+                {short}
+              </text>
+              <text
+                x={boxX + boxW - 6}
+                y={m.boxY + boxH - 4}
+                textAnchor="end"
+                fontFamily="'JetBrains Mono', ui-monospace, monospace"
+                fontSize={9}
+                fontWeight={600}
+                fill={TOK.ink}
+              >
+                {priceStr}
+              </text>
+            </g>
+          );
+        })}
 
         {/* 8 — NOW badge above last bar */}
         <line
@@ -585,4 +649,19 @@ function shortLevelLabel(label: string): string {
     '50 EMA (weekly)':      '50 EMA',
   };
   return map[label] ?? label.toUpperCase();
+}
+
+/** Abbreviate persona entry labels for the editorial callout pills.
+ *  The full label ("Structural breakout zone") is still visible in the
+ *  sidebar persona card — the on-chart pill needs 2-3 words max. */
+function shortEntryLabel(label: string): string {
+  const map: Record<string, string> = {
+    'Structural breakout zone': 'Breakout',
+    'Structural pivot zone':    'Pivot / EMA',
+    'Continuation zone':        'Continuation',
+    'Break-of-pivot zone':      'Break of R1',
+    'Mid-range zone':           'Mid-range',
+    'Support-test zone':        'Support test',
+  };
+  return map[label] ?? label;
 }

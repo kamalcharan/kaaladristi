@@ -241,19 +241,28 @@ export default function ChartView() {
   }, [setupDataForPlay.data]);
   const setupEntriesForPlay = useMemo(() => {
     if (!setupDataForPlay.data) return [];
-    const out: Array<{ price: number; label: string; persona: 'lt' | 'swing'; n: number }> = [];
+    // Dedupe against structural levels: an entry whose price is within
+    // 0.5% of a structural level is redundant (same line, two labels) —
+    // let the structural label win, drop the entry line. Then only give
+    // the PRIMARY entry per persona (n=1) an axis label; secondary entries
+    // (n=2, n=3) draw as dotted references without label spam.
+    const structuralPrices = setupLevelsForPlay.map((l) => l.price);
+    const nearStructural = (p: number) =>
+      structuralPrices.some((sp) => Math.abs(sp - p) / p < 0.005);
+
+    const out: Array<{ price: number; label: string; persona: 'lt' | 'swing'; n: number; axisLabel?: boolean }> = [];
     for (const e of setupDataForPlay.data.personas.ltInvestor) {
-      if (e.price != null && Number.isFinite(e.price)) {
-        out.push({ price: e.price, label: e.label, persona: 'lt', n: e.entryNo });
-      }
+      if (e.price == null || !Number.isFinite(e.price)) continue;
+      if (nearStructural(e.price)) continue;
+      out.push({ price: e.price, label: e.label, persona: 'lt', n: e.entryNo, axisLabel: e.entryNo === 1 });
     }
     for (const e of setupDataForPlay.data.personas.swingTrader) {
-      if (e.price != null && Number.isFinite(e.price)) {
-        out.push({ price: e.price, label: e.label, persona: 'swing', n: e.entryNo });
-      }
+      if (e.price == null || !Number.isFinite(e.price)) continue;
+      if (nearStructural(e.price)) continue;
+      out.push({ price: e.price, label: e.label, persona: 'swing', n: e.entryNo, axisLabel: e.entryNo === 1 });
     }
     return out;
-  }, [setupDataForPlay.data]);
+  }, [setupDataForPlay.data, setupLevelsForPlay]);
 
   // ── Chart data (full history for TradingChart) ──
   // dateKey: the main chart page is commonly left open through a session —

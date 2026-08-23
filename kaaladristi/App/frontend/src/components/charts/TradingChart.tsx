@@ -93,8 +93,10 @@ interface TradingChartProps {
    *  setup's structure too. */
   setupLevels?: { price: number; label: string; tone: 'bull' | 'bear' | 'neutral' }[];
   /** Story-page persona entry zones (LT/Swing) — thin dotted price lines
-   *  colored by persona. */
-  setupEntries?: { price: number; label: string; persona: 'lt' | 'swing'; n: number }[];
+   *  colored by persona. axisLabel:false draws the line but skips the
+   *  right-axis text badge, keeping Story Play's axis from becoming a
+   *  soup of overlapping labels. */
+  setupEntries?: { price: number; label: string; persona: 'lt' | 'swing'; n: number; axisLabel?: boolean }[];
   // Workspace sync callbacks — no-op when not provided
   onVisibleRangeChange?: (from: string, to: string) => void;
   onCrosshairMove?: (barIndex: number, date: string) => void;
@@ -524,13 +526,14 @@ export default function TradingChart({ data, height = 900, compact = false, work
     for (const en of setupEntries) {
       if (!Number.isFinite(en.price)) continue;
       const color = en.persona === 'lt' ? C.indigo : C.riskAmber;
+      const showLabel = en.axisLabel !== false;
       candleSeries.createPriceLine({
         price: en.price,
         color,
         lineWidth: 1 as LineWidth,
         lineStyle: LineStyle.Dotted,
-        axisLabelVisible: true,
-        title: `${en.persona === 'lt' ? 'LT' : 'SW'}-${en.n} · ${en.label}`,
+        axisLabelVisible: showLabel,
+        title: showLabel ? `${en.persona === 'lt' ? 'LT' : 'SW'}-${en.n} · ${en.label}` : '',
       });
     }
 
