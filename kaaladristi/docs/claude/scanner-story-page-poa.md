@@ -124,28 +124,26 @@ Per-adapter guardrails (all presets):
 |---|---|
 | Chart + overlay engine | ✅ shipped, harness-verified |
 | Story View / Story Play toggle + editorial sidebar | ✅ |
-| Stage 2 Leaders adapter | ✅ (pilot, live) |
-| ScanView wiring | ✅ stage_2_leaders only — generalize via registry |
+| Adapters — ALL 8 presets (stage_2_leaders, breakout_surge, power_buy, smart_money, quiet_accumulation, conviction_flow, power_sell, distribution_warning) | ✅ owner-validated on Waves 0–2; Wave 3 shipped 2026-08-23 |
+| ScanView wiring | ✅ registry-driven across ALL 6 navigation paths + 5 card sites |
+| Bearish lens headings (personaMeta: Holder / Pressure) | ✅ |
 | Fullscreen exit (Esc + pinned ✕) | ✅ |
-| Remaining 8 preset adapters | ⬜ see roll-out below |
+| flower_pot_burst Story View (coil-phase adapter) | ⬜ FPB has its own coil UI; needs a compression-phase adapter |
 | Direct-load lens picker (no `?setup=`: pick from scan membership) | ⬜ |
 | Light-mode tuning of band tints | ⬜ (tokens exist; values dark-calibrated) |
 | Zone rectangles (dashed base boxes, reference decks) | ⬜ deferred |
 | Multi-pane monthly+weekly split (Solara deck) | ⬜ deferred |
 
-## Roll-out plan for the remaining presets
+## Roll-out — COMPLETE (2026-08-23)
 
-Wave 1 — **breakout_surge** (contrast test: daily momentum, no long
-base narrative; single-persona lean). Proves the contract flexes.
-Extract shared cycle-label code while writing it.
+All three waves shipped. 8 presets covered; the ScanView registry
+auto-wires every scan surface. Each adapter's What-Confirms mirrors
+its matview gates (migration 170), industry-level gates that need
+scan-side history say so explicitly instead of faking a check, and
+bearish presets carry Holder/Pressure lens headings via personaMeta
+with explicit invalidation zones (SEBI-observational throughout).
 
-Wave 2 — batch the trend/accumulation family: `smart_money`,
-`quiet_accumulation`, `conviction_flow`, `power_buy`.
-
-Wave 3 — the bearish/exit family: `power_sell`,
-`distribution_warning` (personas become Holder/Exit lenses — the
-persona card headings come from the adapter, not hardcoded), plus
-`fresh_breakout` if still live in `kd_scan_presets`.
-
-Each wave: adapters + typecheck/build + spot-check one real stock per
-preset in the app; harness only if the overlay itself changes.
+Remaining candidates (owner to prioritize):
+· flower_pot_burst — coil-phase adapter (compression → release story)
+· direct-load lens picker · light-mode band tints · zone rectangles ·
+  multi-pane split (see Status table)
