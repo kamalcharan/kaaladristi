@@ -1,5 +1,9 @@
 # Scanner Story Page — Plan of Action (v2, 2026-08-23)
 
+> **MERGED TO MAIN 2026-08-23.** The feature is live: all 14 preset
+> adapters, the unified chart + overlay, direct-load stories, and the
+> verification harness. Open items below are post-merge polish.
+
 > v1 of this doc described a Thesis-tab section with a bespoke SVG chart.
 > That architecture was replaced during the 2026-08-23 session at the
 > owner's direction: **one chart, one overlay, Story View and Story Play
@@ -129,7 +133,7 @@ Per-adapter guardrails (all presets):
 | Bearish lens headings (personaMeta: Holder / Pressure) | ✅ |
 | Fullscreen exit (Esc + pinned ✕) | ✅ |
 | flower_pot_burst coil-phase adapter (weekly coil proxies, Burst/Shatter phases, coil-boundary zones) | ✅ |
-| Direct-load lens picker (no `?setup=`: pick from scan membership) | ⬜ |
+| Direct-load story (no `?setup=`: presence-derived lens + stage fallback + lens-picker pills) | ✅ |
 | Light-mode tuning of band tints | ⬜ (tokens exist; values dark-calibrated) |
 | Zone rectangles (dashed base boxes, reference decks) | ⬜ deferred |
 | Multi-pane monthly+weekly split (Solara deck) | ⬜ deferred |
@@ -144,5 +148,5 @@ bearish presets carry Holder/Pressure lens headings via personaMeta
 with explicit invalidation zones (SEBI-observational throughout).
 
 Remaining candidates (owner to prioritize):
-· direct-load lens picker · light-mode band tints · zone rectangles ·
-  multi-pane split (see Status table)
+· light-mode band tints · zone rectangles · multi-pane split
+  (see Status table)
