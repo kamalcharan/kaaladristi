@@ -120,10 +120,17 @@ const overlay = {
     { trade_date: dateAt(480), price: closeAt(480), amountCr: 24.8, count: 1 },
     { trade_date: dateAt(490), price: closeAt(490), amountCr: 60.5, count: 3 },
   ],
+  levels: [
+    { price: 560, label: 'Major Resistance', tone: 'bear' as const },
+    { price: 545, label: 'Immediate Resistance', tone: 'bear' as const },
+    { price: 525, label: 'Pivot', tone: 'neutral' as const },
+    { price: 510, label: 'Immediate Support', tone: 'bull' as const },
+    { price: 490, label: 'Strong Support', tone: 'bull' as const },
+  ],
   storyPins: [
-    { trade_date: dateAt(240), kind: 'flow' as const,     title: 'Longs Building',  tone: 'bull' as const,    price: closeAt(240) },
-    { trade_date: dateAt(300), kind: 'conviction' as const, title: 'Conviction Turn', tone: 'bull' as const,  price: closeAt(300) },
-    { trade_date: dateAt(405), kind: 'stage' as const,    title: 'Stage Flip',      tone: 'bull' as const,    price: closeAt(405) },
+    { trade_date: dateAt(240), kind: 'flow' as const,     title: 'Longs Building',  tone: 'bull' as const,    price: closeAt(240), promote: true },
+    { trade_date: dateAt(300), kind: 'conviction' as const, title: 'Conviction Turn', tone: 'bull' as const,  price: closeAt(300), promote: true },
+    { trade_date: dateAt(405), kind: 'stage' as const,    title: 'Entered Stage 2', tone: 'bull' as const,    price: closeAt(405), promote: true },
     { trade_date: dateAt(430), kind: 'magic_rs' as const, title: 'RS Turn',         tone: 'bull' as const,    price: closeAt(430) },
   ],
 };

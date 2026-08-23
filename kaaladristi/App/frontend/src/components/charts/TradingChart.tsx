@@ -41,7 +41,7 @@ import { planetColorOfRuleCode } from '@/constants/planetColors';
 import { fetchEvidence } from '@/pages/RuleEngine/ruleService';
 import { buildRuleRead } from '@/services/ruleInterpretation';
 import { useAstroHorizon } from '@/hooks/useAstroHorizon';
-import { AnnotationOverlay, type OverlayCycleBand, type OverlayCallout, type OverlayBigMoney, type OverlayStoryPin } from './AnnotationOverlay';
+import { AnnotationOverlay, type OverlayCycleBand, type OverlayLevel, type OverlayCallout, type OverlayBigMoney, type OverlayStoryPin } from './AnnotationOverlay';
 
 // ── SMA config — used in legacy (non-workspace) mode ──
 const SMA_LINES: { key: keyof IndicatorRow; color: string; label: string; width: LineWidth }[] = [
@@ -106,6 +106,7 @@ interface TradingChartProps {
    *  never drifts between the two modes. */
   overlay?: {
     cycleBands?: OverlayCycleBand[];
+    levels?: OverlayLevel[];
     callouts?: OverlayCallout[];
     bigMoney?: OverlayBigMoney[];
     storyPins?: OverlayStoryPin[];
@@ -529,32 +530,36 @@ export default function TradingChart({ data, height = 900, compact = false, work
       });
     }
 
-    // Scanner Story Page — setup lines draw as thin horizontal
-    // references on the chart. Labels are handled by AnnotationOverlay
-    // (editorial pill callouts) — native axis labels stay off so the
-    // right-axis doesn't turn into a soup of overlapping badges.
-    for (const lv of setupLevels) {
-      if (!Number.isFinite(lv.price)) continue;
-      candleSeries.createPriceLine({
-        price: lv.price,
-        color: lv.tone === 'bull' ? C.riskGreen : lv.tone === 'bear' ? C.riskRed : C.text,
-        lineWidth: 1 as LineWidth,
-        lineStyle: lv.tone === 'neutral' ? LineStyle.Dashed : LineStyle.Solid,
-        axisLabelVisible: false,
-        title: '',
-      });
-    }
-    for (const en of setupEntries) {
-      if (!Number.isFinite(en.price)) continue;
-      const color = en.persona === 'lt' ? C.indigo : C.riskAmber;
-      candleSeries.createPriceLine({
-        price: en.price,
-        color,
-        lineWidth: 1 as LineWidth,
-        lineStyle: LineStyle.Dotted,
-        axisLabelVisible: false,
-        title: '',
-      });
+    // Scanner Story Page — when the editorial overlay is active it draws
+    // setup levels as SHORT right-edge segments and persona zones via
+    // anchored callouts, so the native FULL-WIDTH price lines are
+    // skipped: five full-width lines read as generic S/R clutter and
+    // drowned the story (owner feedback). Without the overlay (plain
+    // chart usage) the native lines still render.
+    if (!hasOverlay) {
+      for (const lv of setupLevels) {
+        if (!Number.isFinite(lv.price)) continue;
+        candleSeries.createPriceLine({
+          price: lv.price,
+          color: lv.tone === 'bull' ? C.riskGreen : lv.tone === 'bear' ? C.riskRed : C.text,
+          lineWidth: 1 as LineWidth,
+          lineStyle: lv.tone === 'neutral' ? LineStyle.Dashed : LineStyle.Solid,
+          axisLabelVisible: false,
+          title: '',
+        });
+      }
+      for (const en of setupEntries) {
+        if (!Number.isFinite(en.price)) continue;
+        const color = en.persona === 'lt' ? C.indigo : C.riskAmber;
+        candleSeries.createPriceLine({
+          price: en.price,
+          color,
+          lineWidth: 1 as LineWidth,
+          lineStyle: LineStyle.Dotted,
+          axisLabelVisible: false,
+          title: '',
+        });
+      }
     }
 
     // Markers: Dot signals + Swing High/Low

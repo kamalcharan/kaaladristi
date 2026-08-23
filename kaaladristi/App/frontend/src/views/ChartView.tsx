@@ -151,6 +151,14 @@ export default function ChartView() {
   const [range, setRange] = useState<TimeRange>('1Y');
   const [tf, setTf] = useState<EquityTimeframe>('daily');
   const [isFull, setIsFull] = useState(false);
+  // Escape always exits fullscreen — the toolbar ✕ can scroll out of view
+  // inside the fullscreen card, leaving no visible way out.
+  useEffect(() => {
+    if (!isFull) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setIsFull(false); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [isFull]);
   const [selectedStyle] = useState<TradingStyle>('Balanced');
   // Timeline scrubber (the Player, pulled in from Pulse). null = pin to latest bar.
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
@@ -519,12 +527,23 @@ export default function ChartView() {
       amountCr: Number(b.label.match(/([0-9.]+)/)?.[1] ?? 0),
       count: 1,
     }));
+    // Promote the top story beats to slim on-chart callout boxes — the
+    // narrative moments the reference decks annotate. Highest-priority
+    // events win, capped so the chart doesn't drown; the rest stay as
+    // dots. Story Play animates through the SAME events one at a time.
+    const promotedDates = new Set(
+      [...storyEvents]
+        .sort((a, b) => b.priority - a.priority || b.barIndex - a.barIndex)
+        .slice(0, 5)
+        .map((e) => `${e.date}|${e.kind}`),
+    );
     const storyPins: Array<{
       trade_date: string;
       kind: 'flow' | 'conviction' | 'stage' | 'magic_rs' | 'big_money' | 'rs_breakaway' | 'fpb' | 'scan' | 'sector';
       title: string;
       tone: 'bull' | 'bear' | 'neutral';
       price: number;
+      promote?: boolean;
     }> = storyEvents.map((e) => ({
       trade_date: e.date,
       kind: e.kind,
@@ -532,9 +551,10 @@ export default function ChartView() {
       tone: e.tone,
       // storyEvents don't carry price; use the bar's close on that date
       price: rows.find((r) => r.trade_date === e.date)?.close ?? 0,
+      promote: promotedDates.has(`${e.date}|${e.kind}`),
     })).filter((p) => p.price > 0);
-    return { ...setupOverlayCore, callouts, bigMoney, storyPins };
-  }, [setupOverlayCore, bigMoneyChartLines, storyEvents, rows]);
+    return { ...setupOverlayCore, callouts, levels: setupLevelsForPlay, bigMoney, storyPins };
+  }, [setupOverlayCore, setupLevelsForPlay, bigMoneyChartLines, storyEvents, rows]);
   // Latest Clean Breakaway/Breakdown within the rotation's plotted window —
   // storyEvents is indexed against `rows`, rotationPoints against `pulseBars`;
   // join by date (same pattern used for the story/playhead bridge below).
@@ -592,6 +612,17 @@ export default function ChartView() {
         className={cn('glass-card rounded-2xl p-3', isFull && 'fixed inset-2 z-[300] overflow-auto')}
         style={isFull ? { background: 'var(--kd-bg, #0b0f17)' } : undefined}
       >
+        {/* Always-visible exit in fullscreen — the toolbar ✕ can scroll
+            out of view; this one is pinned to the viewport corner. */}
+        {isFull && (
+          <button
+            onClick={() => setIsFull(false)}
+            title="Exit fullscreen (Esc)"
+            className="fixed top-5 right-6 z-[320] px-3 py-1.5 rounded-lg text-xs font-bold border border-kd-border bg-kd-elevated text-[var(--text-primary)] hover:border-[var(--accent)] transition-colors shadow-lg"
+          >
+            ✕ Exit
+          </button>
+        )}
         {!isLoading && !isError && rows.length > 0 && (
           <div className="flex flex-wrap items-center gap-1 mb-3 px-1">
             <div className="flex items-center gap-0.5 mr-2 p-0.5 rounded-lg border border-kd-border bg-kd-elevated">
