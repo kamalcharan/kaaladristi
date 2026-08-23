@@ -464,6 +464,12 @@ export interface IndustryEodRow {
   bse_as_of_date: string | null;
   nse_stock_count: number | null;
   bse_stock_count: number | null;
+  // migration 171 — Industry Rotation Phase 1: return-momentum clock shown
+  // alongside the avg_magic_rs structural clock. Ranking still uses
+  // avg_magic_rs; these are surfaced-only pending the Phase 2 basis decision.
+  avg_ret_5d: number | null;
+  avg_ret_22d: number | null;
+  avg_ret_66d: number | null;
 }
 
 export type RotationCategory = 'rotating_in' | 'leading' | 'rotating_out';

@@ -457,6 +457,12 @@ export interface IndustryEnrichedStock {
   industryPercentile: number;       // 0-100, higher = stronger
   industryCategory: RotationCategory | 'stable';
   industryPercentileChange: number; // positive = improving
+  // Industry return-momentum clock (migration 171 — surface next to the
+  // Magic-RS structural clock so the Phase 2 ranking-basis decision can be
+  // made from live evidence).
+  industryRet5d: number | null;
+  industryRet22d: number | null;
+  industryRet66d: number | null;
 }
 
 export interface IndustryTransitionStocksResult {
@@ -479,13 +485,23 @@ export async function fetchIndustryTransitionStocks(): Promise<IndustryTransitio
   // Step 1: Get industry transition data
   const transition = await fetchFullIndustryTransition();
 
-  // Build industry lookup: name → { percentile, category, percentileChange }
-  const industryMap = new Map<string, { percentile: number; category: RotationCategory | 'stable'; percentileChange: number }>();
+  // Build industry lookup: name → { percentile, category, percentileChange, avg returns }
+  const industryMap = new Map<string, {
+    percentile: number;
+    category: RotationCategory | 'stable';
+    percentileChange: number;
+    ret5d: number | null;
+    ret22d: number | null;
+    ret66d: number | null;
+  }>();
   for (const item of [...transition.rotatingIn, ...transition.leading, ...transition.rotatingOut]) {
     industryMap.set(item.industry, {
       percentile: item.percentile,
       category: item.percentileChange >= 10 ? 'rotating_in' : item.percentileChange <= -10 ? 'rotating_out' : 'leading',
       percentileChange: item.percentileChange,
+      ret5d:  item.avg_ret_5d,
+      ret22d: item.avg_ret_22d,
+      ret66d: item.avg_ret_66d,
     });
   }
   for (const item of transition.stable) {
@@ -493,6 +509,9 @@ export async function fetchIndustryTransitionStocks(): Promise<IndustryTransitio
       percentile: item.percentile,
       category: 'stable',
       percentileChange: item.percentileChange,
+      ret5d:  item.avg_ret_5d,
+      ret22d: item.avg_ret_22d,
+      ret66d: item.avg_ret_66d,
     });
   }
 
@@ -559,6 +578,9 @@ export async function fetchIndustryTransitionStocks(): Promise<IndustryTransitio
       industryPercentile: indCtx.percentile,
       industryCategory: indCtx.category,
       industryPercentileChange: indCtx.percentileChange,
+      industryRet5d:  indCtx.ret5d,
+      industryRet22d: indCtx.ret22d,
+      industryRet66d: indCtx.ret66d,
     });
   }
 

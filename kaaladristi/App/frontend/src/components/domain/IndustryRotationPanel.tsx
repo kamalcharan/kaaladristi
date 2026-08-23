@@ -181,18 +181,24 @@ export default function IndustryRotationPanel() {
     <Card rounded="xxl" className="overflow-hidden">
       {/* Header */}
       <div className="px-5 pt-5 pb-3">
-        <div className="flex items-center justify-between">
-          <div>
-            <h3 className="text-sm font-bold text-[var(--text-primary)]">Industry Rotation</h3>
-            <p className="text-[11px] text-muted mt-0.5">5-day rank change across market industries</p>
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h3 className="text-sm font-bold text-[var(--text-primary)]">Industry Rotation</h3>
+              {/* NSE-only scope pill — BSE coverage deferred pending industry-tag backfill. */}
+              <span
+                className="text-[9px] font-mono text-accent-indigo bg-accent-indigo/10 border border-accent-indigo/30 px-1.5 py-0.5 rounded"
+                title="NSE-only universe for now. BSE industry tagging is being backfilled — full-market coverage lands in a follow-up."
+              >
+                NSE only
+              </span>
+            </div>
+            <p className="text-[11px] text-muted mt-0.5">5-day rank change across NSE industries</p>
           </div>
           {data?.latestDate && (
-            <div className="text-right">
+            <div className="text-right shrink-0">
               <span className="text-[10px] font-mono text-muted bg-kd-elevated/40 px-2 py-1 rounded-lg border border-kd-border">
                 NSE {data.nseAsOfDate ?? data.latestDate}
-                {data.bseAsOfDate && data.bseAsOfDate !== data.nseAsOfDate && (
-                  <span className="text-risk-amber"> · BSE {data.bseAsOfDate}</span>
-                )}
               </span>
             </div>
           )}
