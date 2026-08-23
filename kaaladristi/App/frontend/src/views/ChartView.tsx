@@ -40,6 +40,7 @@ import { useVisualPulse } from '@/hooks/useVisualPulse';
 import { useEquityVisualPulse } from '@/hooks/useEquityVisualPulse';
 import { useScanPresence } from '@/hooks/useScanPresence';
 import { useSetupData } from '@/hooks/useSetupData';
+import { getSetupAdapter } from '@/services/thesis/setupAdapter';
 import { useIndexBreadth, useConstituentDetails } from '@/hooks/useSectorRotation';
 import { useIndexConstituents } from '@/hooks/useMasterData';
 import { computeMoveQuality } from '@/services/moveQuality';
@@ -146,7 +147,7 @@ function buildSmNarrative(snap: PulseSnapshot): string {
  */
 export default function ChartView() {
   const { type, id } = useParams<{ type: string; id: string }>();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const [range, setRange] = useState<TimeRange>('1Y');
   const [tf, setTf] = useState<EquityTimeframe>('daily');
@@ -244,13 +245,38 @@ export default function ChartView() {
   const isIndex = type === 'index';
   const isEquity = type === 'equity';
 
+  // Scan presence — which presets currently contain this stock. Moved up
+  // from the pulse block because the story layer derives from it on
+  // direct navigation (no ?setup= in the URL).
+  const scanPresence = useScanPresence(isEquity ? numId : null);
+
+  // The story lenses available for this stock: every matched preset that
+  // has a registered setup adapter. Order comes from useScanPresence
+  // (✦ VaNi-highlight scans first — the strongest presence leads).
+  const storyChoices = useMemo(
+    () => (isEquity ? scanPresence.matchedScans.filter((m) => getSetupAdapter(m.id)) : []),
+    [isEquity, scanPresence.matchedScans],
+  );
+
+  // Direct navigation (no ?setup=) still gets a story when the stock is
+  // in at least one adapter-backed scan — the top presence match becomes
+  // the effective setup. An explicit ?setup= always wins (deep links).
+  const effectiveSetup = setupParam ?? storyChoices[0]?.id ?? null;
+
+  // Default the toggle to Story View whenever a story exists — but only
+  // until the user touches the toggle themselves.
+  const storyModeTouchedRef = useRef(false);
+  useEffect(() => {
+    if (!storyModeTouchedRef.current) setStoryMode(effectiveSetup ? 'view' : 'play');
+  }, [effectiveSetup]);
+
   // Fetch setup annotations once at ChartView level so BOTH branches of the
   // toggle can render them: Story View's SVG chart AND Story Play's
   // TradingChart. React Query dedupes by (equityId, setupKey) so the second
   // consumer inside ScannerArrivalView costs nothing.
   const setupDataForPlay = useSetupData(
-    isEquity && setupParam ? numId : null,
-    isEquity && setupParam ? setupParam : null,
+    isEquity && effectiveSetup ? numId : null,
+    isEquity && effectiveSetup ? effectiveSetup : null,
   );
   const setupLevelsForPlay = useMemo(() => {
     if (!setupDataForPlay.data) return [];
@@ -330,7 +356,7 @@ export default function ChartView() {
   // ── Visual Pulse data — index uses useVisualPulse, equity uses useEquityVisualPulse ──
   const indexPulse = useVisualPulse(isIndex ? numId : null);
   const equityPulse = useEquityVisualPulse(isEquity ? numId : null);
-  const scanPresence = useScanPresence(isEquity ? numId : null);
+  // (scanPresence is declared earlier — the story layer derives from it.)
 
   // Index breadth — the cockpit's 4th verdict pillar for indices (% of
   // constituents participating). Equities read Liquidity instead.
@@ -1184,16 +1210,48 @@ export default function ChartView() {
             See: docs/claude/scanner-story-page-poa.md */}
         {dvTab === 'chart' && (
           <>
-            {isEquity && setupParam && (
-              <StoryModeToggle mode={storyMode} onChange={setStoryMode} />
+            {isEquity && effectiveSetup && (
+              <div className="flex items-center gap-3 flex-wrap mb-2">
+                <StoryModeToggle
+                  mode={storyMode}
+                  onChange={(m) => { storyModeTouchedRef.current = true; setStoryMode(m); }}
+                />
+                {/* Lens picker — on direct navigation the story derives from
+                    scan presence; when several presets match, the user picks
+                    the lens. Clicking writes ?setup= so the choice deep-links. */}
+                {storyChoices.length > 1 && (
+                  <div className="flex items-center gap-1 flex-wrap">
+                    <span className="text-[9px] font-bold uppercase tracking-widest text-muted mr-1">Lens</span>
+                    {storyChoices.map((c) => (
+                      <button
+                        key={c.id}
+                        onClick={() => setSearchParams((prev) => { prev.set('setup', c.id); return prev; }, { replace: true })}
+                        className={cn(
+                          'px-2.5 py-1 rounded-full text-[10px] font-medium border transition-colors',
+                          c.id === effectiveSetup
+                            ? 'border-[var(--accent)] text-[var(--accent)] bg-[var(--accent-glow)]'
+                            : 'border-kd-border text-[var(--text-secondary)] hover:border-[var(--accent)]',
+                        )}
+                      >
+                        {c.vani ? '✦ ' : ''}{c.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {!setupParam && storyChoices.length > 0 && (
+                  <span className="text-[10px] text-muted font-mono">
+                    story from scan presence
+                  </span>
+                )}
+              </div>
             )}
             {/* Chart + right-column indicators are ALWAYS the same TradingChart
                 (via replayTab) — Story View and Story Play differ only in what
                 sits BELOW: editorial sidebar cards vs the replay scrubber. */}
             {replayTab}
-            {isEquity && setupParam && storyMode === 'view' && (
+            {isEquity && effectiveSetup && storyMode === 'view' && (
               <div className="mt-4">
-                <ScannerArrivalView equityId={numId} setupKey={setupParam} />
+                <ScannerArrivalView equityId={numId} setupKey={effectiveSetup} />
               </div>
             )}
           </>
