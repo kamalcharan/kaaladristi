@@ -166,7 +166,7 @@ def run(dry_run: bool, local_csv: str | None):
         ) t
         GROUP BY 1 ORDER BY 3 DESC
     """)
-    print('\nActive NSE age-band distribution (post-backfill):')
+    print(f"\nActive NSE age-band distribution ({'UNCHANGED — dry run' if dry_run else 'post-backfill'}):")
     for r in cur.fetchall():
         print(f"  {r['band']:<42} {r['stocks']:>5}")
 
