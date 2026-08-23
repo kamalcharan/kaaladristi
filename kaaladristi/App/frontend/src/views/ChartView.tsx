@@ -11,6 +11,7 @@ import VerdictHero from '@/components/domain/StockCockpit/VerdictHero';
 import ThesisTab from '@/components/domain/StockCockpit/ThesisTab';
 import type { ThesisBar } from '@/services/thesis';
 import StoryMode from '@/components/domain/StockCockpit/StoryMode';
+import ScannerArrivalView from '@/components/domain/StockCockpit/ScannerArrival/ScannerArrivalView';
 import { buildStoryEvents, KIND_COLORS, type StoryEvent } from '@/services/storyEvents';
 import { fetchSectorSeries } from '@/services/sectorSeries';
 import DeliveryVsTraded from '@/components/domain/StockCockpit/DeliveryVsTraded';
@@ -201,6 +202,18 @@ export default function ChartView() {
   const [dvTab, setDvTab] = useState<'analysis' | 'chart' | 'thesis'>(
     tabParam === 'thesis' ? 'thesis' : tabParam === 'chart' ? 'chart' : 'analysis',
   );
+  // Scanner arrival — when the URL carries ?setup=<preset> the user came
+  // from a scanner (e.g. Stage 2 Leaders). We land on Chart & Replay tab
+  // and default the mode to Story View (static annotated setup). Story Play
+  // (existing animated replay) is the other mode of the segmented toggle.
+  // See: docs/claude/scanner-story-page-poa.md
+  const setupParam = searchParams.get('setup');
+  const [storyMode, setStoryMode] = useState<'view' | 'play'>(setupParam ? 'view' : 'play');
+  // If landing with ?setup= but no explicit ?tab=, land on Chart & Replay so
+  // the Story View / Story Play toggle is where the user sees it.
+  useEffect(() => {
+    if (setupParam && !tabParam && dvTab !== 'chart') setDvTab('chart');
+  }, [setupParam, tabParam, dvTab]);
   const [membershipOpen, setMembershipOpen] = useState(false);
   // Add-position from the chart hero (equity only). Switches to the Thesis tab
   // and pops its "I hold this" form.
@@ -1008,8 +1021,23 @@ export default function ChartView() {
         {/* ═══ RESERVED CHAPTERS (Study reorg 2026-07-12) — #study-fundamentals,
             #study-events — render nothing until their data pipelines land. ═══ */}
 
-        {/* ═══ CHART & REPLAY TAB — SHARED (equity + index), rendered once ═══ */}
-        {dvTab === 'chart' && replayTab}
+        {/* ═══ CHART & REPLAY TAB — SHARED (equity + index) ═══
+            When ?setup=<preset> is present, a segmented Story View / Story Play
+            toggle is shown at the top. Story View = static annotated setup
+            (ScannerArrivalView); Story Play = existing animated replay chart.
+            See: docs/claude/scanner-story-page-poa.md */}
+        {dvTab === 'chart' && (
+          <>
+            {isEquity && setupParam && (
+              <StoryModeToggle mode={storyMode} onChange={setStoryMode} />
+            )}
+            {isEquity && setupParam && storyMode === 'view' ? (
+              <ScannerArrivalView equityId={numId} setupKey={setupParam} />
+            ) : (
+              replayTab
+            )}
+          </>
+        )}
 
         {/* ═══ THESIS TAB — equity only (Phase 2a). The verification cockpit:
             adapts to position / watchlist / cold. Deep-linked via ?tab=thesis. ═══ */}
@@ -1056,6 +1084,36 @@ export default function ChartView() {
 }
 
 // ── Helpers ─────────────────────────────────────────────────────
+
+/** Segmented toggle for the Chart & Replay tab when the user arrives
+ *  from a scanner (?setup=<preset>). Story View = static annotated setup;
+ *  Story Play = animated timeline replay. Same tab, two lenses on the same
+ *  story arc. See: docs/claude/scanner-story-page-poa.md */
+function StoryModeToggle({ mode, onChange }: { mode: 'view' | 'play'; onChange: (m: 'view' | 'play') => void }) {
+  const btn = (m: 'view' | 'play', label: string, hint: string) => {
+    const active = mode === m;
+    return (
+      <button
+        key={m}
+        onClick={() => onChange(m)}
+        title={hint}
+        className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+          active
+            ? 'bg-[var(--accent-glow)] text-[var(--accent)] border border-[var(--accent)]'
+            : 'text-muted hover:text-[var(--text-primary)] border border-transparent'
+        }`}
+      >
+        {label}
+      </button>
+    );
+  };
+  return (
+    <div className="inline-flex items-center gap-1 p-1 mb-3 rounded-lg border border-kd-border bg-kd-elevated/30">
+      {btn('view', '☰ Story View', 'Static annotated setup — key levels, entry zones, what confirms')}
+      {btn('play', '▷ Story Play', 'Animated replay — watch price × signals unfold over time')}
+    </div>
+  );
+}
 
 /** Chapter label — small-caps eyebrow + fading hairline (Study reorg). */
 function SectionLabel({ children }: { children: React.ReactNode }) {

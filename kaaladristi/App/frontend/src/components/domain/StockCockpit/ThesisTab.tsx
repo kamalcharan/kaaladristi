@@ -11,14 +11,12 @@
  */
 
 import { useEffect, useMemo, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
 import { useAuthStore } from '@/stores/authStore'
 import { useBookmarkStore } from '@/stores/bookmarkStore'
 import { computeThesis, type Relationship, type ThesisBar, type ThesisRead } from '@/services/thesis'
 import { KIND_COLORS } from '@/services/storyEvents'
 import { narrateVani } from '@/services/vaniNarrate'
 import type { Pillar } from './VerdictHero'
-import ScannerArrivalView from './ScannerArrival/ScannerArrivalView'
 
 /** Assemble the deterministic facts VaNi will narrate — nothing derived here. */
 function buildThesisFacts(name: string, t: ThesisRead): string {
@@ -118,23 +116,8 @@ export default function ThesisTab({
 
   const vColor = TONE[thesis.verdict.tone]
 
-  // Scanner-arrival view — rendered ONLY when ?setup=<preset> is in the
-  // URL (a user landing here from a scanner row). Layered ABOVE the
-  // existing relationship view so scrolling reveals the deeper thesis.
-  // See: docs/claude/scanner-story-page-poa.md · Phase 5.
-  const [searchParams] = useSearchParams()
-  const setupKey = searchParams.get('setup')
-
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-      {/* ── Scanner-arrival section (Story Page) ── */}
-      {setupKey && (
-        <>
-          <ScannerArrivalView equityId={equityId} setupKey={setupKey} />
-          <div style={{ height: 1, background: 'var(--kd-border, rgba(148,163,184,0.2))', margin: '4px 0' }} />
-        </>
-      )}
-
       {/* ── Relationship + verdict header ── */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
         <span style={{ ...MONO, fontSize: 9, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-faint)' }}>

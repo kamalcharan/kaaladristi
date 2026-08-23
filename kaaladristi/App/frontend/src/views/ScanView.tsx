@@ -523,7 +523,7 @@ function Stage2Results({ preset, timeframe, viewMode, onViewModeChange }: {
   // coverage per docs/claude/scanner-story-page-poa.md). Stage 2 Watch and
   // future presets can opt in by adding their key to a scanner→setup map.
   const thesisSetupSuffix = preset.id === 'stage_2_leaders'
-    ? '&tab=thesis&setup=stage_2_leaders'
+    ? '&tab=chart&setup=stage_2_leaders'
     : '';
 
   const renderCard = (stock: ScanStock) => (
