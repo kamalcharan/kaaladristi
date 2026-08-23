@@ -17,6 +17,10 @@ import { quietAccumulationAdapter } from './quietAccumulation';
 import { convictionFlowAdapter } from './convictionFlow';
 import { powerSellAdapter } from './powerSell';
 import { distributionWarningAdapter } from './distributionWarning';
+import { stage2WatchAdapter } from './stage2Watch';
+import { volumeDriveAdapter } from './volumeDrive';
+import { stage3WatchAdapter, stage4LeadersAdapter, vaniExitWatchAdapter } from './stageWeakness';
+import { flowerPotBurstAdapter } from './flowerPot';
 
 SETUP_ADAPTERS['stage_2_leaders']      = stage2LeadersAdapter;
 SETUP_ADAPTERS['breakout_surge']       = breakoutSurgeAdapter;
@@ -26,11 +30,15 @@ SETUP_ADAPTERS['quiet_accumulation']   = quietAccumulationAdapter;
 SETUP_ADAPTERS['conviction_flow']      = convictionFlowAdapter;
 SETUP_ADAPTERS['power_sell']           = powerSellAdapter;
 SETUP_ADAPTERS['distribution_warning'] = distributionWarningAdapter;
+SETUP_ADAPTERS['stage_2_watch']        = stage2WatchAdapter;
+SETUP_ADAPTERS['volume_drive']         = volumeDriveAdapter;
+SETUP_ADAPTERS['stage_3_watch']        = stage3WatchAdapter;
+SETUP_ADAPTERS['stage_4_leaders']      = stage4LeadersAdapter;
+SETUP_ADAPTERS['vani_exit_watch']      = vaniExitWatchAdapter;
+SETUP_ADAPTERS['flower_pot_burst']     = flowerPotBurstAdapter;
 
-// All six matview presets + stage_2_leaders + breakout_surge covered.
-// Not covered (by design for now): stage_2_watch (no preset row),
-// flower_pot_burst (FPB has its own coil-phase UI — a Story View for it
-// needs a compression-phase adapter, tracked in the POA).
+// COMPLETE: every preset in SCAN_PRESETS (scanEngine.ts) has a Story
+// View adapter. A new scanner needs one adapter file + one line here.
 
 // The default export is here so callers can `import './adapters'` and be
 // sure the registrations ran (module load = side-effect fill of the map).

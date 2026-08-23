@@ -124,11 +124,11 @@ Per-adapter guardrails (all presets):
 |---|---|
 | Chart + overlay engine | ✅ shipped, harness-verified |
 | Story View / Story Play toggle + editorial sidebar | ✅ |
-| Adapters — ALL 8 presets (stage_2_leaders, breakout_surge, power_buy, smart_money, quiet_accumulation, conviction_flow, power_sell, distribution_warning) | ✅ owner-validated on Waves 0–2; Wave 3 shipped 2026-08-23 |
+| Adapters — ALL 14 presets (the 8 above + stage_2_watch, volume_drive, stage_3_watch, stage_4_leaders, vani_exit_watch, flower_pot_burst) | ✅ complete 2026-08-23 |
 | ScanView wiring | ✅ registry-driven across ALL 6 navigation paths + 5 card sites |
 | Bearish lens headings (personaMeta: Holder / Pressure) | ✅ |
 | Fullscreen exit (Esc + pinned ✕) | ✅ |
-| flower_pot_burst Story View (coil-phase adapter) | ⬜ FPB has its own coil UI; needs a compression-phase adapter |
+| flower_pot_burst coil-phase adapter (weekly coil proxies, Burst/Shatter phases, coil-boundary zones) | ✅ |
 | Direct-load lens picker (no `?setup=`: pick from scan membership) | ⬜ |
 | Light-mode tuning of band tints | ⬜ (tokens exist; values dark-calibrated) |
 | Zone rectangles (dashed base boxes, reference decks) | ⬜ deferred |
@@ -144,6 +144,5 @@ bearish presets carry Holder/Pressure lens headings via personaMeta
 with explicit invalidation zones (SEBI-observational throughout).
 
 Remaining candidates (owner to prioritize):
-· flower_pot_burst — coil-phase adapter (compression → release story)
 · direct-load lens picker · light-mode band tints · zone rectangles ·
   multi-pane split (see Status table)

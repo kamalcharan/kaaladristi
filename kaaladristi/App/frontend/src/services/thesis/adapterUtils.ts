@@ -117,6 +117,22 @@ export function buildStandardZones(personas: PersonaEntries): EntryZoneAnnotatio
   return zones;
 }
 
+/** Shared Holder / Pressure lens metadata for the bearish presets —
+ *  one definition so Weakness Confluence, Distribution Warnings and the
+ *  stage-weakness family speak with one voice. */
+export const HOLDER_PRESSURE_META = {
+  lt: {
+    heading: 'Holder Lens',
+    sub: 'Weekly · exposure',
+    intent: 'Reads the levels someone already exposed watches — where the weakness read strengthens, and where it is invalidated. Observational, not an instruction.',
+  },
+  swing: {
+    heading: 'Pressure Lens',
+    sub: 'Daily · downside',
+    intent: 'Reads where downside pressure historically confirmed or eased. Faster-resolving zones near the last bar.',
+  },
+} as const;
+
 export function buildStandardLines(kl: KeyLevels): HorizontalLine[] {
   const lines: HorizontalLine[] = [];
   const push = (price: number | null, label: string, tone: 'bull' | 'bear' | 'neutral') => {

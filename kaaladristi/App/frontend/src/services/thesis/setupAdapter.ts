@@ -75,6 +75,11 @@ export interface LatestEodRow {
   avg_amt_22d: number | null;
   // Distribution columns (Wave 3)
   volume_divergence_flag: string | null;
+  // Stage-family + volume-drive columns (Wave 4)
+  sma_200: number | null;
+  dot_svd: boolean | null;
+  dot_sbd: boolean | null;
+  dot_syd: boolean | null;
 }
 
 /** The equity's master-table row — identity + exchange + industry. */
