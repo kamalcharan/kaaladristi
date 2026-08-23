@@ -67,6 +67,12 @@ export interface LatestEodRow {
   delivery_pct: number | null;
   accum_distrib: string | null;
   flow_type: string | null;
+  // Flow-conviction columns (Wave 2 adapters — migration 094/095 rolling
+  // metrics + standard indicator columns)
+  rss_value: number | null;
+  sniper_inst: number | null;
+  delivery_surge_x: number | null;
+  avg_amt_22d: number | null;
 }
 
 /** The equity's master-table row — identity + exchange + industry. */
