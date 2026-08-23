@@ -513,15 +513,19 @@ export default function TradingChart({ data, height = 900, compact = false, work
       }
     }
 
-    // Big Money days (Phase 3): gold dashed line at each zone low
+    // Big Money days (Phase 3): gold dashed line at each zone low.
+    // When the editorial overlay is active it renders its own ₹Cr badges
+    // on the top rail — the native axis labels would double up and
+    // collide with callouts, so they're suppressed (lines stay).
+    const hasOverlay = !!overlay;
     for (const ev of bigMoneyEvents) {
       candleSeries.createPriceLine({
         price: ev.price,
         color: ev.color ?? '#d4a84b',
         lineWidth: 1 as LineWidth,
         lineStyle: LineStyle.Dashed,
-        axisLabelVisible: true,
-        title: ev.label,
+        axisLabelVisible: !hasOverlay,
+        title: hasOverlay ? '' : ev.label,
       });
     }
 
@@ -814,7 +818,8 @@ export default function TradingChart({ data, height = 900, compact = false, work
     });
     // Redraw bands immediately after chart rebuild (covers indicator overlay changes)
     requestAnimationFrame(() => { drawBandsRef.current?.(); });
-  }, [data, height, compact, workspaceMode, indicatorOverlays, bigMoneyEvents, setupLevels, setupEntries, onVisibleRangeChange, onCrosshairMove]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- `overlay` is read only for presence (hasOverlay); depending on `!!overlay` avoids chart rebuilds on overlay identity churn
+  }, [data, height, compact, workspaceMode, indicatorOverlays, bigMoneyEvents, setupLevels, setupEntries, !!overlay, onVisibleRangeChange, onCrosshairMove]);
 
   // Scroll to highlighted date when slider moves
   useEffect(() => {

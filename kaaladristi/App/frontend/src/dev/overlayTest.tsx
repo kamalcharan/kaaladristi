@@ -99,13 +99,23 @@ const overlay = {
     { from: dateAt(220), to: dateAt(399), label: 'Long Stage 1 Base',     tone: 'neutral' as const },
     { from: dateAt(400), to: dateAt(LAST), label: 'New Stage 2 Recovery', tone: 'bull' as const },
   ],
-  callouts: [
-    { persona: 'lt' as const,    n: 1, price: 524, labelShort: 'Breakout' },
-    { persona: 'lt' as const,    n: 3, price: 517, labelShort: 'Continuation' },
-    { persona: 'swing' as const, n: 1, price: 545, labelShort: 'Break of R1' },
-    { persona: 'swing' as const, n: 2, price: 525, labelShort: 'Mid-range' },
-    { persona: 'swing' as const, n: 3, price: 510, labelShort: 'Support test' },
-  ],
+  callouts: (() => {
+    // Same anchor rule ChartView uses: last bar whose range touched the
+    // zone price; fallback last bar.
+    const anchorFor = (price: number): string => {
+      for (let i = bars.length - 1; i >= 0; i--) {
+        if (bars[i].low <= price && price <= bars[i].high) return bars[i].trade_date;
+      }
+      return bars[LAST].trade_date;
+    };
+    return [
+      { persona: 'lt' as const,    n: 1, price: 524, labelShort: 'Breakout',     anchorDate: anchorFor(524) },
+      { persona: 'lt' as const,    n: 3, price: 517, labelShort: 'Continuation', anchorDate: anchorFor(517) },
+      { persona: 'swing' as const, n: 1, price: 545, labelShort: 'Break of R1',  anchorDate: anchorFor(545) },
+      { persona: 'swing' as const, n: 2, price: 525, labelShort: 'Mid-range',    anchorDate: anchorFor(525) },
+      { persona: 'swing' as const, n: 3, price: 510, labelShort: 'Support test', anchorDate: anchorFor(510) },
+    ];
+  })(),
   bigMoney: [
     { trade_date: dateAt(480), price: closeAt(480), amountCr: 24.8, count: 1 },
     { trade_date: dateAt(490), price: closeAt(490), amountCr: 60.5, count: 3 },

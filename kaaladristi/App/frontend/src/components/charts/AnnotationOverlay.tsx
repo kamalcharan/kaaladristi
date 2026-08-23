@@ -5,10 +5,19 @@
  * both wrap TradingChart in this same overlay, so setup annotations look
  * IDENTICAL across the toggle and the code lives in exactly one place.
  *
- * Positioned as an absolutely-placed SVG matching the chart canvas.
- * Coordinates are computed via lightweight-charts' priceScale +
- * timeScale APIs. Re-renders on chart resize + visible-range change so
- * annotations track the chart as the user pans or zooms.
+ * Structure: an absolutely-positioned wrapper div matching the chart
+ * canvas. Inside it:
+ *   · an SVG layer — cycle bands, story pins, Big Money badges, leader
+ *     lines, numbered anchor badges
+ *   · HTML callout boxes — same visual language as Story Play's
+ *     storyBubble (verdict-hero background, colored left border), so the
+ *     two features read as one system
+ *
+ * Callouts are TIME+PRICE anchored (reference decks: KPL/Solara/Kronox):
+ * each zone's numbered badge sits at the bar where price last interacted
+ * with that zone, and the box floats beside it with a leader line. They
+ * reposition on pan/zoom because coordinates are recomputed from
+ * lightweight-charts' priceScale/timeScale on every visible-range change.
  *
  * Pointer events: none. The chart underneath handles all interactions.
  */
@@ -30,6 +39,11 @@ export interface OverlayCallout {
   n: number;
   price: number;
   labelShort: string;  // "Breakout", "Continuation", etc.
+  /** ISO date of the bar this zone anchors to — usually the last bar
+   *  whose range touched the zone price. The callout renders AT that
+   *  location on the chart (reference-deck grammar) instead of stacking
+   *  at the right edge. Absent → anchored to the last visible bar. */
+  anchorDate?: string;
 }
 
 export interface OverlayBigMoney {
@@ -57,7 +71,7 @@ interface Props {
   storyPins?: OverlayStoryPin[];
 }
 
-// ── Design tokens (scoped to the overlay, resolved from Kāla-Drishti CSS vars) ──
+// ── Design tokens (resolved from Kāla-Drishti CSS vars) ─────────────────
 
 const TOK = {
   ground:   'var(--card)',
@@ -68,9 +82,11 @@ const TOK = {
   gold:     'var(--gold-soft)',
   bull:     'var(--risk-green)',
   bear:     'var(--risk-red)',
-  neutral:  'var(--text-muted)',
   lt:       'var(--accent-indigo)',
   sw:       'var(--risk-amber)',
+  bubbleBg: 'var(--verdict-hero-bg)',
+  bubbleText: 'var(--verdict-hero-text)',
+  bubbleMuted: 'var(--verdict-hero-muted)',
   bandBull: 'var(--story-band-bull)',
   bandBear: 'var(--story-band-bear)',
   bandNeut: 'var(--story-band-neut)',
@@ -79,10 +95,10 @@ const TOK = {
   bandTxtNeut: 'var(--story-band-text-neut)',
 } as const;
 
-/** Callout box dimensions in pixels. */
-const CALLOUT_W = 138;
-const CALLOUT_H = 20;
-const CALLOUT_GAP = 3;
+/** Callout box dimensions in pixels (mirrors storyBubble proportions). */
+const BOX_W = 152;
+const BOX_H = 40;
+const BOX_GAP = 6;
 /** Kind → color for storyEvent pins (mirrors services/storyEvents KIND_COLORS). */
 const PIN_COLOR: Record<OverlayStoryPin['kind'], string> = {
   flow: TOK.bull,
@@ -97,9 +113,6 @@ const PIN_COLOR: Record<OverlayStoryPin['kind'], string> = {
 };
 
 export function AnnotationOverlay({ chart, series, container, cycleBands = [], callouts = [], bigMoney = [], storyPins = [] }: Props) {
-  // Seed size from the container synchronously so first paint has the real
-  // dimensions — waiting for ResizeObserver adds a null-render frame that
-  // in edge cases (mount timing) was making the overlay never appear.
   const [size, setSize] = useState(() => ({
     width: container.clientWidth || 0,
     height: container.clientHeight || 0,
@@ -129,28 +142,9 @@ export function AnnotationOverlay({ chart, series, container, cycleBands = [], c
     };
   }, [chart]);
 
-  // Render the SVG even at zero size — layers filter themselves on invalid
-  // coordinates, so the DOM node exists and picks up size on the next
-  // ResizeObserver tick.
-
   const priceToY = (p: number): number | null => {
     const y = series.priceToCoordinate(p);
     return y == null || !Number.isFinite(y) ? null : y;
-  };
-  /** Same as priceToY but clamps to the visible plot edge when the price
-   *  is off-scale (above the visible max or below the visible min). Used
-   *  by persona callouts so setup zones ABOVE the current visible range
-   *  still show up as a pill at the top edge — the user can then zoom
-   *  out to see the full band. Filtering them out entirely (the naive
-   *  behavior) hides the story on any view that doesn't include all
-   *  setup levels. */
-  const priceToYClamped = (p: number): number => {
-    const y = series.priceToCoordinate(p);
-    if (y != null && Number.isFinite(y) && y >= 0 && y <= size.height) return y;
-    // Off-scale — compare against the current visible top/bottom price
-    const topPrice = series.coordinateToPrice(0);
-    if (topPrice != null && p > topPrice) return 8;
-    return size.height - 30;
   };
   const timeToX = (iso: string): number | null => {
     const x = chart.timeScale().timeToCoordinate(iso as unknown as Time);
@@ -161,12 +155,14 @@ export function AnnotationOverlay({ chart, series, container, cycleBands = [], c
   const bandRects = cycleBands.map((b) => {
     const x0 = timeToX(b.from);
     const x1 = timeToX(b.to);
-    if (x0 == null || x1 == null) return null;
-    const left = Math.min(x0, x1);
-    const width = Math.max(1, Math.abs(x1 - x0));
+    if (x0 == null && x1 == null) return null;
+    // Partially-visible band: clamp missing edge to the plot boundary
+    const left = Math.max(0, Math.min(x0 ?? 0, x1 ?? size.width));
+    const right = Math.min(size.width, Math.max(x0 ?? 0, x1 ?? size.width));
+    const width = right - left;
+    if (width < 2) return null;
     const fill = b.tone === 'bull' ? TOK.bandBull : b.tone === 'bear' ? TOK.bandBear : TOK.bandNeut;
     const textFill = b.tone === 'bull' ? TOK.bandTxtBull : b.tone === 'bear' ? TOK.bandTxtBear : TOK.bandTxtNeut;
-    // fit label vertically inside plot; cap at 22px
     const availH = size.height - 40;
     const chars = b.label.length;
     const maxByHeight = availH / (chars * 0.95);
@@ -180,7 +176,6 @@ export function AnnotationOverlay({ chart, series, container, cycleBands = [], c
     const x = timeToX(p.trade_date);
     const y = priceToY(p.price);
     if (x == null || y == null) return null;
-    // In-bounds only — an off-scale pin at a garbage coordinate is noise
     if (x < 0 || x > size.width || y < 0 || y > size.height) return null;
     return { x, y, color: PIN_COLOR[p.kind] ?? TOK.gold, kind: p.kind, title: p.title };
   }).filter((v): v is NonNullable<typeof v> => v !== null);
@@ -190,46 +185,105 @@ export function AnnotationOverlay({ chart, series, container, cycleBands = [], c
     const x = timeToX(b.trade_date);
     const yTip = priceToY(b.price);
     if (x == null || yTip == null) return null;
-    // In-bounds only — a badge whose bar is scrolled out of view must not
-    // float over unrelated page areas.
     if (x < 0 || x > size.width || yTip < 0 || yTip > size.height) return null;
     const text = b.count > 1
       ? `₹${b.amountCr.toFixed(0)}Cr · ${b.count}d`
       : `₹${b.amountCr.toFixed(b.amountCr >= 10 ? 0 : 1)}Cr`;
     return { x, yTip, text, boxW: text.length * 5.6 + 14 };
   }).filter((v): v is NonNullable<typeof v> => v !== null);
+  // Stagger overlapping BM badges into two top rows
+  {
+    let lastRight = -Infinity;
+    for (const b of bmBadges) {
+      (b as { row?: number }).row = (b.x - b.boxW / 2) < lastRight + 4 ? 1 : 0;
+      if ((b as { row?: number }).row === 0) lastRight = b.x + b.boxW / 2;
+    }
+  }
 
-  // ── Layer 4: persona callouts, right-edge, anti-collision stack ──────
-  // Plot right edge is roughly container.clientWidth - price axis width.
-  // lightweight-charts default right-price-axis width is ~60-70px; we use
-  // the container width minus a safety pad.
-  const plotRightX = size.width - 70;
-  const laidCallouts: Array<{
+  // ── Layer 4: persona callouts — anchored at their bar, boxes float ───
+  // Each callout: numbered badge at (anchor bar x, zone price y); an HTML
+  // box in storyBubble style floats above or below the anchor; a leader
+  // line connects box → badge. Greedy anti-collision nudges boxes apart.
+  interface LaidCallout {
     persona: 'lt' | 'swing';
     n: number;
     price: number;
     labelShort: string;
-    y: number;
-    boxY: number;
     color: string;
-  }> = [];
-  const withY = callouts
-    .map((c) => ({ ...c, y: priceToYClamped(c.price), color: c.persona === 'lt' ? TOK.lt : TOK.sw }))
-    .sort((a, b) => a.y - b.y);
-  let lastBottom = -Infinity;
-  for (const c of withY) {
-    let boxY = c.y - CALLOUT_H / 2;
-    if (boxY < lastBottom + CALLOUT_GAP) boxY = lastBottom + CALLOUT_GAP;
-    if (boxY < 4) boxY = 4;
-    if (boxY + CALLOUT_H > size.height - 30) boxY = size.height - 30 - CALLOUT_H;
-    lastBottom = boxY + CALLOUT_H;
-    laidCallouts.push({ ...c, boxY });
+    ax: number;   // anchor x (bar)
+    ay: number;   // anchor y (price)
+    bx: number;   // box left
+    by: number;   // box top
+  }
+  const laidCallouts: LaidCallout[] = [];
+  {
+    const placed: Array<{ x0: number; y0: number; x1: number; y1: number }> = [];
+    const intersects = (r: { x0: number; y0: number; x1: number; y1: number }) =>
+      placed.some((p) => r.x0 < p.x1 + BOX_GAP && r.x1 > p.x0 - BOX_GAP && r.y0 < p.y1 + BOX_GAP && r.y1 > p.y0 - BOX_GAP);
+
+    const withAnchor = callouts
+      .map((c) => {
+        const ax = c.anchorDate ? timeToX(c.anchorDate) : null;
+        const ay = priceToY(c.price);
+        if (ax == null || ay == null) return null;
+        if (ax < 0 || ax > size.width) return null;
+        const ayClamped = Math.max(6, Math.min(size.height - 6, ay));
+        return { ...c, ax, ay: ayClamped, color: c.persona === 'lt' ? TOK.lt : TOK.sw };
+      })
+      .filter((v): v is NonNullable<typeof v> => v !== null)
+      .sort((a, b) => a.ax - b.ax);
+
+    // Keep boxes clear of the right price axis (~70px)
+    const maxBx = size.width - 70 - BOX_W;
+    const clampBx = (x: number) => Math.max(4, Math.min(maxBx, x));
+    const clampBy = (y: number) => Math.max(4, Math.min(size.height - BOX_H - 4, y));
+
+    for (const c of withAnchor) {
+      // Candidate spots in priority order: above/below the anchor, then a
+      // left-fan (boxes marching left at the anchor's height) for the
+      // common case where several zones anchor on the same recent bars.
+      const preferAbove = c.ay > size.height / 2;
+      const vertical = (above: boolean, step: number) => ({
+        bx: clampBx(c.ax - BOX_W / 2),
+        by: above
+          ? c.ay - 16 - BOX_H - step * (BOX_H + BOX_GAP)
+          : c.ay + 16 + step * (BOX_H + BOX_GAP),
+      });
+      const leftFan = (step: number, dy: number) => ({
+        bx: clampBx(c.ax - 20 - BOX_W - step * (BOX_W * 0.4)),
+        by: clampBy(c.ay - BOX_H / 2 + dy),
+      });
+      const candidates: Array<{ bx: number; by: number }> = [];
+      for (let s = 0; s < 3; s++) {
+        candidates.push(vertical(preferAbove, s));
+        candidates.push(vertical(!preferAbove, s));
+      }
+      for (let s = 0; s < 8; s++) {
+        candidates.push(leftFan(s, 0));
+        candidates.push(leftFan(s, -(BOX_H + BOX_GAP)));
+        candidates.push(leftFan(s, BOX_H + BOX_GAP));
+        candidates.push(leftFan(s, -2 * (BOX_H + BOX_GAP)));
+        candidates.push(leftFan(s, 2 * (BOX_H + BOX_GAP)));
+      }
+      let spot: { bx: number; by: number } | null = null;
+      for (const cand of candidates) {
+        if (cand.by < 4 || cand.by + BOX_H > size.height - 4) continue;
+        const rect = { x0: cand.bx, y0: cand.by, x1: cand.bx + BOX_W, y1: cand.by + BOX_H };
+        if (!intersects(rect)) { spot = cand; break; }
+      }
+      if (!spot) {
+        spot = { bx: clampBx(c.ax - BOX_W / 2), by: clampBy(c.ay - BOX_H / 2) };
+      }
+      placed.push({ x0: spot.bx, y0: spot.by, x1: spot.bx + BOX_W, y1: spot.by + BOX_H });
+      laidCallouts.push({
+        persona: c.persona, n: c.n, price: c.price, labelShort: c.labelShort,
+        color: c.color, ax: c.ax, ay: c.ay, bx: spot.bx, by: spot.by,
+      });
+    }
   }
 
   return (
-    <svg
-      width={size.width || '100%'}
-      height={size.height || '100%'}
+    <div
       style={{
         position: 'absolute',
         top: 0,
@@ -237,155 +291,153 @@ export function AnnotationOverlay({ chart, series, container, cycleBands = [], c
         width: '100%',
         height: '100%',
         pointerEvents: 'none',
-        // MUST clip: off-scale coordinates (price above visible range →
-        // negative y) otherwise draw outside the chart, floating over
-        // unrelated page content.
         overflow: 'hidden',
         // lightweight-charts' internal canvases carry explicit z-index
-        // (1/2) — without a higher z-index here the chart paints OVER
-        // the overlay and every annotation is invisible.
+        // (1/2) — without a higher z-index the chart paints OVER the
+        // overlay and every annotation is invisible.
         zIndex: 10,
       }}
     >
-      {/* ── Layer 1: cycle bands ── */}
-      {bandRects.map((c, i) => {
-        const midX = c.left + c.width / 2;
-        const midY = size.height / 2;
-        return (
-          <g key={`band-${i}`}>
-            <rect x={c.left} y={0} width={c.width} height={size.height} fill={c.fill} />
-            {i > 0 && (
-              <line
-                x1={c.left} y1={0} x2={c.left} y2={size.height}
-                stroke={`color-mix(in srgb, ${TOK.rule} 90%, transparent)`}
-                strokeDasharray="2 4"
-              />
-            )}
-            {c.width > 40 && (
-              <g transform={`translate(${midX} ${midY}) rotate(-90)`}>
-                <text
-                  textAnchor="middle"
-                  fontFamily="Fraunces, Georgia, serif"
-                  fontWeight={600}
-                  fontSize={c.fontSize}
-                  letterSpacing="0.06em"
-                  fill={c.textFill}
-                  style={{ textTransform: 'uppercase' }}
-                >
-                  {c.label}
-                </text>
-              </g>
-            )}
-          </g>
-        );
-      })}
+      <svg width="100%" height="100%" style={{ position: 'absolute', top: 0, left: 0, overflow: 'hidden' }}>
+        {/* ── cycle bands ── */}
+        {bandRects.map((c, i) => {
+          const midX = c.left + c.width / 2;
+          const midY = size.height / 2;
+          return (
+            <g key={`band-${i}`}>
+              <rect x={c.left} y={0} width={c.width} height={size.height} fill={c.fill} />
+              {i > 0 && (
+                <line
+                  x1={c.left} y1={0} x2={c.left} y2={size.height}
+                  stroke={`color-mix(in srgb, ${TOK.rule} 90%, transparent)`}
+                  strokeDasharray="2 4"
+                />
+              )}
+              {c.width > 40 && (
+                <g transform={`translate(${midX} ${midY}) rotate(-90)`}>
+                  <text
+                    textAnchor="middle"
+                    fontFamily="Fraunces, Georgia, serif"
+                    fontWeight={600}
+                    fontSize={c.fontSize}
+                    letterSpacing="0.06em"
+                    fill={c.textFill}
+                    style={{ textTransform: 'uppercase' }}
+                  >
+                    {c.label}
+                  </text>
+                </g>
+              )}
+            </g>
+          );
+        })}
 
-      {/* ── Layer 2: story event pins on the price line ── */}
-      {pinPoints.map((p, i) => (
-        <g key={`pin-${i}`}>
-          <circle cx={p.x} cy={p.y} r={4} fill={p.color} opacity={0.9}
-            stroke={`color-mix(in srgb, ${TOK.ground} 60%, transparent)`} strokeWidth={0.7} />
-        </g>
+        {/* ── story pins ── */}
+        {pinPoints.map((p, i) => (
+          <circle
+            key={`pin-${i}`}
+            cx={p.x} cy={p.y} r={4}
+            fill={p.color} opacity={0.9}
+            stroke={`color-mix(in srgb, ${TOK.ground} 60%, transparent)`} strokeWidth={0.7}
+          />
+        ))}
+
+        {/* ── Big Money badges (top rail, two staggered rows) ── */}
+        {bmBadges.map((b, i) => {
+          const badgeY = 12 + ((b as { row?: number }).row ?? 0) * 18;
+          return (
+            <g key={`bm-${i}`}>
+              <line
+                x1={b.x} y1={badgeY + 8}
+                x2={b.x} y2={b.yTip - 2}
+                stroke={TOK.gold} strokeWidth={0.6} opacity={0.55} strokeDasharray="1 3"
+              />
+              <circle cx={b.x} cy={b.yTip - 2} r={2} fill={TOK.gold} />
+              <rect
+                x={b.x - b.boxW / 2} y={badgeY - 6}
+                width={b.boxW} height={14} rx={2}
+                fill={TOK.ground}
+                stroke={TOK.gold} strokeWidth={0.8}
+                opacity={0.97}
+              />
+              <text
+                x={b.x} y={badgeY + 4}
+                textAnchor="middle"
+                fontFamily="'JetBrains Mono', ui-monospace, monospace"
+                fontSize={9}
+                fontWeight={700}
+                fill={TOK.gold}
+              >
+                {b.text}
+              </text>
+            </g>
+          );
+        })}
+
+        {/* ── callout leader lines + numbered anchor badges ── */}
+        {laidCallouts.map((m, i) => {
+          const boxCX = m.bx + BOX_W / 2;
+          const boxAbove = m.by + BOX_H <= m.ay;
+          const boxEdgeY = boxAbove ? m.by + BOX_H : m.by;
+          return (
+            <g key={`col-${i}`}>
+              <line
+                x1={boxCX} y1={boxEdgeY}
+                x2={m.ax} y2={m.ay + (boxAbove ? -10 : 10)}
+                stroke={m.color} strokeWidth={0.8} opacity={0.6}
+              />
+              <circle
+                cx={m.ax} cy={m.ay} r={9}
+                fill={m.color} opacity={0.95}
+                stroke={`color-mix(in srgb, ${TOK.ground} 60%, transparent)`}
+                strokeWidth={0.5}
+              />
+              <text
+                x={m.ax} y={m.ay + 3.5}
+                textAnchor="middle"
+                fontFamily="'JetBrains Mono', ui-monospace, monospace"
+                fontSize={10} fontWeight={700}
+                fill={TOK.ground}
+              >
+                {m.n}
+              </text>
+            </g>
+          );
+        })}
+      </svg>
+
+      {/* ── HTML callout boxes — same visual language as storyBubble ── */}
+      {laidCallouts.map((m, i) => (
+        <div
+          key={`cbox-${i}`}
+          style={{
+            position: 'absolute',
+            left: m.bx,
+            top: m.by,
+            width: BOX_W,
+            height: BOX_H,
+            background: TOK.bubbleBg,
+            color: TOK.bubbleText,
+            border: `1px solid color-mix(in srgb, ${m.color} 55%, transparent)`,
+            borderLeft: `3px solid ${m.color}`,
+            borderRadius: 8,
+            padding: '5px 9px',
+            boxShadow: 'var(--card-shadow)',
+            boxSizing: 'border-box',
+            overflow: 'hidden',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 700, whiteSpace: 'nowrap' }}>
+            <span style={{ width: 6, height: 6, borderRadius: '50%', background: m.color, flexShrink: 0 }} />
+            <span style={{ color: m.color }}>{m.persona === 'lt' ? 'LT' : 'SW'}-{m.n}</span>
+            <span style={{ color: TOK.bubbleText, fontWeight: 600 }}>{m.labelShort}</span>
+          </div>
+          <div style={{ fontSize: 10.5, color: TOK.bubbleMuted, marginTop: 2, fontFamily: 'var(--font-mono, monospace)' }}>
+            ₹{Math.round(m.price)} zone
+          </div>
+        </div>
       ))}
-
-      {/* ── Layer 3: Big Money badges on top rail ── */}
-      {bmBadges.map((b, i) => {
-        const badgeY = 12;
-        return (
-          <g key={`bm-${i}`}>
-            <line
-              x1={b.x} y1={badgeY + 8}
-              x2={b.x} y2={b.yTip - 2}
-              stroke={TOK.gold} strokeWidth={0.6} opacity={0.55} strokeDasharray="1 3"
-            />
-            <circle cx={b.x} cy={b.yTip - 2} r={2} fill={TOK.gold} />
-            <rect
-              x={b.x - b.boxW / 2} y={badgeY - 6}
-              width={b.boxW} height={14} rx={2}
-              fill={`color-mix(in srgb, ${TOK.ground} 95%, transparent)`}
-              stroke={TOK.gold} strokeWidth={0.8}
-            />
-            <text
-              x={b.x} y={badgeY + 4}
-              textAnchor="middle"
-              fontFamily="'JetBrains Mono', ui-monospace, monospace"
-              fontSize={9}
-              fontWeight={700}
-              fill={TOK.gold}
-            >
-              {b.text}
-            </text>
-          </g>
-        );
-      })}
-
-      {/* ── Layer 4: persona callouts (numbered pills at right edge) ── */}
-      {laidCallouts.map((m, i) => {
-        const tagStr = m.persona === 'lt' ? 'LT' : 'SW';
-        const markerX = plotRightX - 8;
-        const boxX = markerX - 14 - CALLOUT_W;
-        const boxCY = m.boxY + CALLOUT_H / 2;
-        const shifted = Math.abs(boxCY - m.y) > 0.5;
-        const priceStr = `₹${Math.round(m.price)}`;
-        return (
-          <g key={`co-${i}`}>
-            <rect
-              x={boxX} y={m.boxY}
-              width={CALLOUT_W} height={CALLOUT_H}
-              rx={3}
-              fill={TOK.ground}
-              stroke={m.color}
-              strokeWidth={1.2}
-              opacity={0.98}
-            />
-            <text x={boxX + 7} y={m.boxY + 9}
-              fontFamily="Inter, system-ui, sans-serif"
-              fontSize={8} fontWeight={700} letterSpacing="0.10em"
-              fill={m.color}
-              style={{ textTransform: 'uppercase' }}
-            >
-              {tagStr}-{m.n}
-            </text>
-            <text x={boxX + 32} y={m.boxY + 9}
-              fontFamily="Inter, system-ui, sans-serif"
-              fontSize={8.5} fontWeight={500}
-              fill={TOK.ink2}
-            >
-              {m.labelShort}
-            </text>
-            <text x={boxX + CALLOUT_W - 6} y={m.boxY + CALLOUT_H - 4}
-              textAnchor="end"
-              fontFamily="'JetBrains Mono', ui-monospace, monospace"
-              fontSize={9} fontWeight={600}
-              fill={TOK.ink}
-            >
-              {priceStr}
-            </text>
-            {shifted && (
-              <line
-                x1={boxX + CALLOUT_W} y1={boxCY}
-                x2={markerX - 9} y2={m.y}
-                stroke={m.color} strokeWidth={0.5} opacity={0.55}
-              />
-            )}
-            <circle
-              cx={markerX} cy={m.y} r={9}
-              fill={m.color} opacity={0.95}
-              stroke={`color-mix(in srgb, ${TOK.ground} 60%, transparent)`}
-              strokeWidth={0.5}
-            />
-            <text x={markerX} y={m.y + 3.5}
-              textAnchor="middle"
-              fontFamily="'JetBrains Mono', ui-monospace, monospace"
-              fontSize={10} fontWeight={700}
-              fill={TOK.ground}
-            >
-              {m.n}
-            </text>
-          </g>
-        );
-      })}
-    </svg>
+    </div>
   );
 }
 

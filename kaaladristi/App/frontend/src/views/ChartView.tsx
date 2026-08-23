@@ -498,6 +498,21 @@ export default function ChartView() {
    *  controls what sits BELOW the chart, never what's on it. */
   const setupOverlayFull = useMemo(() => {
     if (!setupOverlayCore) return undefined;
+    // Anchor each callout at the LAST bar whose range touched the zone
+    // price — the reference-deck grammar (breakout callout points at the
+    // breakout bar, support-test callout at the last test). Falls back
+    // to the last bar when price never touched the zone in view.
+    const anchorFor = (price: number): string | undefined => {
+      for (let i = rows.length - 1; i >= 0; i--) {
+        const r = rows[i];
+        if (r.low <= price && price <= r.high) return r.trade_date;
+      }
+      return rows[rows.length - 1]?.trade_date;
+    };
+    const callouts = setupOverlayCore.callouts.map((c) => ({
+      ...c,
+      anchorDate: anchorFor(c.price),
+    }));
     const bigMoney = bigMoneyChartLines.map((b) => ({
       trade_date: b.trade_date,
       price: b.price,
@@ -518,7 +533,7 @@ export default function ChartView() {
       // storyEvents don't carry price; use the bar's close on that date
       price: rows.find((r) => r.trade_date === e.date)?.close ?? 0,
     })).filter((p) => p.price > 0);
-    return { ...setupOverlayCore, bigMoney, storyPins };
+    return { ...setupOverlayCore, callouts, bigMoney, storyPins };
   }, [setupOverlayCore, bigMoneyChartLines, storyEvents, rows]);
   // Latest Clean Breakaway/Breakdown within the rotation's plotted window —
   // storyEvents is indexed against `rows`, rotationPoints against `pulseBars`;
