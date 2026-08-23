@@ -16,6 +16,8 @@ import { ScanFilterBar, applyFilters, DEFAULT_FILTERS, FPB_DEFAULT_FILTERS, type
 import ScanVaNiPublisher from '@/components/domain/ScanVaNiPublisher';
 import ScanStalenessBanner from '@/components/domain/ScanStalenessBanner';
 import { navName } from '@/lib/symbolUtils';
+import { getSetupAdapter } from '@/services/thesis/setupAdapter';
+import '@/services/thesis/adapters'; // registers SETUP_ADAPTERS entries
 import { useVaNiStore } from '@/stores/vaniStore';
 
 // ── Sort ──────────────────────────────────────────────────────
@@ -519,11 +521,11 @@ function Stage2Results({ preset, timeframe, viewMode, onViewModeChange }: {
     else { setS2Sort(key); setSortDir('desc'); }
   };
 
-  // Only Stage 2 Leaders opens the Thesis tab's scanner-arrival view (v1
-  // coverage per docs/claude/scanner-story-page-poa.md). Stage 2 Watch and
-  // future presets can opt in by adding their key to a scanner→setup map.
-  const thesisSetupSuffix = preset.id === 'stage_2_leaders'
-    ? '&tab=chart&setup=stage_2_leaders'
+  // Any preset with a registered setup adapter opens the Story View on
+  // row-click (docs/claude/scanner-story-page-poa.md). Adding an adapter
+  // file + registry entry auto-wires the scanner — no change here.
+  const thesisSetupSuffix = getSetupAdapter(preset.id)
+    ? `&tab=chart&setup=${preset.id}`
     : '';
 
   const renderCard = (stock: ScanStock) => (

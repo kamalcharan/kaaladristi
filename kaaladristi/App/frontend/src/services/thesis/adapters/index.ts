@@ -10,15 +10,14 @@
 
 import { SETUP_ADAPTERS } from '../setupAdapter';
 import { stage2LeadersAdapter } from './stage2';
+import { breakoutSurgeAdapter } from './breakoutSurge';
 
 SETUP_ADAPTERS['stage_2_leaders'] = stage2LeadersAdapter;
+SETUP_ADAPTERS['breakout_surge']  = breakoutSurgeAdapter;
 
-// Reserved for follow-up phases (uncomment when the adapter ships):
-// import { wakingGiantsAdapter } from './wakingGiants';
-// SETUP_ADAPTERS['waking_giants'] = wakingGiantsAdapter;
-//
-// import { flowerPotBurstAdapter } from './flowerPot';
-// SETUP_ADAPTERS['flower_pot_burst'] = flowerPotBurstAdapter;
+// Roll-out waves (docs/claude/scanner-story-page-poa.md · Roll-out plan):
+// Wave 2 — smart_money, quiet_accumulation, conviction_flow, power_buy
+// Wave 3 — power_sell, distribution_warning (Holder/Exit lenses)
 
 // The default export is here so callers can `import './adapters'` and be
 // sure the registrations ran (module load = side-effect fill of the map).
