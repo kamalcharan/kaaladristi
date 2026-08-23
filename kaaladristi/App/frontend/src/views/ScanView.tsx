@@ -519,12 +519,20 @@ function Stage2Results({ preset, timeframe, viewMode, onViewModeChange }: {
     else { setS2Sort(key); setSortDir('desc'); }
   };
 
+  // Only Stage 2 Leaders opens the Thesis tab's scanner-arrival view (v1
+  // coverage per docs/claude/scanner-story-page-poa.md). Stage 2 Watch and
+  // future presets can opt in by adding their key to a scanner→setup map.
+  const thesisSetupSuffix = preset.id === 'stage_2_leaders'
+    ? '&tab=thesis&setup=stage_2_leaders'
+    : '';
+
   const renderCard = (stock: ScanStock) => (
     <StockCard
       key={stock.equity_id}
       stock={stock}
       stageBadge="S2"
       vaniContext={`Scanner / ${preset.name}`}
+      linkQueryExtra={thesisSetupSuffix}
     />
   );
 
@@ -601,7 +609,7 @@ function Stage2Results({ preset, timeframe, viewMode, onViewModeChange }: {
         <ScanTable
           stocks={displayStocks}
           presetId={preset.id}
-          onRowClick={(s) => navigate(`/chart/equity/${s.equity_id}?name=${encodeURIComponent(navName(s))}`)}
+          onRowClick={(s) => navigate(`/chart/equity/${s.equity_id}?name=${encodeURIComponent(navName(s))}${thesisSetupSuffix}`)}
         />
       )}
 
