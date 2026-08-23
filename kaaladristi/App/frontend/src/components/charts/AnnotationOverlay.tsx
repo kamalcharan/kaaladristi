@@ -180,6 +180,8 @@ export function AnnotationOverlay({ chart, series, container, cycleBands = [], c
     const x = timeToX(p.trade_date);
     const y = priceToY(p.price);
     if (x == null || y == null) return null;
+    // In-bounds only — an off-scale pin at a garbage coordinate is noise
+    if (x < 0 || x > size.width || y < 0 || y > size.height) return null;
     return { x, y, color: PIN_COLOR[p.kind] ?? TOK.gold, kind: p.kind, title: p.title };
   }).filter((v): v is NonNullable<typeof v> => v !== null);
 
@@ -188,6 +190,9 @@ export function AnnotationOverlay({ chart, series, container, cycleBands = [], c
     const x = timeToX(b.trade_date);
     const yTip = priceToY(b.price);
     if (x == null || yTip == null) return null;
+    // In-bounds only — a badge whose bar is scrolled out of view must not
+    // float over unrelated page areas.
+    if (x < 0 || x > size.width || yTip < 0 || yTip > size.height) return null;
     const text = b.count > 1
       ? `₹${b.amountCr.toFixed(0)}Cr · ${b.count}d`
       : `₹${b.amountCr.toFixed(b.amountCr >= 10 ? 0 : 1)}Cr`;
@@ -232,7 +237,10 @@ export function AnnotationOverlay({ chart, series, container, cycleBands = [], c
         width: '100%',
         height: '100%',
         pointerEvents: 'none',
-        overflow: 'visible',
+        // MUST clip: off-scale coordinates (price above visible range →
+        // negative y) otherwise draw outside the chart, floating over
+        // unrelated page content.
+        overflow: 'hidden',
       }}
     >
       {/* ── Layer 1: cycle bands ── */}
