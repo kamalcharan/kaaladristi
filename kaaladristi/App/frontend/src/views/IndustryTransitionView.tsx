@@ -238,19 +238,18 @@ export default function IndustryTransitionView() {
         title="Industry Transition"
         meta={
           <span className="flex items-center gap-3 flex-wrap">
+            {/* Scope: NSE-only for now. BSE industry mapping needs backfill
+                before it's meaningful; the pill signals scope so users don't
+                read absent BSE-only industries as "no data". */}
+            <span
+              className="text-[10px] font-mono text-accent-indigo bg-accent-indigo/10 border border-accent-indigo/30 px-2 py-1 rounded"
+              title="NSE-only universe for now. BSE industry tagging is being backfilled — full-market coverage lands in a follow-up."
+            >
+              NSE only · BSE coming soon
+            </span>
             {data?.nseAsOfDate && (
               <span className="text-[10px] font-mono text-risk-green bg-risk-green/10 border border-risk-green/30 px-2 py-1 rounded">
                 NSE {data.nseAsOfDate}
-              </span>
-            )}
-            {data?.bseAsOfDate && (
-              <span className={cn(
-                'text-[10px] font-mono px-2 py-1 rounded border',
-                data.bseAsOfDate === data.nseAsOfDate
-                  ? 'text-risk-green bg-risk-green/10 border-risk-green/30'
-                  : 'text-risk-amber bg-risk-amber/10 border-risk-amber/30',
-              )}>
-                BSE {data.bseAsOfDate}{data.bseAsOfDate !== data.nseAsOfDate ? ' · delayed' : ''}
               </span>
             )}
             {data && (
