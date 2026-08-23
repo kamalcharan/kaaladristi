@@ -171,21 +171,22 @@ export default function ScannerArrivalView({ equityId, setupKey }: Props) {
           </KvGrid>
         </Card>
 
-        {/* LT lens */}
+        {/* LT lens — heading/intent come from the adapter when set
+            (bearish presets rename these to Holder / Pressure lenses) */}
         <PersonaCard
           persona="lt"
-          heading="Long-Term Lens"
-          sub="Weekly · patient"
-          intent="Reads pullbacks into structure as the primary reference. Zones observed here have historically been where accumulation prevails."
+          heading={data.personaMeta?.lt.heading ?? 'Long-Term Lens'}
+          sub={data.personaMeta?.lt.sub ?? 'Weekly · patient'}
+          intent={data.personaMeta?.lt.intent ?? 'Reads pullbacks into structure as the primary reference. Zones observed here have historically been where accumulation prevails.'}
           entries={data.personas.ltInvestor}
         />
 
         {/* Swing lens */}
         <PersonaCard
           persona="sw"
-          heading="Swing Lens"
-          sub="Daily · reactive"
-          intent="Reads daily strength and reaction to near-term pivots. Zones are closer to the last bar and more time-sensitive."
+          heading={data.personaMeta?.swing.heading ?? 'Swing Lens'}
+          sub={data.personaMeta?.swing.sub ?? 'Daily · reactive'}
+          intent={data.personaMeta?.swing.intent ?? 'Reads daily strength and reaction to near-term pivots. Zones are closer to the last bar and more time-sensitive.'}
           entries={data.personas.swingTrader}
         />
       </section>

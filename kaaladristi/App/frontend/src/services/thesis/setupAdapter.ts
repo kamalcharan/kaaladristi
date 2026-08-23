@@ -73,6 +73,8 @@ export interface LatestEodRow {
   sniper_inst: number | null;
   delivery_surge_x: number | null;
   avg_amt_22d: number | null;
+  // Distribution columns (Wave 3)
+  volume_divergence_flag: string | null;
 }
 
 /** The equity's master-table row — identity + exchange + industry. */
@@ -200,6 +202,20 @@ export interface SetupData {
    *  reference images). Adapter may leave this undefined; the card
    *  suppresses the box when unset. */
   investorTip?: string;
+  /** Optional lens metadata. Bullish presets keep the default
+   *  Long-Term / Swing lens headings; bearish presets (Weakness
+   *  Confluence, Distribution Warnings) supply Holder / Pressure lens
+   *  headings instead. The view falls back to defaults when unset. */
+  personaMeta?: {
+    lt: LensMeta;
+    swing: LensMeta;
+  };
+}
+
+export interface LensMeta {
+  heading: string;  // "Holder Lens"
+  sub: string;      // "Weekly · exposure"
+  intent: string;   // one-sentence italic intent line
 }
 
 // ── Adapter type + dispatch ─────────────────────────────────────────────
