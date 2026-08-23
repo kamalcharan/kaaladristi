@@ -47,6 +47,18 @@ enrich them separately if needed. Yahoo misses are typically ETFs, brand-
 new listings, and some SMEs — they stay as `industry IS NULL` and the
 next run picks them up automatically once Yahoo has them.
 
+Market cap (migration 172 — Waking Giants / First Ascent)
+---------------------------------------------------------
+mcap = shares × price, decomposed by how fast each part moves:
+  * `shares_outstanding` (slow-moving) is fetched from Yahoo alongside the
+    industry, on a rolling ~SHARES_REFRESH_DAYS cadence per stock. Every
+    attempt (hit or miss) stamps `shares_updated_at` so misses aren't
+    retried nightly.
+  * `mcap_cr` (fast-moving) is rebuilt by `recompute_mcap_from_shares()` —
+    one SQL UPDATE joining each stock's latest close, zero API calls —
+    at the end of every pipeline/CLI run. This replaces the frozen
+    one-time populate_mcap.py snapshot.
+
 Writes go through db.patch — id-scoped, atomic, single-row.
 """
 
@@ -74,6 +86,12 @@ RECENT_EOD_WINDOW_DAYS = 30
 
 # Polite pacing. NSE has soft-blocked us on faster loops historically.
 API_SLEEP_SECONDS = 0.3
+
+# Shares outstanding are slow-moving (QIP / bonus / buyback only), so a
+# stock's Yahoo lookup is re-attempted at most once per this many days.
+# mcap_cr itself stays daily-fresh regardless — recompute_mcap_from_shares
+# rebuilds it from shares × latest close with zero API calls.
+SHARES_REFRESH_DAYS = 45
 
 
 # One-time diagnostic flag so the yfinance import error is loud (printed
@@ -111,14 +129,17 @@ def _fetch_from_yahoo(yahoo_ticker: str) -> Optional[dict]:
         return None
     try:
         info = yf.Ticker(yahoo_ticker).info or {}
-        if not info.get('industry'):
+        industry = info.get('industry')
+        shares = info.get('sharesOutstanding')
+        if not industry and not shares:
             return None
         return {
             'company_name': info.get('longName') or info.get('shortName'),
-            'industry': info.get('industry'),
+            'industry': industry,
             'is_fno': False,     # Yahoo doesn't expose F&O status
             'is_etf': info.get('quoteType', '') == 'ETF',
             'listing_date': None,
+            'shares_outstanding': int(shares) if shares else None,
         }
     except Exception:
         return None
@@ -144,32 +165,70 @@ def _yahoo_ticker_for(equity: dict) -> Optional[str]:
 
 
 def _find_targets(db, cap: Optional[int] = None) -> list[dict]:
-    """Return active equities that are traded but untagged.
+    """Return active, recently-traded equities needing a Yahoo lookup:
+    untagged (industry IS NULL — the original lane), never share-counted,
+    or share-count stale (last attempt > SHARES_REFRESH_DAYS ago).
 
-    One raw SQL query — the client's `filters={'industry': None}` shortcut
-    would compile to `industry = NULL` (never true in SQL); we need
-    `industry IS NULL`. `EXISTS` on km_equity_eod restricts to symbols
-    that actually traded in the recency window so we don't spend API
-    calls on dormant/delisted listings.
+    Raw SQL — the client's `filters={'industry': None}` shortcut would
+    compile to `industry = NULL` (never true); we need `IS NULL`.
+    `EXISTS` on km_equity_eod restricts to symbols that actually traded
+    in the recency window so we don't spend API calls on dormant listings.
 
-    Ordered id DESC so recently-registered symbols get enriched before
-    older tails when the run is capped.
+    Ordering: untagged first (industry drives v_equity_eod_deduped, the
+    higher-stakes gap), then stalest shares, then newest registrations —
+    so a capped pipeline run always spends its budget where it matters.
     """
     sql = """
-      SELECT s.id, s.symbol, s.exchange, s.vendor_codes, s.isin
+      SELECT s.id, s.symbol, s.exchange, s.vendor_codes, s.isin, s.industry
       FROM km_equity_symbols s
       WHERE s.is_active = TRUE
-        AND s.industry IS NULL
+        AND (
+          s.industry IS NULL
+          OR s.shares_updated_at IS NULL
+          OR s.shares_updated_at < CURRENT_DATE - INTERVAL '%s days'
+        )
         AND EXISTS (
           SELECT 1 FROM km_equity_eod e
           WHERE e.equity_id = s.id
             AND e.trade_date >= CURRENT_DATE - INTERVAL '%s days'
         )
-      ORDER BY s.id DESC
-    """ % RECENT_EOD_WINDOW_DAYS  # int constant, safe to inline; keeps params.py-agnostic
+      ORDER BY (s.industry IS NULL) DESC,
+               s.shares_updated_at ASC NULLS FIRST,
+               s.id DESC
+    """ % (SHARES_REFRESH_DAYS, RECENT_EOD_WINDOW_DAYS)  # int constants, safe to inline
     if cap is not None:
         sql += f' LIMIT {int(cap)}'
     return db.execute(sql)
+
+
+def recompute_mcap_from_shares(db) -> int:
+    """Daily mcap freshness: mcap_cr = shares_outstanding × latest close / 1e7.
+
+    One SQL UPDATE, zero API calls — this is what keeps the ₹200 Cr gate
+    (Waking Giants / First Ascent) judging on current prices instead of
+    the frozen populate_mcap.py snapshot. Latest close is taken from the
+    recent-EOD window so a suspended stock keeps its last known mcap
+    rather than flipping to a stale-price value from years ago.
+    """
+    if not hasattr(db, 'execute_write'):
+        print('  [mcap] db client lacks execute_write — recompute skipped')
+        return 0
+    sql = """
+      WITH latest AS (
+        SELECT DISTINCT ON (equity_id) equity_id, close
+        FROM km_equity_eod
+        WHERE trade_date >= CURRENT_DATE - INTERVAL '%s days'
+          AND close IS NOT NULL AND close > 0
+        ORDER BY equity_id, trade_date DESC
+      )
+      UPDATE km_equity_symbols s
+      SET mcap_cr = ROUND(s.shares_outstanding::numeric * l.close::numeric / 10000000, 2)
+      FROM latest l
+      WHERE l.equity_id = s.id
+        AND s.shares_outstanding IS NOT NULL
+        AND s.shares_outstanding > 0
+    """ % RECENT_EOD_WINDOW_DAYS
+    return db.execute_write(sql)
 
 
 def enrich_untagged_equities(
@@ -190,11 +249,13 @@ def enrich_untagged_equities(
         'targets': len(targets),
         'nse_hits': 0,
         'yahoo_hits': 0,
+        'shares_hits': 0,
         'failed': 0,
     }
 
     if verbose:
-        print(f'  [enrich] {len(targets)} untagged active equities with recent EOD')
+        print(f'  [enrich] {len(targets)} active equities needing enrichment '
+              f'(untagged / shares missing or stale) with recent EOD')
 
     if not targets or dry_run:
         if dry_run:
@@ -212,6 +273,7 @@ def enrich_untagged_equities(
     # no industry for many ETFs, brand-new listings, and some SMEs) is
     # marked failed and can be resolved later with a manual step —
     # dropping NSE from the daily loop keeps runtime linear.
+    today_iso = date.today().isoformat()
     for i, eq in enumerate(targets, start=1):
         exchange = eq.get('exchange', '')
 
@@ -221,22 +283,37 @@ def enrich_untagged_equities(
 
         if not meta:
             summary['failed'] += 1
+            # Stamp the attempt so a Yahoo miss retries after
+            # SHARES_REFRESH_DAYS, not every night. Rows still untagged
+            # stay targeted via the industry-IS-NULL lane regardless.
+            db.patch('km_equity_symbols', {'id': eq['id']},
+                     {'shares_updated_at': today_iso})
             if verbose and summary['failed'] <= 20:
                 print(f'    [miss]  {exchange} {eq["symbol"]:20} (isin={eq.get("isin")}, yahoo={yahoo_ticker})')
             continue
 
         summary['yahoo_hits'] += 1
+        if meta.get('shares_outstanding'):
+            summary['shares_hits'] += 1
         if verbose and summary['yahoo_hits'] <= 10:
             # Log the first few hits so the user sees Yahoo working before
             # the every-100 progress line kicks in on longer runs.
-            print(f'    [ok]    {exchange} {eq["symbol"]:20} -> {meta["industry"][:40]}')
+            ind = (meta.get('industry') or '—')[:40]
+            sh = meta.get('shares_outstanding')
+            print(f'    [ok]    {exchange} {eq["symbol"]:20} -> {ind}'
+                  f'{f"  shares={sh:,}" if sh else ""}')
 
-        patch = {
-            'company_name': meta['company_name'],
-            'industry':     meta['industry'],
-            'is_fno':       meta['is_fno'],
-            'is_etf':       meta['is_etf'],
-        }
+        patch = {'shares_updated_at': today_iso}
+        if meta.get('shares_outstanding'):
+            patch['shares_outstanding'] = meta['shares_outstanding']
+        # Never overwrite an existing industry — the shares-refresh lane
+        # now targets tagged rows too, and Yahoo's vocabulary can drift
+        # from what the platform already carries.
+        if meta.get('industry') and not eq.get('industry'):
+            patch['company_name'] = meta['company_name']
+            patch['industry'] = meta['industry']
+            patch['is_fno'] = meta['is_fno']
+            patch['is_etf'] = meta['is_etf']
         if meta.get('listing_date'):
             patch['listing_date'] = meta['listing_date']
         db.patch('km_equity_symbols', {'id': eq['id']}, patch)
@@ -247,7 +324,8 @@ def enrich_untagged_equities(
 
     if verbose:
         print(f'  [enrich] done. nse={summary["nse_hits"]}  '
-              f'yahoo={summary["yahoo_hits"]}  failed={summary["failed"]}')
+              f'yahoo={summary["yahoo_hits"]}  shares={summary["shares_hits"]}  '
+              f'failed={summary["failed"]}')
     return summary
 
 
@@ -258,10 +336,13 @@ def enrich_untagged_equities(
 
 def enrich_for_pipeline(conn, trade_date: date, force: bool = False) -> tuple[int, str]:
     """Pipeline-callable enrichment. Capped so a large backlog can't stall
-    a nightly job — the rest gets picked up on the next run."""
+    a nightly job — the rest gets picked up on the next run. Always ends
+    with the mcap recompute so mcap_cr tracks today's closes even on runs
+    with no Yahoo work."""
     db = get_db()
     cap = None if force else PIPELINE_PER_RUN_CAP
     summary = enrich_untagged_equities(db, cap=cap, dry_run=False, verbose=False)
+    recompute_mcap_from_shares(db)
     rows = summary['nse_hits'] + summary['yahoo_hits']
     # 'completed' if we made progress or there was nothing to do; 'partial'
     # only if we saw work and hit zero (all API attempts failed).
@@ -281,10 +362,13 @@ def run(dry_run: bool = False, cap: Optional[int] = None):
     print('=' * 50)
     db = get_db()
     summary = enrich_untagged_equities(db, cap=cap, dry_run=dry_run, verbose=True)
+    if not dry_run:
+        refreshed = recompute_mcap_from_shares(db)
+        print(f'  [mcap] recomputed mcap_cr from shares × latest close: {refreshed} rows')
     print()
     print(f'  Summary: targets={summary["targets"]}  '
           f'nse={summary["nse_hits"]}  yahoo={summary["yahoo_hits"]}  '
-          f'failed={summary["failed"]}')
+          f'shares={summary["shares_hits"]}  failed={summary["failed"]}')
 
 
 if __name__ == '__main__':

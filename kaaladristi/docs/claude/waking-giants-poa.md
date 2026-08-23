@@ -71,8 +71,20 @@ avg of close×volume):
 
 ⚠ **mcap_cr NULL excludes unfairly**: 725 of the Giants pool and 146
 of First Ascent have NULL mcap (the recently-admitted full-universe
-symbols). Before shipping, run a targeted symbol-enrichment pass
-(pipeline2 `symbol_enrichment` dimension / enrich_equity_metadata.py,
-already built) over the age-passed pool so the mcap gate judges on
-data, not absence. Dormancy (step 2) will then cut 479+ down toward
-the audit's expected 100–150.
+symbols). **Permanent fix built 2026-08-23 (migration 172)** — mcap is
+decomposed as shares × price: `shares_outstanding` (slow-moving) is
+fetched from Yahoo by `enrich_equity_metadata.py` on a rolling ~45-day
+cadence (`shares_updated_at` stamps every attempt so misses don't
+retry nightly; existing `industry` is never overwritten), and
+`mcap_cr` is rebuilt daily by `recompute_mcap_from_shares()` — one
+SQL UPDATE from shares × latest close, zero API calls — at the end of
+every pipeline `symbol_enrichment` run. This replaces the frozen
+one-time `populate_mcap.py` snapshot (NSE quote API, now 403-blocked).
+Owner steps: run migration 172 in pgAdmin, then locally
+`python scripts/enrich_equity_metadata.py` (full, ~20 min for ~3,500
+stocks at 0.3 s/call) or let the nightly cap of 200 catch up over
+~18 runs. Note: mcap *growth* as a signal ≈ `d30/d365_pct_chng`
+(shares are near-constant); the new columns add tier-crossing and
+dilution/buyback visibility, not a separate mcap history need.
+Dormancy (step 2) will then cut 479+ down toward the audit's expected
+100–150.
