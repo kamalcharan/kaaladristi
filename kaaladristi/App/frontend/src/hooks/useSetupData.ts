@@ -27,7 +27,11 @@ import '@/services/thesis/adapters';
 
 const WEEKLY_LOOKBACK_YEARS = 5;
 
-const WEEKLY_COLS = 'trade_date,open,high,low,close,volume,magic_rs,magic_rs_zone,stage';
+// NOTE: km_equity_weekly does NOT carry `stage` — that column lives on
+// km_equity_eod only. The adapter's WeeklyBar type marks stage as optional
+// and the cycle-labels feature (which is the only consumer of weekly.stage)
+// is deferred to Phase 2.5 pending the HTML overlay layer for banded ranges.
+const WEEKLY_COLS = 'trade_date,open,high,low,close,volume,magic_rs,magic_rs_zone';
 const LATEST_COLS = 'trade_date,close,pct_chng,pivot_pp,pivot_r1,pivot_r2,pivot_s1,pivot_s2,ema_20,sma_50,sma_150,w52_high,w52_low,stage,magic_rs,magic_rs_zone,rs_percentile,rvol,delivery_pct,accum_distrib,flow_type';
 const SYMBOL_COLS = 'id,symbol,company_name,exchange,industry,isin,mcap_cr';
 
