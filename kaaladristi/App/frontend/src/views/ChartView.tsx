@@ -245,6 +245,25 @@ export default function ChartView() {
   const isIndex = type === 'index';
   const isEquity = type === 'equity';
 
+  // ── Chart data (full history for TradingChart) — declared BEFORE the
+  // story block because the stage-based story fallback reads the latest
+  // bar's stage. dateKey: the page is commonly left open through a
+  // session; a day change refetches automatically (same as useScan.ts).
+  const { latestDataDate: chartDateKey } = usePipelineStatus();
+  const { data: rows = [], isLoading, isError, error, refetch } = useQuery({
+    queryKey: ['chart', type, numId, range, tf, chartDateKey ?? 'unknown'],
+    queryFn: () =>
+      isEquity
+        ? (tf === 'daily' ? fetchEquityEodById(numId, range) : fetchEquityTimeframeById(numId, tf))
+        // Index W/M: no aggregate tables exist — resample full daily history
+        // client-side (indices carry no delivery data, so nothing is lost)
+        : (tf === 'daily'
+            ? fetchIndicatorDataById(numId, range)
+            : fetchIndicatorDataById(numId, 'MAX').then((r) => resampleRows(r, tf))),
+    staleTime: 120_000,
+    enabled: !!numId && (isIndex || isEquity),
+  });
+
   // Scan presence — which presets currently contain this stock. Moved up
   // from the pulse block because the story layer derives from it on
   // direct navigation (no ?setup= in the URL).
@@ -258,10 +277,25 @@ export default function ChartView() {
     [isEquity, scanPresence.matchedScans],
   );
 
-  // Direct navigation (no ?setup=) still gets a story when the stock is
-  // in at least one adapter-backed scan — the top presence match becomes
-  // the effective setup. An explicit ?setup= always wins (deep links).
-  const effectiveSetup = setupParam ?? storyChoices[0]?.id ?? null;
+  // Stage-based fallback lens — a story ALWAYS shows for an equity, even
+  // while scan presence is still computing or when the stock is in no
+  // scan today: the latest bar's Weinstein stage picks the structural
+  // read that fits (weekly/monthly rows carry no stage → generic watch).
+  const latestStage = isEquity && rows.length > 0
+    ? ((rows[rows.length - 1] as { stage?: string | null }).stage ?? null)
+    : null;
+  const stageFallback = !isEquity || rows.length === 0 ? null
+    : latestStage === 'S2'                                    ? 'stage_2_leaders'
+    : latestStage === 'S2_CANDIDATE'                          ? 'stage_2_watch'
+    : latestStage === 'S3'                                    ? 'stage_3_watch'
+    : latestStage === 'S4'                                    ? 'stage_4_leaders'
+    : latestStage === 'S1' || latestStage === 'S1_CANDIDATE'  ? 'quiet_accumulation'
+    : 'stage_2_watch';
+
+  // Direct navigation (no ?setup=) still gets a story: the top
+  // adapter-backed presence match, else the stage fallback. An explicit
+  // ?setup= always wins (deep links).
+  const effectiveSetup = setupParam ?? storyChoices[0]?.id ?? stageFallback;
 
   // Default the toggle to Story View whenever a story exists — but only
   // until the user touches the toggle themselves.
@@ -334,24 +368,6 @@ export default function ChartView() {
     }
     return { cycleBands, callouts };
   }, [setupDataForPlay.data]);
-
-  // ── Chart data (full history for TradingChart) ──
-  // dateKey: the main chart page is commonly left open through a session —
-  // same fix as hooks/useScan.ts, so a day change refetches automatically.
-  const { latestDataDate: chartDateKey } = usePipelineStatus();
-  const { data: rows = [], isLoading, isError, error, refetch } = useQuery({
-    queryKey: ['chart', type, numId, range, tf, chartDateKey ?? 'unknown'],
-    queryFn: () =>
-      isEquity
-        ? (tf === 'daily' ? fetchEquityEodById(numId, range) : fetchEquityTimeframeById(numId, tf))
-        // Index W/M: no aggregate tables exist — resample full daily history
-        // client-side (indices carry no delivery data, so nothing is lost)
-        : (tf === 'daily'
-            ? fetchIndicatorDataById(numId, range)
-            : fetchIndicatorDataById(numId, 'MAX').then((r) => resampleRows(r, tf))),
-    staleTime: 120_000,
-    enabled: !!numId && (isIndex || isEquity),
-  });
 
   // ── Visual Pulse data — index uses useVisualPulse, equity uses useEquityVisualPulse ──
   const indexPulse = useVisualPulse(isIndex ? numId : null);
@@ -1241,6 +1257,11 @@ export default function ChartView() {
                 {!setupParam && storyChoices.length > 0 && (
                   <span className="text-[10px] text-muted font-mono">
                     story from scan presence
+                  </span>
+                )}
+                {!setupParam && storyChoices.length === 0 && (
+                  <span className="text-[10px] text-muted font-mono">
+                    {scanPresence.isLoading ? 'structural story · checking scans…' : 'structural story · not in a scan today'}
                   </span>
                 )}
               </div>
