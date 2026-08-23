@@ -241,6 +241,10 @@ export function AnnotationOverlay({ chart, series, container, cycleBands = [], c
         // negative y) otherwise draw outside the chart, floating over
         // unrelated page content.
         overflow: 'hidden',
+        // lightweight-charts' internal canvases carry explicit z-index
+        // (1/2) — without a higher z-index here the chart paints OVER
+        // the overlay and every annotation is invisible.
+        zIndex: 10,
       }}
     >
       {/* ── Layer 1: cycle bands ── */}
