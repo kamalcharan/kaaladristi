@@ -99,9 +99,28 @@ export const stage2LeadersAdapter: SetupAdapter = (weekly, latest, identity) => 
     chartAnnotations,
     personas,
     whatConfirms,
+    investorTip: buildInvestorTip(cycleLabels.length, currentSituation.verdict),
   };
   return data;
 };
+
+/**
+ * Editor's Note voice — SEBI-observational, never directive. Reads the
+ * cycle count and the confirmation verdict and writes a one-liner about
+ * WHAT this chart is showing, not what to DO about it.
+ */
+function buildInvestorTip(cycleCount: number, verdict: string): string {
+  if (cycleCount >= 3) {
+    return 'A multi-regime chart: prior cycles anchor how the current regime should be read. Zones that co-locate with structural levels historically carried more weight than zones sitting mid-air.';
+  }
+  if (cycleCount === 2) {
+    return 'Two regimes on the chart — the transition line is the interpretive anchor. The current regime is young; each confirmation below adds evidence, not certainty.';
+  }
+  if (cycleCount === 1) {
+    return 'Single-regime chart. The pattern is one act, not a sequence — persona zones read against the same trend, not against a prior cycle.';
+  }
+  return `Setup verdict: ${verdict}. No labeled cycles yet — insufficient stage history. The read is single-timeframe.`;
+}
 
 // ── Header ──────────────────────────────────────────────────────────────
 
@@ -167,20 +186,20 @@ function buildPersonas(latest: LatestEodRow, weekly: WeeklyBar[], ema50Weekly: n
     {
       entryNo: 1,
       price: priorWeekHigh20,
-      label: 'Best historical',
-      rationale: 'Weekly breakout above the prior 20-week high with a weekly-close + volume expansion. Highest-probability structural entry.',
+      label: 'Structural breakout zone',
+      rationale: 'Weekly close above the prior 20-week high with volume expansion. The highest-agreement setup activation zone in this preset historically.',
     },
     {
       entryNo: 2,
       price: ema50Weekly,
-      label: 'Early / higher-risk',
-      rationale: 'Pullback reclaim of the weekly 50 EMA — earlier trigger, wider risk. Requires the trend to already be structurally intact.',
+      label: 'Structural pivot zone',
+      rationale: 'Pullback reclaim of the weekly 50 EMA — earlier zone, wider risk. Only relevant while the primary trend is structurally intact.',
     },
     {
       entryNo: 3,
       price: priorConsolBase,
-      label: 'Add-on',
-      rationale: 'Continuation base — pullback into the prior 8-week consolidation top and hold. Ideal for scaling into an existing position.',
+      label: 'Continuation zone',
+      rationale: 'Prior 8-week consolidation top. Reads as continuation while the setup remains active — a secondary reference within the same regime.',
     },
   ];
 
@@ -188,20 +207,20 @@ function buildPersonas(latest: LatestEodRow, weekly: WeeklyBar[], ema50Weekly: n
     {
       entryNo: 1,
       price: latest.pivot_r1,
-      label: 'Breakout',
-      rationale: 'Break above the daily pivot R1 with rvol > 1.5. Fastest-resolving swing entry.',
+      label: 'Break-of-pivot zone',
+      rationale: 'Above the daily pivot R1 with rvol > 1.5. The fastest-resolving swing reference in this preset.',
     },
     {
       entryNo: 2,
       price: latest.pivot_pp,
-      label: 'Mid-range pullback',
-      rationale: 'Continuation entry on a pullback to the daily pivot PP. Tighter stop than the breakout entry.',
+      label: 'Mid-range zone',
+      rationale: 'Pullback to the daily pivot PP. Tighter observed range than the break zone above.',
     },
     {
       entryNo: 3,
       price: pickBest(latest.pivot_s1, latest.ema_20, Math.max),
-      label: 'Support test',
-      rationale: 'Deeper pullback to the daily pivot S1 or 20 EMA. Still in Stage 2 territory — good risk/reward, needs confirmation.',
+      label: 'Support-test zone',
+      rationale: 'Pullback to daily pivot S1 or 20 EMA. Still within Stage 2 territory — the setup remains active only if this holds.',
     },
   ];
 
