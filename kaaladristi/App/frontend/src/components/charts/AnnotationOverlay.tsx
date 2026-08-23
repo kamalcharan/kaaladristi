@@ -137,6 +137,21 @@ export function AnnotationOverlay({ chart, series, container, cycleBands = [], c
     const y = series.priceToCoordinate(p);
     return y == null || !Number.isFinite(y) ? null : y;
   };
+  /** Same as priceToY but clamps to the visible plot edge when the price
+   *  is off-scale (above the visible max or below the visible min). Used
+   *  by persona callouts so setup zones ABOVE the current visible range
+   *  still show up as a pill at the top edge — the user can then zoom
+   *  out to see the full band. Filtering them out entirely (the naive
+   *  behavior) hides the story on any view that doesn't include all
+   *  setup levels. */
+  const priceToYClamped = (p: number): number => {
+    const y = series.priceToCoordinate(p);
+    if (y != null && Number.isFinite(y) && y >= 0 && y <= size.height) return y;
+    // Off-scale — compare against the current visible top/bottom price
+    const topPrice = series.coordinateToPrice(0);
+    if (topPrice != null && p > topPrice) return 8;
+    return size.height - 30;
+  };
   const timeToX = (iso: string): number | null => {
     const x = chart.timeScale().timeToCoordinate(iso as unknown as Time);
     return x == null || !Number.isFinite(x) ? null : x;
@@ -194,8 +209,7 @@ export function AnnotationOverlay({ chart, series, container, cycleBands = [], c
     color: string;
   }> = [];
   const withY = callouts
-    .map((c) => ({ ...c, y: priceToY(c.price), color: c.persona === 'lt' ? TOK.lt : TOK.sw }))
-    .filter((c): c is typeof c & { y: number } => c.y != null)
+    .map((c) => ({ ...c, y: priceToYClamped(c.price), color: c.persona === 'lt' ? TOK.lt : TOK.sw }))
     .sort((a, b) => a.y - b.y);
   let lastBottom = -Infinity;
   for (const c of withY) {
@@ -306,10 +320,11 @@ export function AnnotationOverlay({ chart, series, container, cycleBands = [], c
             <rect
               x={boxX} y={m.boxY}
               width={CALLOUT_W} height={CALLOUT_H}
-              rx={2}
-              fill={`color-mix(in srgb, ${TOK.ground} 90%, transparent)`}
-              stroke={`color-mix(in srgb, ${m.color} 45%, transparent)`}
-              strokeWidth={0.7}
+              rx={3}
+              fill={TOK.ground}
+              stroke={m.color}
+              strokeWidth={1.2}
+              opacity={0.98}
             />
             <text x={boxX + 7} y={m.boxY + 9}
               fontFamily="Inter, system-ui, sans-serif"
