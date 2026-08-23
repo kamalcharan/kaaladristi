@@ -220,9 +220,17 @@ export default function ChartView() {
   const [storyMode, setStoryMode] = useState<'view' | 'play'>(setupParam ? 'view' : 'play');
   // If landing with ?setup= but no explicit ?tab=, land on Chart & Replay so
   // the Story View / Story Play toggle is where the user sees it.
+  // Arriving with ?setup= ALWAYS lands on Chart & Replay, whatever ?tab=
+  // says — old bookmarks carry tab=thesis from when the story view lived
+  // there. One-shot (ref-guarded) so the user can still switch tabs
+  // afterwards without being yanked back.
+  const setupTabForcedRef = useRef(false);
   useEffect(() => {
-    if (setupParam && !tabParam && dvTab !== 'chart') setDvTab('chart');
-  }, [setupParam, tabParam, dvTab]);
+    if (setupParam && !setupTabForcedRef.current) {
+      setupTabForcedRef.current = true;
+      if (dvTab !== 'chart') setDvTab('chart');
+    }
+  }, [setupParam, dvTab]);
   // User controls the timeframe — no forced snapping. Story View's cycle
   // bands + editorial layer come from setupData (weekly-computed) and
   // render via the overlay regardless of the chart's active tf.
