@@ -14,7 +14,106 @@ Owner decision (2026-08-22 session):
 
 ## Scope in one sentence
 
-Extend `/chart/equity/:id` with a **Setup tab** that renders the annotated-chart research view shown in the reference images, for any stock the caller marks as a "setup" (Stage 2 Leaders v1; Flower Pot Burst / Waking Giants / others plug in later via the same view).
+**Extend the existing Thesis tab** on `/chart/equity/:id` with a **scanner-arrival view** that renders the annotated-chart research shown in the reference images. Same tab, one more axis of adaptation (`setup=<preset>`) alongside the existing position / watchlist / none states.
+
+## Decisions locked (2026-08-22)
+
+- **Surface:** the **existing Thesis tab** on `/chart/equity/:id` (do NOT create a new tab — one already exists, deep-linkable via `?tab=thesis`, already relationship-aware).
+- **New axis:** URL param `?setup=<preset>` (e.g. `?tab=thesis&setup=stage_2`). When present, the tab renders the scanner-arrival view described here, layered *before* / *alongside* the existing position/watchlist/cold read (see composition below).
+- **Personas:** LT Investor + Swing Trader.
+- **v1 coverage:** Stage 2 Leaders only. Flower Pot Burst / Waking Giants wire in via new adapters (no tab changes) once the UX is validated.
+- **Do NOT rebuild:** existing `services/thesis.ts` (`computeThesis`, `buildPillars`, `buildStoryEvents`), existing `ThesisTab.tsx` chrome (VaNi narration surface, position form) — all preserved. The scanner-arrival view is a new SECTION rendered inside the current tab, not a replacement.
+
+## Composition inside the existing Thesis tab
+
+The tab today branches on `relationship` (`position` / `watchlist` / `none`). The scanner-arrival view is a **new section** rendered at the top of the tab whenever `?setup=<preset>` is present in the URL. It composes cleanly with what's already there:
+
+```
+┌────────── Thesis tab body ───────────┐
+│                                       │
+│  [ NEW ]  Scanner-Arrival Section     │  ← only when ?setup=<preset>
+│    · Annotated Weekly Chart          │    reads SetupData from adapter
+│    · Setup Summary card              │
+│    · Persona Entries (LT / Swing)    │
+│    · What Confirms checklist         │
+│                                       │
+│  ─────────────────────────────────    │
+│                                       │
+│  [ EXISTING ]  Relationship view      │  ← today's tab content, unchanged
+│    · Verdict hero + Pillars          │    (position P&L, or watchlist read,
+│    · Signal timeline                 │     or cold-setup read)
+│    · Position form / P&L / posture   │
+│    · VaNi narration                  │
+│                                       │
+└───────────────────────────────────────┘
+```
+
+Effect: a scanner sends the user in with `?setup=stage_2`, they land on Thesis and immediately see the annotated setup answering "why am I looking at this?". Scrolling reveals the deeper thesis engine (pillars, signals, P&L if held). If the user later adds a position, the scanner-arrival section stays available above; the position content lands below as it does today.
+
+## Reusability contract — the adapter pattern
+
+**One page, per-preset adapter.** All setup-specific logic (entry zones, what-confirms criteria, cycle labels, narrative tone) lives in a per-preset adapter module. Adding a new setup = writing one adapter file; the ThesisTab code and the four new presentation components never branch on preset name.
+
+```
+components/domain/StockCockpit/
+  ThesisTab.tsx                  ← existing; mounts <ScannerArrivalView> above today's content
+                                    when ?setup=<preset> is present
+  ScannerArrival/
+    ScannerArrivalView.tsx       ← the new section shell
+    AnnotatedWeeklyChart.tsx     ← universal chart renderer
+    SetupSummary.tsx             ← universal right-column card
+    PersonaEntries.tsx           ← universal 2-column entries card
+    WhatConfirms.tsx             ← universal checklist card
+
+services/thesis/
+  setupAdapter.ts                ← the SetupData contract (types) + dispatcher
+  adapters/
+    stage2.ts                    ← Stage 2 Leaders (v1)
+    wakingGiants.ts              ← later
+    flowerPot.ts                 ← later
+
+hooks/
+  useSetupData.ts                ← fetches weekly OHLC + latest EOD, calls the
+                                    right adapter, returns SetupData
+```
+
+Note: co-located under the existing `StockCockpit/` folder to keep the tab's components together, not a separate `Thesis/` folder that would confuse ownership.
+
+**The `SetupData` contract (draft):**
+
+```ts
+interface SetupData {
+  header:       { symbol, name, exchange, close, pct_chng, rs_percentile, phase };
+  keyLevels:    { pivot, immediateResistance, majorResistance,
+                  immediateSupport, strongSupport, ema50 };
+  currentSituation: { verdict, narrative /* 2-3 lines */ };
+  chartAnnotations: {
+    cycleLabels:  Array<{ from, to, label, tone }>;   // "Old Stage 2" etc.
+    entryZones:   Array<{ priceLow, priceHigh, label, persona, tone }>;
+    horizontalLines: Array<{ price, label, tone }>;    // key levels on chart
+  };
+  personas: {
+    ltInvestor: Array<{ entryNo, price, label, rationale }>;  // 3 entries
+    swingTrader: Array<{ entryNo, price, label, rationale }>; // 3 entries
+  };
+  whatConfirms: Array<{ label, state: 'met'|'pending'|'failed', explain }>;
+  investorTip?: string;   // one-liner, template-filled per stock
+}
+```
+
+**Rule:** no `if (preset === 'stage_2')` inside `ThesisTab.tsx` or its four child components. Ever. Adapter is the only place preset semantics live.
+
+**Adapter signature:**
+
+```ts
+type SetupAdapter = (
+  weekly: WeeklyBar[],
+  latest: EquityEodRow,
+  symbol: EquitySymbolRow,
+) => SetupData;
+```
+
+That's the whole contract. Waking Giants ships as one new file — `adapters/wakingGiants.ts` — that reads the same inputs plus WG-specific columns (from its future signals table) and returns the same shape.
 
 ## Layout (grounded in the reference images)
 
@@ -120,32 +219,31 @@ Renders as `lightweight-charts` price-line / area annotation.
 
 ## Implementation phases
 
-Numbered so each phase ships an independently-mergeable slice.
+Numbered so each phase ships an independently-mergeable slice. Every phase builds toward "click a Stage 2 Leaders row → land on Thesis tab with the annotated setup at the top." The existing tab keeps working the whole time.
 
-### Phase 1 — Annotated weekly chart component (session 1)
-`components/domain/StoryPage/AnnotatedWeeklyChart.tsx` — takes `(bars, keyLevels, entryZones, cycleLabels)` and renders. Pure component, storybook-ready with mock data.
+### Phase 1 — Adapter contract + Stage 2 adapter (session 1)
+`services/thesis/setupAdapter.ts` — the `SetupData` TypeScript type + a `getSetupAdapter(key)` dispatcher.
+`services/thesis/adapters/stage2.ts` — reads `(weekly, latest, symbol)`, returns `SetupData`: key levels, cycle labels, entry zones (six entries across two personas), what-confirms checklist. Deterministic, no async, no LLM.
+**Ships without any UI changes** — adapter is testable in isolation.
 
-### Phase 2 — Setup Summary + Current Situation card (session 1-2)
-`components/domain/StoryPage/SetupSummary.tsx` — right-column card. Reads a `SetupData` object; no fetching inside.
-`services/setupNarrative.ts` — 2-3 line narrative generator (VaNi-backed).
+### Phase 2 — AnnotatedWeeklyChart component (session 1-2)
+`components/domain/StockCockpit/ScannerArrival/AnnotatedWeeklyChart.tsx` — takes `bars + chartAnnotations` and renders the annotated weekly chart with EMA 50 overlay, cycle-label bands, entry-zone shading, numbered entry markers, key-level horizontal lines.
 
-### Phase 3 — Persona split + What-Confirms (session 2)
-`components/domain/StoryPage/PersonaEntries.tsx` — LT / Swing three-column card.
-`components/domain/StoryPage/WhatConfirms.tsx` — checklist card.
-Both take pre-computed inputs.
+### Phase 3 — Setup Summary + Persona + What-Confirms cards (session 2)
+Three universal presentation components under the same folder. All read from `SetupData` — no branching on preset. Rendered as three sections in the ScannerArrivalView shell.
 
-### Phase 4 — Data hook + page shell (session 2-3)
-`hooks/useSetupData.ts` — fetches `km_equity_weekly` (last 5y) + `km_equity_eod` latest + walks the stage series → returns the fully-derived `SetupData` object.
-`views/StoryPageView.tsx` — new page composing the four components.
+### Phase 4 — Data hook + ScannerArrivalView shell (session 2-3)
+`hooks/useSetupData.ts` — fetches `km_equity_weekly` (5y for this equity) + `km_equity_eod` latest, calls the right adapter via `getSetupAdapter(setupKey)`, returns a fully-derived `SetupData`.
+`ScannerArrivalView.tsx` — composes the four components using data from the hook. Loading + error states + "no setup for this stock" fallback.
 
-### Phase 5 — Wire into `/chart/equity/:id` (session 3)
-Add "Setup" tab. Enable it when the referring scanner is Stage 2 Leaders (URL param `?from=stage_2_leaders` or `?setup=stage_2`). Default tab stays the existing chart.
+### Phase 5 — Wire into existing ThesisTab (session 3)
+Read `?setup=<preset>` from the URL inside `ThesisTab.tsx`. When present, mount `<ScannerArrivalView setup={preset} equityId={equityId} />` at the top of the tab body, above the existing relationship view. Zero regressions on the current position/watchlist/none flows.
 
-### Phase 6 — Wire from the scanner list (session 3)
-`views/ScanView.tsx`: row click for Stage 2 Leaders sends the user to `/chart/equity/:id?setup=stage_2`. All other scanners continue to open the current chart view (no regression).
+### Phase 6 — Wire from Stage 2 Leaders row click (session 3)
+`views/ScanView.tsx`: for the `stage_2_leaders` preset, the row-click URL becomes `/chart/equity/:id?tab=thesis&setup=stage_2`. Other scanners unchanged — they still open the default chart tab.
 
-### Phase 7 — Handoff-ready for Waking Giants (later)
-When WG ships its own preset, the row click sends `?setup=waking_giants`. `useSetupData` learns a `wg` variant of entry-zone / what-confirms logic. Same view, different setup semantics.
+### Phase 7 — Handoff-ready for Waking Giants / Flower Pot Burst (later)
+When each new scanner ships, add one adapter file (`adapters/wakingGiants.ts`, `adapters/flowerPot.ts`) and route its row click to `?setup=waking_giants` / `?setup=flower_pot`. The tab, chart component, and three cards never change.
 
 ## Non-goals (v1)
 
@@ -164,9 +262,9 @@ When WG ships its own preset, the row click sends `?setup=waking_giants`. `useSe
 
 ## Open questions (owner input needed before Phase 5)
 
-1. **New route or extend the existing chart route?** Extending keeps deep-link continuity; a new `/setup/:id` route is cleaner. Recommendation: extend + `?setup=<preset>` URL param.
-2. **Which scanners get Setup mode in v1?** Stage 2 Leaders is the pilot. Should we also enable it for Flower Pot Burst on day one, or wait until WG lands? Recommendation: pilot only Stage 2 Leaders — measure page load, feedback, then enable FPB.
-3. **Copy of the "Investor Tip" green box in the reference images.** It's a house-voice one-liner. Owner-authored per setup type, or LLM-generated? Recommendation: template + LLM-fill per stock context.
+1. ~~New route or extend the existing chart route?~~ **DECIDED 2026-08-22:** extend the existing Thesis tab.
+2. **Which scanners get Setup mode in v1?** Stage 2 Leaders is the pilot. Enable Flower Pot Burst on day one, or wait? *Recommendation: pilot Stage 2 Leaders only.*
+3. **"Investor Tip" green box copy** — owner-authored per setup type, or LLM-generated per stock? *Recommendation: template + LLM-fill.*
 
 ## Related in-repo work
 
