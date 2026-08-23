@@ -317,14 +317,14 @@ function PersonaCard({
         {intent}
       </p>
       <ol style={{ listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 0, padding: 0, margin: 0 }}>
-        {entries.map((e, i) => (
+        {entries.filter((e) => e.price != null && Number.isFinite(e.price)).map((e, i, arr) => (
           <li
             key={e.entryNo}
             style={{
               display: 'grid', gridTemplateColumns: '28px 1fr auto',
               alignItems: 'baseline', gap: 12,
               padding: '12px 0',
-              borderBottom: i === entries.length - 1 ? 'none' : `1px solid ${T.rule}`,
+              borderBottom: i === arr.length - 1 ? 'none' : `1px solid ${T.rule}`,
             }}
           >
             <span style={{

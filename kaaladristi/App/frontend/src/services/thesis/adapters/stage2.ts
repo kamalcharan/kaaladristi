@@ -319,6 +319,18 @@ function fmt(v: number | null | undefined): string {
 // ── Cycle Labels ────────────────────────────────────────────────────────
 
 function buildCycleLabels(weekly: WeeklyBar[]): CycleLabel[] {
+  const stageBased = buildFromStage(weekly);
+  if (stageBased.length > 0) return stageBased;
+  // Fallback — km_equity_eod.stage is NULL for the stock's base years
+  // (a common gap: the classifier stamps forward from when it first ran,
+  // so most Stage 2 breakouts have NULL for the very base period that
+  // MADE them a Stage 2 breakout). Derive regimes from price shape
+  // instead — no DB dependency, works for every stock with ≥40 weekly
+  // bars.
+  return buildFromPriceShape(weekly);
+}
+
+function buildFromStage(weekly: WeeklyBar[]): CycleLabel[] {
   if (weekly.length === 0) return [];
   const labels: CycleLabel[] = [];
   let runStart = 0;
@@ -341,8 +353,77 @@ function buildCycleLabels(weekly: WeeklyBar[]): CycleLabel[] {
     runStart = i;
     runStage = s;
   }
-  // Final run
   emit(runStart, weekly.length - 1, runStage);
+  return labels;
+}
+
+/**
+ * Price-shape regime detector — the fallback that runs when stage data
+ * is missing. Identifies (up to) four regimes from the weekly bars:
+ *
+ *   1. Prior Uptrend  — leading up to the highest close in the first
+ *      two-thirds of history (the "old cycle high")
+ *   2. Correction     — from that peak down to the lowest close in the
+ *      window between the peak and the last 15% of history
+ *   3. Long Base      — from the trough forward, while close stays
+ *      within ±20% of the trough
+ *   4. Recovery       — from the end of the base to now
+ *
+ * A regime is emitted only when it lasts ≥8 weeks — noise wouldn't earn
+ * a labeled band. Returns [] when the archetype doesn't fit (e.g. a
+ * long steady uptrend with no correction).
+ */
+function buildFromPriceShape(weekly: WeeklyBar[]): CycleLabel[] {
+  const N = weekly.length;
+  if (N < 40) return [];
+  const closes = weekly.map((b) => b.close);
+  const dates  = weekly.map((b) => b.trade_date);
+
+  // Find the highest close in the first 2/3 of history — that's the peak
+  // of the "prior" regime.
+  const peakSearchEnd = Math.floor(N * 0.67);
+  let peakIdx = 0;
+  for (let i = 0; i <= peakSearchEnd; i++) if (closes[i] > closes[peakIdx]) peakIdx = i;
+  const peakPrice = closes[peakIdx];
+
+  // Find the lowest close between peak+1 and the last 15% of history —
+  // the trough of the correction.
+  const troughSearchStart = peakIdx + 1;
+  const troughSearchEnd   = Math.floor(N * 0.85);
+  if (troughSearchEnd - troughSearchStart < 8) return [];
+  let troughIdx = troughSearchStart;
+  for (let i = troughSearchStart; i <= troughSearchEnd; i++) if (closes[i] < closes[troughIdx]) troughIdx = i;
+  const troughPrice = closes[troughIdx];
+
+  // Correction must be ≥18% for the pattern to earn labels.
+  if (troughPrice / peakPrice > 0.82) return [];
+
+  // Base end — walk forward from trough while close stays within ±20%
+  // of trough. Base ends when price breaks decisively above that band.
+  const baseCeiling = troughPrice * 1.20;
+  let baseEnd = troughIdx;
+  for (let i = troughIdx + 1; i < N; i++) {
+    if (closes[i] > baseCeiling) break;
+    baseEnd = i;
+  }
+
+  const labels: CycleLabel[] = [];
+  const push = (from: number, to: number, label: string, tone: 'bull' | 'bear' | 'neutral') => {
+    if (to - from < 8) return;
+    labels.push({ from: dates[from], to: dates[to], label, tone });
+  };
+
+  // Prior Uptrend — pre-peak. Only if there's a run before the peak.
+  push(0, peakIdx - 1, 'Old Stage 2 Uptrend', 'bull');
+  // Correction — peak → trough.
+  push(peakIdx, troughIdx - 1, 'Old Cycle Correction', 'bear');
+  // Long Base — trough → baseEnd.
+  push(troughIdx, baseEnd, 'Long Stage 1 Base', 'neutral');
+  // Recovery — baseEnd → now (only if we're currently above the base).
+  if (baseEnd < N - 1 && closes[N - 1] > baseCeiling) {
+    push(baseEnd + 1, N - 1, 'New Stage 2 Recovery', 'bull');
+  }
+
   return labels;
 }
 

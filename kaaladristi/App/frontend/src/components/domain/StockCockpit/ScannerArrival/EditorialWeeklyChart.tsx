@@ -366,11 +366,11 @@ export default function EditorialWeeklyChart({ bars, annotations, personas }: Pr
                 fontFamily="Inter, system-ui, sans-serif"
                 fontSize={8.5}
                 fontWeight={600}
-                letterSpacing="0.14em"
+                letterSpacing="0.06em"
                 fill={TOK.ink3}
                 style={{ textTransform: 'uppercase' } as React.CSSProperties}
               >
-                {l.label}
+                {shortLevelLabel(l.label)}
               </text>
             </g>
           );
@@ -570,4 +570,19 @@ function formatShortDate(iso: string): string {
   const [y, m, d] = iso.split('-');
   const months = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
   return `${months[Number(m) - 1] ?? m} ${d} ${y}`;
+}
+
+/** Abbreviate right-axis level labels so long strings like "IMMEDIATE
+ *  RESISTANCE" fit inside the 178px right margin without clipping.
+ *  Unknown labels pass through uppercased. */
+function shortLevelLabel(label: string): string {
+  const map: Record<string, string> = {
+    'Major Resistance':     'MAJOR R',
+    'Immediate Resistance': 'IMM R',
+    'Immediate Support':    'IMM S',
+    'Strong Support':       'STRONG S',
+    'Pivot':                'PIVOT',
+    '50 EMA (weekly)':      '50 EMA',
+  };
+  return map[label] ?? label.toUpperCase();
 }
