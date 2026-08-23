@@ -39,6 +39,7 @@ import type { TimeRange } from '@/types';
 import { useVisualPulse } from '@/hooks/useVisualPulse';
 import { useEquityVisualPulse } from '@/hooks/useEquityVisualPulse';
 import { useScanPresence } from '@/hooks/useScanPresence';
+import { useSetupData } from '@/hooks/useSetupData';
 import { useIndexBreadth, useConstituentDetails } from '@/hooks/useSectorRotation';
 import { useIndexConstituents } from '@/hooks/useMasterData';
 import { computeMoveQuality } from '@/services/moveQuality';
@@ -223,6 +224,36 @@ export default function ChartView() {
   const rawName = searchParams.get('name') ?? `${type} #${id}`;
   const isIndex = type === 'index';
   const isEquity = type === 'equity';
+
+  // Fetch setup annotations once at ChartView level so BOTH branches of the
+  // toggle can render them: Story View's SVG chart AND Story Play's
+  // TradingChart. React Query dedupes by (equityId, setupKey) so the second
+  // consumer inside ScannerArrivalView costs nothing.
+  const setupDataForPlay = useSetupData(
+    isEquity && setupParam ? numId : null,
+    isEquity && setupParam ? setupParam : null,
+  );
+  const setupLevelsForPlay = useMemo(() => {
+    if (!setupDataForPlay.data) return [];
+    return setupDataForPlay.data.chartAnnotations.horizontalLines.map((l) => ({
+      price: l.price, label: l.label, tone: l.tone,
+    }));
+  }, [setupDataForPlay.data]);
+  const setupEntriesForPlay = useMemo(() => {
+    if (!setupDataForPlay.data) return [];
+    const out: Array<{ price: number; label: string; persona: 'lt' | 'swing'; n: number }> = [];
+    for (const e of setupDataForPlay.data.personas.ltInvestor) {
+      if (e.price != null && Number.isFinite(e.price)) {
+        out.push({ price: e.price, label: e.label, persona: 'lt', n: e.entryNo });
+      }
+    }
+    for (const e of setupDataForPlay.data.personas.swingTrader) {
+      if (e.price != null && Number.isFinite(e.price)) {
+        out.push({ price: e.price, label: e.label, persona: 'swing', n: e.entryNo });
+      }
+    }
+    return out;
+  }, [setupDataForPlay.data]);
 
   // ── Chart data (full history for TradingChart) ──
   // dateKey: the main chart page is commonly left open through a session —
@@ -564,6 +595,8 @@ export default function ChartView() {
               overlays={frameworkOverlays}
               astroBands={astroBands}
               bigMoneyEvents={bigMoneyChartLines}
+              setupLevels={setupLevelsForPlay}
+              setupEntries={setupEntriesForPlay}
               benchmarkIndexId={isIndex && id ? Number(id) : null}
               benchmarkName={isIndex ? name : null}
               storyBubble={storyBubble}

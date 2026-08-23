@@ -85,6 +85,16 @@ interface TradingChartProps {
   /** Big Money days (Phase 3): gold dashed price line at each event's zone
    *  low + a ₹ marker on the event bar. Observational annotations only. */
   bigMoneyEvents?: { trade_date: string; price: number; label: string; color?: string }[];
+  /** Story-page setup annotations (Scanner Story Page).
+   *  setupLevels — structural key lines (52wk high, breakout, EMA, etc.),
+   *  drawn solid; the SAME horizontal lines the editorial Story View
+   *  shows on its SVG chart. Passing an array here makes them survive
+   *  the toggle into Story Play so the animated replay carries the
+   *  setup's structure too. */
+  setupLevels?: { price: number; label: string; tone: 'bull' | 'bear' | 'neutral' }[];
+  /** Story-page persona entry zones (LT/Swing) — thin dotted price lines
+   *  colored by persona. */
+  setupEntries?: { price: number; label: string; persona: 'lt' | 'swing'; n: number }[];
   // Workspace sync callbacks — no-op when not provided
   onVisibleRangeChange?: (from: string, to: string) => void;
   onCrosshairMove?: (barIndex: number, date: string) => void;
@@ -223,8 +233,10 @@ function createChartOptions(container: HTMLElement, height: number, colors: Retu
 const DEFAULT_OVERLAYS: NonNullable<TradingChartProps['overlays']> = [];
 const DEFAULT_BANDS: NonNullable<TradingChartProps['astroBands']> = [];
 const DEFAULT_BM_EVENTS: NonNullable<TradingChartProps['bigMoneyEvents']> = [];
+const DEFAULT_SETUP_LEVELS: NonNullable<TradingChartProps['setupLevels']> = [];
+const DEFAULT_SETUP_ENTRIES: NonNullable<TradingChartProps['setupEntries']> = [];
 
-export default function TradingChart({ data, height = 900, compact = false, workspaceMode = false, highlightDate = null, overlays = DEFAULT_OVERLAYS, astroBands = DEFAULT_BANDS, bigMoneyEvents = DEFAULT_BM_EVENTS, onVisibleRangeChange, onCrosshairMove, onZoneClick, benchmarkIndexId = null, benchmarkName = null, storyBubble = null }: TradingChartProps) {
+export default function TradingChart({ data, height = 900, compact = false, workspaceMode = false, highlightDate = null, overlays = DEFAULT_OVERLAYS, astroBands = DEFAULT_BANDS, bigMoneyEvents = DEFAULT_BM_EVENTS, setupLevels = DEFAULT_SETUP_LEVELS, setupEntries = DEFAULT_SETUP_ENTRIES, onVisibleRangeChange, onCrosshairMove, onZoneClick, benchmarkIndexId = null, benchmarkName = null, storyBubble = null }: TradingChartProps) {
   const mainRef      = useRef<HTMLDivElement>(null);
   const rsiRef       = useRef<HTMLDivElement>(null);
   const sniperRef    = useRef<HTMLDivElement>(null);
@@ -495,6 +507,33 @@ export default function TradingChart({ data, height = 900, compact = false, work
       });
     }
 
+    // Scanner Story Page — setup annotations survive the Story View →
+    // Story Play toggle. Structural levels solid, persona entries dotted
+    // in their persona color. Same annotations the SVG chart shows.
+    for (const lv of setupLevels) {
+      if (!Number.isFinite(lv.price)) continue;
+      candleSeries.createPriceLine({
+        price: lv.price,
+        color: lv.tone === 'bull' ? C.riskGreen : lv.tone === 'bear' ? C.riskRed : C.text,
+        lineWidth: 1 as LineWidth,
+        lineStyle: lv.tone === 'neutral' ? LineStyle.Dashed : LineStyle.Solid,
+        axisLabelVisible: true,
+        title: lv.label,
+      });
+    }
+    for (const en of setupEntries) {
+      if (!Number.isFinite(en.price)) continue;
+      const color = en.persona === 'lt' ? C.indigo : C.riskAmber;
+      candleSeries.createPriceLine({
+        price: en.price,
+        color,
+        lineWidth: 1 as LineWidth,
+        lineStyle: LineStyle.Dotted,
+        axisLabelVisible: true,
+        title: `${en.persona === 'lt' ? 'LT' : 'SW'}-${en.n} · ${en.label}`,
+      });
+    }
+
     // Markers: Dot signals + Swing High/Low
     const markers: SeriesMarker<Time>[] = [];
     const bmColorByDate = new Map(bigMoneyEvents.map((e) => [e.trade_date, e.color ?? '#d4a84b']));
@@ -750,7 +789,7 @@ export default function TradingChart({ data, height = 900, compact = false, work
     });
     // Redraw bands immediately after chart rebuild (covers indicator overlay changes)
     requestAnimationFrame(() => { drawBandsRef.current?.(); });
-  }, [data, height, compact, workspaceMode, indicatorOverlays, bigMoneyEvents, onVisibleRangeChange, onCrosshairMove]);
+  }, [data, height, compact, workspaceMode, indicatorOverlays, bigMoneyEvents, setupLevels, setupEntries, onVisibleRangeChange, onCrosshairMove]);
 
   // Scroll to highlighted date when slider moves
   useEffect(() => {

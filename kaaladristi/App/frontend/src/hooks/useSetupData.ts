@@ -27,11 +27,13 @@ import '@/services/thesis/adapters';
 
 const WEEKLY_LOOKBACK_YEARS = 5;
 
-// NOTE: km_equity_weekly does NOT carry `stage` — that column lives on
-// km_equity_eod only. The adapter's WeeklyBar type marks stage as optional
-// and the cycle-labels feature (which is the only consumer of weekly.stage)
-// is deferred to Phase 2.5 pending the HTML overlay layer for banded ranges.
+// km_equity_weekly does NOT carry `stage` — the column lives on km_equity_eod.
+// We fetch (trade_date, stage) from eod for the same 5-year window and stamp
+// each weekly bar's stage from the eod row on that exact date (weekly bars
+// are Friday-anchored, so a same-date lookup works for the vast majority;
+// missing days fall through to the closest prior-week stage).
 const WEEKLY_COLS = 'trade_date,open,high,low,close,volume,magic_rs,magic_rs_zone';
+const STAGE_COLS  = 'trade_date,stage';
 const LATEST_COLS = 'trade_date,close,pct_chng,pivot_pp,pivot_r1,pivot_r2,pivot_s1,pivot_s2,ema_20,sma_50,sma_150,w52_high,w52_low,stage,magic_rs,magic_rs_zone,rs_percentile,rvol,delivery_pct,accum_distrib,flow_type';
 const SYMBOL_COLS = 'id,symbol,company_name,exchange,industry,isin,mcap_cr';
 
@@ -60,7 +62,7 @@ export function useSetupData(equityId: number | null, setupKey: string | null): 
       const cutoffIso = new Date(Date.now() - WEEKLY_LOOKBACK_YEARS * 365 * 24 * 60 * 60 * 1000)
         .toISOString().slice(0, 10);
 
-      const [weeklyRes, latestRes, symbolRes] = await Promise.all([
+      const [weeklyRes, latestRes, symbolRes, stageRes] = await Promise.all([
         from('km_equity_weekly')
           .select(WEEKLY_COLS)
           .eq('equity_id', id)
@@ -79,15 +81,44 @@ export function useSetupData(equityId: number | null, setupKey: string | null): 
           .eq('id', id)
           .limit(1)
           .execute(),
+        from('km_equity_eod')
+          .select(STAGE_COLS)
+          .eq('equity_id', id)
+          .gte('trade_date', cutoffIso)
+          .order('trade_date', { ascending: true })
+          .limit(1500)
+          .execute(),
       ]);
 
       if (weeklyRes.error) throw new Error(`weekly: ${weeklyRes.error.message}`);
       if (latestRes.error) throw new Error(`latest: ${latestRes.error.message}`);
       if (symbolRes.error) throw new Error(`symbol: ${symbolRes.error.message}`);
+      if (stageRes.error)  throw new Error(`stage: ${stageRes.error.message}`);
 
-      const weekly   = (weeklyRes.data ?? []) as WeeklyBar[];
-      const latest   = (latestRes.data ?? [])[0] as LatestEodRow | undefined;
-      const identity = (symbolRes.data ?? [])[0] as EquityIdentity | undefined;
+      const weeklyRaw = (weeklyRes.data ?? []) as WeeklyBar[];
+      const latest    = (latestRes.data ?? [])[0] as LatestEodRow | undefined;
+      const identity  = (symbolRes.data ?? [])[0] as EquityIdentity | undefined;
+
+      // Stage aggregation: for each weekly bar, pick the eod stage on that
+      // trade_date if present, else carry the most recent prior-date stage
+      // forward (weekly bars are Friday-anchored; a same-date row usually
+      // exists but not always — non-trading Fridays are the exception).
+      const stageRows = (stageRes.data ?? []) as Array<{ trade_date: string; stage: string | null }>;
+      const stageByDate = new Map(stageRows.map((r) => [r.trade_date, r.stage] as const));
+      const sortedStageDates = [...stageByDate.keys()].sort();
+      const weekly: WeeklyBar[] = weeklyRaw.map((b) => {
+        let s = stageByDate.get(b.trade_date) ?? null;
+        if (s == null) {
+          // fallback: nearest prior date's stage
+          for (let i = sortedStageDates.length - 1; i >= 0; i--) {
+            if (sortedStageDates[i] <= b.trade_date) {
+              s = stageByDate.get(sortedStageDates[i]) ?? null;
+              break;
+            }
+          }
+        }
+        return { ...b, stage: s };
+      });
 
       if (!latest)   throw new Error('No latest EOD row for this equity.');
       if (!identity) throw new Error('No km_equity_symbols row for this equity.');

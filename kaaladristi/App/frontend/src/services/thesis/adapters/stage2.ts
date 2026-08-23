@@ -181,23 +181,35 @@ function pickBest(a: number | null, b: number | null, combine: (x: number, y: nu
 function buildPersonas(latest: LatestEodRow, weekly: WeeklyBar[], ema50Weekly: number | null): PersonaEntries {
   const priorWeekHigh20 = priorMaxFromEnd(weekly, 20, (b) => b.high);
   const priorConsolBase = priorMaxFromEnd(weekly, 8,  (b) => b.close);
+  const close = latest.close;
+
+  // Range guard — a zone that sits >30% below or >45% above current close
+  // is off the actionable map: users won't watch it, and it stretches the
+  // chart's price scale so everything nearby loses definition. Return
+  // null → the persona card + chart filter it out.
+  const inRange = (p: number | null | undefined): number | null => {
+    if (p == null || !Number.isFinite(p) || close <= 0) return null;
+    const ratio = p / close;
+    if (ratio < 0.70 || ratio > 1.45) return null;
+    return p;
+  };
 
   const ltInvestor: PersonaEntry[] = [
     {
       entryNo: 1,
-      price: priorWeekHigh20,
+      price: inRange(priorWeekHigh20),
       label: 'Structural breakout zone',
       rationale: 'Weekly close above the prior 20-week high with volume expansion. The highest-agreement setup activation zone in this preset historically.',
     },
     {
       entryNo: 2,
-      price: ema50Weekly,
+      price: inRange(ema50Weekly),
       label: 'Structural pivot zone',
       rationale: 'Pullback reclaim of the weekly 50 EMA — earlier zone, wider risk. Only relevant while the primary trend is structurally intact.',
     },
     {
       entryNo: 3,
-      price: priorConsolBase,
+      price: inRange(priorConsolBase),
       label: 'Continuation zone',
       rationale: 'Prior 8-week consolidation top. Reads as continuation while the setup remains active — a secondary reference within the same regime.',
     },
@@ -206,19 +218,19 @@ function buildPersonas(latest: LatestEodRow, weekly: WeeklyBar[], ema50Weekly: n
   const swingTrader: PersonaEntry[] = [
     {
       entryNo: 1,
-      price: latest.pivot_r1,
+      price: inRange(latest.pivot_r1),
       label: 'Break-of-pivot zone',
       rationale: 'Above the daily pivot R1 with rvol > 1.5. The fastest-resolving swing reference in this preset.',
     },
     {
       entryNo: 2,
-      price: latest.pivot_pp,
+      price: inRange(latest.pivot_pp),
       label: 'Mid-range zone',
       rationale: 'Pullback to the daily pivot PP. Tighter observed range than the break zone above.',
     },
     {
       entryNo: 3,
-      price: pickBest(latest.pivot_s1, latest.ema_20, Math.max),
+      price: inRange(pickBest(latest.pivot_s1, latest.ema_20, Math.max)),
       label: 'Support-test zone',
       rationale: 'Pullback to daily pivot S1 or 20 EMA. Still within Stage 2 territory — the setup remains active only if this holds.',
     },

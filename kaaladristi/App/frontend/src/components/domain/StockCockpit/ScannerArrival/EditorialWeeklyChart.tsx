@@ -68,7 +68,10 @@ const TOK = {
 // container width. The <svg> scales via CSS width:100% + preserveAspect.
 const VB_W = 1200;
 const VB_H = 460;
-const MARGIN = { l: 20, r: 128, t: 40, b: 30 };
+const MARGIN = { l: 20, r: 178, t: 40, b: 30 };
+/** Minimum vertical spacing between right-axis labels + persona markers,
+ *  in SVG units. Anything closer than this triggers stagger/offset. */
+const LABEL_MIN_GAP = 14;
 
 export default function EditorialWeeklyChart({ bars, annotations, personas }: Props) {
   if (bars.length === 0) {
@@ -106,18 +109,18 @@ export default function EditorialWeeklyChart({ bars, annotations, personas }: Pr
   const bodyW = Math.max(1.2, barW * 0.62);
   const xOf = (i: number) => plot.x0 + i * barW + barW / 2;
 
-  // Price scale — snap to bar highs/lows with padding, but include every
-  // annotated level (persona entries and structural lines) so nothing
-  // annotated falls off the plot.
+  // Price scale — snap to bar highs/lows only. Annotated levels (structural
+  // lines, persona entries) do NOT get to stretch the scale: an extended
+  // stock's 50-wk EMA can sit 50% below current price and drag the whole
+  // plot into unreadable density. Anything off-scale is filtered at draw
+  // time instead — the user still sees the KV grid and persona card list
+  // it, just not as a line on the chart.
   const { pMin, pMax, yOf } = useMemo(() => {
     const values: number[] = [];
     for (const b of bars) {
       if (Number.isFinite(b.high)) values.push(b.high);
       if (Number.isFinite(b.low)) values.push(b.low);
     }
-    for (const l of annotations.horizontalLines) if (Number.isFinite(l.price)) values.push(l.price);
-    for (const e of personas.ltInvestor) if (e.price != null && Number.isFinite(e.price)) values.push(e.price);
-    for (const e of personas.swingTrader) if (e.price != null && Number.isFinite(e.price)) values.push(e.price);
     const lo = Math.min(...values);
     const hi = Math.max(...values);
     const pad = (hi - lo) * 0.06;
@@ -126,7 +129,11 @@ export default function EditorialWeeklyChart({ bars, annotations, personas }: Pr
     const range = pMax - pMin || 1;
     const yOf = (p: number) => plot.y1 - ((p - pMin) / range) * plot.h;
     return { pMin, pMax, yOf };
-  }, [bars, annotations.horizontalLines, personas, plot.h, plot.y1]);
+  }, [bars, plot.h, plot.y1]);
+
+  /** True if a price falls inside the visible scale. Off-scale annotations
+   *  are dropped from the chart (the sidebar still surfaces them). */
+  const inScale = (p: number) => p >= pMin && p <= pMax;
 
   // ── 50-week EMA (SMA proxy — matches adapter's smaFromEnd choice) ────
   const emaSeries = useMemo(() => rollingSma(bars.map((b) => b.close), 50), [bars]);
@@ -153,31 +160,66 @@ export default function EditorialWeeklyChart({ bars, annotations, personas }: Pr
       .filter((v): v is NonNullable<typeof v> => v !== null);
   }, [annotations.cycleLabels, dateIndex, plot.x0, barW]);
 
-  // ── Persona markers — stack in right margin, offset X to avoid overlaps
+  // ── Persona markers — 4-column fan in the right margin.
+  // Two lists (LT + Swing), only entries with a price + inside the visible
+  // scale. Sorted by y (top→bottom); markers within LABEL_MIN_GAP of each
+  // other get pushed to the next column (col cycles 0→1→2→3 then wraps).
+  // Column 0 is closest to the plot; the tag ("LT"/"SW") sits to the left
+  // of column-0 markers only, so the right margin doesn't stack labels.
   const markers = useMemo(() => {
     const all: Array<{ persona: 'lt' | 'swing'; n: number; price: number; color: string; label: string }> = [];
     for (const e of personas.ltInvestor) {
-      if (e.price != null && Number.isFinite(e.price)) {
+      if (e.price != null && Number.isFinite(e.price) && inScale(e.price)) {
         all.push({ persona: 'lt', n: e.entryNo, price: e.price, color: TOK.lt, label: e.label });
       }
     }
     for (const e of personas.swingTrader) {
-      if (e.price != null && Number.isFinite(e.price)) {
+      if (e.price != null && Number.isFinite(e.price) && inScale(e.price)) {
         all.push({ persona: 'swing', n: e.entryNo, price: e.price, color: TOK.sw, label: e.label });
       }
     }
-    // Sort top→bottom and stagger any within 18 SVG units of each other.
     const withY = all.map((m) => ({ ...m, y: yOf(m.price) })).sort((a, b) => a.y - b.y);
-    const laid: typeof withY = [];
-    let lastY = -Infinity;
-    let col = 0;
+    const laid: Array<(typeof withY)[number] & { x: number; col: number }> = [];
+    // occupancy: track the y of the last marker placed in each column
+    const colY: number[] = [-Infinity, -Infinity, -Infinity, -Infinity];
     for (const m of withY) {
-      col = Math.abs(m.y - lastY) < 18 ? 1 - col : 0;
-      laid.push({ ...m, x: plot.x1 + 14 + (col ? 24 : 0) } as typeof m & { x: number });
-      lastY = m.y;
+      let col = 0;
+      while (col < 4 && Math.abs(m.y - colY[col]) < LABEL_MIN_GAP) col++;
+      if (col === 4) col = 0; // wrap
+      colY[col] = m.y;
+      laid.push({ ...m, col, x: plot.x1 + 14 + col * 22 });
     }
-    return laid as Array<(typeof withY)[number] & { x: number }>;
-  }, [personas, yOf, plot.x1]);
+    return laid;
+  }, [personas, yOf, plot.x1, inScale]);
+
+  // ── Structural key lines — filter to on-scale, then anti-collide labels
+  // so their text doesn't overprint (anchor y stays on the price line;
+  // only the LABEL box shifts vertically with a subtle leader gap).
+  const structuralLines = useMemo(() => {
+    const raw = annotations.horizontalLines
+      .filter((l) => Number.isFinite(l.price) && inScale(l.price))
+      .map((l) => ({ ...l, y: yOf(l.price) }))
+      .sort((a, b) => a.y - b.y);
+    // Two right-axis columns: col 0 close to axis, col 1 further right.
+    // A label within LABEL_MIN_GAP of the previous same-column label
+    // gets pushed to the other column (and its labelY shifted if needed).
+    const laid: Array<(typeof raw)[number] & { labelX: number; labelY: number; col: number }> = [];
+    const colLastY: number[] = [-Infinity, -Infinity];
+    for (const l of raw) {
+      let col = 0;
+      if (Math.abs(l.y - colLastY[0]) < LABEL_MIN_GAP) col = 1;
+      if (Math.abs(l.y - colLastY[col]) < LABEL_MIN_GAP) {
+        // push labelY down to clear the previous label
+        const shiftedY = colLastY[col] + LABEL_MIN_GAP;
+        colLastY[col] = shiftedY;
+        laid.push({ ...l, labelX: 6 + col * 82, labelY: shiftedY, col });
+      } else {
+        colLastY[col] = l.y;
+        laid.push({ ...l, labelX: 6 + col * 82, labelY: l.y, col });
+      }
+    }
+    return laid;
+  }, [annotations.horizontalLines, yOf, inScale]);
 
   // ── Year axis (bar_date year → x pos) ─────────────────────────────────
   const yearTicks = useMemo(() => {
@@ -279,49 +321,60 @@ export default function EditorialWeeklyChart({ bars, annotations, personas }: Pr
           opacity={0.9}
         />
 
-        {/* 5 — horizontal structural level lines + right-axis labels */}
-        {annotations.horizontalLines
-          .filter((l) => Number.isFinite(l.price))
-          .map((l, i) => {
-            const y = yOf(l.price);
-            const color = l.tone === 'bull' ? TOK.bull : l.tone === 'bear' ? TOK.bear : TOK.ink2;
-            return (
-              <g key={`lvl-${i}`}>
+        {/* 5 — horizontal structural level lines + anti-collided labels */}
+        {structuralLines.map((l, i) => {
+          const color = l.tone === 'bull' ? TOK.bull : l.tone === 'bear' ? TOK.bear : TOK.ink2;
+          const labelX = plot.x1 + l.labelX;
+          const labelShifted = Math.abs(l.labelY - l.y) > 0.5;
+          return (
+            <g key={`lvl-${i}`}>
+              <line
+                x1={plot.x0}
+                x2={plot.x1}
+                y1={l.y}
+                y2={l.y}
+                stroke={color}
+                strokeWidth={1.1}
+                strokeDasharray={l.tone === 'neutral' ? '3 4' : ''}
+                opacity={0.7}
+              />
+              {/* leader line only when the label was pushed off its price line */}
+              {labelShifted && (
                 <line
-                  x1={plot.x0}
-                  x2={plot.x1}
-                  y1={y}
-                  y2={y}
+                  x1={plot.x1 + 2}
+                  y1={l.y}
+                  x2={labelX - 2}
+                  y2={l.labelY - 3}
                   stroke={color}
-                  strokeWidth={1.1}
-                  strokeDasharray={l.tone === 'neutral' ? '3 4' : ''}
-                  opacity={0.7}
+                  strokeWidth={0.5}
+                  opacity={0.5}
                 />
-                <text
-                  x={plot.x1 + 6}
-                  y={y - 3}
-                  fontFamily="'JetBrains Mono', ui-monospace, monospace"
-                  fontSize={10}
-                  fill={color}
-                  fontWeight={500}
-                >
-                  {l.price.toFixed(0)}
-                </text>
-                <text
-                  x={plot.x1 + 6}
-                  y={y + 9}
-                  fontFamily="Inter, system-ui, sans-serif"
-                  fontSize={8.5}
-                  fontWeight={600}
-                  letterSpacing="0.14em"
-                  fill={TOK.ink3}
-                  style={{ textTransform: 'uppercase' } as React.CSSProperties}
-                >
-                  {l.label}
-                </text>
-              </g>
-            );
-          })}
+              )}
+              <text
+                x={labelX}
+                y={l.labelY - 3}
+                fontFamily="'JetBrains Mono', ui-monospace, monospace"
+                fontSize={10}
+                fill={color}
+                fontWeight={500}
+              >
+                {l.price.toFixed(0)}
+              </text>
+              <text
+                x={labelX}
+                y={l.labelY + 9}
+                fontFamily="Inter, system-ui, sans-serif"
+                fontSize={8.5}
+                fontWeight={600}
+                letterSpacing="0.14em"
+                fill={TOK.ink3}
+                style={{ textTransform: 'uppercase' } as React.CSSProperties}
+              >
+                {l.label}
+              </text>
+            </g>
+          );
+        })}
 
         {/* 6 — dotted persona entry lines across chart */}
         {markers.map((m, i) => (
@@ -338,10 +391,15 @@ export default function EditorialWeeklyChart({ bars, annotations, personas }: Pr
           />
         ))}
 
-        {/* 7 — persona markers in the right margin */}
+        {/* 7 — persona markers in the right margin (4-column fan) */}
         {markers.map((m, i) => (
           <g key={`pm-${i}`}>
-            <circle cx={m.x} cy={m.y} r={9} fill={m.color} opacity={0.95} stroke={`color-mix(in srgb, ${TOK.ground} 60%, transparent)`} strokeWidth={0.5} />
+            <circle
+              cx={m.x} cy={m.y} r={9}
+              fill={m.color} opacity={0.95}
+              stroke={`color-mix(in srgb, ${TOK.ground} 60%, transparent)`}
+              strokeWidth={0.5}
+            />
             <text
               x={m.x}
               y={m.y + 3.5}
@@ -353,7 +411,8 @@ export default function EditorialWeeklyChart({ bars, annotations, personas }: Pr
             >
               {m.n}
             </text>
-            {(m as { x: number }).x < plot.x1 + 30 && (
+            {/* Persona tag ("LT" / "SW") sits to the left of column-0 markers only */}
+            {m.col === 0 && (
               <text
                 x={m.x - 12}
                 y={m.y + 3.5}
