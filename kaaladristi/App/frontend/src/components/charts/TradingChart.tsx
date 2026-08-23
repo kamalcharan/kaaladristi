@@ -1280,14 +1280,8 @@ export default function TradingChart({ data, height = 900, compact = false, work
         {/* Editorial AnnotationOverlay — cycle bands + persona callouts +
             Big Money badges + storyEvent pins. Same overlay used by both
             Story View and Story Play, so the setup annotations look
-            identical across the toggle. Only mounts when the parent
-            passed at least one overlay array with content. */}
-        {overlayApi && overlay && (
-          (overlay.cycleBands?.length ?? 0) +
-          (overlay.callouts?.length ?? 0) +
-          (overlay.bigMoney?.length ?? 0) +
-          (overlay.storyPins?.length ?? 0)
-        ) > 0 && (
+            identical across the toggle. */}
+        {overlayApi && overlay ? (
           <AnnotationOverlay
             chart={overlayApi.chart}
             series={overlayApi.series}
@@ -1297,7 +1291,7 @@ export default function TradingChart({ data, height = 900, compact = false, work
             bigMoney={overlay.bigMoney}
             storyPins={overlay.storyPins}
           />
-        )}
+        ) : null}
 
         {/* Story-mode on-candle bubble — anchored by X to the current event's
             candle, near the top of the pane with a downward caret. */}
