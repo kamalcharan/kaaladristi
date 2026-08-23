@@ -215,6 +215,13 @@ export default function ChartView() {
   useEffect(() => {
     if (setupParam && !tabParam && dvTab !== 'chart') setDvTab('chart');
   }, [setupParam, tabParam, dvTab]);
+  // Story View mode uses the weekly editorial read of the setup — force
+  // the timeframe so the chart matches the setup adapter's window
+  // (cycle bands + weekly 20-week highs etc. are all weekly-computed).
+  // Story Play stays on whatever timeframe the user picked.
+  useEffect(() => {
+    if (setupParam && storyMode === 'view' && tf !== 'weekly') setTf('weekly');
+  }, [setupParam, storyMode, tf]);
   const [membershipOpen, setMembershipOpen] = useState(false);
   // Add-position from the chart hero (equity only). Switches to the Thesis tab
   // and pops its "I hold this" form.
@@ -1073,10 +1080,14 @@ export default function ChartView() {
             {isEquity && setupParam && (
               <StoryModeToggle mode={storyMode} onChange={setStoryMode} />
             )}
-            {isEquity && setupParam && storyMode === 'view' ? (
-              <ScannerArrivalView equityId={numId} setupKey={setupParam} bigMoneyEvents={bigMoneyChartLines} />
-            ) : (
-              replayTab
+            {/* Chart + right-column indicators are ALWAYS the same TradingChart
+                (via replayTab) — Story View and Story Play differ only in what
+                sits BELOW: editorial sidebar cards vs the replay scrubber. */}
+            {replayTab}
+            {isEquity && setupParam && storyMode === 'view' && (
+              <div className="mt-4">
+                <ScannerArrivalView equityId={numId} setupKey={setupParam} />
+              </div>
             )}
           </>
         )}

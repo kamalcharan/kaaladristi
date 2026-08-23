@@ -1,14 +1,13 @@
 /**
- * ScannerArrivalView — editorial Story View shell.
+ * ScannerArrivalView — the editorial SIDEBAR for the Story View mode.
  *
- * Renders inside ChartView's Chart & Replay tab when the URL carries
- * ?setup=<preset>. Layout matches the owner-approved editorial mock
- * (Solara reference deck):
+ * The chart itself is the shared TradingChart at ChartView level, so
+ * Story View and Story Play render the SAME chart with the SAME setup
+ * annotations (levels + entries via TradingChart's price lines). What
+ * this component provides is the editorial reading UNDER the chart:
  *
  *   ┌────────────────────────────────────────────────────────────┐
  *   │  MASTHEAD  · Setup crumb · Company name · Phase pill · Thesis line
- *   ├────────────────────────────────────────────────────────────┤
- *   │  CHART HERO — cycle bands · candles · EMA · key levels · markers
  *   ├────────────────────────────────────────────────────────────┤
  *   │  CURRENT SITUATION   │  LT (LENS)   │  SWING (LENS)         │
  *   ├────────────────────────────────────────────────────────────┤
@@ -17,27 +16,25 @@
  *   │  EDITOR'S NOTE (italic tip)
  *   └────────────────────────────────────────────────────────────┘
  *
+ * The chart is deliberately NOT rendered here — that would duplicate
+ * the same TradingChart in two places. One chart, two modes; only the
+ * play controls + editorial sidebar differ between them.
+ *
  * SEBI voice:
  *   · Personas are READING LENSES, not order-placers.
  *   · Levels are ZONES of setup activation, not entry orders.
  *   · No verbs like "add", "buy", "trade" in user-facing copy.
- *   · No SIZE column. No stops. No targets.
  *
  * See: docs/claude/scanner-story-page-poa.md
  */
 
 import { Loader2 } from 'lucide-react';
 import { useSetupData } from '@/hooks/useSetupData';
-import EditorialWeeklyChart from './EditorialWeeklyChart';
 import type { PersonaEntry, WhatConfirmsItem } from '@/services/thesis/setupAdapter';
 
 interface Props {
   equityId: number;
   setupKey: string;
-  /** Big Money daily events from ChartView (same array TradingChart
-   *  consumes). Flows through to the SVG chart so the editorial view
-   *  carries the ₹ institutional-footprint markers, not just Story Play. */
-  bigMoneyEvents?: { trade_date: string; price: number; label: string; color?: string }[];
 }
 
 // Scoped editorial palette — inherits Kāla-Drishti CSS vars where they map,
@@ -61,8 +58,8 @@ const SERIF = { fontFamily: "Fraunces, Georgia, serif" } as React.CSSProperties;
 const SANS  = { fontFamily: "Inter, system-ui, sans-serif" } as React.CSSProperties;
 const MONO  = { fontFamily: "'JetBrains Mono', ui-monospace, monospace", fontVariantNumeric: 'tabular-nums' } as React.CSSProperties;
 
-export default function ScannerArrivalView({ equityId, setupKey, bigMoneyEvents = [] }: Props) {
-  const { data, weekly, isLoading, error } = useSetupData(equityId, setupKey);
+export default function ScannerArrivalView({ equityId, setupKey }: Props) {
+  const { data, isLoading, error } = useSetupData(equityId, setupKey);
 
   if (isLoading) {
     return (
@@ -151,13 +148,10 @@ export default function ScannerArrivalView({ equityId, setupKey, bigMoneyEvents 
         </div>
       </header>
 
-      {/* ── CHART HERO ─────────────────────────────────────────── */}
-      <EditorialWeeklyChart
-        bars={weekly}
-        annotations={data.chartAnnotations}
-        personas={data.personas}
-        bigMoneyEvents={bigMoneyEvents}
-      />
+      {/* Chart is deliberately not rendered here — the shared
+          TradingChart lives one level up in ChartView, so Story View and
+          Story Play always see the same chart with the same setup
+          annotations. This component is the editorial sidebar layer only. */}
 
       {/* ── SETUP GRID · 3 columns ─────────────────────────────── */}
       <section style={{ display: 'grid', gridTemplateColumns: '1.15fr 1fr 1fr', gap: 20 }}>
