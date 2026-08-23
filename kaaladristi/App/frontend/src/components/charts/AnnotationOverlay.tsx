@@ -97,12 +97,17 @@ const PIN_COLOR: Record<OverlayStoryPin['kind'], string> = {
 };
 
 export function AnnotationOverlay({ chart, series, container, cycleBands = [], callouts = [], bigMoney = [], storyPins = [] }: Props) {
-  const [size, setSize] = useState({ width: 0, height: 0 });
+  // Seed size from the container synchronously so first paint has the real
+  // dimensions — waiting for ResizeObserver adds a null-render frame that
+  // in edge cases (mount timing) was making the overlay never appear.
+  const [size, setSize] = useState(() => ({
+    width: container.clientWidth || 0,
+    height: container.clientHeight || 0,
+  }));
   const [, force] = useState(0);
   const bumpRef = useRef(0);
   const bump = () => force(++bumpRef.current);
 
-  // Observe chart container size so overlay stays flush with the canvas
   useEffect(() => {
     const ro = new ResizeObserver(() => {
       setSize({ width: container.clientWidth, height: container.clientHeight });
@@ -124,7 +129,9 @@ export function AnnotationOverlay({ chart, series, container, cycleBands = [], c
     };
   }, [chart]);
 
-  if (size.width === 0 || size.height === 0) return null;
+  // Render the SVG even at zero size — layers filter themselves on invalid
+  // coordinates, so the DOM node exists and picks up size on the next
+  // ResizeObserver tick.
 
   const priceToY = (p: number): number | null => {
     const y = series.priceToCoordinate(p);
@@ -202,12 +209,14 @@ export function AnnotationOverlay({ chart, series, container, cycleBands = [], c
 
   return (
     <svg
-      width={size.width}
-      height={size.height}
+      width={size.width || '100%'}
+      height={size.height || '100%'}
       style={{
         position: 'absolute',
         top: 0,
         left: 0,
+        width: '100%',
+        height: '100%',
         pointerEvents: 'none',
         overflow: 'visible',
       }}
