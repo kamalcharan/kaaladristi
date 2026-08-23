@@ -59,9 +59,20 @@ compressed version is authoritative). Owner decisions below are FINAL.
 | 6 | Curated Layer-0 watchlist admin flow (Discover pattern) | ⬜ |
 | 7 | Story View adapters (shared builder, two voices) | ⬜ |
 
-## Universe ground truth (pre-backfill, 36% coverage)
+## Universe ground truth (post-backfill 2026-08-23 — 3,598 rows filled)
 
-Active NSE with listing_date (1,380 of 3,787): 20y+ → 299 ·
-10–20y → 206 · 6–10y → 126 · 3–6y → 229 · <3y → 520.
-Giants pool ≈ 505 pre-gates (matches audit's 501). Re-measure after
-step 1 — the backfill roughly doubles date coverage.
+Age bands (active NSE): 20y+ → 663 · 10–20y → 608 · 6–10y → 279 ·
+3–6y → 513 · <3y → 1,053. ~670 active NSE still dateless (SME/quirks).
+
+Gate funnel (age → +mcap ≥ ₹200 Cr → +ADV ≥ ₹1 Cr, ADV = 22-session
+avg of close×volume):
+· Giants 10y+:      1,225 trading → 488 → **479** pre-dormancy
+· First Ascent 6–10: 268 trading →  96 →  **85** pre-dormancy
+
+⚠ **mcap_cr NULL excludes unfairly**: 725 of the Giants pool and 146
+of First Ascent have NULL mcap (the recently-admitted full-universe
+symbols). Before shipping, run a targeted symbol-enrichment pass
+(pipeline2 `symbol_enrichment` dimension / enrich_equity_metadata.py,
+already built) over the age-passed pool so the mcap gate judges on
+data, not absence. Dormancy (step 2) will then cut 479+ down toward
+the audit's expected 100–150.
