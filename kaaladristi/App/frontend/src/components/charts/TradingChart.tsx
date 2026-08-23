@@ -19,6 +19,7 @@ import {
   HistogramSeries,
   LineSeries,
   type IChartApi,
+  type ISeriesApi,
   type CandlestickData,
   type HistogramData,
   type LineData,
@@ -40,6 +41,7 @@ import { planetColorOfRuleCode } from '@/constants/planetColors';
 import { fetchEvidence } from '@/pages/RuleEngine/ruleService';
 import { buildRuleRead } from '@/services/ruleInterpretation';
 import { useAstroHorizon } from '@/hooks/useAstroHorizon';
+import { AnnotationOverlay, type OverlayCycleBand, type OverlayLevel, type OverlayCallout, type OverlayBigMoney, type OverlayStoryPin } from './AnnotationOverlay';
 
 // ── SMA config — used in legacy (non-workspace) mode ──
 const SMA_LINES: { key: keyof IndicatorRow; color: string; label: string; width: LineWidth }[] = [
@@ -85,6 +87,30 @@ interface TradingChartProps {
   /** Big Money days (Phase 3): gold dashed price line at each event's zone
    *  low + a ₹ marker on the event bar. Observational annotations only. */
   bigMoneyEvents?: { trade_date: string; price: number; label: string; color?: string }[];
+  /** Story-page setup annotations (Scanner Story Page).
+   *  setupLevels — structural key lines (52wk high, breakout, EMA, etc.),
+   *  drawn solid; the SAME horizontal lines the editorial Story View
+   *  shows on its SVG chart. Passing an array here makes them survive
+   *  the toggle into Story Play so the animated replay carries the
+   *  setup's structure too. */
+  setupLevels?: { price: number; label: string; tone: 'bull' | 'bear' | 'neutral' }[];
+  /** Story-page persona entry zones (LT/Swing) — thin dotted price lines
+   *  colored by persona. axisLabel:false draws the line but skips the
+   *  right-axis text badge, keeping Story Play's axis from becoming a
+   *  soup of overlapping labels. */
+  setupEntries?: { price: number; label: string; persona: 'lt' | 'swing'; n: number; axisLabel?: boolean }[];
+  /** Editorial overlay data — cycle bands, persona callouts, big money
+   *  badges, and storyEvent pins. When any of these are non-empty, an
+   *  SVG overlay renders on top of the main chart. This is the ONE
+   *  layer both Story View and Story Play use, so the editorial visual
+   *  never drifts between the two modes. */
+  overlay?: {
+    cycleBands?: OverlayCycleBand[];
+    levels?: OverlayLevel[];
+    callouts?: OverlayCallout[];
+    bigMoney?: OverlayBigMoney[];
+    storyPins?: OverlayStoryPin[];
+  };
   // Workspace sync callbacks — no-op when not provided
   onVisibleRangeChange?: (from: string, to: string) => void;
   onCrosshairMove?: (barIndex: number, date: string) => void;
@@ -223,8 +249,13 @@ function createChartOptions(container: HTMLElement, height: number, colors: Retu
 const DEFAULT_OVERLAYS: NonNullable<TradingChartProps['overlays']> = [];
 const DEFAULT_BANDS: NonNullable<TradingChartProps['astroBands']> = [];
 const DEFAULT_BM_EVENTS: NonNullable<TradingChartProps['bigMoneyEvents']> = [];
+const DEFAULT_SETUP_LEVELS: NonNullable<TradingChartProps['setupLevels']> = [];
+const DEFAULT_SETUP_ENTRIES: NonNullable<TradingChartProps['setupEntries']> = [];
 
-export default function TradingChart({ data, height = 900, compact = false, workspaceMode = false, highlightDate = null, overlays = DEFAULT_OVERLAYS, astroBands = DEFAULT_BANDS, bigMoneyEvents = DEFAULT_BM_EVENTS, onVisibleRangeChange, onCrosshairMove, onZoneClick, benchmarkIndexId = null, benchmarkName = null, storyBubble = null }: TradingChartProps) {
+export default function TradingChart({ data, height = 900, compact = false, workspaceMode = false, highlightDate = null, overlays = DEFAULT_OVERLAYS, astroBands = DEFAULT_BANDS, bigMoneyEvents = DEFAULT_BM_EVENTS, setupLevels = DEFAULT_SETUP_LEVELS, setupEntries = DEFAULT_SETUP_ENTRIES, overlay, onVisibleRangeChange, onCrosshairMove, onZoneClick, benchmarkIndexId = null, benchmarkName = null, storyBubble = null }: TradingChartProps) {
+  // Chart + series exposed to the AnnotationOverlay after mount. React state
+  // (not just refs) so the overlay re-renders as soon as they exist.
+  const [overlayApi, setOverlayApi] = useState<{ chart: IChartApi; series: ISeriesApi<'Candlestick'>; container: HTMLDivElement } | null>(null);
   const mainRef      = useRef<HTMLDivElement>(null);
   const rsiRef       = useRef<HTMLDivElement>(null);
   const sniperRef    = useRef<HTMLDivElement>(null);
@@ -483,16 +514,52 @@ export default function TradingChart({ data, height = 900, compact = false, work
       }
     }
 
-    // Big Money days (Phase 3): gold dashed line at each zone low
+    // Big Money days (Phase 3): gold dashed line at each zone low.
+    // When the editorial overlay is active it renders its own ₹Cr badges
+    // on the top rail — the native axis labels would double up and
+    // collide with callouts, so they're suppressed (lines stay).
+    const hasOverlay = !!overlay;
     for (const ev of bigMoneyEvents) {
       candleSeries.createPriceLine({
         price: ev.price,
         color: ev.color ?? '#d4a84b',
         lineWidth: 1 as LineWidth,
         lineStyle: LineStyle.Dashed,
-        axisLabelVisible: true,
-        title: ev.label,
+        axisLabelVisible: !hasOverlay,
+        title: hasOverlay ? '' : ev.label,
       });
+    }
+
+    // Scanner Story Page — when the editorial overlay is active it draws
+    // setup levels as SHORT right-edge segments and persona zones via
+    // anchored callouts, so the native FULL-WIDTH price lines are
+    // skipped: five full-width lines read as generic S/R clutter and
+    // drowned the story (owner feedback). Without the overlay (plain
+    // chart usage) the native lines still render.
+    if (!hasOverlay) {
+      for (const lv of setupLevels) {
+        if (!Number.isFinite(lv.price)) continue;
+        candleSeries.createPriceLine({
+          price: lv.price,
+          color: lv.tone === 'bull' ? C.riskGreen : lv.tone === 'bear' ? C.riskRed : C.text,
+          lineWidth: 1 as LineWidth,
+          lineStyle: lv.tone === 'neutral' ? LineStyle.Dashed : LineStyle.Solid,
+          axisLabelVisible: false,
+          title: '',
+        });
+      }
+      for (const en of setupEntries) {
+        if (!Number.isFinite(en.price)) continue;
+        const color = en.persona === 'lt' ? C.indigo : C.riskAmber;
+        candleSeries.createPriceLine({
+          price: en.price,
+          color,
+          lineWidth: 1 as LineWidth,
+          lineStyle: LineStyle.Dotted,
+          axisLabelVisible: false,
+          title: '',
+        });
+      }
     }
 
     // Markers: Dot signals + Swing High/Low
@@ -744,13 +811,20 @@ export default function TradingChart({ data, height = 900, compact = false, work
 
     // Store ref so the bands canvas effect can reach the time scale
     mainChartRef.current = mainChart;
+    // Expose the chart+series to the editorial AnnotationOverlay via
+    // state, so cycle bands + callouts + Big Money badges + storyEvent
+    // pins can position themselves against real chart coordinates.
+    if (mainRef.current) {
+      setOverlayApi({ chart: mainChart, series: candleSeries, container: mainRef.current });
+    }
     // Trigger band redraw whenever the chart scrolls/zooms
     mainChart.timeScale().subscribeVisibleLogicalRangeChange(() => {
       drawBandsRef.current?.();
     });
     // Redraw bands immediately after chart rebuild (covers indicator overlay changes)
     requestAnimationFrame(() => { drawBandsRef.current?.(); });
-  }, [data, height, compact, workspaceMode, indicatorOverlays, bigMoneyEvents, onVisibleRangeChange, onCrosshairMove]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- `overlay` is read only for presence (hasOverlay); depending on `!!overlay` avoids chart rebuilds on overlay identity churn
+  }, [data, height, compact, workspaceMode, indicatorOverlays, bigMoneyEvents, setupLevels, setupEntries, !!overlay, onVisibleRangeChange, onCrosshairMove]);
 
   // Scroll to highlighted date when slider moves
   useEffect(() => {
@@ -789,6 +863,7 @@ export default function TradingChart({ data, height = 900, compact = false, work
       chartsRef.current.forEach((c) => c.remove());
       chartsRef.current = [];
       mainChartRef.current = null;
+      setOverlayApi(null);
     };
   }, [buildCharts]);
 
@@ -1211,6 +1286,22 @@ export default function TradingChart({ data, height = 900, compact = false, work
         onMouseLeave={() => { setBandTooltip(null); setHoverBar(null); }}
       >
         <div ref={mainRef} className="rounded-xl overflow-hidden" />
+
+        {/* Editorial AnnotationOverlay — cycle bands + persona callouts +
+            Big Money badges + storyEvent pins. Same overlay used by both
+            Story View and Story Play, so the setup annotations look
+            identical across the toggle. */}
+        {overlayApi && overlay ? (
+          <AnnotationOverlay
+            chart={overlayApi.chart}
+            series={overlayApi.series}
+            container={overlayApi.container}
+            cycleBands={overlay.cycleBands}
+            callouts={overlay.callouts}
+            bigMoney={overlay.bigMoney}
+            storyPins={overlay.storyPins}
+          />
+        ) : null}
 
         {/* Story-mode on-candle bubble — anchored by X to the current event's
             candle, near the top of the pane with a downward caret. */}

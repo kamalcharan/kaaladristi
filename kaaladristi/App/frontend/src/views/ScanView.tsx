@@ -16,6 +16,16 @@ import { ScanFilterBar, applyFilters, DEFAULT_FILTERS, FPB_DEFAULT_FILTERS, type
 import ScanVaNiPublisher from '@/components/domain/ScanVaNiPublisher';
 import ScanStalenessBanner from '@/components/domain/ScanStalenessBanner';
 import { navName } from '@/lib/symbolUtils';
+import { getSetupAdapter } from '@/services/thesis/setupAdapter';
+import '@/services/thesis/adapters'; // registers SETUP_ADAPTERS entries
+
+/** Story View deep-link suffix for a preset — empty when the preset has
+ *  no registered setup adapter. EVERY chart navigation out of a scan
+ *  surface must append this (Stage2Results, ScannerResults, FPB,
+ *  ConvictionFlow, cards AND tables) — a bare navigate() from any one
+ *  of them silently drops the user outside the Story View. */
+const storySetupSuffix = (presetId: string): string =>
+  getSetupAdapter(presetId) ? `&tab=chart&setup=${presetId}` : '';
 import { useVaNiStore } from '@/stores/vaniStore';
 
 // ── Sort ──────────────────────────────────────────────────────
@@ -519,12 +529,18 @@ function Stage2Results({ preset, timeframe, viewMode, onViewModeChange }: {
     else { setS2Sort(key); setSortDir('desc'); }
   };
 
+  // Any preset with a registered setup adapter opens the Story View on
+  // row-click (docs/claude/scanner-story-page-poa.md). Adding an adapter
+  // file + registry entry auto-wires the scanner — no change here.
+  const thesisSetupSuffix = storySetupSuffix(preset.id);
+
   const renderCard = (stock: ScanStock) => (
     <StockCard
       key={stock.equity_id}
       stock={stock}
       stageBadge="S2"
       vaniContext={`Scanner / ${preset.name}`}
+      linkQueryExtra={thesisSetupSuffix}
     />
   );
 
@@ -601,7 +617,7 @@ function Stage2Results({ preset, timeframe, viewMode, onViewModeChange }: {
         <ScanTable
           stocks={displayStocks}
           presetId={preset.id}
-          onRowClick={(s) => navigate(`/chart/equity/${s.equity_id}?name=${encodeURIComponent(navName(s))}`)}
+          onRowClick={(s) => navigate(`/chart/equity/${s.equity_id}?name=${encodeURIComponent(navName(s))}${thesisSetupSuffix}`)}
         />
       )}
 
@@ -790,7 +806,7 @@ function ConvictionFlowResults({ preset, timeframe, viewMode, onViewModeChange }
           <ScanTable
             stocks={stocks}
             presetId="conviction_flow"
-            onRowClick={(s) => navigate(`/chart/equity/${s.equity_id}?name=${encodeURIComponent(navName(s))}`)}
+            onRowClick={(s) => navigate(`/chart/equity/${s.equity_id}?name=${encodeURIComponent(navName(s))}${storySetupSuffix('conviction_flow')}`)}
           />
         )
       ) : (
@@ -873,7 +889,7 @@ function FpbActiveSection() {
           return (
             <div
               key={`${r.equity_id}-${r.release_date}`}
-              onClick={() => navigate(`/chart/equity/${r.equity_id}?name=${encodeURIComponent(navName({ symbol: r.symbol, company_name: null }))}`)}
+              onClick={() => navigate(`/chart/equity/${r.equity_id}?name=${encodeURIComponent(navName({ symbol: r.symbol, company_name: null }))}${storySetupSuffix('flower_pot_burst')}`)}
               style={{
                 display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer',
                 padding: '10px 14px', borderRadius: 12,
@@ -966,7 +982,7 @@ function FpbResults({ preset, timeframe, viewMode, onViewModeChange }: {
         <ScanTable
           stocks={[...bursts, ...shatters, ...setups]}
           presetId="flower_pot_burst"
-          onRowClick={(s) => navigate(`/chart/equity/${s.equity_id}?name=${encodeURIComponent(navName(s))}`)}
+          onRowClick={(s) => navigate(`/chart/equity/${s.equity_id}?name=${encodeURIComponent(navName(s))}${storySetupSuffix('flower_pot_burst')}`)}
         />
       ) : (
         <>
@@ -987,7 +1003,7 @@ function FpbResults({ preset, timeframe, viewMode, onViewModeChange }: {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: 20 }}>
               {bursts.map((stock) => (
                 <div key={stock.equity_id}>
-                  <StockCard stock={stock} />
+                  <StockCard stock={stock} linkQueryExtra={storySetupSuffix('flower_pot_burst')} />
                   <FpbMetricLine stock={stock} />
                 </div>
               ))}
@@ -1013,7 +1029,7 @@ function FpbResults({ preset, timeframe, viewMode, onViewModeChange }: {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: 20 }}>
               {shatters.map((stock) => (
                 <div key={stock.equity_id}>
-                  <StockCard stock={stock} />
+                  <StockCard stock={stock} linkQueryExtra={storySetupSuffix('flower_pot_burst')} />
                   <FpbMetricLine stock={stock} />
                 </div>
               ))}
@@ -1040,7 +1056,7 @@ function FpbResults({ preset, timeframe, viewMode, onViewModeChange }: {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   {setups.map((stock) => (
                     <div key={stock.equity_id}>
-                      <StockCard stock={stock} />
+                      <StockCard stock={stock} linkQueryExtra={storySetupSuffix('flower_pot_burst')} />
                       <FpbMetricLine stock={stock} />
                     </div>
                   ))}
@@ -1303,7 +1319,7 @@ function ScannerResults({ presetId }: { presetId: string }) {
           <ScanTable
             stocks={exportStocks}
             presetId={presetId}
-            onRowClick={(s) => navigate(`/chart/equity/${s.equity_id}?name=${encodeURIComponent(navName(s))}`)}
+            onRowClick={(s) => navigate(`/chart/equity/${s.equity_id}?name=${encodeURIComponent(navName(s))}${storySetupSuffix(presetId)}`)}
           />
         ) : (
           <BreakoutSurgeCards stocks={oppFilter ? exportStocks : sorted} />
@@ -1387,7 +1403,7 @@ function ScannerResults({ presetId }: { presetId: string }) {
             key={presetId}
             stocks={sorted}
             presetId={presetId}
-            onRowClick={(s) => navigate(`/chart/equity/${s.equity_id}?name=${encodeURIComponent(navName(s))}`)}
+            onRowClick={(s) => navigate(`/chart/equity/${s.equity_id}?name=${encodeURIComponent(navName(s))}${storySetupSuffix(presetId)}`)}
           />
         ) : (
           <div style={{
@@ -1419,7 +1435,7 @@ function ScannerResults({ presetId }: { presetId: string }) {
                     </ScanSectionLabel>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '24px' }}>
                       {vaniStocks.map((stock) => (
-                        <StockCard key={stock.equity_id} stock={stock} vaniContext={`Scanner / ${preset.name}`} />
+                        <StockCard key={stock.equity_id} stock={stock} vaniContext={`Scanner / ${preset.name}`} linkQueryExtra={storySetupSuffix(presetId)} />
                       ))}
                     </div>
                   </>
@@ -1431,7 +1447,7 @@ function ScannerResults({ presetId }: { presetId: string }) {
                     </ScanSectionLabel>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                       {restStocks.map((stock) => (
-                        <StockCard key={stock.equity_id} stock={stock} vaniContext={`Scanner / ${preset.name}`} />
+                        <StockCard key={stock.equity_id} stock={stock} vaniContext={`Scanner / ${preset.name}`} linkQueryExtra={storySetupSuffix(presetId)} />
                       ))}
                     </div>
                   </>
