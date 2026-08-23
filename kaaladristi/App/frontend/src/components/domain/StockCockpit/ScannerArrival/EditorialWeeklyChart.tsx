@@ -522,33 +522,46 @@ export default function EditorialWeeklyChart({ bars, annotations, personas, bigM
           );
         })}
 
-        {/* 7.5 — Big Money markers on the weekly bars that contain
-            institutional-footprint days. Small ₹ pill above the candle;
-            color = green for net-entry weeks, red for net-exit, gold for
-            mixed. Multiple daily events in the same week cluster into
-            one badge showing the combined ₹ value. */}
+        {/* 7.5 — Big Money badges: pinned to the TOP of the plot area
+            with a vertical leader dropping to the specific weekly bar's
+            high. Puts institutional-footprint annotations in their own
+            visual layer (never fights persona callouts for space at the
+            current-price zone). Multi-event weeks cluster into one badge
+            showing combined ₹ and day count. */}
         {Array.from(bigMoneyByBar.entries()).map(([idx, agg]) => {
           const x = xOf(idx);
-          const y = yOf(agg.high) - 18;
+          const barTopY = yOf(agg.high);
+          const badgeY = plot.y0 + 12;
           const color = TOK.gold;
           const crText = agg.count > 1
             ? `₹${agg.totalCr.toFixed(0)}Cr · ${agg.count}d`
             : `₹${agg.totalCr.toFixed(agg.totalCr >= 10 ? 0 : 1)}Cr`;
-          const boxW = crText.length * 5.6 + 10;
+          const boxW = crText.length * 5.6 + 14;
           return (
             <g key={`bm-${idx}`}>
-              <line x1={x} y1={y + 10} x2={x} y2={yOf(agg.high) + 2} stroke={color} strokeWidth={0.6} opacity={0.55} />
+              {/* leader from badge down to the candle top */}
+              <line
+                x1={x} y1={badgeY + 8}
+                x2={x} y2={barTopY - 2}
+                stroke={color}
+                strokeWidth={0.6}
+                opacity={0.55}
+                strokeDasharray="1 3"
+              />
+              {/* small mark at the candle top */}
+              <circle cx={x} cy={barTopY - 2} r={2} fill={color} />
+              {/* badge box */}
               <rect
-                x={x - boxW / 2} y={y - 4}
-                width={boxW} height={12} rx={2}
-                fill={`color-mix(in srgb, ${TOK.ground} 92%, transparent)`}
-                stroke={color} strokeWidth={0.7}
+                x={x - boxW / 2} y={badgeY - 6}
+                width={boxW} height={14} rx={2}
+                fill={`color-mix(in srgb, ${TOK.ground} 95%, transparent)`}
+                stroke={color} strokeWidth={0.8}
               />
               <text
-                x={x} y={y + 5}
+                x={x} y={badgeY + 4}
                 textAnchor="middle"
                 fontFamily="'JetBrains Mono', ui-monospace, monospace"
-                fontSize={8}
+                fontSize={9}
                 fontWeight={700}
                 fill={color}
               >
