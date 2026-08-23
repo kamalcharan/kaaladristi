@@ -104,14 +104,19 @@ class NseSession:
         print('  [nse] WARNING: Could not obtain cookies — downloads may fail')
         self._initialized = True  # Try anyway
 
-    def get(self, url: str, retries: int = 3) -> requests.Response:
-        """GET with auto-cookie initialization and retry with backoff."""
+    def get(self, url: str, retries: int = 3, referer: str | None = None) -> requests.Response:
+        """GET with auto-cookie initialization and retry with backoff.
+
+        Some NSE APIs (notably `/api/quote-equity`) validate the Referer against
+        the specific page that would normally load them — passing the generic
+        homepage Referer gets 403'd. Pass `referer=<page url>` to override the
+        default `https://www.nseindia.com/`."""
         if not self._initialized:
             self._init_cookies()
             time.sleep(2)
 
         headers = {
-            'Referer': 'https://www.nseindia.com/',
+            'Referer': referer or 'https://www.nseindia.com/',
         }
 
         for attempt in range(retries + 1):
