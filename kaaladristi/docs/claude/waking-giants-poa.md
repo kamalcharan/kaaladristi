@@ -1,4 +1,128 @@
-# Waking Giants + First Ascent — Plan of Action (2026-08-23)
+# Waking Giants + Ascent — Plan of Action (2026-08-23, v4 spec 2026-08-24)
+
+## v4 — Hibernation → Wake → Ascent (journey model) — SPEC AGREED 2026-08-24
+
+Owner-driven redesign after live review of the v1–v3 daily-evidence
+scanner (migrations 174–176 stay live as the INTERIM scanner until v4
+ships). Trigger case: WALCHANNAG — the v1–v3 3-yr window read its 2024
+wake-leg peak as "the old high it fell from" when the real story is a
+7-year hibernation (2016–23, ₹40–90) it broke out of in 2023; and the
+absolute delivery-day gate measured stock character, not change.
+Core reframe: **a waking giant is a multi-year JOURNEY (a state), not a
+60-session evidence window (a daily signal).**
+
+### Vocabulary (owner's)
+- **Golden Line** = SMA150 (house name, already a chart overlay).
+- **Hibernation** = multi-year consolidation: tight price band
+  oscillating around a FLAT Golden Line, duration ≥ min-base-years.
+- **Wake** = "consolidation breakout at the Golden Line" — breaking a
+  multi-year hibernation. WALCHANNAG = "waking from a 7-year
+  consolidation".
+
+### Base (hibernation) detector — deep history
+Computed over FULL cliff-adjusted history (raw prices exist ~26y; the
+3-yr window was the v1–v3 mistake). Outputs per stock: base_start,
+base_end, base_high, base_low, **base_years**. Min base_years:
+**default 3, USER-ADJUSTABLE** (entry field on the scanner — user can
+type 2 and search), which means base_years is STORED per stock and the
+filter is runtime, not baked into the matview.
+
+### MagicRS Alignment Score (0–6) — the strength dial (owner)
+daily green = 1 · weekly green = 2 · monthly green = 3, summed; 6/6 =
+strongest (rediscovery visible on every clock). Data rules:
+- Monthly is judged on `magic_rs_short` ONLY (migration-169 lesson —
+  monthly long MagicRS is structurally impossible, needs ~12y of bars).
+- Weekly uses long where warm, `magic_rs_short` as fallback (the
+  2024-admitted cohort lacks 145 weekly bars).
+- "Data missing" must never silently score as red.
+- "Green" = bull side of center incl. Neutral Bull (7-band lesson) —
+  ASSUMED default, owner may veto for Strong/Mild-only.
+Echoes the multi-timeframe "aligned rotation" idea in Rsspec.md.
+
+### Journey state machine (the scanner IS this roster)
+**Owner framing: "this should work like stage journey"** — the states
+are a CYCLE exactly like the Weinstein stage system: a stock can move
+to Stage 2, fall back to Stage 4, and later reappear on the potential
+Stage-2-leaders watchlist. Same here: every transition is legal in
+both directions, and each state feeds its own list (a died journey
+re-enters HIBERNATING and is automatically future wake-watch
+material — SHIVALIK is living this loop today).
+
+HIBERNATING → STIRRING (accumulation overlay inside the base) →
+WAKING (daily breakout of base ceiling + weekly confirm, at/above the
+Golden Line, alignment building) → **ASCENDING** (CONFIRMED wake —
+owner rule: **alignment score 6/6 AND monthly close holds above the
+base ceiling**) → journey death → back to HIBERNATING (re-base; a
+stock can wake again — SHIVALIK: woke 2021, journey died, re-basing).
+- State persists in a table (the `km_fpb_active` pattern on a
+  multi-year clock); nightly evaluation updates it; daily noise cannot
+  erase a journey.
+- **Journey death — ⚠ ONE OPEN CALIBRATION**: owner rule "Golden Line
+  distance turns negative on weekly" taken literally (one weekly close
+  below GL) would have killed WALCHANNAG in its 2025 dips — which the
+  owner reads as mid-journey. Proposal: single weekly close below GL ⇒
+  state **RESTING** (journey alive, flagged); death = **N consecutive
+  weekly closes below the Golden Line (propose N=8) OR weekly close
+  back inside the old hibernation range**. Owner to set N.
+
+### Wake detection ingredients (owner list, by role)
+- Structure: daily breakout of the consolidation ceiling + weekly
+  confirm; price crossing/holding the Golden Line; Golden Line slope
+  turning up.
+- Follow-through: EXPANDING distance from the Golden Line.
+- Participation: volume vs the base's own baseline; big-money-day
+  clusters at the break.
+- Strength: RS rising; weekly MagicRS turning green (feeds alignment).
+- mcap: NOT a gate (mcap ≡ price × constant shares) — mcap TIER
+  CROSSINGS are story beats.
+
+### Quality overlays (never gates)
+- Delivery consistency vs the stock's OWN baseline (relative, not
+  absolute ≥55 — the sniper_inst lesson) through the base and into the
+  break.
+- Base duration is the headline story stat ("broke a 7-year
+  hibernation" > "broke a 3-year one").
+
+### Scanner presentation — the STAGE-FAMILY pattern (owner screenshot)
+Present like the Stage Analysis family: **one tab per journey state**,
+each with an editorial one-liner, in the Discovery category:
+1. **Stirring** — "accumulating inside a multi-year hibernation,
+   knocking on the wake door" (~ Stage 2 Watch analog).
+2. **Waking Giants** — "hibernation ceiling broken at the Golden Line,
+   alignment building" — fresh/confirming wakes, freshest first.
+3. **Ascent** — "confirmed journeys in progress" (~ Stage 2 Leaders
+   analog): journey age, base_years, alignment score, % traveled,
+   Resting flag.
+
+### Naming (owner)
+**first_ascent → `ascent` ("Ascent")** — "it's not about 1st ascent,
+it's about ascent." Under the stage-family pattern the natural reading
+is: Ascent = the JOURNEY-STATE tab (Stage-2-Leaders analog), and the
+age dimension (Veteran 20y+/Established 10–20y/Ascending 6–10y,
+effective per-ISIN age) becomes the tier badge + a filter inside every
+tab — the family is split by STATE, not by age band.
+⚠ CONFIRM with owner: state-tabs REPLACE the two age-banded presets
+(3 focused tabs), vs keeping Giants/Ascent age-banded scanners with
+states inside each (6 diluted tabs). Recommendation: the former.
+
+### Story-chart integration (owner point 1)
+Hibernation paints as a background band exactly like the stage bands
+("7-YEAR HIBERNATION", rotated label — AnnotationOverlay band reuse),
+wake = event pin, ascent = band; alignment 1→3→6 is a narrative beat.
+
+### Infra implications
+Deep-history base compute (full history, cliff-adjusted — populating
+km_corporate_actions, audit item #7, gains leverage); journey state
+table (`km_wg_journeys`); weekly+monthly clock evaluation; runtime
+base_years filter (state table read, not matview-baked); backtest =
+run the wake detector over history → real events + forward returns →
+km_rule_confidence-style stats (audit's 30-signal minimum before ★).
+
+### Open before build
+1. Journey-death persistence N (propose 8 weekly closes; WALCHANNAG
+   2025 = the calibration case — must REST, not die).
+2. "Green" definition veto (default: bull side incl. Neutral Bull).
+
 
 Spec home: `docs/claude/scanner-audit-2026-07-12.md` §6b/§7/§8 (the full
 `WAKING_GIANTS_RULE.md` it references was never committed — the audit's
