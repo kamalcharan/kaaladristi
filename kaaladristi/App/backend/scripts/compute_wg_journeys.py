@@ -201,76 +201,80 @@ def load_display(conn, ids: list[int]) -> dict[int, dict]:
         return {r['equity_id']: dict(r) for r in cur.fetchall()}
 
 
-# ── Alignment ────────────────────────────────────────────────────────────
-
-def green_from(zone, rs_short) -> bool | None:
-    """Bull-side zone, else short-RS sign fallback; None = unknown (never red)."""
-    if zone is not None:
-        return zone in BULL_ZONES
-    if rs_short is not None:
-        try:
-            return float(rs_short) > 0
-        except (TypeError, ValueError):
-            return None
-    return None
-
-
-def alignment_at(daily_zone, wk_row, mo_row):
-    """(score, d, w, m). Weights: daily 1, weekly 2, monthly 3."""
-    d = (daily_zone in BULL_ZONES) if daily_zone is not None else None
-    w = green_from(wk_row[0], wk_row[1]) if wk_row is not None else None
-    # Monthly: SHORT variant only (169 lesson) — the zone column reflects
-    # long-RS logic and is unreliable at monthly cadence.
-    m = (float(mo_row[1]) > 0) if (mo_row is not None and mo_row[1] is not None) else None
-    score = (1 if d else 0) + (2 if w else 0) + (3 if m else 0)
-    return score, d, w, m
-
-
 # ── Per-stock journey walk ───────────────────────────────────────────────
+# Alignment components (daily zone / weekly zone-or-short / monthly SHORT
+# ONLY — the 169 lesson) are precomputed as numpy arrays in
+# _tri_state_arrays + walk_stock; weights daily=1, weekly=2, monthly=3.
+
+def _tri_state_arrays(idx, frame, use_zone: bool, use_short: bool):
+    """As-of (ffill) a weekly/monthly zone frame onto the daily index ONCE.
+    Returns (known: bool[], green: bool[]) numpy arrays. Vectorized — the
+    per-day `.loc[:t]` slicing this replaces made the walk O(n^2)."""
+    n = len(idx)
+    if frame is None or not len(frame):
+        return np.zeros(n, bool), np.zeros(n, bool)
+    f = frame.drop_duplicates('trade_date').set_index('trade_date').sort_index()
+    f = f.reindex(idx, method='ffill')
+    zone = f['zone'].to_numpy(dtype=object)
+    rs = pd.to_numeric(f['rs_short'], errors='coerce').to_numpy(dtype=float)
+    zone_known = np.array([isinstance(z, str) for z in zone]) if use_zone else np.zeros(n, bool)
+    zone_green = np.array([isinstance(z, str) and z in BULL_ZONES for z in zone])
+    rs_known = ~np.isnan(rs) if use_short else np.zeros(n, bool)
+    rs_green = np.where(rs_known, rs > 0, False)
+    known = zone_known | rs_known
+    green = np.where(zone_known, zone_green, rs_green)
+    return known, green
+
 
 def walk_stock(s: pd.Series, zones: pd.Series, wk: pd.DataFrame, mo: pd.DataFrame):
     """Walk one stock's cliff-adjusted close series through the state machine.
 
-    Returns (current: dict, archived: list[dict]). Historical alignment uses
-    whatever weekly/monthly rows existed at each date (as-of joins); where the
-    enriched layer is shallow (pre-2025) alignment is unknown and journeys are
-    tracked on price structure alone (no sleep call without full clock data).
+    Returns (current: dict, archived: list[dict]). Everything the daily loop
+    reads is precomputed into numpy arrays (as-of joins done once via ffill),
+    so the loop is O(n). Where the enriched layer is shallow (pre-2025)
+    alignment is unknown and journeys are tracked on price structure alone
+    (no sleep call without full clock data).
     """
     closes = s.dropna()
     if len(closes) < MIN_BARS:
         return None, []
     idx = closes.index
+    n = len(closes)
     vals = closes.values.astype(float)
-    gl = closes.rolling(GL_WINDOW).mean()
+    gl_arr = closes.rolling(GL_WINDOW).mean().to_numpy()
 
-    # Weekly resample of the same adjusted series (for confirm + resting).
+    # Weekly/monthly resamples of the same adjusted series, ffilled to daily —
+    # wclose_daily[i] is the last COMPLETED week's close as of day i.
     wk_close = closes.resample('W-FRI').last().dropna()
     mo_close = closes.resample('ME').last().dropna()
+    wclose_daily = wk_close.reindex(idx, method='ffill').to_numpy()
+    mclose_daily = mo_close.reindex(idx, method='ffill').to_numpy()
 
-    # rolling prior max over MIN_BASE_YEARS_DETECT (calendar) — shifted so
-    # "today" is excluded.
+    # rolling prior max over MIN_BASE_YEARS_DETECT (calendar), today excluded.
     win = f'{int(MIN_BASE_YEARS_DETECT * 365)}D'
-    prior_max = closes.rolling(win).max().shift(1)
+    prior_max = closes.rolling(win).max().shift(1).to_numpy()
 
-    # as-of lookups for weekly/monthly alignment rows
-    wk = wk.set_index('trade_date') if wk is not None and len(wk) else None
-    mo = mo.set_index('trade_date') if mo is not None and len(mo) else None
+    # daily alignment component
+    if zones is not None:
+        z = zones.reindex(idx).to_numpy(dtype=object)
+        d_known = np.array([isinstance(v, str) for v in z])
+        d_green = np.array([isinstance(v, str) and v in BULL_ZONES for v in z])
+    else:
+        d_known = np.zeros(n, bool)
+        d_green = np.zeros(n, bool)
 
-    def asof_row(frame, t):
-        if frame is None:
-            return None
-        sub = frame.loc[:t]
-        if not len(sub):
-            return None
-        last = sub.iloc[-1]
-        return (last['zone'], last['rs_short'])
+    # weekly (zone, short fallback) + monthly (SHORT ONLY — 169 lesson)
+    w_known, w_green = _tri_state_arrays(idx, wk, use_zone=True, use_short=True)
+    m_known, m_green = _tri_state_arrays(idx, mo, use_zone=False, use_short=True)
+
+    score_arr = d_green.astype(int) + 2 * w_green.astype(int) + 3 * m_green.astype(int)
+    clocks_known_arr = d_known & w_known & m_known
 
     def base_years_at(i):
         """Years since close was last >= vals[i], before the quiet stretch."""
         level = vals[i]
         before = np.where(vals[:i] >= level)[0]
         if len(before) == 0:
-            # never traded here — 'highest since listing'
             return (idx[i] - idx[0]).days / 365.25, idx[0]
         j = before[-1]
         return (idx[i] - idx[j]).days / 365.25, idx[j]
@@ -279,62 +283,53 @@ def walk_stock(s: pd.Series, zones: pd.Series, wk: pd.DataFrame, mo: pd.DataFram
     journey = None
     archived = []
 
-    for i in range(len(closes)):
-        t = idx[i]
+    for i in range(n):
         c = vals[i]
-        g = gl.iloc[i]
-
         if state == 'HIBERNATING':
-            pm = prior_max.iloc[i]
-            if pd.notna(pm) and c > pm and pd.notna(g) and c >= g:
+            pm = prior_max[i]
+            g = gl_arr[i]
+            if pm == pm and g == g and c > pm and c >= g:  # x == x → not NaN
                 by, bstart = base_years_at(i)
                 if by >= MIN_BASE_YEARS_DETECT:
                     journey = {
-                        'wake_date': t, 'base_high': float(pm),
+                        'wake_date': idx[i], 'base_high': float(pm),
                         'base_years': round(by, 1), 'base_start': bstart,
                         'confirm_date': None, 'weekly_confirmed': False,
                     }
                     state = 'WAKING'
         else:
-            # weekly confirmation of the breakout
             if not journey['weekly_confirmed']:
-                wks = wk_close.loc[journey['wake_date']:t]
-                if len(wks) and (wks > journey['base_high']).any():
+                w = wclose_daily[i]
+                if w == w and w > journey['base_high']:
                     journey['weekly_confirmed'] = True
 
-            dz = zones.iloc[i] if zones is not None else None
-            score, d_g, w_g, m_g = alignment_at(
-                dz if isinstance(dz, str) else None, asof_row(wk, t), asof_row(mo, t))
-            clocks_known = (d_g is not None and w_g is not None and m_g is not None)
-
-            # confirmation → ASCENDING
-            if state == 'WAKING' and clocks_known and score == 6:
-                mos = mo_close.loc[:t]
-                if len(mos) and mos.iloc[-1] >= journey['base_high']:
-                    journey['confirm_date'] = t
-                    state = 'ASCENDING'
-
-            # back to sleep — only with all three clocks known
-            if clocks_known and score <= SLEEP_MAX_ALIGN:
-                journey['sleep_date'] = t
-                journey['end_state'] = state
-                archived.append(journey)
-                journey = None
-                state = 'HIBERNATING'
+            if clocks_known_arr[i]:
+                sc = score_arr[i]
+                if state == 'WAKING' and sc == 6:
+                    m = mclose_daily[i]
+                    if m == m and m >= journey['base_high']:
+                        journey['confirm_date'] = idx[i]
+                        state = 'ASCENDING'
+                if sc <= SLEEP_MAX_ALIGN:
+                    journey['sleep_date'] = idx[i]
+                    journey['end_state'] = state
+                    archived.append(journey)
+                    journey = None
+                    state = 'HIBERNATING'
 
     # ── final snapshot ──
     t = idx[-1]
     c = vals[-1]
-    g = gl.iloc[-1]
-    dz = zones.iloc[-1] if zones is not None else None
-    score, d_g, w_g, m_g = alignment_at(
-        dz if isinstance(dz, str) else None, asof_row(wk, t), asof_row(mo, t))
+    g = gl_arr[-1]
+    score = int(score_arr[-1])
+    d_g = bool(d_green[-1]) if d_known[-1] else None
+    w_g = bool(w_green[-1]) if w_known[-1] else None
+    m_g = bool(m_green[-1]) if m_known[-1] else None
 
     resting = False
     if state in ('WAKING', 'ASCENDING') and len(wk_close):
         wk_last = float(wk_close.iloc[-1])
-        gl_at_wk = gl.iloc[-1]
-        resting = pd.notna(gl_at_wk) and wk_last < float(gl_at_wk)
+        resting = (g == g) and wk_last < float(g)
 
     current = {
         'state': state,
@@ -375,13 +370,14 @@ def stir_days_map(stir: pd.DataFrame) -> dict[int, int]:
     for eq, grp in stir.groupby('equity_id'):
         grp = grp.sort_values('trade_date').tail(60)
         del_ = grp['delivery_pct'].astype(float)
-        med = del_.median()
-        if pd.isna(med):
+        med_src = del_.dropna()
+        if not len(med_src):
             out[eq] = 0
             continue
-        gate = max(STIR_DELIV_FLOOR, float(med) * STIR_DELIV_MULT)
+        med = float(med_src.median())
+        gate = max(STIR_DELIV_FLOOR, med * STIR_DELIV_MULT)
         ok = (
-            (del_ >= gate)
+            (del_ >= gate)  # NaN delivery compares False — correct
             & (grp['pct_chng'].astype(float).abs().fillna(0) <= STIR_MAX_ABS_PCT)
             & (grp['rvol'].astype(float).fillna(1) <= STIR_MAX_RVOL)
         )
@@ -435,7 +431,11 @@ def run(dry_run: bool):
 
     current_rows, archive_rows = [], []
     counts = {'HIBERNATING': 0, 'STIRRING': 0, 'WAKING': 0, 'ASCENDING': 0, 'archived': 0}
+    n_done = 0
     for eq in closes.columns:
+        n_done += 1
+        if n_done % 100 == 0:
+            print(f'    [{n_done}/{len(closes.columns)}] walking…')
         wk = wk_all[wk_all.equity_id == eq][['trade_date', 'zone', 'rs_short']]
         mo = mo_all[mo_all.equity_id == eq][['trade_date', 'zone', 'rs_short']]
         res = walk_stock(closes[eq], zones_piv[eq] if eq in zones_piv else None, wk, mo)
