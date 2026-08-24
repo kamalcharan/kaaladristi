@@ -51,8 +51,9 @@ compressed version is authoritative). Owner decisions below are FINAL.
 
 | # | Step | State |
 |---|---|---|
-| 1 | `listing_date` backfill — `scripts/backfill_listing_dates.py` (NSE EQUITY_L.csv, ISIN-first match, NULL-only, prints age bands) | ✅ script ready — owner runs it |
-| 2 | 3-yr-high history for the dormancy gate (ties into populating `km_corporate_actions` — audit §5.7 split adjustment) | ⬜ |
+| 1 | `listing_date` backfill — `scripts/backfill_listing_dates.py` (NSE EQUITY_L.csv, ISIN-first match, NULL-only, prints age bands) | ✅ run 2026-08-23 (3,598 rows) |
+| 1b | mcap freshness — migration 172 + shares_outstanding lane in `enrich_equity_metadata.py` + daily `recompute_mcap_from_shares()` | ✅ run 2026-08-24 (see below) |
+| 2 | Dormancy metrics — migration 173 (`high_3y_adj`/`low_3y_adj`/`pct_from_3y_high`/`days_since_3y_high` on `km_equity_symbols`) + `scripts/compute_dormancy.py` (cliff-adjusted via `lib/breadth_common.adjust_close_cliffs` since `km_corporate_actions` is empty; MIN_BARS=150; ends with a per-band calibration report — the step-4 threshold constants get set from that report, not guesses; candidate gate: ≤ −50% from an ≥1-yr-old 3-yr high OR 3-yr range ratio ≤ 1.8. Raw preview 2026-08-24: Giants ≤−50% = 259, ≤−60% = 155, flat = 77 of the 1,013 mcap-passed pool pre-ADV). Weekly cadence; pipeline shim `compute_dormancy_for_pipeline` wires in at step 4. | ✅ script ready — owner runs migration 173 + script |
 | 3 | GL_acc_days rolling compute (pipeline column) | ⬜ |
 | 4 | Matview CTE + two preset SELECTs + `kd_scan_presets` rows (migration) | ⬜ |
 | 5 | ScanView tabs (auto — presets appear once rows exist; registry wiring already generalized) | ⬜ |
