@@ -122,23 +122,29 @@ base_years filter (state table read, not matview-baked); backtest =
 run the wake detector over history → real events + forward returns →
 km_rule_confidence-style stats (audit's 30-signal minimum before ★).
 
-### Spec CLOSED 2026-08-24 — v4 build order
-All design questions resolved. Build sequence:
-1. Base/hibernation detector — extend the cliff-adjusted machinery in
-   `compute_dormancy.py` to FULL history; store base_start/end/high/
-   low/base_years per stock.
-2. `km_wg_journeys` state table + nightly evaluator (weekly+monthly
-   clock; states, Resting flag, alignment score, transition history —
-   transitions are the backtest record).
-3. Alignment score compute (daily/weekly/monthly zone reads with the
-   short-variant fallbacks).
-4. Historical backfill: run the wake detector over full history so
-   journeys, past wakes, and forward-return stats exist on day one
-   (audit's 30-signal minimum before any ★).
-5. Three presets (stirring / waking_giants / ascent) reading the state
-   table; retire interim 174–176 WG blocks; runtime base_years filter.
-6. Story chart: hibernation bands + wake pins + journey band
-   (AnnotationOverlay reuse); D39 sweep on all surfaced copy.
+### Spec CLOSED 2026-08-24 — v4 BUILT same day (commit chain on
+### `claude/waking-giants`; steps 1–5 shipped, step 6 pending)
+
+| # | Piece | State |
+|---|---|---|
+| 1–4 | `scripts/compute_wg_journeys.py` — ONE evaluator does base detection, wake detection, alignment, the full state walk AND the historical backfill in a single 15-yr cliff-adjusted pass. Wake = close prints its highest level in ≥ 2y (detect floor; UI default filter 3y) at/above the Golden Line; base_years = years since price last traded at that level; weekly confirm; ASCENDING at 6/6 + monthly hold; RESTING on weekly GL cross; back-to-sleep at alignment ≤ 1 (only when all three clocks have data — pre-2025 shallow-indicator eras track price structure without sleep calls). STIRRING uses the RELATIVE delivery gate (≥ max(45, 1.15 × own 60d median)). Archived journeys = the backtest record. Smoke-tested on synthetic data (wake→confirm→ascend and clocks-dark→sleep→archive both verified). | ✅ |
+| 2 | Migration 177 — `km_wg_journeys` (current row per pooled stock + archive; display fields stamped denormalized, km_fpb_active pattern; grants incl. `authenticated`) + preset rows `waking_giants`/`wg_ascent`/`wg_stirring` (D39 copy), `first_ascent` deactivated. | ✅ pglast-validated — owner runs in pgAdmin |
+| 5 | Frontend — journey tabs read `km_wg_journeys` directly (fetchWgJourneys + counts merged into getAllScanCounts, graceful zeros pre-177); wg_phase gains 🧗 Ascent / 🌑 Asleep; new fields base_years ("Slept"), align_score ("N/6"), journey_age, Resting, vs-GL; per-tab columns + sorts. Typecheck + build (ratchet) green. | ✅ |
+| — | base_years USER FILTER field (spec: user enters 2 and searches) — data is runtime-filterable now (column on the table); the input UI itself | ⬜ next |
+| 6 | Story chart: hibernation bands + wake pins + journey band (AnnotationOverlay reuse) + WG story adapters | ⬜ next |
+| — | Matview cleanup: drop interim WG blocks from km_scan_results at the next scheduled recreate (they refresh harmlessly; nothing reads them post-177) | ⬜ housekeeping |
+
+**Owner runbook for v4 go-live:**
+1. Run migration 177 in pgAdmin.
+2. `cd App/backend && python scripts/compute_wg_journeys.py --dry-run`
+   — sanity-read the state counts and the WAKING/ASCENDING sample
+   (expect WALCHANNAG/SOLARA in ASCENDING or WAKING with real
+   base_years; SHIVALIK likely HIBERNATING with archived journeys).
+3. Re-run without `--dry-run` to write.
+4. Reload the app — Discovery shows Waking Giants / Ascent / Stirring.
+Nightly cadence: wire `compute_wg_for_pipeline` into pipeline2 after
+the daily run (or owner cron) — every run fully re-derives state
+(idempotent).
 
 
 Spec home: `docs/claude/scanner-audit-2026-07-12.md` §6b/§7/§8 (the full

@@ -330,9 +330,67 @@ export const ALL_FIELDS: Record<string, FieldConfig> = {
     type: 'category',
     width: 92,
     formatFn: (val: any) =>
-      val === 'WAKING' ? '🌅 Waking' : val === 'STIRRING' ? '🌱 Stirring' : val === 'DORMANT' ? '🌑 Dormant' : '—',
+      val === 'WAKING' ? '🌅 Waking'
+        : val === 'ASCENDING' ? '🧗 Ascent'
+        : val === 'STIRRING' ? '🌱 Stirring'
+        : val === 'HIBERNATING' || val === 'DORMANT' ? '🌑 Asleep'
+        : '—',
     colorFn: (val: any) =>
-      val === 'WAKING' ? 'var(--bull)' : val === 'STIRRING' ? 'var(--risk-amber)' : 'var(--text-secondary)',
+      val === 'WAKING' || val === 'ASCENDING' ? 'var(--bull)'
+        : val === 'STIRRING' ? 'var(--risk-amber)'
+        : 'var(--text-secondary)',
+  },
+  base_years: {
+    key: 'base_years',
+    label: 'Slept',
+    tooltip: 'Length of the hibernation — how many years the price had not traded at the wake level before breaking it. "7y" reads as: the breakout printed the highest close in 7 years.',
+    type: 'number',
+    width: 66,
+    formatFn: (val: any) => (val == null ? '—' : `${Number(val).toFixed(1)}y`),
+    colorFn: () => 'var(--text-primary)',
+  },
+  align_score: {
+    key: 'align_score',
+    label: 'Align',
+    tooltip: 'MagicRS alignment across timeframes: daily counts 1, weekly 2, monthly 3 — 6/6 means Leading/Improving on all three clocks at once. A journey confirms into Ascent at 6 and returns to sleep at 1 or below.',
+    type: 'number',
+    width: 64,
+    formatFn: (val: any) => (val == null ? '—' : `${Number(val)}/6`),
+    colorFn: (val: any) =>
+      val != null && Number(val) >= 6 ? 'var(--bull)'
+        : val != null && Number(val) >= 3 ? 'var(--risk-amber)'
+        : 'var(--text-secondary)',
+  },
+  journey_age_days: {
+    key: 'journey_age_days',
+    label: 'Journey',
+    tooltip: 'Time since the wake event (the day the hibernation ceiling broke).',
+    type: 'number',
+    width: 72,
+    formatFn: (val: any) => {
+      if (val == null) return '—';
+      const d = Number(val);
+      return d >= 365 ? `${(d / 365).toFixed(1)}y` : `${Math.round(d / 30.44)}mo`;
+    },
+    colorFn: () => 'var(--text-secondary)',
+  },
+  wg_resting: {
+    key: 'wg_resting',
+    label: 'Resting',
+    tooltip: 'Weekly close currently below the Golden Line — the journey is pausing, not over. A journey returns to sleep only when the timeframe alignment collapses.',
+    type: 'category',
+    width: 68,
+    formatFn: (val: any) => (val === true || val === 't' ? '😴 Yes' : '—'),
+    colorFn: () => 'var(--text-secondary)',
+  },
+  gl_dist_pct: {
+    key: 'gl_dist_pct',
+    label: 'vs GL',
+    tooltip: 'Distance of the close from the Golden Line (SMA 150). Expanding distance after a wake is follow-through; negative marks a rest.',
+    type: 'number',
+    width: 70,
+    formatFn: (val: any) => (val == null ? '—' : `${Number(val).toFixed(1)}%`),
+    colorFn: (val: any) => (val != null && Number(val) < 0 ? 'var(--risk-amber)' : 'var(--text-secondary)'),
   },
   drawdown_3y_pct: {
     key: 'drawdown_3y_pct',
