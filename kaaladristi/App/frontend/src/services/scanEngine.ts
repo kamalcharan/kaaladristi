@@ -1607,16 +1607,17 @@ function wgJourneyRowToScanStock(r: any): ScanStock {
 async function fetchWgJourneys(presetId: string, exchangeFilter: ExchangeFilter): Promise<ScanStock[]> {
   if (exchangeFilter === 'BSE') return [];
   const state = WG_JOURNEY_PRESETS[presetId];
-  const order =
-    state === 'WAKING'    ? 'wake_date.desc' :      // freshest wakes first
-    state === 'ASCENDING' ? 'align_score.desc' :    // strongest alignment first
-                            'stir_days.desc';       // strongest quiet building first
+  // QueryBuilder.order() appends the direction itself — pass the bare column.
+  const orderCol =
+    state === 'WAKING'    ? 'wake_date' :      // freshest wakes first
+    state === 'ASCENDING' ? 'align_score' :    // strongest alignment first
+                            'stir_days';       // strongest quiet building first
   const lim = getPresetMeta(presetId)?.limit ?? 60;
   const { data, error } = await from('km_wg_journeys')
     .select('*')
     .is('is_current', 'true')
     .eq('state', state)
-    .order(order)
+    .order(orderCol, { ascending: false, nullsFirst: false })
     .limit(lim)
     .execute();
   if (error || !Array.isArray(data)) {

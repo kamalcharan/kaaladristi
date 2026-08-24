@@ -138,8 +138,31 @@ def load_pool(conn) -> pd.DataFrame:
 
 # ── Data loads ───────────────────────────────────────────────────────────
 
+def load_twin_map(conn, pool: pd.DataFrame) -> dict[int, list[int]]:
+    """pool equity_id → [twin equity_ids sharing the ISIN] (other exchanges).
+
+    The newly-admitted NSE cohort (2024-06) carries only ~2y of NSE bars;
+    the DEEP tape — the 7-yr bases and 2023 wakes this engine exists to
+    find — lives on the BSE twin rows (BSE history reaches ~2001). Same
+    per-ISIN principle as effective age and combined ADV."""
+    isins = [i for i in pool['isin'].dropna().unique().tolist()]
+    if not isins:
+        return {}
+    with conn.cursor() as cur:
+        cur.execute('SELECT id, isin FROM km_equity_symbols WHERE isin = ANY(%s)', (isins,))
+        rows = cur.fetchall()
+    by_isin: dict[str, list[int]] = {}
+    for id_, isin in rows:
+        by_isin.setdefault(isin, []).append(id_)
+    out = {}
+    for _, p in pool.iterrows():
+        twins = [t for t in by_isin.get(p['isin'], []) if t != p['id']]
+        out[int(p['id'])] = twins
+    return out
+
+
 def load_daily(conn, ids: list[int]) -> pd.DataFrame:
-    """Daily close + zone history for the pool, LOAD_YEARS deep, long format."""
+    """Daily close + zone history, LOAD_YEARS deep, long format."""
     sql = """
         SELECT equity_id, trade_date, close, magic_rs, magic_rs_zone
         FROM km_equity_eod
@@ -153,8 +176,25 @@ def load_daily(conn, ids: list[int]) -> pd.DataFrame:
     df = pd.DataFrame(rows, columns=['equity_id', 'trade_date', 'close', 'magic_rs', 'magic_rs_zone'])
     df['trade_date'] = pd.to_datetime(df['trade_date'])
     df['close'] = df['close'].astype(float)
-    print(f'  Daily bars: {len(df):,} rows / {df.equity_id.nunique()} stocks')
+    print(f'  Daily bars: {len(df):,} rows / {df.equity_id.nunique()} stocks (incl. ISIN twins)')
     return df
+
+
+def merge_isin_histories(closes_raw: pd.DataFrame, pool_ids: list[int],
+                         twin_map: dict[int, list[int]]) -> pd.DataFrame:
+    """One close series per POOL stock: its own exchange line where present,
+    the ISIN twin's line filling the deep past (combine_first). Small
+    cross-exchange level differences are far inside the cliff thresholds."""
+    merged = {}
+    for eq in pool_ids:
+        s = closes_raw[eq] if eq in closes_raw.columns else None
+        for tid in twin_map.get(eq, []):
+            if tid in closes_raw.columns:
+                t = closes_raw[tid]
+                s = t if s is None else s.combine_first(t)
+        if s is not None:
+            merged[eq] = s
+    return pd.DataFrame(merged).sort_index()
 
 
 def load_tf_zones(conn, table: str, ids: list[int]) -> pd.DataFrame:
@@ -350,11 +390,15 @@ def walk_stock(s: pd.Series, zones: pd.Series, wk: pd.DataFrame, mo: pd.DataFram
             'journey_age_days': int((t - journey['wake_date']).days),
         })
     else:
-        # hibernating — describe the CURRENT sleep for the watchlist
-        by, bstart = base_years_at(len(closes) - 1)
+        # hibernating — describe the CURRENT sleep. "base_years" for a
+        # sleeping stock = time since its last peak in the loaded window
+        # (WALCHANNAG: asleep since its 2024 ₹430 top). base_high = the
+        # level a fresh wake must break (trailing detect-window max).
+        peak_t = closes.idxmax()
+        by = (t - peak_t).days / 365.25
         hi_win = closes.rolling(win).max().iloc[-1]
         current.update({
-            'base_start': bstart.date(), 'base_high': round(float(hi_win), 2),
+            'base_start': peak_t.date(), 'base_high': round(float(hi_win), 2),
             'base_years': round(by, 1),
             'wake_date': None, 'confirm_date': None,
             'pct_from_base_high': round((c / float(hi_win) - 1) * 100, 2) if pd.notna(hi_win) else None,
@@ -418,8 +462,12 @@ def run(dry_run: bool):
         print('  Empty pool — nothing to do.')
         return
     ids = pool['id'].tolist()
-    daily = load_daily(conn, ids)
-    closes = daily.pivot(index='trade_date', columns='equity_id', values='close').sort_index()
+    twin_map = load_twin_map(conn, pool)
+    all_ids = sorted(set(ids) | {t for ts in twin_map.values() for t in ts})
+    daily = load_daily(conn, all_ids)
+    closes_raw = daily.pivot(index='trade_date', columns='equity_id', values='close').sort_index()
+    closes = merge_isin_histories(closes_raw, ids, twin_map)
+    print(f'  Merged per-ISIN histories: {closes.notna().sum().sum():,.0f} bars across {len(closes.columns)} pool stocks')
     closes = adjust_close_cliffs(closes)
     zones_piv = daily.pivot(index='trade_date', columns='equity_id', values='magic_rs_zone').sort_index()
 
