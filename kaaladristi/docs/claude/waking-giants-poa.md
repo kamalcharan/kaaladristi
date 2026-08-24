@@ -65,13 +65,15 @@ Age bands (active NSE): 20y+ → 663 · 10–20y → 608 · 6–10y → 279 ·
 3–6y → 513 · <3y → 1,053. ~670 active NSE still dateless (SME/quirks).
 
 Gate funnel (age → +mcap ≥ ₹200 Cr → +ADV ≥ ₹1 Cr, ADV = 22-session
-avg of close×volume):
-· Giants 10y+:      1,225 trading → 488 → **479** pre-dormancy
-· First Ascent 6–10: 268 trading →  96 →  **85** pre-dormancy
+avg of close×volume) — **re-measured 2026-08-24 after the full shares
+sweep** (7,039 share counts captured, 6,760 mcap_cr recomputed;
+mcap NULL is down from 725/146 to 2/2):
+· Giants 10y+:      1,225 trading → 1,013 → **824** pre-dormancy
+· First Ascent 6–10: 268 trading →   199 → **154** pre-dormancy
+(pre-fix, judging on frozen/absent mcap: 479 / 85 — the gate was
+silently excluding ~345 Giants and ~69 First Ascent names.)
 
-⚠ **mcap_cr NULL excludes unfairly**: 725 of the Giants pool and 146
-of First Ascent have NULL mcap (the recently-admitted full-universe
-symbols). **Permanent fix built 2026-08-23 (migration 172)** — mcap is
+✅ **mcap_cr freshness — FIXED (migration 172, run 2026-08-24)** — mcap is
 decomposed as shares × price: `shares_outstanding` (slow-moving) is
 fetched from Yahoo by `enrich_equity_metadata.py` on a rolling ~45-day
 cadence (`shares_updated_at` stamps every attempt so misses don't
@@ -80,11 +82,12 @@ retry nightly; existing `industry` is never overwritten), and
 SQL UPDATE from shares × latest close, zero API calls — at the end of
 every pipeline `symbol_enrichment` run. This replaces the frozen
 one-time `populate_mcap.py` snapshot (NSE quote API, now 403-blocked).
-Owner steps: run migration 172 in pgAdmin, then locally
-`python scripts/enrich_equity_metadata.py` (full, ~20 min for ~3,500
-stocks at 0.3 s/call) or let the nightly cap of 200 catch up over
-~18 runs. Note: mcap *growth* as a signal ≈ `d30/d365_pct_chng`
+Owner ran migration 172 + the full sweep 2026-08-24 (8,237 targets,
+7,242 Yahoo hits, 995 misses — mostly ETF/MF `INF…` ISINs and fresh
+SMEs, stamped so they retry only after 45 days). From here the nightly
+`symbol_enrichment` run maintains it (cap 200/run covers the ~45-day
+rolling cadence). Note: mcap *growth* as a signal ≈ `d30/d365_pct_chng`
 (shares are near-constant); the new columns add tier-crossing and
 dilution/buyback visibility, not a separate mcap history need.
-Dormancy (step 2) will then cut 479+ down toward the audit's expected
-100–150.
+Dormancy (step 2) now works from 824 / 154 and is expected to cut the
+Giants pool toward the audit's 100–150.
