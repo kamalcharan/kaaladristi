@@ -134,6 +134,25 @@ km_rule_confidence-style stats (audit's 30-signal minimum before ★).
 | 6 | Story View adapters — `adapters/wakingGiants.ts`: ONE shared builder, three voices (stirring/waking/ascent), registered for all three preset ids so scanner row-clicks navigate into Story View (`&tab=chart&setup=`). Hibernation renders as a cycle band ("~N.NY QUIET"), the broken ceiling as a "Wake Level" line, wake/ascent as a bull band — all through the existing overlay contract. Weekly wake re-derived from the visible 5-yr window (deep read stays in km_wg_journeys). What-Confirms mirrors the engine gates; D39-observational copy incl. journey-rest framing. | ✅ (wake-date event pin on the chart: ⬜ polish) |
 | — | Matview cleanup: drop interim WG blocks from km_scan_results at the next scheduled recreate (they refresh harmlessly; nothing reads them post-177) | ⬜ housekeeping |
 
+**Post-go-live additions (2026-08-24):**
+- **Nightly wiring DONE**: `wg_journeys` is a pipeline2 dimension
+  (bespoke handler, scan_refresh pattern), LAST in DAILY_STEPS — the
+  journey table now refreshes itself every evening.
+- **⚠ PRODUCTION BUGFIX found while wiring**: `handle_symbol_enrichment`
+  routed through `_handle_script`, which probes
+  `fill_rate('symbol_enrichment')` — a key DIMENSION_HEALTH never had
+  (ValueError before the script ran) — and passes `verbose=`, which
+  `enrich_for_pipeline` doesn't accept. The nightly enrichment dimension
+  had therefore NEVER successfully run; the untagged backlog and mcap
+  maintenance only moved on manual CLI runs. Now a bespoke handler; the
+  45-day shares cadence + daily mcap recompute are genuinely nightly
+  for the first time.
+- **Backtest**: `scripts/wg_backtest.py` — forward returns (1m/3m/6m/
+  12m) for every wake event in km_wg_journeys, on the engine's own
+  cliff-adjusted per-ISIN tape; grouped by hibernation band and
+  confirmed-vs-not; prints the 30-signal confidence-gate check.
+  Absolute returns v1; benchmark-relative is the follow-up.
+
 **Owner runbook for v4 go-live:**
 1. Run migration 177 in pgAdmin.
 2. `cd App/backend && python scripts/compute_wg_journeys.py --dry-run`
