@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DristiQ Scanners · Story-Driven UX</title>
+  <style>
+    * { box-sizing: border-box; }
+    :root {
+      --bg: #0b0913; --panel: #141021; --card: #191327; --card-2: #201936;
+      --line: rgba(236,231,220,0.10); --line-2: rgba(236,231,220,0.18);
+      --ink: #ece7dc; --muted: #a79fb2; --faint: #7d7590;
+      --gold: #d8b46a; --gold-ink: #e6c885; --gold-wash: rgba(216,180,106,0.10);
+      --violet: #a596f5; --violet-wash: rgba(157,143,249,0.13);
+      --green: #6fcf92; --green-wash: rgba(111,207,146,0.12);
+      --red: #ef8f8f; --red-wash: rgba(239,143,143,0.12);
+      --amber: #e5bd72; --amber-wash: rgba(229,189,114,0.12);
+      --serif: 'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, serif;
+      --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      --mono: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, monospace;
+    }
+    body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 14.5px; line-height: 1.6; margin: 0; -webkit-font-smoothing: antialiased; }
+    
+    .wrap { max-width: 1120px; margin: 0 auto; padding: 24px 22px 60px; }
+    
+    /* Top Navigation Tabs */
+    .nav-tabs { display: flex; gap: 8px; border-bottom: 1px solid var(--line); margin-bottom: 24px; padding-bottom: 12px; }
+    .tab-btn { font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); background: var(--panel); border: 1px solid var(--line-2); padding: 8px 18px; border-radius: 8px; cursor: pointer; transition: all 0.2s; }
+    .tab-btn.active { color: var(--gold-ink); border-color: var(--gold); background: var(--gold-wash); }
+
+    .topline { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 6px; }
+    .eyebrow { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--gold); }
+    h1 { font-family: var(--serif); font-weight: 400; font-size: 1.9rem; margin: 4px 0 6px; }
+    h1 em { font-style: italic; color: var(--gold-ink); }
+    .lede { color: var(--muted); max-width: 800px; margin: 0 0 16px; font-size: 13.5px; }
+    .lede b { color: var(--gold-ink); }
+
+    .tab-content { display: none; }
+    .tab-content.active { display: block; animation: fadein 0.28s ease; }
+    @keyframes fadein { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+    /* Universal UI Elements */
+    .chip { display: inline-block; font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.08em; border-radius: 99px; padding: 2px 9px; white-space: nowrap; }
+    .chip.g { color: var(--green); background: var(--green-wash); }
+    .chip.r { color: var(--red); background: var(--red-wash); }
+    .chip.v { color: var(--violet); background: var(--violet-wash); }
+    .chip.au { color: var(--gold-ink); background: var(--gold-wash); }
+    .chip.mu { color: var(--faint); background: var(--card-2); }
+
+    .stateband { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin-bottom: 16px; }
+    .stat { border: 1px solid var(--line); border-radius: 10px; background: var(--panel); padding: 12px 15px; }
+    .stat .bn { font-family: var(--serif); font-size: 1.7rem; color: var(--gold-ink); line-height: 1.1; }
+    .stat .lb { font-family: var(--mono); font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--faint); margin-top: 4px; }
+    .stat .delta { font-family: var(--mono); font-size: 9.5px; color: var(--green); }
+
+    /* FLOWER POT UX */
+    .acts { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0; border: 1px solid var(--line-2); border-radius: 12px; overflow: hidden; margin: 16px 0 18px; }
+    @media (max-width: 720px) { .acts { grid-template-columns: 1fr; } }
+    .act { padding: 14px 18px; background: var(--panel); }
+    .act + .act { border-left: 1px dashed var(--line-2); }
+    .act .an { font-family: var(--mono); font-size: 9px; letter-spacing: 0.2em; text-transform: uppercase; margin-bottom: 4px; }
+    .act h4 { font-family: var(--serif); font-weight: 400; font-size: 1.1rem; margin: 0 0 3px; }
+    .act p { font-size: 12px; color: var(--muted); margin: 0; }
+    .act.a1 .an { color: var(--amber); } .act.a2 .an { color: var(--gold); } .act.a3 .an { color: var(--violet); }
+
+    .sec-label { display: flex; align-items: baseline; gap: 10px; font-family: var(--mono); font-size: 10px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--faint); margin: 20px 0 10px; }
+    .sec-label .n { color: var(--gold); }
+
+    .burst-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    @media (max-width: 800px) { .burst-row { grid-template-columns: 1fr; } }
+    .bcard { border: 1px solid rgba(216,180,106,0.45); border-radius: 12px; background: linear-gradient(180deg, rgba(216,180,106,0.08), rgba(216,180,106,0.02)); padding: 14px 16px; }
+    .bhead { display: flex; align-items: baseline; gap: 10px; }
+    .sym { font-family: var(--mono); font-weight: 700; font-size: 1.05rem; }
+    .bhead .px { margin-left: auto; font-variant-numeric: tabular-nums; }
+
+    .coil-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; }
+    .ccard { border: 1px solid var(--line); border-radius: 12px; background: var(--panel); padding: 14px 16px; }
+    canvas { display: block; width: 100%; height: auto; border-radius: 8px; background: var(--card); border: 1px solid var(--line); margin: 10px 0; }
+
+    /* CONFLUENCE UX */
+    .gauges { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+    .gauge { display: inline-flex; align-items: center; gap: 7px; border: 1px solid var(--line); border-radius: 99px; background: var(--panel); padding: 4px 12px; font-family: var(--mono); font-size: 9.5px; text-transform: uppercase; color: var(--muted); }
+    .lamp { width: 9px; height: 9px; border-radius: 50%; background: var(--gold); box-shadow: 0 0 6px rgba(216,180,106,0.6); }
+    .lamp.off { background: var(--card-2); box-shadow: none; border: 1px solid var(--line-2); }
+
+    .board { border: 1px solid var(--line); border-radius: 12px; background: var(--panel); overflow: hidden; }
+    .brow { display: grid; grid-template-columns: 30px 150px 1fr 110px 120px 90px; gap: 12px; align-items: center; padding: 10px 14px; border-bottom: 1px solid var(--line); }
+    .brow:last-child { border-bottom: none; }
+    .lampstrip { display: flex; gap: 5px; align-items: center; }
+    .lampstrip .cnt { font-family: var(--mono); font-size: 10px; color: var(--gold-ink); margin-left: 6px; }
+    .persist { display: flex; gap: 2px; align-items: flex-end; height: 16px; }
+    .persist i { width: 5px; border-radius: 1px; background: var(--gold); display: block; }
+    .persist i.faded { background: var(--card-2); }
+    .up { color: var(--green); } .dn { color: var(--red); }
+  </style>
+</head>
+<body>
+
+<div class="wrap">
+  <!-- Top UX Switcher -->
+  <div class="nav-tabs">
+    <button class="tab-btn active" onclick="switchTab('flowerpot')">1. Flower Pot (Story Pattern)</button>
+    <button class="tab-btn" onclick="switchTab('confluence')">2. Strength Confluence (Gauges)</button>
+  </div>
+
+  <!-- ================= FLOWER POT TAB ================= -->
+  <div id="tab-flowerpot" class="tab-content active">
+    <div class="topline">
+      <div>
+        <div class="eyebrow">Pattern #1 · Time Sequence</div>
+        <h1>Flower <em>Pot</em></h1>
+      </div>
+    </div>
+    <p class="lede">A story told in three acts: <b>energy coils</b>, <b>range expands</b>, and <b>outcomes are tracked</b>[cite: 2].</p>
+
+    <!-- The 3-Act Narrative Strip -->
+    <div class="acts">
+      <div class="act a1"><div class="an">Act I · The Coil</div><h4>Energy Builds</h4><p>Range contracts and volume dies[cite: 2]. Energy is stored[cite: 2].</p></div>
+      <div class="act a2"><div class="an">Act II · The Release</div><h4>The Expansion</h4><p>The rare session when range and volume explode[cite: 2].</p></div>
+      <div class="act a3"><div class="an">Act III · The Verdict</div><h4>Tracked Ledger</h4><p>Holding, cracked, or reference hit[cite: 2]. Published transparently[cite: 2].</p></div>
+    </div>
+
+    <!-- State Band -->
+    <div class="stateband">
+      <div class="stat"><div class="bn">6</div><div class="lb">Coiling Tonight</div></div>
+      <div class="stat"><div class="bn">2</div><div class="lb">Released Today</div></div>
+      <div class="stat"><div class="bn">3 <span class="delta">new</span></div><div class="lb">Fresh This Week</div></div>
+      <div class="stat"><div class="bn">14</div><div class="lb">Releases (60d)</div></div>
+    </div>
+
+    <!-- Act II: Releases First -->
+    <div class="sec-label"><span class="n">ACT II</span> Released Today · Rare Event</div>
+    <div class="burst-row">
+      <div class="bcard">
+        <div class="bhead">
+          <span class="sym">SHAKTIPUMP</span>
+          <span class="chip g">released +9.6%</span>
+          <span class="px">₹912.75</span>
+        </div>
+        <div style="font-family:var(--mono); font-size:11px; color:var(--muted); margin-top:8px;">
+          vol <b>11.2×</b> · range <b>3.1×</b> · after <b>13d</b> coiled[cite: 2]
+        </div>
+      </div>
+      <div class="bcard">
+        <div class="bhead">
+          <span class="sym">GRANULES</span>
+          <span class="chip r">released −7.1%</span>
+          <span class="px">₹506.10</span>
+        </div>
+        <div style="font-family:var(--mono); font-size:11px; color:var(--muted); margin-top:8px;">
+          vol <b>6.8×</b> · range <b>2.4×</b> · after <b>9d</b> coiled[cite: 2]
+        </div>
+      </div>
+    </div>
+
+    <!-- Act I: Coils Grid -->
+    <div class="sec-label"><span class="n">ACT I</span> Coiling Now · Visualized</div>
+    <div class="coil-grid">
+      <div class="ccard">
+        <div class="bhead"><span class="sym">SOLARINDS</span><span class="chip au">q 8.2</span><span class="px">₹13,482</span></div>
+        <canvas id="fpCanvas1" width="320" height="100"></canvas>
+        <div style="font-family:var(--mono); font-size:10px; color:var(--faint);">DAY 11 · ATR 0.44× · VOL 0.38×[cite: 2]</div>
+      </div>
+      <div class="ccard">
+        <div class="bhead"><span class="sym">BIKAJI</span><span class="chip au">q 7.8</span><span class="px">₹772.20</span></div>
+        <canvas id="fpCanvas2" width="320" height="100"></canvas>
+        <div style="font-family:var(--mono); font-size:10px; color:var(--faint);">DAY 8 · ATR 0.51× · VOL 0.42×[cite: 2]</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= CONFLUENCE TAB ================= -->
+  <div id="tab-confluence" class="tab-content">
+    <div class="topline">
+      <div>
+        <div class="eyebrow">Pattern #2 · Gauge Agreement</div>
+        <h1>Strength <em>Confluence</em></h1>
+      </div>
+    </div>
+    <p class="lede">Six independent indicators lighting up at once[cite: 1]. Glance the <b>lamp strip</b> to find maximum agreement[cite: 1].</p>
+
+    <!-- The 6 Gauges Legend -->
+    <div class="gauges">
+      <span class="gauge"><span class="lamp"></span>Price</span>
+      <span class="gauge"><span class="lamp"></span>Volume</span>
+      <span class="gauge"><span class="lamp"></span>Delivery</span>
+      <span class="gauge"><span class="lamp"></span>Industry</span>
+      <span class="gauge"><span class="lamp"></span>RS Zone</span>
+      <span class="gauge"><span class="lamp"></span>Structure</span>
+    </div>
+
+    <!-- State Band -->
+    <div class="stateband">
+      <div class="stat"><div class="bn">23</div><div class="lb">On the Board</div></div>
+      <div class="stat"><div class="bn">9</div><div class="lb">3d+ Running</div></div>
+      <div class="stat"><div class="bn">4.2<span style="font-size:0.9rem">/6</span></div><div class="lb">Avg Gauges Lit</div></div>
+      <div class="stat"><div class="bn">58%</div><div class="lb">10d Persistence Rate</div></div>
+    </div>
+
+    <!-- Confluence Board -->
+    <div class="board">
+      <div class="brow">
+        <span style="font-family:var(--mono); color:var(--faint); font-size:10px;">1</span>
+        <div><span class="sym">QPOWER</span><span style="display:block; font-size:10px; color:var(--faint)">Capital Goods</span></div>
+        <span class="lampstrip"><span class="lamp"></span><span class="lamp"></span><span class="lamp"></span><span class="lamp"></span><span class="lamp"></span><span class="lamp"></span><span class="cnt">6/6</span></span>
+        <span class="chip mu">Capital Goods</span>
+        <span class="persist"><i style="height:6px"></i><i style="height:9px"></i><i style="height:11px"></i><i style="height:14px"></i><i style="height:16px"></i></span>
+        <span style="text-align:right">₹864.20<span class="up" style="display:block; font-size:10px">+9.4%</span></span>
+      </div>
+      <div class="brow">
+        <span style="font-family:var(--mono); color:var(--faint); font-size:10px;">2</span>
+        <div><span class="sym">TARIL</span><span style="display:block; font-size:10px; color:var(--faint)">Capital Goods</span></div>
+        <span class="lampstrip"><span class="lamp"></span><span class="lamp"></span><span class="lamp"></span><span class="lamp"></span><span class="lamp"></span><span class="lamp off"></span><span class="cnt">5/6</span></span>
+        <span class="chip mu">Capital Goods</span>
+        <span class="persist"><i style="height:8px"></i><i style="height:8px"></i><i style="height:11px"></i><i style="height:14px"></i><i style="height:14px"></i></span>
+        <span style="text-align:right">₹512.65<span class="up" style="display:block; font-size:10px">+4.1%</span></span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  function switchTab(tabId) {
+    document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+    
+    if(tabId === 'flowerpot') {
+      document.querySelectorAll('.tab-btn')[0].classList.add('active');
+      document.getElementById('tab-flowerpot').classList.add('active');
+    } else {
+      document.querySelectorAll('.tab-btn')[1].classList.add('active');
+      document.getElementById('tab-confluence').classList.add('active');
+    }
+  }
+
+  // Draw Mini Coil Canvas Examples
+  function drawCoil(id) {
+    const cv = document.getElementById(id);
+    if (!cv) return;
+    const ctx = cv.getContext('2d'), W = cv.width, H = cv.height;
+    ctx.clearRect(0, 0, W, H);
+    
+    // Envelope
+    ctx.strokeStyle = 'rgba(216,180,106,0.55)'; 
+    ctx.setLineDash([4, 4]);
+    ctx.beginPath(); ctx.moveTo(10, 20); ctx.lineTo(W-10, 40); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(10, 80); ctx.lineTo(W-10, 60); ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Price
+    ctx.strokeStyle = '#ece7dc'; ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    for(let i=0; i<W-20; i+=10) {
+      let y = 50 + Math.sin(i * 0.2) * (30 - i*0.08);
+      i === 0 ? ctx.moveTo(10 + i, y) : ctx.lineTo(10 + i, y);
+    }
+    ctx.stroke();
+  }
+  drawCoil('fpCanvas1');
+  drawCoil('fpCanvas2');
+</script>
+
+</body>
+</html>

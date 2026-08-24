@@ -1,0 +1,4015 @@
+//@version=6
+indicator("Smart Trader, Episode 04, by Ata Sabanci, Candles and Z Scores", 
+     shorttitle = "ST-EP04", 
+     overlay = true, 
+     max_bars_back = 5000,
+     max_labels_count = 500,
+     max_boxes_count = 500)
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// IMPORTS
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+import TradingView/ta/10 as tvta
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// CONSTANTS
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+color COLOR_BULL      = color.rgb(59, 130, 246)   // Blue - Bullish
+color COLOR_BEAR      = color.rgb(244, 63, 94)    // Red - Bearish
+color COLOR_NEUTRAL   = color.rgb(148, 163, 184)  // Gray - Neutral
+color COLOR_HDR_BG    = color.rgb(30, 41, 59)     // Dark slate header
+color COLOR_ROW_BG    = color.rgb(51, 65, 85)     // Slate row background
+color COLOR_TXT_HDR   = color.rgb(248, 250, 252)  // White header text
+color COLOR_TXT_DIM   = color.rgb(148, 163, 184)  // Dim text
+color COLOR_TXT_VAL   = color.rgb(226, 232, 240)  // Value text
+color COLOR_YELLOW    = color.rgb(250, 204, 21)   // Yellow - Combined events
+
+float Z_THRESHOLD_HIGH = 2.0
+float Z_THRESHOLD_MED  = 1.0
+float Z_THRESHOLD_ZERO = 0.5
+
+// Event Classification Constants
+int EVT_CAT_PV    = 1    // Price-Volume (1-10)
+int EVT_CAT_OF    = 2    // Order-Flow/Delta (11-16)
+int EVT_CAT_BS    = 3    // Buy vs Sell (17-23)
+int EVT_CAT_PR    = 4    // Predictability (24-26)
+int EVT_CAT_RC    = 5    // Reversal vs Continuation (27-30)
+int EVT_CAT_IL    = 6    // Imbalance Lag (31-33)
+int EVT_CAT_SR    = 7    // Support/Resistance (34-36)
+int EVT_CAT_EX    = 8    // Extended Scenarios (37-50)
+int EVT_CAT_TI    = 9    // Trend-Integrated (51-60)
+
+int EVT_DIR_BULL    =  1
+int EVT_DIR_BEAR    = -1
+int EVT_DIR_NEUTRAL =  0
+int EVT_DIR_WARNING =  2   // Caution signal
+
+float CONF_VERY_HIGH = 90.0
+float CONF_HIGH      = 75.0
+float CONF_MEDIUM    = 60.0
+float CONF_LOW       = 45.0
+float CONF_MIN       = 30.0
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// INPUT GROUPS
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+string G_GLOBAL  = "═══ 🎛️ Global Settings ═══"
+string G_ENGINE  = "═══ ⚙️ Volume Engine ═══"
+string G_ZSCORE  = "═══ 📊 Z-Score Settings ═══"
+string G_DASH    = "═══ 📋 Dashboard ═══"
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// INPUTS: GLOBAL
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+string i_language = input.string("EN", "Language", 
+     options = ["EN", "TR", "KO"], group = G_GLOBAL,
+     tooltip = "Interface language.\n\n" +
+               "• EN: English\n" +
+               "• TR: Türkçe (Turkish)\n" +
+               "• KO: 한국어 (Korean)")
+
+string i_textSizeStr = input.string("Small", "Text Size (All)", 
+     options = ["Tiny", "Small", "Normal", "Large"], group = G_GLOBAL,
+     tooltip = "Controls font size for dashboard and all visual elements.\n\n" +
+               "• Tiny: Compact view for small screens\n" +
+               "• Small: Balanced readability (recommended)\n" +
+               "• Normal: Standard size\n" +
+               "• Large: High visibility")
+
+string i_dashPosStr = input.string("Top Right", "Dashboard Position",
+     options = ["Top Right", "Top Left", "Bottom Right", "Bottom Left"], group = G_GLOBAL,
+     tooltip = "Select corner placement for the Z-Score dashboard.")
+
+string i_calcBasis = input.string("Closed Bar", "Calculation Basis",
+     options = ["Closed Bar", "Current Bar"], group = G_GLOBAL)
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// INPUTS: Z-LINES
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+string G_ZLINES = "═══ 📈 Z-Lines ═══"
+
+// --- Metric Toggles ---
+bool  i_showZLines       = input.bool(true, "Show Price Z-Lines", group = G_ZLINES,
+     tooltip = "Show Z-Lines for Price.\n\nDraws horizontal lines at price levels where Price Z-Score reached extreme values.")
+bool  i_showVolumeZLines = input.bool(true, "Show Volume Z-Lines", group = G_ZLINES,
+     tooltip = "Show Z-Lines for Total Volume.\n\nDraws lines where Volume Z-Score reached extreme values.")
+bool  i_showBuyZLines    = input.bool(true, "Show Buy Vol Z-Lines", group = G_ZLINES,
+     tooltip = "Show Z-Lines for Buy Volume.\n\nDraws lines where Buy Volume Z-Score reached extreme values.")
+bool  i_showSellZLines   = input.bool(true, "Show Sell Vol Z-Lines", group = G_ZLINES,
+     tooltip = "Show Z-Lines for Sell Volume.\n\nDraws lines where Sell Volume Z-Score reached extreme values.")
+bool  i_showDeltaZLines  = input.bool(true, "Show Delta Z-Lines", group = G_ZLINES,
+     tooltip = "Show Z-Lines for Delta (Buy - Sell).\n\nDraws lines where Delta Z-Score reached extreme values.")
+
+// --- Direction Toggles ---
+bool  i_showUpperZLine   = input.bool(true, "Show Upper Lines", group = G_ZLINES,
+     tooltip = "Show lines for upper Z threshold.\n\nDrawn from HIGH of candles where Z >= threshold.")
+bool  i_showLowerZLine   = input.bool(true, "Show Lower Lines", group = G_ZLINES,
+     tooltip = "Show lines for lower Z threshold.\n\nDrawn from LOW of candles where Z <= threshold.")
+
+// --- Projection Settings ---
+bool  i_enableProjection = input.bool(true, "Enable Projection", group = G_ZLINES,
+     tooltip = "Extend lines with dashed projection into future bars.")
+int   i_projectionLen    = input.int(7, "Projection Length", minval = 1, maxval = 50, group = G_ZLINES,
+     tooltip = "Number of bars to project the line forward.")
+
+// --- Label Anti-Overlap (Min Gap + Cap) ---
+float i_labelMinGapPct = input.float(3.0, "Label Min Gap (%)", minval = 0.1, maxval = 25.0, step = 0.1, group = G_ZLINES,
+     tooltip = "Minimum vertical separation between Z-Line labels (as % of reference price).\n\n" +
+               "Rule: no two labels are allowed to be closer than this threshold.\n" +
+               "If needed, labels are offset (stacked) to preserve readability.")
+float i_labelMaxOffsetAtr = input.float(1.5, "Label Max Offset (ATR x)", minval = 0.1, maxval = 10.0, step = 0.1, group = G_ZLINES,
+     tooltip = "Maximum allowed label offset from its own line level.\n\n" +
+               "If the required separation exceeds this cap, the dashboard will show an overlap warning.")
+
+// --- Threshold Settings ---
+float i_upperZThreshold  = input.float(2.0, "Upper Z Threshold", minval = 0.5, maxval = 5.0, step = 0.1, group = G_ZLINES,
+     tooltip = "Z-Score threshold for upper lines.\n\nWhen Z >= this value, a line is drawn from the HIGH.")
+float i_lowerZThreshold  = input.float(-2.0, "Lower Z Threshold", minval = -5.0, maxval = -0.5, step = 0.1, group = G_ZLINES,
+     tooltip = "Z-Score threshold for lower lines.\n\nWhen Z <= this value, a line is drawn from the LOW.")
+
+// --- Color Settings ---
+color i_upperLineColor   = input.color(color.rgb(59, 130, 246), "Upper Line Color", group = G_ZLINES,
+     tooltip = "Color for upper Z-Lines (levels above current price).")
+color i_lowerLineColor   = input.color(color.rgb(244, 63, 94), "Lower Line Color", group = G_ZLINES,
+     tooltip = "Color for lower Z-Lines (levels below current price).")
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// INPUTS: VOLUME ENGINE
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+string i_calcMethod = input.string("Geometry (Approx)", "Calculation Method",
+     options = ["Geometry (Approx)", "Intrabar (Precise)"], group = G_ENGINE,
+     tooltip = "Volume decomposition method:\n\n" +
+               "• Geometry (Approx): Fast calculation using candle structure.\n" +
+               "  Buy = Volume × (Close-Low)/(High-Low)\n" +
+               "  Works on all instruments.\n\n" +
+               "• Intrabar (Precise): Uses lower timeframe tick data.\n" +
+               "  More accurate but requires data coverage.")
+
+bool i_useCustomLTF = input.bool(true, "Use Custom Lower Timeframe", group = G_ENGINE,
+     tooltip = "Enable to specify custom LTF for Intrabar method.\n" +
+               "Disable for auto-resolution based on current timeframe.")
+
+string i_customLTF = input.timeframe("15S", "Lower Timeframe (LTF)", group = G_ENGINE,
+     tooltip = "Lower timeframe for precise volume calculation.\n\n" +
+               "• 1S-15S: High precision, limited history\n" +
+               "• 1-5 min: Good balance\n" +
+               "• Only used with Intrabar method")
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// INPUTS: Z-SCORE
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+int i_zPeriod = input.int(20, "Z-Score Period", minval = 10, maxval = 500, group = G_ZSCORE,
+     tooltip = "Lookback period for Z-Score calculation.\n\n" +
+               "• Minimum 20 required for statistical validity\n" +
+               "• 20-50: Responsive to recent changes\n" +
+               "• 50-100: Smoother, captures longer-term deviations\n" +
+               "• 100+: Very stable, slow to react\n\n" +
+               "Z-Score = (Value - Mean) / StdDev\n" +
+               "Measures how many standard deviations from average.")
+
+int i_numGroups = input.int(5, "Number of Groups", minval = 1, maxval = 20, group = G_ZSCORE,
+     tooltip = "Number of Z-Score groups.\n\n" +
+               "Total window = Period × Groups\n" +
+               "Example: 20 × 5 = 100 bars\n\n" +
+               "Z-Lines will detect levels across all groups.")
+
+bool i_showGroupLabels = input.bool(true, "Show Group Labels", group = G_ZSCORE,
+     tooltip = "Display group boundary numbers above candles.\n\n" +
+               "Shows numbered markers (1, 2, 3...) at the end of each group period.")
+
+ 
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// INPUTS: DASHBOARD
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+bool i_showDash = input.bool(true, "Show Dashboard", group = G_DASH,
+     tooltip = "Toggle Z-Score dashboard visibility.\n\n" +
+               "Dashboard displays real-time Z-Scores for:\n" +
+               "• Price\n• Total Volume\n• Buy Volume\n• Sell Volume\n• Delta")
+
+string G_TREND = "═══ 📐 Trend Channels ═══"
+
+bool i_trendEnable = input.bool(true, "Enable Trend Detection", group = G_TREND,
+     tooltip = "Multi-segment trend system using block HH/HL/LH/LL pattern detection.\n\n" +
+               "Draws dynamic trend channels based on Z-Score group blocks.")
+
+float i_rangeAngleThreshold = input.float(10.0, "Range Angle Threshold (°)", minval = 1.0, maxval = 45.0, step = 1.0, group = G_TREND,
+     tooltip = "Lines with angle ≤ this value are classified as RANGE.\n\n" +
+               "• Lower value: More trends, fewer ranges\n" +
+               "• Higher value: Fewer trends, more ranges")
+
+bool i_showRangeSegments = input.bool(true, "Show Range Segments", group = G_TREND,
+     tooltip = "Draw lines for range/sideways segments.")
+
+color i_trendUpColor = input.color(color.rgb(34, 197, 94), "Uptrend Line Color", group = G_TREND,
+     tooltip = "Color for uptrend channel lines (green).")
+
+color i_trendDnColor = input.color(color.rgb(239, 68, 68), "Downtrend Line Color", group = G_TREND,
+     tooltip = "Color for downtrend channel lines (red).")
+
+color i_trendRangeColor = input.color(color.rgb(148, 163, 184), "Range Line Color", group = G_TREND,
+     tooltip = "Color for range/sideways lines (gray).")
+
+int i_trendLineWidth = input.int(2, "Trend Line Width", minval = 1, maxval = 5, group = G_TREND)
+
+string i_trendLineStyle = input.string("solid", "Trend Line Style",
+     options = ["solid", "dashed", "dotted"], group = G_TREND)
+
+bool i_trendProject = input.bool(true, "Project to Future", group = G_TREND,
+     tooltip = "Extend trend lines into the future by projection length.")
+
+int i_trendProjLen = input.int(10, "Projection Length", minval = 1, maxval = 50, group = G_TREND,
+     tooltip = "Number of bars to project trend lines forward.")
+
+bool i_showTrendLabels = input.bool(true, "Show Trend Labels", group = G_TREND,
+     tooltip = "Display labels at trend channel endpoints showing price levels and angles.")
+
+string G_EVENTS = "═══ ⚡ Event Markers ═══"
+
+bool i_showEventMarkers = input.bool(true, "Show Event Markers", group = G_EVENTS,
+     tooltip = "Display visual markers on the chart when events are triggered.\n\n" +
+               "• Bullish events: Blue markers above bars\n" +
+               "• Bearish events: Red markers below bars\n" +
+               "• Warning events: Yellow markers\n" +
+               "• Neutral events: Gray markers")
+
+bool i_showOnlyStrong = input.bool(true, "Only Strong Events (≥60% conf)", group = G_EVENTS,
+     tooltip = "Filter to show only high-confidence events.\n\n" +
+               "When enabled, only events with ≥60% confidence are displayed.\n" +
+               "This reduces chart clutter.")
+
+int i_maxMarkersPerBar = input.int(3, "Max Markers Per Bar", minval = 1, maxval = 10, group = G_EVENTS,
+     tooltip = "Maximum number of event markers to show per bar.\n\n" +
+               "When multiple events trigger on the same bar, only the top N by confidence are shown.")
+
+// Alert system uses alertcondition() only — no inputs needed
+// All alert options appear in TradingView's native Alert dialog
+// This keeps the indicator settings menu clean and professional
+
+  
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// DERIVED SETTINGS
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+int baseOff = i_calcBasis == "Current Bar" ? 0 : 1
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// TRANSLATION ENGINE
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+// Translation function - returns localized text based on selected language
+// Keys are English strings, function returns translated version
+// TODO: Add full translations when all features are complete
+f_tr(string key) =>
+    // For now, return English (translations to be added later)
+    key
+
+// Trilingual translation function (EN, TR, KO)
+f_L3(string en, string tr, string ko) =>
+    i_language == "TR" ? tr : 
+     i_language == "KO" ? ko : en
+
+// Event name localization (60 scenarios)
+f_eventName(int id) =>
+    switch id
+        // Category A: Price-Volume (1-10)
+        1  => f_L3("Breakout Confirmed", "Kırılım Onaylı", "돌파 확정")
+        2  => f_L3("Trend Strength Confirmed", "Trend Gücü Onaylı", "추세 강도 확정")
+        3  => f_L3("Fragile Move", "Kırılgan Hareket", "취약한 움직임")
+        4  => f_L3("Weak Rally", "Zayıf Ralli", "약한 반등")
+        5  => f_L3("Weak Selloff", "Zayıf Satış", "약한 하락")
+        6  => f_L3("Momentum Build", "Momentum Oluşumu", "모멘텀 형성")
+        7  => f_L3("Churn", "Çalkalanma", "순환")
+        8  => f_L3("Quiet Compression", "Sessiz Sıkışma", "조용한 압축")
+        9  => f_L3("High Volume Regime", "Yüksek Hacim Rejimi", "고거래량 체제")
+        10 => f_L3("Low Volume Regime", "Düşük Hacim Rejimi", "저거래량 체제")
+        // Category B: Order-Flow/Delta (11-16)
+        11 => f_L3("Imbalance Drives Price", "Dengesizlik Fiyatı Yönlendiriyor", "불균형이 가격 주도")
+        12 => f_L3("Divergence Top", "Tepe Uyumsuzluğu", "고점 다이버전스")
+        13 => f_L3("Divergence Bottom", "Dip Uyumsuzluğu", "저점 다이버전스")
+        14 => f_L3("Absorption Positive", "Pozitif Emilim", "긍정적 흡수")
+        15 => f_L3("Absorption Negative", "Negatif Emilim", "부정적 흡수")
+        16 => f_L3("Depth Wall", "Derinlik Duvarı", "깊이 벽")
+        // Category C: Buy vs Sell (17-23)
+        17 => f_L3("Aggressive Buy Dominance", "Agresif Alıcı Hakimiyeti", "공격적 매수 우위")
+        18 => f_L3("Aggressive Sell Dominance", "Agresif Satıcı Hakimiyeti", "공격적 매도 우위")
+        19 => f_L3("Two-Sided Battle", "İki Taraflı Savaş", "양측 전투")
+        20 => f_L3("Battle with Buy Edge", "Alıcı Avantajlı Savaş", "매수 우위 전투")
+        21 => f_L3("Battle with Sell Edge", "Satıcı Avantajlı Savaş", "매도 우위 전투")
+        22 => f_L3("Hidden Accumulation", "Gizli Birikim", "숨겨진 축적")
+        23 => f_L3("Hidden Distribution", "Gizli Dağıtım", "숨겨진 배분")
+        // Category D: Predictability (24-26)
+        24 => f_L3("Volume Shock Positive Drift", "Hacim Şoku Pozitif Sapma", "거래량 충격 긍정적 드리프트")
+        25 => f_L3("Volume Shock Negative Drift", "Hacim Şoku Negatif Sapma", "거래량 충격 부정적 드리프트")
+        26 => f_L3("Abnormal Volume Info Arrival", "Anormal Hacim Bilgi Gelişi", "비정상 거래량 정보 도착")
+        // Category E: Reversal vs Continuation (27-30)
+        27 => f_L3("High Vol Reversal Risk", "Yüksek Hacim Dönüş Riski", "고거래량 반전 위험")
+        28 => f_L3("Low Vol Continuation Risk", "Düşük Hacim Devam Riski", "저거래량 지속 위험")
+        29 => f_L3("Speculation Continuation", "Spekülasyon Devamı", "투기 지속")
+        30 => f_L3("Risk Sharing Reversal", "Risk Paylaşımı Dönüşü", "리스크 공유 반전")
+        // Category F: Imbalance Lag (31-33)
+        31 => f_L3("Persistent Imbalance Push", "Kalıcı Dengesizlik Baskısı", "지속적 불균형 압력")
+        32 => f_L3("Imbalance Pressure Decay", "Dengesizlik Baskısı Çözülmesi", "불균형 압력 감소")
+        33 => f_L3("Intraday Imbalance Predicts", "Gün İçi Dengesizlik Tahmini", "일중 불균형 예측")
+        // Category G: Support/Resistance (34-36)
+        34 => f_L3("SR Barrier Event", "Destek/Direnç Bariyeri", "지지/저항 장벽")
+        35 => f_L3("Volume Backed SR Level", "Hacim Destekli S/R Seviyesi", "거래량 지지 S/R 레벨")
+        36 => f_L3("Volume Poor SR Level", "Hacim Zayıf S/R Seviyesi", "거래량 빈약 S/R 레벨")
+        // Category H: Extended (37-50)
+        37 => f_L3("Climax Buy", "Klimaks Alım", "클라이맥스 매수")
+        38 => f_L3("Climax Sell", "Klimaks Satış", "클라이맥스 매도")
+        39 => f_L3("Stealth Accumulation", "Gizli Birikim", "스텔스 축적")
+        40 => f_L3("Stealth Distribution", "Gizli Dağıtım", "스텔스 배분")
+        41 => f_L3("Volume Divergence Bull", "Hacim Uyumsuzluğu Boğa", "거래량 다이버전스 강세")
+        42 => f_L3("Volume Divergence Bear", "Hacim Uyumsuzluğu Ayı", "거래량 다이버전스 약세")
+        43 => f_L3("Delta Price Alignment", "Delta Fiyat Uyumu", "델타 가격 정렬")
+        44 => f_L3("Extreme Compression", "Aşırı Sıkışma", "극한 압축")
+        45 => f_L3("Volatility Expansion", "Volatilite Genişlemesi", "변동성 확장")
+        46 => f_L3("Buy Exhaustion", "Alım Tükenmesi", "매수 소진")
+        47 => f_L3("Sell Exhaustion", "Satış Tükenmesi", "매도 소진")
+        48 => f_L3("Trend Acceleration", "Trend Hızlanması", "추세 가속")
+        49 => f_L3("Trend Deceleration", "Trend Yavaşlaması", "추세 감속")
+        50 => f_L3("Multi Divergence", "Çoklu Uyumsuzluk", "다중 다이버전스")
+        // Category I: Trend-Integrated (51-60)
+        51 => f_L3("Trend Breakout Confirmed", "Trend Kırılımı Onaylı", "추세 돌파 확정")
+        52 => f_L3("Trend Support Test", "Trend Destek Testi", "추세 지지 테스트")
+        53 => f_L3("Trend Resistance Test", "Trend Direnç Testi", "추세 저항 테스트")
+        54 => f_L3("Trend Reversal Signal", "Trend Dönüş Sinyali", "추세 반전 신호")
+        55 => f_L3("Channel Absorption", "Kanal Emilimi", "채널 흡수")
+        56 => f_L3("Trend Continuation Volume", "Trend Devam Hacmi", "추세 지속 거래량")
+        57 => f_L3("Trend Exhaustion", "Trend Tükenmesi", "추세 소진")
+        58 => f_L3("Range Breakout Pending", "Yatay Kırılım Bekliyor", "레인지 돌파 대기")
+        59 => f_L3("Trend Quality High", "Yüksek Trend Kalitesi", "높은 추세 품질")
+        60 => f_L3("Trend Quality Low", "Düşük Trend Kalitesi", "낮은 추세 품질")
+        => f_L3("Unknown Event", "Bilinmeyen Olay", "알 수 없는 이벤트")
+
+// Event category name localization
+f_categoryName(int cat) =>
+    switch cat
+        EVT_CAT_PV => f_L3("Price-Volume", "Fiyat-Hacim", "가격-거래량")
+        EVT_CAT_OF => f_L3("Order-Flow", "Emir Akışı", "주문 흐름")
+        EVT_CAT_BS => f_L3("Buy vs Sell", "Alım vs Satış", "매수 vs 매도")
+        EVT_CAT_PR => f_L3("Predictability", "Öngörülebilirlik", "예측 가능성")
+        EVT_CAT_RC => f_L3("Reversal/Continuation", "Dönüş/Devam", "반전/지속")
+        EVT_CAT_IL => f_L3("Imbalance Lag", "Dengesizlik Gecikmesi", "불균형 지연")
+        EVT_CAT_SR => f_L3("Support/Resistance", "Destek/Direnç", "지지/저항")
+        EVT_CAT_EX => f_L3("Extended Analysis", "Genişletilmiş Analiz", "확장 분석")
+        EVT_CAT_TI => f_L3("Trend-Integrated", "Trend Entegre", "추세 통합")
+        => f_L3("Unknown", "Bilinmeyen", "알 수 없음")
+
+// Event direction localization
+f_directionName(int dir) =>
+    switch dir
+        EVT_DIR_BULL    => f_L3("Bullish", "Yükseliş", "강세")
+        EVT_DIR_BEAR    => f_L3("Bearish", "Düşüş", "약세")
+        EVT_DIR_NEUTRAL => f_L3("Neutral", "Nötr", "중립")
+        EVT_DIR_WARNING => f_L3("Warning", "Uyarı", "경고")
+        => f_L3("Unknown", "Bilinmeyen", "알 수 없음")
+
+// Academic basis citations (abbreviated)
+f_academicBasis(int id) =>
+    switch id
+        1  => "Cont et al. (arXiv) + Karpoff"
+        2  => "Karpoff (Cambridge)"
+        3  => "Karpoff (Cambridge) - Anomaly"
+        4  => "Karpoff (Cambridge) - Anomaly"
+        5  => "Karpoff (Cambridge) - Anomaly"
+        6  => "Tauchen-Pitts (Duke)"
+        7  => "Clark (Stats) - MDH"
+        8  => "Tauchen-Pitts (Duke)"
+        9  => "Tauchen-Pitts (Duke)"
+        10 => "Tauchen-Pitts (Duke)"
+        11 => "Cont et al. (arXiv)"
+        12 => "EKOP (Buffalo)"
+        13 => "EKOP (Buffalo)"
+        14 => "Cont et al. (arXiv)"
+        15 => "Cont et al. (arXiv)"
+        16 => "Cont et al. (arXiv)"
+        17 => "EKOP (Buffalo)"
+        18 => "EKOP (Buffalo)"
+        19 => "Cont et al. (arXiv)"
+        20 => "Chordia et al. (ScienceDirect)"
+        21 => "Chordia et al. (ScienceDirect)"
+        22 => "EKOP (Buffalo)"
+        23 => "EKOP (Buffalo)"
+        24 => "Gervais et al. (Wharton)"
+        25 => "Gervais et al. (Wharton)"
+        26 => "Karpoff (Cambridge)"
+        27 => "CGW (MIT)"
+        28 => "CGW (MIT)"
+        29 => "Llorente et al. (Finance)"
+        30 => "Llorente et al. (Finance)"
+        31 => "Chordia et al. (ScienceDirect)"
+        32 => "Chordia et al. (ScienceDirect)"
+        33 => "T&F Online (2025)"
+        34 => "Peskir (Manchester)"
+        35 => "Peskir (Manchester)"
+        36 => "Peskir (Manchester)"
+        => "Extended Analysis"
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// UDT: Z-SCORE SNAPSHOT (for event detection)
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+type ZSnapshot
+    float Zp        // Price Z-Score
+    float Zv        // Total Volume Z-Score
+    float Zbuy      // Buy Volume Z-Score
+    float Zsell     // Sell Volume Z-Score
+    float Zdelta    // Delta Z-Score
+    int   dirP      // Price direction: 1=up, -1=down, 0=neutral
+    float Zp_1      // Previous bar Zp
+    float Zdelta_1  // Previous bar Zdelta
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// UDT: EVENT RESULT
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+type EventResult
+    int     eventId       // 1-60
+    string  eventName     // Localized name
+    int     category      // EVT_CAT_*
+    int     direction     // EVT_DIR_*
+    float   confidence    // 0-100
+    string  academicBasis // Citation reference
+    bool    isActive      // Currently triggered
+    int     barIdx        // Bar index when detected
+
+// Method: Calculate confidence score based on Z-score magnitudes
+method calcConfidence(EventResult this, float primaryZ, float secondaryZ, float tertiaryZ) =>
+    // Base confidence from primary Z-score magnitude
+    float baseConf = math.min(100.0, math.abs(primaryZ) * 25.0)
+    
+    // Boost from secondary alignment
+    float secBoost = na(secondaryZ) ? 0.0 : math.min(20.0, math.abs(secondaryZ) * 10.0)
+    
+    // Boost from tertiary alignment
+    float terBoost = na(tertiaryZ) ? 0.0 : math.min(10.0, math.abs(tertiaryZ) * 5.0)
+    
+    // Alignment bonus: if all Z-scores point same direction
+    float alignBonus = 0.0
+    if not na(secondaryZ) and math.sign(primaryZ) == math.sign(secondaryZ)
+        alignBonus += 5.0
+    if not na(tertiaryZ) and math.sign(primaryZ) == math.sign(tertiaryZ)
+        alignBonus += 5.0
+    
+    this.confidence := math.min(100.0, baseConf + secBoost + terBoost + alignBonus)
+    this
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// EVENT DETECTION FUNCTIONS - CATEGORY A: PRICE-VOLUME (1-10)
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+// Helper: Check if value is in range [lo, hi)
+f_inRange(float val, float lo, float hi) =>
+    val >= lo and val < hi
+
+// Helper: Check if absolute value is in range
+f_absInRange(float val, float lo, float hi) =>
+    math.abs(val) >= lo and math.abs(val) < hi
+
+// Event 1: Breakout-Confirmed
+// Condition: |Zp| >= ZH AND Zv >= ZH AND sign(ZΔ) == dirP
+f_checkEvent1(ZSnapshot z) =>
+    bool triggered = math.abs(z.Zp) >= Z_THRESHOLD_HIGH and 
+                     z.Zv >= Z_THRESHOLD_HIGH and 
+                     math.sign(z.Zdelta) == z.dirP and
+                     z.dirP != 0
+    
+    if triggered
+        EventResult evt = EventResult.new()
+        evt.eventId := 1
+        evt.eventName := f_eventName(1)
+        evt.category := EVT_CAT_PV
+        evt.direction := z.dirP
+        evt.academicBasis := f_academicBasis(1)
+        evt.isActive := true
+        evt.barIdx := bar_index
+        evt.calcConfidence(z.Zp, z.Zv, z.Zdelta)
+        evt
+    else
+        na
+
+// Event 2: Trend-Strength-Confirmed
+// Condition: |Zp| >= ZH AND Zv >= ZH
+f_checkEvent2(ZSnapshot z) =>
+    bool triggered = math.abs(z.Zp) >= Z_THRESHOLD_HIGH and 
+                     z.Zv >= Z_THRESHOLD_HIGH
+    
+    if triggered
+        EventResult evt = EventResult.new()
+        evt.eventId := 2
+        evt.eventName := f_eventName(2)
+        evt.category := EVT_CAT_PV
+        evt.direction := z.dirP != 0 ? z.dirP : EVT_DIR_NEUTRAL
+        evt.academicBasis := f_academicBasis(2)
+        evt.isActive := true
+        evt.barIdx := bar_index
+        evt.calcConfidence(z.Zp, z.Zv, na)
+        evt
+    else
+        na
+
+// Event 3: Fragile-Move (Low-Participation Extreme)
+// Condition: |Zp| >= ZH AND Zv <= -ZM
+f_checkEvent3(ZSnapshot z) =>
+    bool triggered = math.abs(z.Zp) >= Z_THRESHOLD_HIGH and 
+                     z.Zv <= -Z_THRESHOLD_MED
+    
+    if triggered
+        EventResult evt = EventResult.new()
+        evt.eventId := 3
+        evt.eventName := f_eventName(3)
+        evt.category := EVT_CAT_PV
+        evt.direction := EVT_DIR_WARNING
+        evt.academicBasis := f_academicBasis(3)
+        evt.isActive := true
+        evt.barIdx := bar_index
+        evt.calcConfidence(z.Zp, z.Zv, na)
+        evt
+    else
+        na
+
+// Event 4: Weak-Rally (Price↑ without volume)
+// Condition: Zp >= ZH AND Zv <= -ZH
+f_checkEvent4(ZSnapshot z) =>
+    bool triggered = z.Zp >= Z_THRESHOLD_HIGH and 
+                     z.Zv <= -Z_THRESHOLD_HIGH
+    
+    if triggered
+        EventResult evt = EventResult.new()
+        evt.eventId := 4
+        evt.eventName := f_eventName(4)
+        evt.category := EVT_CAT_PV
+        evt.direction := EVT_DIR_WARNING
+        evt.academicBasis := f_academicBasis(4)
+        evt.isActive := true
+        evt.barIdx := bar_index
+        evt.calcConfidence(z.Zp, z.Zv, na)
+        evt
+    else
+        na
+
+// Event 5: Weak-Selloff (Price↓ without volume)
+// Condition: Zp <= -ZH AND Zv <= -ZH
+f_checkEvent5(ZSnapshot z) =>
+    bool triggered = z.Zp <= -Z_THRESHOLD_HIGH and 
+                     z.Zv <= -Z_THRESHOLD_HIGH
+    
+    if triggered
+        EventResult evt = EventResult.new()
+        evt.eventId := 5
+        evt.eventName := f_eventName(5)
+        evt.category := EVT_CAT_PV
+        evt.direction := EVT_DIR_WARNING
+        evt.academicBasis := f_academicBasis(5)
+        evt.isActive := true
+        evt.barIdx := bar_index
+        evt.calcConfidence(z.Zp, z.Zv, na)
+        evt
+    else
+        na
+
+// Event 6: Momentum-Build (Moderate Price + Extreme Volume)
+// Condition: |Zp| ∈ [ZM, ZH) AND Zv >= ZH
+f_checkEvent6(ZSnapshot z) =>
+    bool triggered = f_absInRange(z.Zp, Z_THRESHOLD_MED, Z_THRESHOLD_HIGH) and 
+                     z.Zv >= Z_THRESHOLD_HIGH
+    
+    if triggered
+        EventResult evt = EventResult.new()
+        evt.eventId := 6
+        evt.eventName := f_eventName(6)
+        evt.category := EVT_CAT_PV
+        evt.direction := z.dirP != 0 ? z.dirP : EVT_DIR_NEUTRAL
+        evt.academicBasis := f_academicBasis(6)
+        evt.isActive := true
+        evt.barIdx := bar_index
+        evt.calcConfidence(z.Zv, z.Zp, na)
+        evt
+    else
+        na
+
+// Event 7: Churn (High Volume, Low Price Deviation)
+// Condition: |Zp| <= Z0 AND Zv >= ZH
+f_checkEvent7(ZSnapshot z) =>
+    bool triggered = math.abs(z.Zp) <= Z_THRESHOLD_ZERO and 
+                     z.Zv >= Z_THRESHOLD_HIGH
+    
+    if triggered
+        EventResult evt = EventResult.new()
+        evt.eventId := 7
+        evt.eventName := f_eventName(7)
+        evt.category := EVT_CAT_PV
+        evt.direction := EVT_DIR_NEUTRAL
+        evt.academicBasis := f_academicBasis(7)
+        evt.isActive := true
+        evt.barIdx := bar_index
+        evt.calcConfidence(z.Zv, z.Zp, na)
+        evt
+    else
+        na
+
+// Event 8: Quiet-Compression (Low Volume, Low Price Deviation)
+// Condition: |Zp| <= Z0 AND Zv <= -ZH
+f_checkEvent8(ZSnapshot z) =>
+    bool triggered = math.abs(z.Zp) <= Z_THRESHOLD_ZERO and 
+                     z.Zv <= -Z_THRESHOLD_HIGH
+    
+    if triggered
+        EventResult evt = EventResult.new()
+        evt.eventId := 8
+        evt.eventName := f_eventName(8)
+        evt.category := EVT_CAT_PV
+        evt.direction := EVT_DIR_NEUTRAL
+        evt.academicBasis := f_academicBasis(8)
+        evt.isActive := true
+        evt.barIdx := bar_index
+        evt.calcConfidence(z.Zv, z.Zp, na)
+        evt
+    else
+        na
+
+// Event 9: High-Volume Volatility-Regime
+// Condition: Zv >= ZH
+f_checkEvent9(ZSnapshot z) =>
+    bool triggered = z.Zv >= Z_THRESHOLD_HIGH
+    
+    if triggered
+        EventResult evt = EventResult.new()
+        evt.eventId := 9
+        evt.eventName := f_eventName(9)
+        evt.category := EVT_CAT_PV
+        evt.direction := EVT_DIR_NEUTRAL
+        evt.academicBasis := f_academicBasis(9)
+        evt.isActive := true
+        evt.barIdx := bar_index
+        evt.calcConfidence(z.Zv, na, na)
+        evt
+    else
+        na
+
+// Event 10: Low-Volume Low-Volatility Regime
+// Condition: Zv <= -ZH
+f_checkEvent10(ZSnapshot z) =>
+    bool triggered = z.Zv <= -Z_THRESHOLD_HIGH
+    
+    if triggered
+        EventResult evt = EventResult.new()
+        evt.eventId := 10
+        evt.eventName := f_eventName(10)
+        evt.category := EVT_CAT_PV
+        evt.direction := EVT_DIR_NEUTRAL
+        evt.academicBasis := f_academicBasis(10)
+        evt.isActive := true
+        evt.barIdx := bar_index
+        evt.calcConfidence(math.abs(z.Zv), na, na)
+        evt
+    else
+        na
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// EVENT DETECTION FUNCTIONS - CATEGORY B: ORDER-FLOW / DELTA (11-16)
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+// Event 11: Imbalance-Drives-Price
+// Condition: |ZΔ| >= ZH AND sign(ZΔ) == dirP
+f_checkEvent11(ZSnapshot z) =>
+    bool triggered = math.abs(z.Zdelta) >= Z_THRESHOLD_HIGH and 
+                     math.sign(z.Zdelta) == z.dirP and
+                     z.dirP != 0
+    
+    if triggered
+        EventResult evt = EventResult.new()
+        evt.eventId := 11
+        evt.eventName := f_eventName(11)
+        evt.category := EVT_CAT_OF
+        evt.direction := z.dirP
+        evt.academicBasis := f_academicBasis(11)
+        evt.isActive := true
+        evt.barIdx := bar_index
+        evt.calcConfidence(z.Zdelta, z.Zp, na)
+        evt
+    else
+        na
+
+// Event 12: Imbalance-Divergence-Top (Distribution Pressure)
+// Condition: Zp >= ZH AND ZΔ <= -ZH
+f_checkEvent12(ZSnapshot z) =>
+    bool triggered = z.Zp >= Z_THRESHOLD_HIGH and 
+                     z.Zdelta <= -Z_THRESHOLD_HIGH
+    
+    if triggered
+        EventResult evt = EventResult.new()
+        evt.eventId := 12
+        evt.eventName := f_eventName(12)
+        evt.category := EVT_CAT_OF
+        evt.direction := EVT_DIR_WARNING  // Bearish warning at top
+        evt.academicBasis := f_academicBasis(12)
+        evt.isActive := true
+        evt.barIdx := bar_index
+        // Higher confidence when divergence is stronger
+        float divergenceStrength = z.Zp + math.abs(z.Zdelta)
+        evt.calcConfidence(divergenceStrength, z.Zp, z.Zdelta)
+        evt
+    else
+        na
+
+// Event 13: Imbalance-Divergence-Bottom (Accumulation Pressure)
+// Condition: Zp <= -ZH AND ZΔ >= ZH
+f_checkEvent13(ZSnapshot z) =>
+    bool triggered = z.Zp <= -Z_THRESHOLD_HIGH and 
+                     z.Zdelta >= Z_THRESHOLD_HIGH
+    
+    if triggered
+        EventResult evt = EventResult.new()
+        evt.eventId := 13
+        evt.eventName := f_eventName(13)
+        evt.category := EVT_CAT_OF
+        evt.direction := EVT_DIR_WARNING  // Bullish warning at bottom
+        evt.academicBasis := f_academicBasis(13)
+        evt.isActive := true
+        evt.barIdx := bar_index
+        // Higher confidence when divergence is stronger
+        float divergenceStrength = math.abs(z.Zp) + z.Zdelta
+        evt.calcConfidence(divergenceStrength, z.Zp, z.Zdelta)
+        evt
+    else
+        na
+
+// Event 14: Absorption-Positive (Buy Absorption / Support Candidate)
+// Condition: |Zp| <= Z0 AND Zv >= ZH AND ZΔ >= ZH
+f_checkEvent14(ZSnapshot z) =>
+    bool triggered = math.abs(z.Zp) <= Z_THRESHOLD_ZERO and 
+                     z.Zv >= Z_THRESHOLD_HIGH and 
+                     z.Zdelta >= Z_THRESHOLD_HIGH
+    
+    if triggered
+        EventResult evt = EventResult.new()
+        evt.eventId := 14
+        evt.eventName := f_eventName(14)
+        evt.category := EVT_CAT_OF
+        evt.direction := EVT_DIR_BULL  // Bullish absorption
+        evt.academicBasis := f_academicBasis(14)
+        evt.isActive := true
+        evt.barIdx := bar_index
+        evt.calcConfidence(z.Zdelta, z.Zv, z.Zp)
+        evt
+    else
+        na
+
+// Event 15: Absorption-Negative (Sell Absorption / Resistance Candidate)
+// Condition: |Zp| <= Z0 AND Zv >= ZH AND ZΔ <= -ZH
+f_checkEvent15(ZSnapshot z) =>
+    bool triggered = math.abs(z.Zp) <= Z_THRESHOLD_ZERO and 
+                     z.Zv >= Z_THRESHOLD_HIGH and 
+                     z.Zdelta <= -Z_THRESHOLD_HIGH
+    
+    if triggered
+        EventResult evt = EventResult.new()
+        evt.eventId := 15
+        evt.eventName := f_eventName(15)
+        evt.category := EVT_CAT_OF
+        evt.direction := EVT_DIR_BEAR  // Bearish absorption
+        evt.academicBasis := f_academicBasis(15)
+        evt.isActive := true
+        evt.barIdx := bar_index
+        evt.calcConfidence(math.abs(z.Zdelta), z.Zv, z.Zp)
+        evt
+    else
+        na
+
+// Event 16: Depth-Wall Event
+// Condition: Zv >= ZH AND |ZΔ| >= ZH AND |Zp| <= Z0
+f_checkEvent16(ZSnapshot z) =>
+    bool triggered = z.Zv >= Z_THRESHOLD_HIGH and 
+                     math.abs(z.Zdelta) >= Z_THRESHOLD_HIGH and 
+                     math.abs(z.Zp) <= Z_THRESHOLD_ZERO
+    
+    if triggered
+        EventResult evt = EventResult.new()
+        evt.eventId := 16
+        evt.eventName := f_eventName(16)
+        evt.category := EVT_CAT_OF
+        evt.direction := EVT_DIR_NEUTRAL  // Market depth absorbing
+        evt.academicBasis := f_academicBasis(16)
+        evt.isActive := true
+        evt.barIdx := bar_index
+        evt.calcConfidence(z.Zv, z.Zdelta, z.Zp)
+        evt
+    else
+        na
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// EVENT DETECTION FUNCTIONS - CATEGORY C: BUY VS SELL (17-23)
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+// Event 17: Aggressive-Buy-Dominance
+// Condition: Zbuy >= ZH AND ZΔ >= ZH AND Zsell <= -ZM
+f_checkEvent17(ZSnapshot z) =>
+    bool triggered = z.Zbuy >= Z_THRESHOLD_HIGH and 
+                     z.Zdelta >= Z_THRESHOLD_HIGH and 
+                     z.Zsell <= -Z_THRESHOLD_MED
+    
+    if triggered
+        EventResult evt = EventResult.new()
+        evt.eventId := 17
+        evt.eventName := f_eventName(17)
+        evt.category := EVT_CAT_BS
+        evt.direction := EVT_DIR_BULL
+        evt.academicBasis := f_academicBasis(17)
+        evt.isActive := true
+        evt.barIdx := bar_index
+        evt.calcConfidence(z.Zbuy, z.Zdelta, z.Zsell)
+        evt
+    else
+        na
+
+// Event 18: Aggressive-Sell-Dominance
+// Condition: Zsell >= ZH AND ZΔ <= -ZH AND Zbuy <= -ZM
+f_checkEvent18(ZSnapshot z) =>
+    bool triggered = z.Zsell >= Z_THRESHOLD_HIGH and 
+                     z.Zdelta <= -Z_THRESHOLD_HIGH and 
+                     z.Zbuy <= -Z_THRESHOLD_MED
+    
+    if triggered
+        EventResult evt = EventResult.new()
+        evt.eventId := 18
+        evt.eventName := f_eventName(18)
+        evt.category := EVT_CAT_BS
+        evt.direction := EVT_DIR_BEAR
+        evt.academicBasis := f_academicBasis(18)
+        evt.isActive := true
+        evt.barIdx := bar_index
+        evt.calcConfidence(z.Zsell, math.abs(z.Zdelta), z.Zbuy)
+        evt
+    else
+        na
+
+// Event 19: Two-Sided-Battle (High Two-Sided Volume)
+// Condition: Zbuy >= ZH AND Zsell >= ZH AND |ZΔ| <= Z0
+f_checkEvent19(ZSnapshot z) =>
+    bool triggered = z.Zbuy >= Z_THRESHOLD_HIGH and 
+                     z.Zsell >= Z_THRESHOLD_HIGH and 
+                     math.abs(z.Zdelta) <= Z_THRESHOLD_ZERO
+    
+    if triggered
+        EventResult evt = EventResult.new()
+        evt.eventId := 19
+        evt.eventName := f_eventName(19)
+        evt.category := EVT_CAT_BS
+        evt.direction := EVT_DIR_NEUTRAL
+        evt.academicBasis := f_academicBasis(19)
+        evt.isActive := true
+        evt.barIdx := bar_index
+        // Confidence based on both sides being strong
+        float avgBuySell = (z.Zbuy + z.Zsell) / 2.0
+        evt.calcConfidence(avgBuySell, z.Zbuy, z.Zsell)
+        evt
+    else
+        na
+
+// Event 20: Two-Sided-Battle-With-Buy-Edge
+// Condition: Zbuy >= ZH AND Zsell >= ZH AND ZΔ ∈ [ZM, ZH)
+f_checkEvent20(ZSnapshot z) =>
+    bool triggered = z.Zbuy >= Z_THRESHOLD_HIGH and 
+                     z.Zsell >= Z_THRESHOLD_HIGH and 
+                     f_inRange(z.Zdelta, Z_THRESHOLD_MED, Z_THRESHOLD_HIGH)
+    
+    if triggered
+        EventResult evt = EventResult.new()
+        evt.eventId := 20
+        evt.eventName := f_eventName(20)
+        evt.category := EVT_CAT_BS
+        evt.direction := EVT_DIR_BULL
+        evt.academicBasis := f_academicBasis(20)
+        evt.isActive := true
+        evt.barIdx := bar_index
+        evt.calcConfidence(z.Zbuy, z.Zdelta, z.Zsell)
+        evt
+    else
+        na
+
+// Event 21: Two-Sided-Battle-With-Sell-Edge
+// Condition: Zbuy >= ZH AND Zsell >= ZH AND ZΔ ∈ (-ZH, -ZM]
+f_checkEvent21(ZSnapshot z) =>
+    bool triggered = z.Zbuy >= Z_THRESHOLD_HIGH and 
+                     z.Zsell >= Z_THRESHOLD_HIGH and 
+                     z.Zdelta <= -Z_THRESHOLD_MED and 
+                     z.Zdelta > -Z_THRESHOLD_HIGH
+    
+    if triggered
+        EventResult evt = EventResult.new()
+        evt.eventId := 21
+        evt.eventName := f_eventName(21)
+        evt.category := EVT_CAT_BS
+        evt.direction := EVT_DIR_BEAR
+        evt.academicBasis := f_academicBasis(21)
+        evt.isActive := true
+        evt.barIdx := bar_index
+        evt.calcConfidence(z.Zsell, math.abs(z.Zdelta), z.Zbuy)
+        evt
+    else
+        na
+
+// Event 22: Hidden-Accumulation (Buy Shock, No Price Deviation)
+// Condition: Zbuy >= ZH AND |Zp| <= Z0 AND Zv >= ZH
+f_checkEvent22(ZSnapshot z) =>
+    bool triggered = z.Zbuy >= Z_THRESHOLD_HIGH and 
+                     math.abs(z.Zp) <= Z_THRESHOLD_ZERO and 
+                     z.Zv >= Z_THRESHOLD_HIGH
+    
+    if triggered
+        EventResult evt = EventResult.new()
+        evt.eventId := 22
+        evt.eventName := f_eventName(22)
+        evt.category := EVT_CAT_BS
+        evt.direction := EVT_DIR_BULL
+        evt.academicBasis := f_academicBasis(22)
+        evt.isActive := true
+        evt.barIdx := bar_index
+        evt.calcConfidence(z.Zbuy, z.Zv, z.Zp)
+        evt
+    else
+        na
+
+// Event 23: Hidden-Distribution (Sell Shock, No Price Deviation)
+// Condition: Zsell >= ZH AND |Zp| <= Z0 AND Zv >= ZH
+f_checkEvent23(ZSnapshot z) =>
+    bool triggered = z.Zsell >= Z_THRESHOLD_HIGH and 
+                     math.abs(z.Zp) <= Z_THRESHOLD_ZERO and 
+                     z.Zv >= Z_THRESHOLD_HIGH
+    
+    if triggered
+        EventResult evt = EventResult.new()
+        evt.eventId := 23
+        evt.eventName := f_eventName(23)
+        evt.category := EVT_CAT_BS
+        evt.direction := EVT_DIR_BEAR
+        evt.academicBasis := f_academicBasis(23)
+        evt.isActive := true
+        evt.barIdx := bar_index
+        evt.calcConfidence(z.Zsell, z.Zv, z.Zp)
+        evt
+    else
+        na
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// EVENT DETECTION FUNCTIONS - CATEGORY D: PREDICTABILITY (24-26)
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+// Event 24: Volume-Shock-Positive-Drift (High Volume, Normal Return)
+// Condition: Zv >= ZH AND |Zp| <= ZM
+f_checkEvent24(ZSnapshot z) =>
+    bool triggered = z.Zv >= Z_THRESHOLD_HIGH and 
+                     math.abs(z.Zp) <= Z_THRESHOLD_MED
+    
+    if triggered
+        EventResult evt = EventResult.new()
+        evt.eventId := 24
+        evt.eventName := f_eventName(24)
+        evt.category := EVT_CAT_PR
+        evt.direction := z.dirP != 0 ? z.dirP : EVT_DIR_NEUTRAL
+        evt.academicBasis := f_academicBasis(24)
+        evt.isActive := true
+        evt.barIdx := bar_index
+        evt.calcConfidence(z.Zv, z.Zp, na)
+        evt
+    else
+        na
+
+// Event 25: Volume-Shock-Negative-Drift (Low Volume, Normal Return)
+// Condition: Zv <= -ZH AND |Zp| <= ZM
+f_checkEvent25(ZSnapshot z) =>
+    bool triggered = z.Zv <= -Z_THRESHOLD_HIGH and 
+                     math.abs(z.Zp) <= Z_THRESHOLD_MED
+    
+    if triggered
+        EventResult evt = EventResult.new()
+        evt.eventId := 25
+        evt.eventName := f_eventName(25)
+        evt.category := EVT_CAT_PR
+        evt.direction := z.dirP != 0 ? -z.dirP : EVT_DIR_NEUTRAL  // Opposite drift
+        evt.academicBasis := f_academicBasis(25)
+        evt.isActive := true
+        evt.barIdx := bar_index
+        evt.calcConfidence(math.abs(z.Zv), z.Zp, na)
+        evt
+    else
+        na
+
+// Event 26: Abnormal-Volume-Information-Arrival
+// Condition: Zv >= ZH
+f_checkEvent26(ZSnapshot z) =>
+    bool triggered = z.Zv >= Z_THRESHOLD_HIGH
+    
+    if triggered
+        EventResult evt = EventResult.new()
+        evt.eventId := 26
+        evt.eventName := f_eventName(26)
+        evt.category := EVT_CAT_PR
+        evt.direction := EVT_DIR_NEUTRAL
+        evt.academicBasis := f_academicBasis(26)
+        evt.isActive := true
+        evt.barIdx := bar_index
+        evt.calcConfidence(z.Zv, na, na)
+        evt
+    else
+        na
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// EVENT DETECTION FUNCTIONS - CATEGORY E: REVERSAL VS CONTINUATION (27-30)
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+// Event 27: High-Volume → Lower Positive Autocorr (Reversal-Risk Higher)
+// Condition: Zv >= ZH
+f_checkEvent27(ZSnapshot z) =>
+    bool triggered = z.Zv >= Z_THRESHOLD_HIGH
+    
+    if triggered
+        EventResult evt = EventResult.new()
+        evt.eventId := 27
+        evt.eventName := f_eventName(27)
+        evt.category := EVT_CAT_RC
+        evt.direction := EVT_DIR_WARNING
+        evt.academicBasis := f_academicBasis(27)
+        evt.isActive := true
+        evt.barIdx := bar_index
+        evt.calcConfidence(z.Zv, na, na)
+        evt
+    else
+        na
+
+// Event 28: Low-Volume → Higher Positive Autocorr (Continuation-Risk Higher)
+// Condition: Zv <= -ZH
+f_checkEvent28(ZSnapshot z) =>
+    bool triggered = z.Zv <= -Z_THRESHOLD_HIGH
+    
+    if triggered
+        EventResult evt = EventResult.new()
+        evt.eventId := 28
+        evt.eventName := f_eventName(28)
+        evt.category := EVT_CAT_RC
+        evt.direction := z.dirP != 0 ? z.dirP : EVT_DIR_NEUTRAL
+        evt.academicBasis := f_academicBasis(28)
+        evt.isActive := true
+        evt.barIdx := bar_index
+        evt.calcConfidence(math.abs(z.Zv), na, na)
+        evt
+    else
+        na
+
+// Event 29: Speculation-Continuation Proxy
+// Condition: Zv >= ZH AND |ZΔ| >= ZM AND sign(ZΔ) == dirP
+f_checkEvent29(ZSnapshot z) =>
+    bool triggered = z.Zv >= Z_THRESHOLD_HIGH and 
+                     math.abs(z.Zdelta) >= Z_THRESHOLD_MED and 
+                     math.sign(z.Zdelta) == z.dirP and
+                     z.dirP != 0
+    
+    if triggered
+        EventResult evt = EventResult.new()
+        evt.eventId := 29
+        evt.eventName := f_eventName(29)
+        evt.category := EVT_CAT_RC
+        evt.direction := z.dirP
+        evt.academicBasis := f_academicBasis(29)
+        evt.isActive := true
+        evt.barIdx := bar_index
+        evt.calcConfidence(z.Zv, z.Zdelta, z.Zp)
+        evt
+    else
+        na
+
+// Event 30: Risk-Sharing Reversal Proxy
+// Condition: Zv >= ZH AND |ZΔ| <= Z0
+f_checkEvent30(ZSnapshot z) =>
+    bool triggered = z.Zv >= Z_THRESHOLD_HIGH and 
+                     math.abs(z.Zdelta) <= Z_THRESHOLD_ZERO
+    
+    if triggered
+        EventResult evt = EventResult.new()
+        evt.eventId := 30
+        evt.eventName := f_eventName(30)
+        evt.category := EVT_CAT_RC
+        evt.direction := EVT_DIR_WARNING
+        evt.academicBasis := f_academicBasis(30)
+        evt.isActive := true
+        evt.barIdx := bar_index
+        evt.calcConfidence(z.Zv, z.Zdelta, na)
+        evt
+    else
+        na
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// EVENT DETECTION FUNCTIONS - CATEGORY F: IMBALANCE LAG (31-33)
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+// Event 31: Persistent-Imbalance Push
+// Condition: |ZΔ| >= ZM AND |ZΔ[1]| >= ZM AND sign(ZΔ) == sign(ZΔ[1])
+f_checkEvent31(ZSnapshot z) =>
+    bool triggered = math.abs(z.Zdelta) >= Z_THRESHOLD_MED and 
+                     math.abs(z.Zdelta_1) >= Z_THRESHOLD_MED and 
+                     math.sign(z.Zdelta) == math.sign(z.Zdelta_1) and
+                     not na(z.Zdelta_1)
+    
+    if triggered
+        EventResult evt = EventResult.new()
+        evt.eventId := 31
+        evt.eventName := f_eventName(31)
+        evt.category := EVT_CAT_IL
+        evt.direction := z.Zdelta > 0 ? EVT_DIR_BULL : EVT_DIR_BEAR
+        evt.academicBasis := f_academicBasis(31)
+        evt.isActive := true
+        evt.barIdx := bar_index
+        // Confidence boosted by persistence
+        float persistenceStrength = (math.abs(z.Zdelta) + math.abs(z.Zdelta_1)) / 2.0
+        evt.calcConfidence(persistenceStrength, z.Zdelta, z.Zdelta_1)
+        evt
+    else
+        na
+
+// Event 32: Imbalance-Pressure-Decay (Sign Flip)
+// Condition: ZΔ[1] >= ZM AND ZΔ <= -ZM (or inverse)
+f_checkEvent32(ZSnapshot z) =>
+    bool bullFlip = z.Zdelta_1 >= Z_THRESHOLD_MED and z.Zdelta <= -Z_THRESHOLD_MED
+    bool bearFlip = z.Zdelta_1 <= -Z_THRESHOLD_MED and z.Zdelta >= Z_THRESHOLD_MED
+    bool triggered = (bullFlip or bearFlip) and not na(z.Zdelta_1)
+    
+    if triggered
+        EventResult evt = EventResult.new()
+        evt.eventId := 32
+        evt.eventName := f_eventName(32)
+        evt.category := EVT_CAT_IL
+        evt.direction := EVT_DIR_WARNING  // Potential reversal
+        evt.academicBasis := f_academicBasis(32)
+        evt.isActive := true
+        evt.barIdx := bar_index
+        // Confidence based on flip magnitude
+        float flipMagnitude = math.abs(z.Zdelta - z.Zdelta_1)
+        evt.calcConfidence(flipMagnitude, z.Zdelta, z.Zdelta_1)
+        evt
+    else
+        na
+
+// Event 33: Intraday-Imbalance Predicts Short-Horizon Returns
+// Condition: |ZΔ| >= ZM
+f_checkEvent33(ZSnapshot z) =>
+    bool triggered = math.abs(z.Zdelta) >= Z_THRESHOLD_MED
+    
+    if triggered
+        EventResult evt = EventResult.new()
+        evt.eventId := 33
+        evt.eventName := f_eventName(33)
+        evt.category := EVT_CAT_IL
+        evt.direction := z.Zdelta > 0 ? EVT_DIR_BULL : EVT_DIR_BEAR
+        evt.academicBasis := f_academicBasis(33)
+        evt.isActive := true
+        evt.barIdx := bar_index
+        evt.calcConfidence(math.abs(z.Zdelta), na, na)
+        evt
+    else
+        na
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// EVENT DETECTION FUNCTIONS - CATEGORY G: SUPPORT/RESISTANCE (34-36)
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+// Event 34: SR-Barrier Event (Price stalls at key level with volume)
+// Condition: |Zp| <= Z0 AND Zv >= ZH AND price near recent high/low
+f_checkEvent34(ZSnapshot z) =>
+    bool triggered = math.abs(z.Zp) <= Z_THRESHOLD_ZERO and 
+                     z.Zv >= Z_THRESHOLD_HIGH
+    
+    if triggered
+        EventResult evt = EventResult.new()
+        evt.eventId := 34
+        evt.eventName := f_eventName(34)
+        evt.category := EVT_CAT_SR
+        evt.direction := EVT_DIR_NEUTRAL
+        evt.academicBasis := f_academicBasis(34)
+        evt.isActive := true
+        evt.barIdx := bar_index
+        evt.calcConfidence(z.Zv, z.Zp, na)
+        evt
+    else
+        na
+
+// Event 35: Volume-Backed SR Level (Strong support/resistance with volume confirmation)
+// Condition: |Zp| <= Z0 AND Zv >= ZH AND |ZΔ| >= ZM
+f_checkEvent35(ZSnapshot z) =>
+    bool triggered = math.abs(z.Zp) <= Z_THRESHOLD_ZERO and 
+                     z.Zv >= Z_THRESHOLD_HIGH and 
+                     math.abs(z.Zdelta) >= Z_THRESHOLD_MED
+    
+    if triggered
+        EventResult evt = EventResult.new()
+        evt.eventId := 35
+        evt.eventName := f_eventName(35)
+        evt.category := EVT_CAT_SR
+        evt.direction := z.Zdelta > 0 ? EVT_DIR_BULL : EVT_DIR_BEAR
+        evt.academicBasis := f_academicBasis(35)
+        evt.isActive := true
+        evt.barIdx := bar_index
+        evt.calcConfidence(z.Zv, z.Zdelta, z.Zp)
+        evt
+    else
+        na
+
+// Event 36: Volume-Poor SR Level (Weak support/resistance without volume)
+// Condition: |Zp| <= Z0 AND Zv <= -ZM
+f_checkEvent36(ZSnapshot z) =>
+    bool triggered = math.abs(z.Zp) <= Z_THRESHOLD_ZERO and 
+                     z.Zv <= -Z_THRESHOLD_MED
+    
+    if triggered
+        EventResult evt = EventResult.new()
+        evt.eventId := 36
+        evt.eventName := f_eventName(36)
+        evt.category := EVT_CAT_SR
+        evt.direction := EVT_DIR_WARNING
+        evt.academicBasis := f_academicBasis(36)
+        evt.isActive := true
+        evt.barIdx := bar_index
+        evt.calcConfidence(math.abs(z.Zv), z.Zp, na)
+        evt
+    else
+        na
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// EVENT DETECTION FUNCTIONS - CATEGORY H: EXTENDED SCENARIOS (37-50)
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+// Event 37: Climax Buy (Extreme buying exhaustion)
+// Condition: Zbuy >= ZH AND Zp >= ZH AND Zv >= ZH
+f_checkEvent37(ZSnapshot z) =>
+    bool triggered = z.Zbuy >= Z_THRESHOLD_HIGH and 
+                     z.Zp >= Z_THRESHOLD_HIGH and 
+                     z.Zv >= Z_THRESHOLD_HIGH
+    
+    if triggered
+        EventResult evt = EventResult.new()
+        evt.eventId := 37
+        evt.eventName := f_eventName(37)
+        evt.category := EVT_CAT_EX
+        evt.direction := EVT_DIR_WARNING  // Potential top
+        evt.academicBasis := f_academicBasis(37)
+        evt.isActive := true
+        evt.barIdx := bar_index
+        evt.calcConfidence(z.Zbuy, z.Zp, z.Zv)
+        evt
+    else
+        na
+
+// Event 38: Climax Sell (Extreme selling exhaustion)
+// Condition: Zsell >= ZH AND Zp <= -ZH AND Zv >= ZH
+f_checkEvent38(ZSnapshot z) =>
+    bool triggered = z.Zsell >= Z_THRESHOLD_HIGH and 
+                     z.Zp <= -Z_THRESHOLD_HIGH and 
+                     z.Zv >= Z_THRESHOLD_HIGH
+    
+    if triggered
+        EventResult evt = EventResult.new()
+        evt.eventId := 38
+        evt.eventName := f_eventName(38)
+        evt.category := EVT_CAT_EX
+        evt.direction := EVT_DIR_WARNING  // Potential bottom
+        evt.academicBasis := f_academicBasis(38)
+        evt.isActive := true
+        evt.barIdx := bar_index
+        evt.calcConfidence(z.Zsell, math.abs(z.Zp), z.Zv)
+        evt
+    else
+        na
+
+// Event 39: Stealth Accumulation (Quiet buying)
+// Condition: Zbuy >= ZM AND |Zp| <= Z0 AND Zv <= Z0
+f_checkEvent39(ZSnapshot z) =>
+    bool triggered = z.Zbuy >= Z_THRESHOLD_MED and 
+                     math.abs(z.Zp) <= Z_THRESHOLD_ZERO and 
+                     z.Zv <= Z_THRESHOLD_ZERO
+    
+    if triggered
+        EventResult evt = EventResult.new()
+        evt.eventId := 39
+        evt.eventName := f_eventName(39)
+        evt.category := EVT_CAT_EX
+        evt.direction := EVT_DIR_BULL
+        evt.academicBasis := f_academicBasis(39)
+        evt.isActive := true
+        evt.barIdx := bar_index
+        evt.calcConfidence(z.Zbuy, z.Zp, z.Zv)
+        evt
+    else
+        na
+
+// Event 40: Stealth Distribution (Quiet selling)
+// Condition: Zsell >= ZM AND |Zp| <= Z0 AND Zv <= Z0
+f_checkEvent40(ZSnapshot z) =>
+    bool triggered = z.Zsell >= Z_THRESHOLD_MED and 
+                     math.abs(z.Zp) <= Z_THRESHOLD_ZERO and 
+                     z.Zv <= Z_THRESHOLD_ZERO
+    
+    if triggered
+        EventResult evt = EventResult.new()
+        evt.eventId := 40
+        evt.eventName := f_eventName(40)
+        evt.category := EVT_CAT_EX
+        evt.direction := EVT_DIR_BEAR
+        evt.academicBasis := f_academicBasis(40)
+        evt.isActive := true
+        evt.barIdx := bar_index
+        evt.calcConfidence(z.Zsell, z.Zp, z.Zv)
+        evt
+    else
+        na
+
+// Event 41: Volume Divergence Bull (Price down, volume declining)
+// Condition: Zp <= -ZM AND Zv <= -ZM
+f_checkEvent41(ZSnapshot z) =>
+    bool triggered = z.Zp <= -Z_THRESHOLD_MED and 
+                     z.Zv <= -Z_THRESHOLD_MED
+    
+    if triggered
+        EventResult evt = EventResult.new()
+        evt.eventId := 41
+        evt.eventName := f_eventName(41)
+        evt.category := EVT_CAT_EX
+        evt.direction := EVT_DIR_BULL  // Bullish divergence
+        evt.academicBasis := f_academicBasis(41)
+        evt.isActive := true
+        evt.barIdx := bar_index
+        evt.calcConfidence(math.abs(z.Zp), math.abs(z.Zv), na)
+        evt
+    else
+        na
+
+// Event 42: Volume Divergence Bear (Price up, volume declining)
+// Condition: Zp >= ZM AND Zv <= -ZM
+f_checkEvent42(ZSnapshot z) =>
+    bool triggered = z.Zp >= Z_THRESHOLD_MED and 
+                     z.Zv <= -Z_THRESHOLD_MED
+    
+    if triggered
+        EventResult evt = EventResult.new()
+        evt.eventId := 42
+        evt.eventName := f_eventName(42)
+        evt.category := EVT_CAT_EX
+        evt.direction := EVT_DIR_BEAR  // Bearish divergence
+        evt.academicBasis := f_academicBasis(42)
+        evt.isActive := true
+        evt.barIdx := bar_index
+        evt.calcConfidence(z.Zp, math.abs(z.Zv), na)
+        evt
+    else
+        na
+
+// Event 43: Delta-Price Alignment (Strong trend confirmation)
+// Condition: |Zp| >= ZM AND |ZΔ| >= ZM AND sign(Zp) == sign(ZΔ)
+f_checkEvent43(ZSnapshot z) =>
+    bool triggered = math.abs(z.Zp) >= Z_THRESHOLD_MED and 
+                     math.abs(z.Zdelta) >= Z_THRESHOLD_MED and 
+                     math.sign(z.Zp) == math.sign(z.Zdelta)
+    
+    if triggered
+        EventResult evt = EventResult.new()
+        evt.eventId := 43
+        evt.eventName := f_eventName(43)
+        evt.category := EVT_CAT_EX
+        evt.direction := z.Zp > 0 ? EVT_DIR_BULL : EVT_DIR_BEAR
+        evt.academicBasis := f_academicBasis(43)
+        evt.isActive := true
+        evt.barIdx := bar_index
+        evt.calcConfidence(z.Zp, z.Zdelta, na)
+        evt
+    else
+        na
+
+// Event 44: Extreme Compression (Very low volatility)
+// Condition: |Zp| <= Z0 AND Zv <= -ZH
+f_checkEvent44(ZSnapshot z) =>
+    bool triggered = math.abs(z.Zp) <= Z_THRESHOLD_ZERO and 
+                     z.Zv <= -Z_THRESHOLD_HIGH
+    
+    if triggered
+        EventResult evt = EventResult.new()
+        evt.eventId := 44
+        evt.eventName := f_eventName(44)
+        evt.category := EVT_CAT_EX
+        evt.direction := EVT_DIR_NEUTRAL
+        evt.academicBasis := f_academicBasis(44)
+        evt.isActive := true
+        evt.barIdx := bar_index
+        evt.calcConfidence(math.abs(z.Zv), z.Zp, na)
+        evt
+    else
+        na
+
+// Event 45: Volatility Expansion (Breakout from compression)
+// Condition: |Zp| >= ZH AND Zv >= ZH
+f_checkEvent45(ZSnapshot z) =>
+    bool triggered = math.abs(z.Zp) >= Z_THRESHOLD_HIGH and 
+                     z.Zv >= Z_THRESHOLD_HIGH
+    
+    if triggered
+        EventResult evt = EventResult.new()
+        evt.eventId := 45
+        evt.eventName := f_eventName(45)
+        evt.category := EVT_CAT_EX
+        evt.direction := z.dirP != 0 ? z.dirP : EVT_DIR_NEUTRAL
+        evt.academicBasis := f_academicBasis(45)
+        evt.isActive := true
+        evt.barIdx := bar_index
+        evt.calcConfidence(z.Zp, z.Zv, na)
+        evt
+    else
+        na
+
+// Event 46: Buy Exhaustion (High buy but price fails)
+// Condition: Zbuy >= ZH AND Zp <= Z0
+f_checkEvent46(ZSnapshot z) =>
+    bool triggered = z.Zbuy >= Z_THRESHOLD_HIGH and 
+                     z.Zp <= Z_THRESHOLD_ZERO
+    
+    if triggered
+        EventResult evt = EventResult.new()
+        evt.eventId := 46
+        evt.eventName := f_eventName(46)
+        evt.category := EVT_CAT_EX
+        evt.direction := EVT_DIR_WARNING
+        evt.academicBasis := f_academicBasis(46)
+        evt.isActive := true
+        evt.barIdx := bar_index
+        evt.calcConfidence(z.Zbuy, z.Zp, na)
+        evt
+    else
+        na
+
+// Event 47: Sell Exhaustion (High sell but price holds)
+// Condition: Zsell >= ZH AND Zp >= -Z0
+f_checkEvent47(ZSnapshot z) =>
+    bool triggered = z.Zsell >= Z_THRESHOLD_HIGH and 
+                     z.Zp >= -Z_THRESHOLD_ZERO
+    
+    if triggered
+        EventResult evt = EventResult.new()
+        evt.eventId := 47
+        evt.eventName := f_eventName(47)
+        evt.category := EVT_CAT_EX
+        evt.direction := EVT_DIR_WARNING
+        evt.academicBasis := f_academicBasis(47)
+        evt.isActive := true
+        evt.barIdx := bar_index
+        evt.calcConfidence(z.Zsell, z.Zp, na)
+        evt
+    else
+        na
+
+// Event 48: Trend Acceleration (Increasing momentum)
+// Condition: |Zp| >= ZM AND |Zp| > |Zp_1| AND Zv >= ZM
+f_checkEvent48(ZSnapshot z) =>
+    bool triggered = math.abs(z.Zp) >= Z_THRESHOLD_MED and 
+                     math.abs(z.Zp) > math.abs(z.Zp_1) and 
+                     z.Zv >= Z_THRESHOLD_MED and
+                     not na(z.Zp_1)
+    
+    if triggered
+        EventResult evt = EventResult.new()
+        evt.eventId := 48
+        evt.eventName := f_eventName(48)
+        evt.category := EVT_CAT_EX
+        evt.direction := z.dirP != 0 ? z.dirP : EVT_DIR_NEUTRAL
+        evt.academicBasis := f_academicBasis(48)
+        evt.isActive := true
+        evt.barIdx := bar_index
+        evt.calcConfidence(z.Zp, z.Zv, z.Zp_1)
+        evt
+    else
+        na
+
+// Event 49: Trend Deceleration (Decreasing momentum)
+// Condition: |Zp| >= ZM AND |Zp| < |Zp_1| AND sign same
+f_checkEvent49(ZSnapshot z) =>
+    bool triggered = math.abs(z.Zp) >= Z_THRESHOLD_MED and 
+                     math.abs(z.Zp) < math.abs(z.Zp_1) and 
+                     math.sign(z.Zp) == math.sign(z.Zp_1) and
+                     not na(z.Zp_1)
+    
+    if triggered
+        EventResult evt = EventResult.new()
+        evt.eventId := 49
+        evt.eventName := f_eventName(49)
+        evt.category := EVT_CAT_EX
+        evt.direction := EVT_DIR_WARNING
+        evt.academicBasis := f_academicBasis(49)
+        evt.isActive := true
+        evt.barIdx := bar_index
+        evt.calcConfidence(z.Zp_1, z.Zp, na)
+        evt
+    else
+        na
+
+// Event 50: Multi-Divergence (Multiple divergence signals)
+// Condition: (Zp vs ZΔ diverge) AND (Zp vs Zv diverge)
+f_checkEvent50(ZSnapshot z) =>
+    bool priceDeltaDiv = (z.Zp >= Z_THRESHOLD_MED and z.Zdelta <= -Z_THRESHOLD_MED) or
+                         (z.Zp <= -Z_THRESHOLD_MED and z.Zdelta >= Z_THRESHOLD_MED)
+    bool priceVolDiv   = (math.abs(z.Zp) >= Z_THRESHOLD_MED and z.Zv <= -Z_THRESHOLD_MED)
+    bool triggered     = priceDeltaDiv and priceVolDiv
+    
+    if triggered
+        EventResult evt = EventResult.new()
+        evt.eventId := 50
+        evt.eventName := f_eventName(50)
+        evt.category := EVT_CAT_EX
+        evt.direction := EVT_DIR_WARNING
+        evt.academicBasis := f_academicBasis(50)
+        evt.isActive := true
+        evt.barIdx := bar_index
+        evt.calcConfidence(z.Zp, z.Zdelta, z.Zv)
+        evt
+    else
+        na
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// EVENT DETECTION FUNCTIONS - CATEGORY I: TREND-INTEGRATED (51-60)
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+// Event 51: Trend Breakout Confirmed (Strong trend with volume)
+// Condition: |Zp| >= ZH AND Zv >= ZH AND |ZΔ| >= ZM AND aligned
+f_checkEvent51(ZSnapshot z) =>
+    bool triggered = math.abs(z.Zp) >= Z_THRESHOLD_HIGH and 
+                     z.Zv >= Z_THRESHOLD_HIGH and 
+                     math.abs(z.Zdelta) >= Z_THRESHOLD_MED and
+                     math.sign(z.Zdelta) == z.dirP and
+                     z.dirP != 0
+    
+    if triggered
+        EventResult evt = EventResult.new()
+        evt.eventId := 51
+        evt.eventName := f_eventName(51)
+        evt.category := EVT_CAT_TI
+        evt.direction := z.dirP
+        evt.academicBasis := f_academicBasis(51)
+        evt.isActive := true
+        evt.barIdx := bar_index
+        evt.calcConfidence(z.Zp, z.Zv, z.Zdelta)
+        evt
+    else
+        na
+
+// Event 52: Trend Support Test (Pullback in uptrend)
+// Condition: Zp_1 >= ZM AND Zp ∈ [Z0, ZM) AND ZΔ >= Z0
+f_checkEvent52(ZSnapshot z) =>
+    bool triggered = z.Zp_1 >= Z_THRESHOLD_MED and 
+                     z.Zp >= Z_THRESHOLD_ZERO and 
+                     z.Zp < Z_THRESHOLD_MED and
+                     z.Zdelta >= Z_THRESHOLD_ZERO and
+                     not na(z.Zp_1)
+    
+    if triggered
+        EventResult evt = EventResult.new()
+        evt.eventId := 52
+        evt.eventName := f_eventName(52)
+        evt.category := EVT_CAT_TI
+        evt.direction := EVT_DIR_BULL
+        evt.academicBasis := f_academicBasis(52)
+        evt.isActive := true
+        evt.barIdx := bar_index
+        evt.calcConfidence(z.Zp_1, z.Zp, z.Zdelta)
+        evt
+    else
+        na
+
+// Event 53: Trend Resistance Test (Rally in downtrend)
+// Condition: Zp_1 <= -ZM AND Zp ∈ (-ZM, -Z0] AND ZΔ <= -Z0
+f_checkEvent53(ZSnapshot z) =>
+    bool triggered = z.Zp_1 <= -Z_THRESHOLD_MED and 
+                     z.Zp <= -Z_THRESHOLD_ZERO and 
+                     z.Zp > -Z_THRESHOLD_MED and
+                     z.Zdelta <= -Z_THRESHOLD_ZERO and
+                     not na(z.Zp_1)
+    
+    if triggered
+        EventResult evt = EventResult.new()
+        evt.eventId := 53
+        evt.eventName := f_eventName(53)
+        evt.category := EVT_CAT_TI
+        evt.direction := EVT_DIR_BEAR
+        evt.academicBasis := f_academicBasis(53)
+        evt.isActive := true
+        evt.barIdx := bar_index
+        evt.calcConfidence(math.abs(z.Zp_1), z.Zp, z.Zdelta)
+        evt
+    else
+        na
+
+// Event 54: Trend Reversal Signal (Momentum flip)
+// Condition: sign(Zp) != sign(Zp_1) AND |Zp| >= ZM AND |Zp_1| >= ZM
+f_checkEvent54(ZSnapshot z) =>
+    bool triggered = math.sign(z.Zp) != math.sign(z.Zp_1) and 
+                     math.abs(z.Zp) >= Z_THRESHOLD_MED and 
+                     math.abs(z.Zp_1) >= Z_THRESHOLD_MED and
+                     not na(z.Zp_1)
+    
+    if triggered
+        EventResult evt = EventResult.new()
+        evt.eventId := 54
+        evt.eventName := f_eventName(54)
+        evt.category := EVT_CAT_TI
+        evt.direction := z.Zp > 0 ? EVT_DIR_BULL : EVT_DIR_BEAR
+        evt.academicBasis := f_academicBasis(54)
+        evt.isActive := true
+        evt.barIdx := bar_index
+        float flipStrength = math.abs(z.Zp) + math.abs(z.Zp_1)
+        evt.calcConfidence(flipStrength, z.Zp, z.Zp_1)
+        evt
+    else
+        na
+
+// Event 55: Channel Absorption (Range-bound with volume)
+// Condition: |Zp| <= Z0 AND Zv >= ZH
+f_checkEvent55(ZSnapshot z) =>
+    bool triggered = math.abs(z.Zp) <= Z_THRESHOLD_ZERO and 
+                     z.Zv >= Z_THRESHOLD_HIGH
+    
+    if triggered
+        EventResult evt = EventResult.new()
+        evt.eventId := 55
+        evt.eventName := f_eventName(55)
+        evt.category := EVT_CAT_TI
+        evt.direction := EVT_DIR_NEUTRAL
+        evt.academicBasis := f_academicBasis(55)
+        evt.isActive := true
+        evt.barIdx := bar_index
+        evt.calcConfidence(z.Zv, z.Zp, na)
+        evt
+    else
+        na
+
+// Event 56: Trend Continuation Volume (Healthy trend with volume)
+// Condition: |Zp| >= ZM AND Zv >= ZM AND sign(ZΔ) == dirP
+f_checkEvent56(ZSnapshot z) =>
+    bool triggered = math.abs(z.Zp) >= Z_THRESHOLD_MED and 
+                     z.Zv >= Z_THRESHOLD_MED and 
+                     math.sign(z.Zdelta) == z.dirP and
+                     z.dirP != 0
+    
+    if triggered
+        EventResult evt = EventResult.new()
+        evt.eventId := 56
+        evt.eventName := f_eventName(56)
+        evt.category := EVT_CAT_TI
+        evt.direction := z.dirP
+        evt.academicBasis := f_academicBasis(56)
+        evt.isActive := true
+        evt.barIdx := bar_index
+        evt.calcConfidence(z.Zp, z.Zv, z.Zdelta)
+        evt
+    else
+        na
+
+// Event 57: Trend Exhaustion (Trend losing steam)
+// Condition: |Zp| >= ZM AND Zv <= -ZM AND |Zp| < |Zp_1|
+f_checkEvent57(ZSnapshot z) =>
+    bool triggered = math.abs(z.Zp) >= Z_THRESHOLD_MED and 
+                     z.Zv <= -Z_THRESHOLD_MED and 
+                     math.abs(z.Zp) < math.abs(z.Zp_1) and
+                     not na(z.Zp_1)
+    
+    if triggered
+        EventResult evt = EventResult.new()
+        evt.eventId := 57
+        evt.eventName := f_eventName(57)
+        evt.category := EVT_CAT_TI
+        evt.direction := EVT_DIR_WARNING
+        evt.academicBasis := f_academicBasis(57)
+        evt.isActive := true
+        evt.barIdx := bar_index
+        evt.calcConfidence(math.abs(z.Zv), z.Zp, z.Zp_1)
+        evt
+    else
+        na
+
+// Event 58: Range Breakout Pending (Compression before expansion)
+// Condition: |Zp| <= Z0 AND Zv <= -ZH AND |ZΔ| >= ZM
+f_checkEvent58(ZSnapshot z) =>
+    bool triggered = math.abs(z.Zp) <= Z_THRESHOLD_ZERO and 
+                     z.Zv <= -Z_THRESHOLD_HIGH and 
+                     math.abs(z.Zdelta) >= Z_THRESHOLD_MED
+    
+    if triggered
+        EventResult evt = EventResult.new()
+        evt.eventId := 58
+        evt.eventName := f_eventName(58)
+        evt.category := EVT_CAT_TI
+        evt.direction := z.Zdelta > 0 ? EVT_DIR_BULL : EVT_DIR_BEAR
+        evt.academicBasis := f_academicBasis(58)
+        evt.isActive := true
+        evt.barIdx := bar_index
+        evt.calcConfidence(z.Zdelta, z.Zv, z.Zp)
+        evt
+    else
+        na
+
+// Event 59: Trend Quality High (Strong aligned signals)
+// Condition: |Zp| >= ZM AND sign(ZΔ) == dirP AND Zv >= Z0
+f_checkEvent59(ZSnapshot z) =>
+    bool triggered = math.abs(z.Zp) >= Z_THRESHOLD_MED and 
+                     math.sign(z.Zdelta) == z.dirP and 
+                     z.Zv >= Z_THRESHOLD_ZERO and
+                     z.dirP != 0
+    
+    if triggered
+        EventResult evt = EventResult.new()
+        evt.eventId := 59
+        evt.eventName := f_eventName(59)
+        evt.category := EVT_CAT_TI
+        evt.direction := z.dirP
+        evt.academicBasis := f_academicBasis(59)
+        evt.isActive := true
+        evt.barIdx := bar_index
+        evt.calcConfidence(z.Zp, z.Zdelta, z.Zv)
+        evt
+    else
+        na
+
+// Event 60: Trend Quality Low (Conflicting signals)
+// Condition: |Zp| >= ZM AND sign(ZΔ) != dirP
+f_checkEvent60(ZSnapshot z) =>
+    bool triggered = math.abs(z.Zp) >= Z_THRESHOLD_MED and 
+                     math.sign(z.Zdelta) != z.dirP and
+                     z.dirP != 0
+    
+    if triggered
+        EventResult evt = EventResult.new()
+        evt.eventId := 60
+        evt.eventName := f_eventName(60)
+        evt.category := EVT_CAT_TI
+        evt.direction := EVT_DIR_WARNING
+        evt.academicBasis := f_academicBasis(60)
+        evt.isActive := true
+        evt.barIdx := bar_index
+        evt.calcConfidence(z.Zp, z.Zdelta, na)
+        evt
+    else
+        na
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// UTILITY FUNCTIONS
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+// Text size resolver
+f_getTextSize(string sizeStr) =>
+    switch sizeStr
+        "Tiny"   => size.tiny
+        "Normal" => size.normal
+        "Large"  => size.large
+        => size.small
+
+// Dashboard position resolver
+f_getDashPos(string posStr) =>
+    switch posStr
+        "Top Left"     => position.top_left
+        "Bottom Right" => position.bottom_right
+        "Bottom Left"  => position.bottom_left
+        => position.top_right
+
+// Volume formatter
+f_fmtVol(float v) => 
+    na(v) ? "—" : str.tostring(v, format.volume)
+
+// Price formatter
+f_fmtPrice(float v) => 
+    na(v) ? "—" : str.tostring(v, format.mintick)
+
+// Z-Score formatter
+f_fmtZ(float z) => 
+    na(z) ? "—" : (z > 0 ? "+" : "") + str.tostring(z, "#.##")
+
+// LTF resolver for volume engine
+f_resolveLTF(bool useCustom, string customTF) =>
+    if useCustom
+        customTF
+    else
+        if timeframe.isseconds
+            "1S"
+        else if timeframe.isintraday
+            "1"
+        else if timeframe.isdaily
+            "5"
+        else
+            "60"
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// UDT: Z-SCORE DATA CONTAINER
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+type ZScoreData
+    float raw       // Raw Z-Score value
+    string status   // Interpretation status
+    color clr       // Display color
+
+// Method: Calculate Z-Score for any source
+method calcZ(ZScoreData this, float src, int period) =>
+    float mean   = ta.sma(src, period)
+    float stdDev = ta.stdev(src, period)
+    float rawZ   = stdDev != 0 ? (src - mean) / stdDev : 0.0
+    
+    this.raw := rawZ
+    
+    // Determine status and color based on raw Z value (localized)
+    if rawZ >= Z_THRESHOLD_HIGH
+        this.status := f_L3("▲▲ Extreme High", "▲▲ Aşırı Yüksek", "▲▲ 극단적 고점")
+        this.clr    := COLOR_BULL
+    else if rawZ >= Z_THRESHOLD_MED
+        this.status := f_L3("▲ Above Avg", "▲ Ort. Üstü", "▲ 평균 이상")
+        this.clr    := color.new(COLOR_BULL, 40)
+    else if rawZ <= -Z_THRESHOLD_HIGH
+        this.status := f_L3("▼▼ Extreme Low", "▼▼ Aşırı Düşük", "▼▼ 극단적 저점")
+        this.clr    := COLOR_BEAR
+    else if rawZ <= -Z_THRESHOLD_MED
+        this.status := f_L3("▼ Below Avg", "▼ Ort. Altı", "▼ 평균 이하")
+        this.clr    := color.new(COLOR_BEAR, 40)
+    else
+        this.status := f_L3("○ Normal", "○ Normal", "○ 보통")
+        this.clr    := COLOR_NEUTRAL
+    this
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// UDT: VOLUME ENGINE DATA
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+type VolumeData
+    float total
+    float buy
+    float sell
+    float delta
+
+// Method: Calculate using Geometry approximation
+method calcGeometry(VolumeData this, int offset) =>
+    float h   = high[offset]
+    float l   = low[offset]
+    float c   = close[offset]
+    float v   = volume[offset]
+    float rng = h - l
+    
+    if na(v) or v == 0
+        this.total := 0.0
+        this.buy   := 0.0
+        this.sell  := 0.0
+        this.delta := 0.0
+    else if rng == 0
+        this.total := v
+        this.buy   := v * 0.5
+        this.sell  := v * 0.5
+        this.delta := 0.0
+    else
+        this.total := v
+        this.buy   := v * ((c - l) / rng)
+        this.sell  := v * ((h - c) / rng)
+        this.delta := this.buy - this.sell
+    this
+
+// Method: Calculate using Intrabar (LTF) data
+method calcIntrabar(VolumeData this, float u, float d, float dl, int offset) =>
+    this.buy   := math.abs(u[offset])
+    this.sell  := math.abs(d[offset])
+    this.total := this.buy + this.sell
+    this.delta := dl[offset]
+    this
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// UDT: TREND CHANNEL SYSTEM
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+// Direction constants for trend classification
+int DIR_UP    =  1   // Uptrend: higher highs, higher lows
+int DIR_DOWN  = -1   // Downtrend: lower highs, lower lows
+int DIR_RANGE =  0   // Range/Sideways: no clear direction
+
+type BlockAnalytics
+    bool  valid
+    float totalBuy
+    float totalSell
+    float delta
+    float blockHigh
+    float blockLow
+    float blockOpen
+    float blockClose
+    int   startIdx
+    int   endIdx
+    int   centerIdx
+    int   trendType       // 1 = UP, -1 = DOWN, 0 = RANGE
+    bool  trendLocked     // Once true, trendType never changes
+
+type TrendChannel
+    int   channelType      // 1 = UPTREND, -1 = DOWNTREND, 0 = RANGE
+    int   startBlock       // Newest block (e.g., 1)
+    int   endBlock         // Oldest block (e.g., 4)
+    float angleDeg         // Channel angle in degrees
+    int   upperX1          // Upper line start X (left)
+    int   upperX2          // Upper line end X (right)
+    int   lowerX1          // Lower line start X (left)
+    int   lowerX2          // Lower line end X (right)
+    float upperY1          // Upper line start Y
+    float upperY2          // Upper line end Y
+    float lowerY1          // Lower line start Y
+    float lowerY2          // Lower line end Y
+    line  upperLine        // Upper channel line
+    line  lowerLine        // Lower channel line
+
+// TrendChannel method: Clear lines
+method clear(TrendChannel this) =>
+    if not na(this.upperLine)
+        line.delete(this.upperLine)
+    if not na(this.lowerLine)
+        line.delete(this.lowerLine)
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// UDT: Z-LEVEL DATA (for Z-Price Lines)
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+type ZLevel
+    float  price      // Price level (HIGH or LOW)
+    int    barIdx     // Bar index where detected
+    float  zValue     // Z-Score value at detection
+    string metric     // "Price" / "Volume" / "Buy" / "Sell" / "Delta"
+    int    groupNum   // Which group (1, 2, 3...)
+    int    barInGroup // Bar number within group (1 to i_zPeriod)
+
+ 
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// UDT: EVENT CLASSIFIER ENGINE
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+type EventClassifier
+    array<EventResult> activeEvents   // Currently active events
+    ZSnapshot          snapshot       // Current Z-score snapshot
+    int                totalChecked   // Total scenarios checked
+    int                totalTriggered // Total events triggered
+    EventResult        strongestEvent // Highest confidence event
+
+// Method: Initialize classifier
+method init(EventClassifier this) =>
+    this.activeEvents := array.new<EventResult>()
+    this.snapshot := ZSnapshot.new()
+    this.totalChecked := 0
+    this.totalTriggered := 0
+    this.strongestEvent := na
+    this
+
+// Method: Clear previous results
+method clear(EventClassifier this) =>
+    array.clear(this.activeEvents)
+    this.totalChecked := 0
+    this.totalTriggered := 0
+    this.strongestEvent := na
+    this
+
+// Method: Add detected event
+method addEvent(EventClassifier this, EventResult evt) =>
+    array.push(this.activeEvents, evt)
+    this.totalTriggered += 1
+    
+    // Track strongest event
+    if na(this.strongestEvent) or evt.confidence > this.strongestEvent.confidence
+        this.strongestEvent := evt
+    this
+
+// Method: Get events by category
+method getByCategory(EventClassifier this, int cat) =>
+    array<EventResult> result = array.new<EventResult>()
+    int n = array.size(this.activeEvents)
+    if n > 0
+        for i = 0 to n - 1
+            EventResult evt = array.get(this.activeEvents, i)
+            if evt.category == cat
+                array.push(result, evt)
+    result
+
+// Method: Get events by direction
+method getByDirection(EventClassifier this, int dir) =>
+    array<EventResult> result = array.new<EventResult>()
+    int n = array.size(this.activeEvents)
+    if n > 0
+        for i = 0 to n - 1
+            EventResult evt = array.get(this.activeEvents, i)
+            if evt.direction == dir
+                array.push(result, evt)
+    result
+
+// Method: Get top N events by confidence
+method getTopEvents(EventClassifier this, int topN) =>
+    array<EventResult> result = array.new<EventResult>()
+    array<EventResult> sorted = array.copy(this.activeEvents)
+    int n = array.size(sorted)
+    
+    // Sort by confidence (descending) using bubble sort
+    if n > 1
+        for i = 0 to n - 2
+            for j = 0 to n - i - 2
+                EventResult a = array.get(sorted, j)
+                EventResult b = array.get(sorted, j + 1)
+                if b.confidence > a.confidence
+                    array.set(sorted, j, b)
+                    array.set(sorted, j + 1, a)
+    
+    // Take top N
+    int limit = math.min(topN, n)
+    if limit > 0
+        for i = 0 to limit - 1
+            array.push(result, array.get(sorted, i))
+    result
+
+// Method: Calculate overall market bias
+method calcMarketBias(EventClassifier this) =>
+    float bullScore = 0.0
+    float bearScore = 0.0
+    float neutralScore = 0.0
+    
+    int n = array.size(this.activeEvents)
+    if n > 0
+        for i = 0 to n - 1
+            EventResult evt = array.get(this.activeEvents, i)
+            if evt.direction == EVT_DIR_BULL
+                bullScore += evt.confidence
+            else if evt.direction == EVT_DIR_BEAR
+                bearScore += evt.confidence
+            else
+                neutralScore += evt.confidence
+    
+    [bullScore, bearScore, neutralScore]
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// INITIALIZE DATA STRUCTURES
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+var VolumeData volData = VolumeData.new()
+
+var ZScoreData zPrice  = ZScoreData.new()
+var ZScoreData zVolume = ZScoreData.new()
+var ZScoreData zBuy    = ZScoreData.new()
+var ZScoreData zSell   = ZScoreData.new()
+var ZScoreData zDelta  = ZScoreData.new()
+
+// Z-Level arrays for storing levels (all metrics combined)
+var array<ZLevel> upperZLevels = array.new<ZLevel>()
+var array<ZLevel> lowerZLevels = array.new<ZLevel>()
+
+// Track nearest levels for dashboard display
+var ZLevel nearestUpperPrice  = na
+var ZLevel nearestLowerPrice  = na
+var ZLevel nearestUpperVol    = na
+var ZLevel nearestLowerVol    = na
+var ZLevel nearestUpperBuy    = na
+var ZLevel nearestLowerBuy    = na
+var ZLevel nearestUpperSell   = na
+var ZLevel nearestLowerSell   = na
+var ZLevel nearestUpperDelta  = na
+var ZLevel nearestLowerDelta  = na
+
+// Persistent line/label pools (reuse & update; no recreate-per-bar)
+var array<line>  upperLines     = array.new<line>()
+var array<line>  upperProjLines = array.new<line>()
+var array<line>  upperJogs      = array.new<line>()
+var array<label> upperLabels    = array.new<label>()
+
+var array<line>  lowerLines     = array.new<line>()
+var array<line>  lowerProjLines = array.new<line>()
+var array<line>  lowerJogs      = array.new<line>()
+var array<label> lowerLabels    = array.new<label>()
+
+// Dashboard-selected (ONLY what is actually drawn)
+var array<ZLevel> dashUpperSel = array.new<ZLevel>()
+var array<ZLevel> dashLowerSel = array.new<ZLevel>()
+
+// Group boundary labels array
+var array<label> groupLabels = array.new<label>()
+
+// Dashboard warning (when overlap cannot be solved within cap)
+var string dashLabelOverlapWarn = ""
+
+// Event Classifier Engine
+var EventClassifier eventEngine = EventClassifier.new().init()
+
+// Trend Channel System
+var array<BlockAnalytics> blockData = array.new<BlockAnalytics>()
+var array<TrendChannel> trendChannels = array.new<TrendChannel>()
+var label lblTrendUpper = na
+var label lblTrendLower = na
+
+// Alert System State (for bias shift detection via alertcondition)
+var float prevBullPct = 0.0
+var float prevBearPct = 0.0
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// TREND CHANNEL FUNCTIONS
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+// Helper: Create empty block analytics
+f_blockEmpty() =>
+    BlockAnalytics.new(false, na, na, na, na, na, na, na, na, na, na, DIR_RANGE, false)
+
+// Helper: Ensure block array size
+f_ensureBlockCount(int n) =>
+    while array.size(blockData) < n
+        array.push(blockData, f_blockEmpty())
+    while array.size(blockData) > n
+        array.pop(blockData)
+
+// Position comparison: Is block A higher than block B?
+f_isHigherPosition(BlockAnalytics a, BlockAnalytics b) =>
+    if not a.valid or not b.valid
+        DIR_RANGE
+    else
+        float midA = (a.blockHigh + a.blockLow) / 2
+        float midB = (b.blockHigh + b.blockLow) / 2
+        midA > midB ? DIR_UP : (midA < midB ? DIR_DOWN : DIR_RANGE)
+
+// Calculate channel angle from price movement
+f_calcChannelAngle(float priceChange, int barSpan, float avgRange) =>
+    if barSpan == 0 or avgRange == 0
+        0.0
+    else
+        float normalizedChange = priceChange / avgRange
+        float angleRad = math.atan(normalizedChange / barSpan * 10)
+        math.todegrees(angleRad)
+
+// Clear all existing channels
+f_clearAllChannels() =>
+    int n = array.size(trendChannels)
+    if n > 0
+        for i = 0 to n - 1
+            TrendChannel ch = array.get(trendChannels, i)
+            ch.clear()
+    array.clear(trendChannels)
+
+// Lock trend type for a block
+f_lockBlockTrend(int blockIdx, int trendType) =>
+    if blockIdx < array.size(blockData)
+        BlockAnalytics blk = array.get(blockData, blockIdx)
+        if not blk.trendLocked
+            blk.trendType := trendType
+            blk.trendLocked := true
+            array.set(blockData, blockIdx, blk)
+
+// Find extreme points within a segment
+f_findSegmentExtremes(int segStart, int segEnd) =>
+    float highestHigh = na
+    float lowestHigh = na
+    float highestLow = na
+    float lowestLow = na
+    int highestHighIdx = na
+    int lowestHighIdx = na
+    int highestLowIdx = na
+    int lowestLowIdx = na
+    
+    for i = segStart to segEnd
+        if i < array.size(blockData)
+            BlockAnalytics blk = array.get(blockData, i)
+            if blk.valid
+                if na(highestHigh) or blk.blockHigh > highestHigh
+                    highestHigh := blk.blockHigh
+                    highestHighIdx := blk.centerIdx
+                if na(lowestHigh) or blk.blockHigh < lowestHigh
+                    lowestHigh := blk.blockHigh
+                    lowestHighIdx := blk.centerIdx
+                if na(highestLow) or blk.blockLow > highestLow
+                    highestLow := blk.blockLow
+                    highestLowIdx := blk.centerIdx
+                if na(lowestLow) or blk.blockLow < lowestLow
+                    lowestLow := blk.blockLow
+                    lowestLowIdx := blk.centerIdx
+    
+    [highestHigh, lowestHigh, highestLow, lowestLow, highestHighIdx, lowestHighIdx, highestLowIdx, lowestLowIdx]
+
+// Main detection: Scan blocks and build trend channels
+f_detectTrendChannels(float rangeThreshold, float avgRange) =>
+    int numBlocks = array.size(blockData)
+    if numBlocks < 2
+        false
+    else
+        int i = 0
+        while i < numBlocks - 1
+            BlockAnalytics newerBlk = array.get(blockData, i)
+            BlockAnalytics olderBlk = array.get(blockData, i + 1)
+            
+            int dir = 0
+            if newerBlk.trendLocked
+                dir := newerBlk.trendType
+            else
+                dir := f_isHigherPosition(newerBlk, olderBlk)
+            
+            if dir == DIR_RANGE
+                f_lockBlockTrend(i, DIR_RANGE)
+                i += 1
+                continue
+            
+            int segStart = i
+            int segEnd = i + 1
+            f_lockBlockTrend(segStart, dir)
+            
+            while segEnd < numBlocks - 1
+                BlockAnalytics blkNewer = array.get(blockData, segEnd)
+                BlockAnalytics blkOlder = array.get(blockData, segEnd + 1)
+                
+                int nextDir = 0
+                if blkNewer.trendLocked
+                    nextDir := blkNewer.trendType
+                else
+                    nextDir := f_isHigherPosition(blkNewer, blkOlder)
+                
+                if nextDir == dir or (blkOlder.trendLocked and blkOlder.trendType == dir)
+                    f_lockBlockTrend(segEnd, dir)
+                    segEnd += 1
+                else
+                    f_lockBlockTrend(segEnd, nextDir)
+                    break
+            
+            f_lockBlockTrend(segEnd, dir)
+            
+            [highestHigh, lowestHigh, highestLow, lowestLow, hhIdx, lhIdx, hlIdx, llIdx] = 
+                 f_findSegmentExtremes(segStart, segEnd)
+            
+            if not na(highestHigh) and not na(lowestHigh) and not na(highestLow) and not na(lowestLow)
+                BlockAnalytics blkOldest = array.get(blockData, segEnd)
+                BlockAnalytics blkNewest = array.get(blockData, segStart)
+                int segmentX1 = blkOldest.centerIdx
+                int segmentX2 = blkNewest.centerIdx
+                
+                float upperSlope = na
+                float lowerSlope = na
+                float upperY1 = na
+                float upperY2 = na
+                float lowerY1 = na
+                float lowerY2 = na
+                
+                if dir == DIR_DOWN
+                    int upperSpan = lhIdx - hhIdx
+                    int lowerSpan = llIdx - hlIdx
+                    upperSlope := upperSpan != 0 ? (lowestHigh - highestHigh) / upperSpan : 0.0
+                    lowerSlope := lowerSpan != 0 ? (lowestLow - highestLow) / lowerSpan : 0.0
+                    upperY1 := highestHigh + (upperSlope * (segmentX1 - hhIdx))
+                    upperY2 := highestHigh + (upperSlope * (segmentX2 - hhIdx))
+                    lowerY1 := highestLow + (lowerSlope * (segmentX1 - hlIdx))
+                    lowerY2 := highestLow + (lowerSlope * (segmentX2 - hlIdx))
+                else if dir == DIR_UP
+                    int upperSpan = hhIdx - lhIdx
+                    int lowerSpan = hlIdx - llIdx
+                    upperSlope := upperSpan != 0 ? (highestHigh - lowestHigh) / upperSpan : 0.0
+                    lowerSlope := lowerSpan != 0 ? (highestLow - lowestLow) / lowerSpan : 0.0
+                    upperY1 := lowestHigh + (upperSlope * (segmentX1 - lhIdx))
+                    upperY2 := lowestHigh + (upperSlope * (segmentX2 - lhIdx))
+                    lowerY1 := lowestLow + (lowerSlope * (segmentX1 - llIdx))
+                    lowerY2 := lowestLow + (lowerSlope * (segmentX2 - llIdx))
+                else
+                    upperSlope := 0.0
+                    lowerSlope := 0.0
+                    upperY1 := blkOldest.blockHigh
+                    upperY2 := blkNewest.blockHigh
+                    lowerY1 := blkOldest.blockLow
+                    lowerY2 := blkNewest.blockLow
+                
+                float midY1 = (upperY1 + lowerY1) / 2
+                float midY2 = (upperY2 + lowerY2) / 2
+                float priceChange = midY2 - midY1
+                int segmentSpan = math.abs(segmentX2 - segmentX1)
+                float angleDeg = f_calcChannelAngle(priceChange, segmentSpan, avgRange)
+                
+                int finalType = dir
+                if math.abs(angleDeg) <= rangeThreshold
+                    finalType := DIR_RANGE
+                
+                TrendChannel channel = TrendChannel.new(
+                     finalType, segStart + 1, segEnd + 1, angleDeg,
+                     segmentX1, segmentX2, segmentX1, segmentX2,
+                     upperY1, upperY2, lowerY1, lowerY2, na, na)
+                
+                array.push(trendChannels, channel)
+            
+            i := segEnd + 1
+        true
+
+// Draw all detected channels
+f_drawAllChannels(int projLen, color upCol, color dnCol, color rangeCol, int lineWidth, string lineStyle, bool showRange) =>
+    string lstyle = lineStyle == "solid" ? line.style_solid : 
+                     lineStyle == "dashed" ? line.style_dashed : line.style_dotted
+    
+    int n = array.size(trendChannels)
+    if n > 0
+        for i = 0 to n - 1
+            TrendChannel ch = array.get(trendChannels, i)
+            
+            if ch.channelType == DIR_RANGE and not showRange
+                continue
+            
+            color chCol = ch.channelType == DIR_UP ? upCol : 
+                          ch.channelType == DIR_DOWN ? dnCol : rangeCol
+            
+            int currentProjLen = (i == 0) ? projLen : 0
+            
+            int upperBarSpan = ch.upperX2 - ch.upperX1
+            int lowerBarSpan = ch.lowerX2 - ch.lowerX1
+            float upperSlope = upperBarSpan > 0 ? (ch.upperY2 - ch.upperY1) / upperBarSpan : 0.0
+            float lowerSlope = lowerBarSpan > 0 ? (ch.lowerY2 - ch.lowerY1) / lowerBarSpan : 0.0
+            
+            int upperX2Proj = ch.upperX2 + currentProjLen
+            int lowerX2Proj = ch.lowerX2 + currentProjLen
+            float upperY2Proj = ch.upperY2 + (upperSlope * currentProjLen)
+            float lowerY2Proj = ch.lowerY2 + (lowerSlope * currentProjLen)
+            
+            line upperLn = line.new(ch.upperX1, ch.upperY1, upperX2Proj, upperY2Proj,
+                                   xloc = xloc.bar_index, extend = extend.none,
+                                   color = chCol, width = lineWidth, style = lstyle)
+            
+            line lowerLn = line.new(ch.lowerX1, ch.lowerY1, lowerX2Proj, lowerY2Proj,
+                                   xloc = xloc.bar_index, extend = extend.none,
+                                   color = chCol, width = lineWidth, style = lstyle)
+            
+            ch.upperLine := upperLn
+            ch.lowerLine := lowerLn
+            array.set(trendChannels, i, ch)
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// CALCULATIONS: VOLUME ENGINE
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+string ltfResolved = f_resolveLTF(i_useCustomLTF, i_customLTF)
+
+// Intrabar series cache (single request source for engine + coverage)
+float uDash  = na
+float dDash  = na
+float dlDash = na
+if i_calcMethod == "Intrabar (Precise)"
+    [uTmp, dTmp, dlTmp] = tvta.requestUpAndDownVolume(ltfResolved)
+    uDash  := uTmp
+    dDash  := dTmp
+    dlDash := dlTmp
+
+if i_calcMethod == "Intrabar (Precise)"
+    volData.calcIntrabar(uDash, dDash, dlDash, baseOff)
+else
+    volData.calcGeometry(baseOff)
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// CALCULATIONS: Z-SCORES (ALL METRICS)
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// Reference price based on calculation basis
+float refPrice = close[baseOff]
+
+zPrice.calcZ(refPrice,       i_zPeriod)
+zVolume.calcZ(volData.total, i_zPeriod)
+zBuy.calcZ(volData.buy,      i_zPeriod)
+zSell.calcZ(volData.sell,    i_zPeriod)
+zDelta.calcZ(volData.delta,  i_zPeriod)
+
+// Cache Z-values as simple float series (required for history access on UDT fields)
+float zPriceRawSeries = zPrice.raw
+float zDeltaRawSeries = zDelta.raw
+
+// Now apply history operator on simple series (not UDT fields)
+float zPricePrev = nz(zPriceRawSeries[baseOff + 1], 0.0)
+float zDeltaPrev = nz(zDeltaRawSeries[baseOff + 1], 0.0)
+
+// Pre-calculate ATR at global scope (required for ta.* functions)
+float globalAtr14 = ta.atr(14)
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// EVENT CLASSIFIER: BUILD SNAPSHOT & RUN ALL DETECTIONS
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+// Build ZSnapshot from current Z-Score values
+ZSnapshot currentSnapshot = ZSnapshot.new()
+currentSnapshot.Zp       := zPrice.raw
+currentSnapshot.Zv       := zVolume.raw
+currentSnapshot.Zbuy     := zBuy.raw
+currentSnapshot.Zsell    := zSell.raw
+currentSnapshot.Zdelta   := zDelta.raw
+currentSnapshot.dirP     := zPrice.raw > Z_THRESHOLD_ZERO ? 1 : (zPrice.raw < -Z_THRESHOLD_ZERO ? -1 : 0)
+currentSnapshot.Zp_1     := zPricePrev
+currentSnapshot.Zdelta_1 := zDeltaPrev
+
+// Clear previous events and run all detections
+eventEngine.clear()
+eventEngine.snapshot := currentSnapshot
+
+// Helper function to safely add event if triggered
+f_tryAddEvent(EventClassifier engine, EventResult evt) =>
+    if not na(evt)
+        engine.addEvent(evt)
+    engine
+
+// Run all 60 event detections (Categories A-I)
+// Category A: Price-Volume (1-10)
+eventEngine.totalChecked += 10
+f_tryAddEvent(eventEngine, f_checkEvent1(currentSnapshot))
+f_tryAddEvent(eventEngine, f_checkEvent2(currentSnapshot))
+f_tryAddEvent(eventEngine, f_checkEvent3(currentSnapshot))
+f_tryAddEvent(eventEngine, f_checkEvent4(currentSnapshot))
+f_tryAddEvent(eventEngine, f_checkEvent5(currentSnapshot))
+f_tryAddEvent(eventEngine, f_checkEvent6(currentSnapshot))
+f_tryAddEvent(eventEngine, f_checkEvent7(currentSnapshot))
+f_tryAddEvent(eventEngine, f_checkEvent8(currentSnapshot))
+f_tryAddEvent(eventEngine, f_checkEvent9(currentSnapshot))
+f_tryAddEvent(eventEngine, f_checkEvent10(currentSnapshot))
+
+// Category B: Order-Flow/Delta (11-16)
+eventEngine.totalChecked += 6
+f_tryAddEvent(eventEngine, f_checkEvent11(currentSnapshot))
+f_tryAddEvent(eventEngine, f_checkEvent12(currentSnapshot))
+f_tryAddEvent(eventEngine, f_checkEvent13(currentSnapshot))
+f_tryAddEvent(eventEngine, f_checkEvent14(currentSnapshot))
+f_tryAddEvent(eventEngine, f_checkEvent15(currentSnapshot))
+f_tryAddEvent(eventEngine, f_checkEvent16(currentSnapshot))
+
+// Category C: Buy vs Sell (17-23)
+eventEngine.totalChecked += 7
+f_tryAddEvent(eventEngine, f_checkEvent17(currentSnapshot))
+f_tryAddEvent(eventEngine, f_checkEvent18(currentSnapshot))
+f_tryAddEvent(eventEngine, f_checkEvent19(currentSnapshot))
+f_tryAddEvent(eventEngine, f_checkEvent20(currentSnapshot))
+f_tryAddEvent(eventEngine, f_checkEvent21(currentSnapshot))
+f_tryAddEvent(eventEngine, f_checkEvent22(currentSnapshot))
+f_tryAddEvent(eventEngine, f_checkEvent23(currentSnapshot))
+
+// Category D: Predictability (24-26)
+eventEngine.totalChecked += 3
+f_tryAddEvent(eventEngine, f_checkEvent24(currentSnapshot))
+f_tryAddEvent(eventEngine, f_checkEvent25(currentSnapshot))
+f_tryAddEvent(eventEngine, f_checkEvent26(currentSnapshot))
+
+// Category E: Reversal vs Continuation (27-30)
+eventEngine.totalChecked += 4
+f_tryAddEvent(eventEngine, f_checkEvent27(currentSnapshot))
+f_tryAddEvent(eventEngine, f_checkEvent28(currentSnapshot))
+f_tryAddEvent(eventEngine, f_checkEvent29(currentSnapshot))
+f_tryAddEvent(eventEngine, f_checkEvent30(currentSnapshot))
+
+// Category F: Imbalance Lag (31-33)
+eventEngine.totalChecked += 3
+f_tryAddEvent(eventEngine, f_checkEvent31(currentSnapshot))
+f_tryAddEvent(eventEngine, f_checkEvent32(currentSnapshot))
+f_tryAddEvent(eventEngine, f_checkEvent33(currentSnapshot))
+
+// Category G: Support/Resistance (34-36)
+eventEngine.totalChecked += 3
+f_tryAddEvent(eventEngine, f_checkEvent34(currentSnapshot))
+f_tryAddEvent(eventEngine, f_checkEvent35(currentSnapshot))
+f_tryAddEvent(eventEngine, f_checkEvent36(currentSnapshot))
+
+// Category H: Extended Scenarios (37-50)
+eventEngine.totalChecked += 14
+f_tryAddEvent(eventEngine, f_checkEvent37(currentSnapshot))
+f_tryAddEvent(eventEngine, f_checkEvent38(currentSnapshot))
+f_tryAddEvent(eventEngine, f_checkEvent39(currentSnapshot))
+f_tryAddEvent(eventEngine, f_checkEvent40(currentSnapshot))
+f_tryAddEvent(eventEngine, f_checkEvent41(currentSnapshot))
+f_tryAddEvent(eventEngine, f_checkEvent42(currentSnapshot))
+f_tryAddEvent(eventEngine, f_checkEvent43(currentSnapshot))
+f_tryAddEvent(eventEngine, f_checkEvent44(currentSnapshot))
+f_tryAddEvent(eventEngine, f_checkEvent45(currentSnapshot))
+f_tryAddEvent(eventEngine, f_checkEvent46(currentSnapshot))
+f_tryAddEvent(eventEngine, f_checkEvent47(currentSnapshot))
+f_tryAddEvent(eventEngine, f_checkEvent48(currentSnapshot))
+f_tryAddEvent(eventEngine, f_checkEvent49(currentSnapshot))
+f_tryAddEvent(eventEngine, f_checkEvent50(currentSnapshot))
+
+// Category I: Trend-Integrated (51-60)
+eventEngine.totalChecked += 10
+f_tryAddEvent(eventEngine, f_checkEvent51(currentSnapshot))
+f_tryAddEvent(eventEngine, f_checkEvent52(currentSnapshot))
+f_tryAddEvent(eventEngine, f_checkEvent53(currentSnapshot))
+f_tryAddEvent(eventEngine, f_checkEvent54(currentSnapshot))
+f_tryAddEvent(eventEngine, f_checkEvent55(currentSnapshot))
+f_tryAddEvent(eventEngine, f_checkEvent56(currentSnapshot))
+f_tryAddEvent(eventEngine, f_checkEvent57(currentSnapshot))
+f_tryAddEvent(eventEngine, f_checkEvent58(currentSnapshot))
+f_tryAddEvent(eventEngine, f_checkEvent59(currentSnapshot))
+f_tryAddEvent(eventEngine, f_checkEvent60(currentSnapshot))
+
+// Calculate market bias scores
+[bullScore, bearScore, neutralScore] = eventEngine.calcMarketBias()
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// TREND CHANNEL: BUILD BLOCKS & DETECT
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+// Build block analytics from Z-Score groups
+if barstate.islast and i_trendEnable
+    f_ensureBlockCount(i_numGroups)
+    
+    // Reset trend locks for fresh calculation
+    for gi = 0 to i_numGroups - 1
+        BlockAnalytics blk = array.get(blockData, gi)
+        blk.trendLocked := false
+        array.set(blockData, gi, blk)
+    
+    // Calculate each block's OHLC from the Z-Score period
+    for gi = 0 to i_numGroups - 1
+        int startOff = baseOff + gi * i_zPeriod
+        int endOff = baseOff + (gi + 1) * i_zPeriod - 1
+        
+        float blockHi = na
+        float blockLo = na
+        float blockOp = na
+        float blockCl = na
+        float sumBuy = 0.0
+        float sumSell = 0.0
+        
+        for k = startOff to endOff
+            float h = high[k]
+            float l = low[k]
+            float o = open[k]
+            float c = close[k]
+            
+            if na(blockHi) or h > blockHi
+                blockHi := h
+            if na(blockLo) or l < blockLo
+                blockLo := l
+            
+            if k == endOff
+                blockOp := o
+            if k == startOff
+                blockCl := c
+            
+            // Accumulate volume
+            sumBuy += nz(volData.buy, 0)
+            sumSell += nz(volData.sell, 0)
+        
+        int xRight = bar_index - startOff
+        int xLeft = bar_index - endOff
+        int xCenter = int(math.round((xLeft + xRight) / 2.0))
+        
+        BlockAnalytics ba = BlockAnalytics.new(true,
+             sumBuy, sumSell, sumBuy - sumSell,
+             blockHi, blockLo, blockOp, blockCl,
+             xLeft, xRight, xCenter, DIR_RANGE, false)
+        array.set(blockData, gi, ba)
+    
+    // Clear old channels and detect new ones
+    f_clearAllChannels()
+    f_detectTrendChannels(i_rangeAngleThreshold, globalAtr14)
+    
+    // Draw channels
+    int projLen = i_trendProject ? i_trendProjLen : 0
+    f_drawAllChannels(projLen, i_trendUpColor, i_trendDnColor, i_trendRangeColor,
+                      i_trendLineWidth, i_trendLineStyle, i_showRangeSegments)
+    
+    // Draw trend labels
+    if i_showTrendLabels and array.size(trendChannels) > 0
+        TrendChannel latestCh = array.get(trendChannels, 0)
+        
+        int upperBarSpan = latestCh.upperX2 - latestCh.upperX1
+        int lowerBarSpan = latestCh.lowerX2 - latestCh.lowerX1
+        float upperSlope = upperBarSpan > 0 ? (latestCh.upperY2 - latestCh.upperY1) / upperBarSpan : 0.0
+        float lowerSlope = lowerBarSpan > 0 ? (latestCh.lowerY2 - latestCh.lowerY1) / lowerBarSpan : 0.0
+        
+        int lblX = latestCh.upperX2 + projLen
+        float upperY = latestCh.upperY2 + (upperSlope * projLen)
+        float lowerY = latestCh.lowerY2 + (lowerSlope * projLen)
+        
+        float currentPrice = close[baseOff]
+        float upperDiff = upperY - currentPrice
+        float lowerDiff = currentPrice - lowerY
+        float upperPct = currentPrice != 0 ? (upperDiff / currentPrice) * 100 : 0.0
+        float lowerPct = currentPrice != 0 ? (lowerDiff / currentPrice) * 100 : 0.0
+        
+        color chCol = latestCh.channelType == DIR_UP ? i_trendUpColor : 
+                      latestCh.channelType == DIR_DOWN ? i_trendDnColor : i_trendRangeColor
+        
+        string trendName = latestCh.channelType == DIR_UP ? f_L3("UPTREND", "YÜKSELİŞ", "상승추세") : 
+                           latestCh.channelType == DIR_DOWN ? f_L3("DOWNTREND", "DÜŞÜŞ", "하락추세") : f_L3("RANGE", "YATAY", "횡보")
+        
+        string upperLbl = f_L3("Upper", "Üst", "상단")
+        string lowerLbl = f_L3("Lower", "Alt", "하단")
+        
+        string upperTxt = "▲ " + trendName + " " + upperLbl + " | " + str.tostring(upperY, format.mintick) + 
+                          " (+" + str.tostring(upperDiff, "#.##") + " | +" + str.tostring(upperPct, "#.##") + "%) | " +
+                          str.tostring(latestCh.angleDeg, "#.#") + "°"
+        
+        string lowerTxt = "▼ " + trendName + " " + lowerLbl + " | " + str.tostring(lowerY, format.mintick) + 
+                          " (-" + str.tostring(lowerDiff, "#.##") + " | -" + str.tostring(lowerPct, "#.##") + "%) | " +
+                          str.tostring(latestCh.angleDeg, "#.#") + "°"
+        
+        if na(lblTrendUpper)
+            lblTrendUpper := label.new(lblX, upperY, upperTxt,
+                                      style = label.style_label_left, size = f_getTextSize(i_textSizeStr),
+                                      textcolor = chCol, color = color.new(color.black, 85))
+        else
+            label.set_xy(lblTrendUpper, lblX, upperY)
+            label.set_text(lblTrendUpper, upperTxt)
+            label.set_textcolor(lblTrendUpper, chCol)
+            label.set_size(lblTrendUpper, f_getTextSize(i_textSizeStr))
+        
+        if na(lblTrendLower)
+            lblTrendLower := label.new(lblX, lowerY, lowerTxt,
+                                      style = label.style_label_left, size = f_getTextSize(i_textSizeStr),
+                                      textcolor = chCol, color = color.new(color.black, 85))
+        else
+            label.set_xy(lblTrendLower, lblX, lowerY)
+            label.set_text(lblTrendLower, lowerTxt)
+            label.set_textcolor(lblTrendLower, chCol)
+            label.set_size(lblTrendLower, f_getTextSize(i_textSizeStr))
+    else
+        if not na(lblTrendUpper)
+            label.set_text(lblTrendUpper, "")
+            label.set_textcolor(lblTrendUpper, color.new(color.gray, 100))
+        if not na(lblTrendLower)
+            label.set_text(lblTrendLower, "")
+            label.set_textcolor(lblTrendLower, color.new(color.gray, 100))
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// MODERN ALERT ENGINE: alertcondition() Architecture
+// All conditions appear in TradingView's native Alert dialog → Clean settings menu
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+// ═══ CORE METRICS FOR ALERT CONDITIONS ═══
+float totalBiasAlert = bullScore + bearScore + neutralScore
+float bullPctAlert = totalBiasAlert > 0 ? (bullScore / totalBiasAlert) * 100.0 : 0.0
+float bearPctAlert = totalBiasAlert > 0 ? (bearScore / totalBiasAlert) * 100.0 : 0.0
+
+// Bias shift detection
+float bullShift = bullPctAlert - prevBullPct
+float bearShift = bearPctAlert - prevBearPct
+prevBullPct := bullPctAlert
+prevBearPct := bearPctAlert
+
+// Category event arrays
+array<EventResult> catAEvts = eventEngine.getByCategory(EVT_CAT_PV)
+array<EventResult> catBEvts = eventEngine.getByCategory(EVT_CAT_OF)
+array<EventResult> catCEvts = eventEngine.getByCategory(EVT_CAT_BS)
+array<EventResult> catDEvts = eventEngine.getByCategory(EVT_CAT_PR)
+array<EventResult> catEEvts = eventEngine.getByCategory(EVT_CAT_RC)
+array<EventResult> catFEvts = eventEngine.getByCategory(EVT_CAT_IL)
+array<EventResult> catGEvts = eventEngine.getByCategory(EVT_CAT_SR)
+array<EventResult> catHEvts = eventEngine.getByCategory(EVT_CAT_EX)
+array<EventResult> catIEvts = eventEngine.getByCategory(EVT_CAT_TI)
+
+// Direction event arrays
+array<EventResult> bullEvts = eventEngine.getByDirection(EVT_DIR_BULL)
+array<EventResult> bearEvts = eventEngine.getByDirection(EVT_DIR_BEAR)
+array<EventResult> warnEvts = eventEngine.getByDirection(EVT_DIR_WARNING)
+int bullCnt = array.size(bullEvts)
+int bearCnt = array.size(bearEvts)
+
+// Z-Score state flags
+bool zPriceHigh   = zPrice.raw >= Z_THRESHOLD_HIGH
+bool zPriceLow    = zPrice.raw <= -Z_THRESHOLD_HIGH
+bool zPriceMedUp  = zPrice.raw >= Z_THRESHOLD_MED
+bool zPriceMedDn  = zPrice.raw <= -Z_THRESHOLD_MED
+bool zVolHigh     = zVolume.raw >= Z_THRESHOLD_HIGH
+bool zVolLow      = zVolume.raw <= -Z_THRESHOLD_HIGH
+bool zDeltaPos    = zDelta.raw >= Z_THRESHOLD_MED
+bool zDeltaNeg    = zDelta.raw <= -Z_THRESHOLD_MED
+
+// ═══ SINGLE EVENT CONDITIONS (High-Impact Events) ═══
+bool evt1_breakout      = not na(f_checkEvent1(currentSnapshot))
+bool evt2_trendStrength = not na(f_checkEvent2(currentSnapshot))
+bool evt3_fragileMove   = not na(f_checkEvent3(currentSnapshot))
+bool evt11_imbalance    = not na(f_checkEvent11(currentSnapshot))
+bool evt12_divTop       = not na(f_checkEvent12(currentSnapshot))
+bool evt13_divBottom    = not na(f_checkEvent13(currentSnapshot))
+bool evt14_absorbPos    = not na(f_checkEvent14(currentSnapshot))
+bool evt15_absorbNeg    = not na(f_checkEvent15(currentSnapshot))
+bool evt37_climaxBuy    = not na(f_checkEvent37(currentSnapshot))
+bool evt38_climaxSell   = not na(f_checkEvent38(currentSnapshot))
+bool evt39_stealthAcc   = not na(f_checkEvent39(currentSnapshot))
+bool evt40_stealthDist  = not na(f_checkEvent40(currentSnapshot))
+bool evt44_compression  = not na(f_checkEvent44(currentSnapshot))
+bool evt45_expansion    = not na(f_checkEvent45(currentSnapshot))
+bool evt51_trendBreak   = not na(f_checkEvent51(currentSnapshot))
+bool evt54_trendRev     = not na(f_checkEvent54(currentSnapshot))
+bool evt58_rangePending = not na(f_checkEvent58(currentSnapshot))
+
+// ═══ CATEGORY CONDITIONS ═══
+bool catA_priceVol    = array.size(catAEvts) > 0
+bool catB_orderFlow   = array.size(catBEvts) > 0
+bool catC_buySell     = array.size(catCEvts) > 0
+bool catD_predict     = array.size(catDEvts) > 0
+bool catE_revCont     = array.size(catEEvts) > 0
+bool catF_imbalLag    = array.size(catFEvts) > 0
+bool catG_sr          = array.size(catGEvts) > 0
+bool catH_extended    = array.size(catHEvts) > 0
+bool catI_trend       = array.size(catIEvts) > 0
+
+// ═══ CONFLUENCE CONDITIONS ═══
+bool confluence2Bull = bullCnt >= 2
+bool confluence3Bull = bullCnt >= 3
+bool confluence4Bull = bullCnt >= 4
+bool confluence5Bull = bullCnt >= 5
+bool confluence2Bear = bearCnt >= 2
+bool confluence3Bear = bearCnt >= 3
+bool confluence4Bear = bearCnt >= 4
+bool confluence5Bear = bearCnt >= 5
+
+// ═══ BIAS SHIFT CONDITIONS ═══
+bool biasShiftToBull10 = bullShift >= 10.0 and bearShift <= -10.0
+bool biasShiftToBull20 = bullShift >= 20.0 and bearShift <= -20.0
+bool biasShiftToBull30 = bullShift >= 30.0 and bearShift <= -30.0
+bool biasShiftToBear10 = bearShift >= 10.0 and bullShift <= -10.0
+bool biasShiftToBear20 = bearShift >= 20.0 and bullShift <= -20.0
+bool biasShiftToBear30 = bearShift >= 30.0 and bullShift <= -30.0
+
+// ═══ HIGH CONFIDENCE CONDITIONS ═══
+bool highConf60 = not na(eventEngine.strongestEvent) and eventEngine.strongestEvent.confidence >= 60.0
+bool highConf70 = not na(eventEngine.strongestEvent) and eventEngine.strongestEvent.confidence >= 70.0
+bool highConf80 = not na(eventEngine.strongestEvent) and eventEngine.strongestEvent.confidence >= 80.0
+bool highConf90 = not na(eventEngine.strongestEvent) and eventEngine.strongestEvent.confidence >= 90.0
+
+// ═══ DIVERGENCE CONDITIONS ═══
+bool divPriceUpVolDn    = zPriceMedUp and zVolLow
+bool divPriceDnVolDn    = zPriceMedDn and zVolLow
+bool divPriceUpDeltaNeg = zPriceMedUp and zDeltaNeg
+bool divPriceDnDeltaPos = zPriceMedDn and zDeltaPos
+
+// ═══ MASTER CONDITIONS ═══
+bool anyEvent     = eventEngine.totalTriggered > 0
+bool anyBullish   = bullCnt > 0
+bool anyBearish   = bearCnt > 0
+bool anyWarning   = array.size(warnEvts) > 0
+bool anyDivergence = divPriceUpVolDn or divPriceDnVolDn or divPriceUpDeltaNeg or divPriceDnDeltaPos
+
+// ════════════════════════════════════════════════════════════════════════════
+// alertcondition() DECLARATIONS — Appear in TradingView's Alert Dialog
+// ════════════════════════════════════════════════════════════════════════════
+
+// ─── MASTER ALERTS ───
+alertcondition(anyEvent,     title="🔔 ANY Event Triggered",      message="ST-EP04: {{ticker}} | Event detected on {{interval}}")
+alertcondition(anyBullish,   title="🔔 ANY Bullish Event",        message="ST-EP04: {{ticker}} | Bullish signal on {{interval}}")
+alertcondition(anyBearish,   title="🔔 ANY Bearish Event",        message="ST-EP04: {{ticker}} | Bearish signal on {{interval}}")
+alertcondition(anyWarning,   title="🔔 ANY Warning Event",        message="ST-EP04: {{ticker}} | Warning signal on {{interval}}")
+
+// ─── SINGLE EVENTS: Price-Volume ───
+alertcondition(evt1_breakout,      title="⚡ #1 Breakout Confirmed",       message="ST-EP04: {{ticker}} | Breakout with volume confirmation")
+alertcondition(evt2_trendStrength, title="⚡ #2 Trend Strength Confirmed", message="ST-EP04: {{ticker}} | Strong trend with volume")
+alertcondition(evt3_fragileMove,   title="⚡ #3 Fragile Move (Warning)",   message="ST-EP04: {{ticker}} | Price move without volume support")
+
+// ─── SINGLE EVENTS: Order-Flow ───
+alertcondition(evt11_imbalance,  title="⚡ #11 Imbalance Drives Price", message="ST-EP04: {{ticker}} | Order imbalance pushing price")
+alertcondition(evt12_divTop,     title="⚡ #12 Divergence Top",         message="ST-EP04: {{ticker}} | Distribution at top (bearish warning)")
+alertcondition(evt13_divBottom,  title="⚡ #13 Divergence Bottom",      message="ST-EP04: {{ticker}} | Accumulation at bottom (bullish warning)")
+alertcondition(evt14_absorbPos,  title="⚡ #14 Absorption Positive",    message="ST-EP04: {{ticker}} | Buy absorption (support forming)")
+alertcondition(evt15_absorbNeg,  title="⚡ #15 Absorption Negative",    message="ST-EP04: {{ticker}} | Sell absorption (resistance forming)")
+
+// ─── SINGLE EVENTS: Extended Analysis ───
+alertcondition(evt37_climaxBuy,   title="⚡ #37 Climax Buy (Exhaustion)",   message="ST-EP04: {{ticker}} | Buying climax - potential top")
+alertcondition(evt38_climaxSell,  title="⚡ #38 Climax Sell (Exhaustion)",  message="ST-EP04: {{ticker}} | Selling climax - potential bottom")
+alertcondition(evt39_stealthAcc,  title="⚡ #39 Stealth Accumulation",      message="ST-EP04: {{ticker}} | Hidden buying detected")
+alertcondition(evt40_stealthDist, title="⚡ #40 Stealth Distribution",      message="ST-EP04: {{ticker}} | Hidden selling detected")
+alertcondition(evt44_compression, title="⚡ #44 Extreme Compression",       message="ST-EP04: {{ticker}} | Low volatility - breakout pending")
+alertcondition(evt45_expansion,   title="⚡ #45 Volatility Expansion",      message="ST-EP04: {{ticker}} | Breakout in progress")
+
+// ─── SINGLE EVENTS: Trend-Integrated ───
+alertcondition(evt51_trendBreak,   title="⚡ #51 Trend Breakout Confirmed", message="ST-EP04: {{ticker}} | Trend breakout with volume")
+alertcondition(evt54_trendRev,     title="⚡ #54 Trend Reversal Signal",    message="ST-EP04: {{ticker}} | Trend reversal detected")
+alertcondition(evt58_rangePending, title="⚡ #58 Range Breakout Pending",   message="ST-EP04: {{ticker}} | Compression with imbalance - breakout soon")
+
+// ─── CATEGORY ALERTS ───
+alertcondition(catA_priceVol,  title="📊 Category A: Price-Volume",       message="ST-EP04: {{ticker}} | Price-Volume event (1-10)")
+alertcondition(catB_orderFlow, title="📊 Category B: Order-Flow",         message="ST-EP04: {{ticker}} | Order-Flow event (11-16)")
+alertcondition(catC_buySell,   title="📊 Category C: Buy vs Sell",        message="ST-EP04: {{ticker}} | Buy/Sell battle event (17-23)")
+alertcondition(catD_predict,   title="📊 Category D: Predictability",     message="ST-EP04: {{ticker}} | Predictability event (24-26)")
+alertcondition(catE_revCont,   title="📊 Category E: Reversal/Continue",  message="ST-EP04: {{ticker}} | Reversal/Continuation event (27-30)")
+alertcondition(catF_imbalLag,  title="📊 Category F: Imbalance Lag",      message="ST-EP04: {{ticker}} | Imbalance lag event (31-33)")
+alertcondition(catG_sr,        title="📊 Category G: Support/Resistance", message="ST-EP04: {{ticker}} | S/R level event (34-36)")
+alertcondition(catH_extended,  title="📊 Category H: Extended Analysis",  message="ST-EP04: {{ticker}} | Extended analysis event (37-50)")
+alertcondition(catI_trend,     title="📊 Category I: Trend-Integrated",   message="ST-EP04: {{ticker}} | Trend-integrated event (51-60)")
+
+// ─── CONFLUENCE ALERTS ───
+alertcondition(confluence2Bull, title="🎯 Confluence: 2+ Bullish",  message="ST-EP04: {{ticker}} | 2+ bullish events aligned")
+alertcondition(confluence3Bull, title="🎯 Confluence: 3+ Bullish",  message="ST-EP04: {{ticker}} | 3+ bullish events aligned (strong)")
+alertcondition(confluence4Bull, title="🎯 Confluence: 4+ Bullish",  message="ST-EP04: {{ticker}} | 4+ bullish events aligned (very strong)")
+alertcondition(confluence5Bull, title="🎯 Confluence: 5+ Bullish",  message="ST-EP04: {{ticker}} | 5+ bullish events aligned (extreme)")
+alertcondition(confluence2Bear, title="🎯 Confluence: 2+ Bearish",  message="ST-EP04: {{ticker}} | 2+ bearish events aligned")
+alertcondition(confluence3Bear, title="🎯 Confluence: 3+ Bearish",  message="ST-EP04: {{ticker}} | 3+ bearish events aligned (strong)")
+alertcondition(confluence4Bear, title="🎯 Confluence: 4+ Bearish",  message="ST-EP04: {{ticker}} | 4+ bearish events aligned (very strong)")
+alertcondition(confluence5Bear, title="🎯 Confluence: 5+ Bearish",  message="ST-EP04: {{ticker}} | 5+ bearish events aligned (extreme)")
+
+// ─── BIAS SHIFT ALERTS ───
+alertcondition(biasShiftToBull10, title="🔄 Bias Shift → Bull (10%+)", message="ST-EP04: {{ticker}} | Market bias shifting bullish (10%+)")
+alertcondition(biasShiftToBull20, title="🔄 Bias Shift → Bull (20%+)", message="ST-EP04: {{ticker}} | Market bias shifting bullish (20%+)")
+alertcondition(biasShiftToBull30, title="🔄 Bias Shift → Bull (30%+)", message="ST-EP04: {{ticker}} | Major bullish bias shift (30%+)")
+alertcondition(biasShiftToBear10, title="🔄 Bias Shift → Bear (10%+)", message="ST-EP04: {{ticker}} | Market bias shifting bearish (10%+)")
+alertcondition(biasShiftToBear20, title="🔄 Bias Shift → Bear (20%+)", message="ST-EP04: {{ticker}} | Market bias shifting bearish (20%+)")
+alertcondition(biasShiftToBear30, title="🔄 Bias Shift → Bear (30%+)", message="ST-EP04: {{ticker}} | Major bearish bias shift (30%+)")
+
+// ─── HIGH CONFIDENCE ALERTS ───
+alertcondition(highConf60, title="💎 High Confidence (60%+)", message="ST-EP04: {{ticker}} | Event with 60%+ confidence")
+alertcondition(highConf70, title="💎 High Confidence (70%+)", message="ST-EP04: {{ticker}} | Event with 70%+ confidence")
+alertcondition(highConf80, title="💎 High Confidence (80%+)", message="ST-EP04: {{ticker}} | Event with 80%+ confidence")
+alertcondition(highConf90, title="💎 High Confidence (90%+)", message="ST-EP04: {{ticker}} | Event with 90%+ confidence (rare)")
+
+// ─── DIVERGENCE ALERTS ───
+alertcondition(divPriceUpVolDn,    title="⚠️ Divergence: Price↑ Volume↓",  message="ST-EP04: {{ticker}} | Price rising but volume declining")
+alertcondition(divPriceDnVolDn,    title="⚠️ Divergence: Price↓ Volume↓",  message="ST-EP04: {{ticker}} | Price falling with low volume (weak move)")
+alertcondition(divPriceUpDeltaNeg, title="⚠️ Divergence: Price↑ Delta↓",   message="ST-EP04: {{ticker}} | Price rising but sellers dominate")
+alertcondition(divPriceDnDeltaPos, title="⚠️ Divergence: Price↓ Delta↑",   message="ST-EP04: {{ticker}} | Price falling but buyers stepping in")
+alertcondition(anyDivergence,      title="⚠️ ANY Divergence Detected",     message="ST-EP04: {{ticker}} | Price/Volume or Price/Delta divergence")
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// EVENT MARKERS: CHART VISUALIZATION
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+// Pre-calculate ATR for marker offset
+float markerAtrOffset = globalAtr14 * 0.5
+
+// Helper: Get marker style based on direction
+f_getMarkerStyle(int dir) =>
+    switch dir
+        EVT_DIR_BULL    => label.style_triangleup
+        EVT_DIR_BEAR    => label.style_triangledown
+        EVT_DIR_WARNING => label.style_diamond
+        => label.style_circle
+
+// Helper: Get marker color based on direction
+f_getMarkerColor(int dir) =>
+    switch dir
+        EVT_DIR_BULL    => COLOR_BULL
+        EVT_DIR_BEAR    => COLOR_BEAR
+        EVT_DIR_WARNING => COLOR_YELLOW
+        => COLOR_NEUTRAL
+
+// Helper: Get marker Y position based on direction
+f_getMarkerY(int dir, float hi, float lo, float atrOff) =>
+    switch dir
+        EVT_DIR_BULL    => lo - atrOff
+        EVT_DIR_BEAR    => hi + atrOff
+        EVT_DIR_WARNING => hi + atrOff * 1.5
+        => lo - atrOff * 1.5
+
+// Draw event markers on chart
+if i_showEventMarkers and barstate.isconfirmed
+    // Get events to display (filtered by confidence if enabled)
+    array<EventResult> eventsToShow = array.new<EventResult>()
+    
+    int totalEvents = array.size(eventEngine.activeEvents)
+    if totalEvents > 0
+        // Filter and collect events
+        for i = 0 to totalEvents - 1
+            EventResult evt = array.get(eventEngine.activeEvents, i)
+            bool passFilter = i_showOnlyStrong ? (evt.confidence >= CONF_MEDIUM) : true
+            if passFilter
+                array.push(eventsToShow, evt)
+        
+        // Sort by confidence (descending)
+        int numToShow = array.size(eventsToShow)
+        if numToShow > 1
+            for i = 0 to numToShow - 2
+                for j = 0 to numToShow - i - 2
+                    EventResult a = array.get(eventsToShow, j)
+                    EventResult b = array.get(eventsToShow, j + 1)
+                    if b.confidence > a.confidence
+                        array.set(eventsToShow, j, b)
+                        array.set(eventsToShow, j + 1, a)
+        
+        // Limit to max markers per bar
+        int drawCount = math.min(numToShow, i_maxMarkersPerBar)
+        
+        // Draw markers for top events
+        if drawCount > 0
+            for i = 0 to drawCount - 1
+                EventResult evt = array.get(eventsToShow, i)
+                
+                // Calculate position with stacking offset
+                float stackOffset = i * markerAtrOffset * 0.4
+                float baseY = f_getMarkerY(evt.direction, high, low, markerAtrOffset)
+                float markerY = evt.direction == EVT_DIR_BULL or evt.direction == EVT_DIR_NEUTRAL ? 
+                     baseY - stackOffset : baseY + stackOffset
+                
+                // Get visual properties
+                color markerClr = f_getMarkerColor(evt.direction)
+                
+                // Build tooltip
+                string tooltipTxt = "⚡ " + evt.eventName + "\n" +
+                     "━━━━━━━━━━━━━━━━\n" +
+                     "Category: " + f_categoryName(evt.category) + "\n" +
+                     "Direction: " + f_directionName(evt.direction) + "\n" +
+                     "Confidence: " + str.tostring(evt.confidence, "#.#") + "%\n" +
+                     "━━━━━━━━━━━━━━━━\n" +
+                     "📚 " + evt.academicBasis
+                
+                // Create marker label
+                label.new(bar_index, markerY, "",
+                     style = f_getMarkerStyle(evt.direction),
+                     color = markerClr,
+                     size = i == 0 ? size.small : size.tiny,
+                     tooltip = tooltipTxt)
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// Z-LINES: MULTI-METRIC DETECTION, STORAGE, AND DRAWING
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+// Calculate total window across all groups
+int totalWindow = i_zPeriod * i_numGroups
+
+// Helper: Calculate group number and bar within group
+f_calcGroupInfo(int levelBarIdx, int currentBarIdx, int period) =>
+    int barsAgo     = currentBarIdx - levelBarIdx
+    int groupNum    = math.floor(barsAgo / period) + 1
+    // B numbering: nearest-in-group = B1, then B2...
+    int barInGroup  = (barsAgo % period) + 1
+    [groupNum, barInGroup]
+
+// Helper: Find nearest level above current price for specific metric
+f_findNearestAboveByMetric(array<ZLevel> levels, float currentPrice, string metricName) =>
+    ZLevel nearest = na
+    float minDist = 1e10
+    int size = array.size(levels)
+    if size > 0
+        for i = 0 to size - 1
+            ZLevel lvl = array.get(levels, i)
+            if lvl.metric == metricName and lvl.price > currentPrice
+                float dist = lvl.price - currentPrice
+                if dist < minDist
+                    minDist := dist
+                    nearest := lvl
+    nearest
+
+// Helper: Find nearest level below current price for specific metric
+f_findNearestBelowByMetric(array<ZLevel> levels, float currentPrice, string metricName) =>
+    ZLevel nearest = na
+    float minDist = 1e10
+    int size = array.size(levels)
+    if size > 0
+        for i = 0 to size - 1
+            ZLevel lvl = array.get(levels, i)
+            if lvl.metric == metricName and lvl.price < currentPrice
+                float dist = currentPrice - lvl.price
+                if dist < minDist
+                    minDist := dist
+                    nearest := lvl
+    nearest
+
+// Helper: Find all levels at a specific price (for combined labels)
+f_findLevelsAtPrice(array<ZLevel> levels, float targetPrice, float tolerance) =>
+    array<ZLevel> result = array.new<ZLevel>()
+    int size = array.size(levels)
+    if size > 0
+        for i = 0 to size - 1
+            ZLevel lvl = array.get(levels, i)
+            if math.abs(lvl.price - targetPrice) <= tolerance
+                array.push(result, lvl)
+    result
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ACTIVE-EARLIEST SELECTION (for display): pick oldest (smallest barIdx) in window
+// ─────────────────────────────────────────────────────────────────────────────
+f_findEarliestByMetric(array<ZLevel> levels, string metricName) =>
+    ZLevel best = na
+    int bestBar = 2147483647
+    int n = array.size(levels)
+    if n > 0
+        for i = 0 to n - 1
+            ZLevel lvl = array.get(levels, i)
+            if lvl.metric == metricName and lvl.barIdx < bestBar
+                bestBar := lvl.barIdx
+                best := lvl
+    best
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CLUSTERING (merge overlapping lines into one label/line)
+// Returns: [clusterPrices, clusterX1Bars, levelClusterIds]
+// ─────────────────────────────────────────────────────────────────────────────
+f_clusterAssign(array<ZLevel> lvls, float tol) =>
+    array<float> cPrice = array.new<float>()
+    array<int>   cX1    = array.new<int>()
+    array<int>   ids    = array.new<int>()
+
+    int n = array.size(lvls)
+    if n > 0
+        for i = 0 to n - 1
+            ZLevel lvl = array.get(lvls, i)
+
+            int cid = -1
+            int m = array.size(cPrice)
+            if m > 0
+                for j = 0 to m - 1
+                    bool hit = math.abs(lvl.price - array.get(cPrice, j)) <= tol
+                    if hit and cid == -1
+                        cid := j
+
+            if cid == -1
+                cid := array.size(cPrice)
+                array.push(cPrice, lvl.price)
+                array.push(cX1, lvl.barIdx)
+            else
+                int prevX1 = array.get(cX1, cid)
+                if lvl.barIdx < prevX1
+                    array.set(cX1, cid, lvl.barIdx)
+
+            array.push(ids, cid)
+
+    [cPrice, cX1, ids]
+
+// ─────────────────────────────────────────────────────────────────────────────
+// LABEL ANTI-OVERLAP (Percent-gap stacking + capped offset + dashboard warnings)
+// Upper: keep lowest fixed; stack higher upward.
+// Lower: keep highest fixed; stack lower downward.
+// ─────────────────────────────────────────────────────────────────────────────
+f_argsortByY(array<float> ys, bool asc) =>
+    int n = array.size(ys)
+    array<int> idx = array.new<int>()
+    if n > 0
+        for i = 0 to n - 1
+            array.push(idx, i)
+        if n > 1
+            for i = 0 to n - 2
+                int best = i
+                for j = i + 1 to n - 1
+                    int iBest = array.get(idx, best)
+                    int iJ    = array.get(idx, j)
+                    float yB  = array.get(ys, iBest)
+                    float yJv = array.get(ys, iJ)
+                    bool better = asc ? (yJv < yB) : (yJv > yB)
+                    if better
+                        best := j
+                if best != i
+                    int tmp = array.get(idx, i)
+                    array.set(idx, i, array.get(idx, best))
+                    array.set(idx, best, tmp)
+    idx
+
+f_resolveLabelY(array<float> baseY, bool isUpper, float refP, float gapPct, float maxOffAbs) =>
+    int n = array.size(baseY)
+    array<float> disp = array.new_float(n, na)
+    string warn = ""
+
+    if n == 0
+        [disp, warn]
+    else
+        float refAbs = math.max(syminfo.mintick, math.abs(refP))
+        float gapAbs = refAbs * gapPct
+
+        array<int> order = f_argsortByY(baseY, isUpper)  // Upper: asc, Lower: desc
+
+        float prevDisp = na
+        int   prevCi   = na
+        int   warnCnt  = 0
+
+        for k = 0 to n - 1
+            int ci = array.get(order, k)
+            float y0 = array.get(baseY, ci)
+            float yD = y0
+
+            if k == 0
+                yD := y0
+            else
+                if isUpper
+                    if y0 - prevDisp < gapAbs
+                        yD := prevDisp + gapAbs
+                else
+                    if prevDisp - y0 < gapAbs
+                        yD := prevDisp - gapAbs
+
+            float off = yD - y0
+            bool clamped = false
+            if maxOffAbs > 0 and math.abs(off) > maxOffAbs
+                yD := y0 + (off > 0 ? maxOffAbs : -maxOffAbs)
+                clamped := true
+
+            if k > 0
+                bool violates = isUpper ? (yD - prevDisp < gapAbs) : (prevDisp - yD < gapAbs)
+                if clamped and violates and warnCnt < 3
+                    float yPrev0 = array.get(baseY, prevCi)
+                    float dp = math.abs(yPrev0 - y0) / refAbs * 100.0
+                    string line = "⚠ Label overlap: " + str.tostring(yPrev0, format.mintick) + " vs " + str.tostring(y0, format.mintick) +
+                                  " (Δ=" + str.tostring(dp, "#.##") + "%)"
+                    warn := warn == "" ? line : (warn + "\n" + line)
+                    warnCnt += 1
+
+            array.set(disp, ci, yD)
+            prevDisp := yD
+            prevCi   := ci
+
+        [disp, warn]
+
+// Helper: Build combined label text for multiple metrics at same level
+f_buildCombinedLabel(array<ZLevel> levels, bool isUpper, float lineY) =>
+    string arrow  = isUpper ? "▲" : "▼"
+    // Always show the actual line Y clearly (prevents 3.29 vs 3.30 ambiguity)
+    string levelLbl = f_L3("LEVEL (Line Y)", "SEVİYE (Çizgi Y)", "레벨 (라인 Y)")
+    string result = levelLbl + ": " + str.tostring(lineY, format.mintick)
+
+    // Display polish:
+    // - One entry per metric (Price/Volume/Buy/Sell/Delta)
+    // - If multiple entries exist for the same metric, keep the one with the closest price to lineY
+    //   (tie-breaker: newer barIdx wins)
+    ZLevel bestPrice  = na
+    ZLevel bestVolume = na
+    ZLevel bestBuy    = na
+    ZLevel bestSell   = na
+    ZLevel bestDelta  = na
+
+    float dPrice  = 1e10
+    float dVolume = 1e10
+    float dBuy    = 1e10
+    float dSell   = 1e10
+    float dDelta  = 1e10
+
+    int bPrice  = -1
+    int bVolume = -1
+    int bBuy    = -1
+    int bSell   = -1
+    int bDelta  = -1
+
+    int size = array.size(levels)
+    if size > 0
+        for i = 0 to size - 1
+            ZLevel lvl = array.get(levels, i)
+            float dist = math.abs(lvl.price - lineY)
+
+            if lvl.metric == "Price"
+                if dist < dPrice or (dist == dPrice and lvl.barIdx > bPrice)
+                    dPrice := dist
+                    bPrice := lvl.barIdx
+                    bestPrice := lvl
+            else if lvl.metric == "Volume"
+                if dist < dVolume or (dist == dVolume and lvl.barIdx > bVolume)
+                    dVolume := dist
+                    bVolume := lvl.barIdx
+                    bestVolume := lvl
+            else if lvl.metric == "Buy"
+                if dist < dBuy or (dist == dBuy and lvl.barIdx > bBuy)
+                    dBuy := dist
+                    bBuy := lvl.barIdx
+                    bestBuy := lvl
+            else if lvl.metric == "Sell"
+                if dist < dSell or (dist == dSell and lvl.barIdx > bSell)
+                    dSell := dist
+                    bSell := lvl.barIdx
+                    bestSell := lvl
+            else if lvl.metric == "Delta"
+                if dist < dDelta or (dist == dDelta and lvl.barIdx > bDelta)
+                    dDelta := dist
+                    bDelta := lvl.barIdx
+                    bestDelta := lvl
+
+    bool any = false
+
+    if not na(bestPrice)
+        string zTxt = (bestPrice.zValue >= 0 ? "+" : "") + str.tostring(bestPrice.zValue, "#.##")
+        result += "\n" + arrow + " " + bestPrice.metric + " Z: " + zTxt + " │ P: " + str.tostring(bestPrice.price, format.mintick)
+        any := true
+
+    if not na(bestVolume)
+        string zTxt = (bestVolume.zValue >= 0 ? "+" : "") + str.tostring(bestVolume.zValue, "#.##")
+        result += "\n" + arrow + " " + bestVolume.metric + " Z: " + zTxt + " │ P: " + str.tostring(bestVolume.price, format.mintick)
+        any := true
+
+    if not na(bestBuy)
+        string zTxt = (bestBuy.zValue >= 0 ? "+" : "") + str.tostring(bestBuy.zValue, "#.##")
+        result += "\n" + arrow + " " + bestBuy.metric + " Z: " + zTxt + " │ P: " + str.tostring(bestBuy.price, format.mintick)
+        any := true
+
+    if not na(bestSell)
+        string zTxt = (bestSell.zValue >= 0 ? "+" : "") + str.tostring(bestSell.zValue, "#.##")
+        result += "\n" + arrow + " " + bestSell.metric + " Z: " + zTxt + " │ P: " + str.tostring(bestSell.price, format.mintick)
+        any := true
+
+    if not na(bestDelta)
+        string zTxt = (bestDelta.zValue >= 0 ? "+" : "") + str.tostring(bestDelta.zValue, "#.##")
+        result += "\n" + arrow + " " + bestDelta.metric + " Z: " + zTxt + " │ P: " + str.tostring(bestDelta.price, format.mintick)
+        any := true
+
+    result
+
+// Helper: Format dashboard line info
+f_fmtLineInfo(ZLevel lvl) =>
+    if na(lvl)
+        "—"
+    else
+        "B" + str.tostring(lvl.barInGroup) + "-G" + str.tostring(lvl.groupNum) + " │ " + str.tostring(lvl.price, format.mintick)
+
+// Option B (more informative): show nearest plus count of additional close/overlapping levels for the same metric.
+f_fmtLineInfoPlus(array<ZLevel> levels, ZLevel nearest, string metricName, float tolerance) =>
+    if na(nearest)
+        "—"
+    else
+        int cnt = 0
+        int size = array.size(levels)
+        if size > 0
+            for i = 0 to size - 1
+                ZLevel lvl = array.get(levels, i)
+                if lvl.metric == metricName and math.abs(lvl.price - nearest.price) <= tolerance
+                    cnt += 1
+        int extra = math.max(0, cnt - 1)
+        string base = f_fmtLineInfo(nearest)
+        extra > 0 ? base + " (+" + str.tostring(extra) + ")" : base
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DASHBOARD (Label Mirror): show short summary in cell + full label text in tooltip
+// ─────────────────────────────────────────────────────────────────────────────
+f_isMetricEnabled(string m) =>
+    (m == "Price"  and i_showZLines) or
+     (m == "Volume" and i_showVolumeZLines) or
+     (m == "Buy"    and i_showBuyZLines) or
+     (m == "Sell"   and i_showSellZLines) or
+     (m == "Delta"  and i_showDeltaZLines)
+
+f_dashCellText(array<ZLevel> levels, ZLevel nearest, bool isUpper, float tol, bool enabled) =>
+    if not enabled or na(nearest)
+        "—"
+    else
+        // Clean cell output: only show nearest price (no "LEVEL", no item count)
+        str.tostring(nearest.price, format.mintick)
+
+f_dashCellTip(array<ZLevel> levels, ZLevel nearest, bool isUpper, float tol, bool enabled) =>
+    if not enabled or na(nearest)
+        ""
+    else
+        array<ZLevel> cluster = array.new<ZLevel>()
+        int size = array.size(levels)
+        if size > 0
+            for i = 0 to size - 1
+                ZLevel lvl = array.get(levels, i)
+                if math.abs(lvl.price - nearest.price) <= tol and f_isMetricEnabled(lvl.metric)
+                    array.push(cluster, lvl)
+        array.size(cluster) == 0 ? "" :
+             ("Nearest Z-Line details (Label Mirror)\n" +
+              "Rule: one entry per metric; closest price to line level wins.\n\n" +
+              f_buildCombinedLabel(cluster, isUpper, nearest.price))
+
+// Only process within scope
+if bar_index >= i_zPeriod - 1
+    
+    // --- Step 1: Remove levels older than totalWindow ---
+    int oldestValidBar = bar_index - totalWindow
+    
+    if array.size(upperZLevels) > 0
+        for i = array.size(upperZLevels) - 1 to 0
+            if array.get(upperZLevels, i).barIdx < oldestValidBar
+                array.remove(upperZLevels, i)
+    
+    if array.size(lowerZLevels) > 0
+        for i = array.size(lowerZLevels) - 1 to 0
+            if array.get(lowerZLevels, i).barIdx < oldestValidBar
+                array.remove(lowerZLevels, i)
+    
+    // --- Step 2: Detect new levels for ALL metrics ---
+    int detectBarIdx = bar_index - baseOff
+    // Stamp group info relative to the detection bar itself (aligns CLOSED/LIVE behavior)
+    [grpNum, barInGrp] = f_calcGroupInfo(detectBarIdx, bar_index, i_zPeriod)
+    
+    // Price
+    if zPrice.raw >= i_upperZThreshold
+        array.push(upperZLevels, ZLevel.new(high[baseOff], detectBarIdx, zPrice.raw, "Price", grpNum, barInGrp))
+    if zPrice.raw <= i_lowerZThreshold
+        array.push(lowerZLevels, ZLevel.new(low[baseOff], detectBarIdx, zPrice.raw, "Price", grpNum, barInGrp))
+    
+    // Volume
+    if zVolume.raw >= i_upperZThreshold
+        array.push(upperZLevels, ZLevel.new(high[baseOff], detectBarIdx, zVolume.raw, "Volume", grpNum, barInGrp))
+    if zVolume.raw <= i_lowerZThreshold
+        array.push(lowerZLevels, ZLevel.new(low[baseOff], detectBarIdx, zVolume.raw, "Volume", grpNum, barInGrp))
+    
+    // Buy
+    if zBuy.raw >= i_upperZThreshold
+        array.push(upperZLevels, ZLevel.new(high[baseOff], detectBarIdx, zBuy.raw, "Buy", grpNum, barInGrp))
+    if zBuy.raw <= i_lowerZThreshold
+        array.push(lowerZLevels, ZLevel.new(low[baseOff], detectBarIdx, zBuy.raw, "Buy", grpNum, barInGrp))
+    
+    // Sell
+    if zSell.raw >= i_upperZThreshold
+        array.push(upperZLevels, ZLevel.new(high[baseOff], detectBarIdx, zSell.raw, "Sell", grpNum, barInGrp))
+    if zSell.raw <= i_lowerZThreshold
+        array.push(lowerZLevels, ZLevel.new(low[baseOff], detectBarIdx, zSell.raw, "Sell", grpNum, barInGrp))
+    
+    // Delta
+    if zDelta.raw >= i_upperZThreshold
+        array.push(upperZLevels, ZLevel.new(high[baseOff], detectBarIdx, zDelta.raw, "Delta", grpNum, barInGrp))
+    if zDelta.raw <= i_lowerZThreshold
+        array.push(lowerZLevels, ZLevel.new(low[baseOff], detectBarIdx, zDelta.raw, "Delta", grpNum, barInGrp))
+    
+    // --- Step 3: Z-Lines persist (not removed on touch) ---
+    // Lines remain visible until they expire from the group window
+    
+    // --- Step 4: Pick EARLIEST ACTIVE levels per metric (display-only; storage remains complete) ---
+    nearestUpperPrice := (i_showUpperZLine and i_showZLines)       ? f_findEarliestByMetric(upperZLevels, "Price")  : na
+    nearestLowerPrice := (i_showLowerZLine and i_showZLines)       ? f_findEarliestByMetric(lowerZLevels, "Price")  : na
+
+    nearestUpperVol   := (i_showUpperZLine and i_showVolumeZLines) ? f_findEarliestByMetric(upperZLevels, "Volume") : na
+    nearestLowerVol   := (i_showLowerZLine and i_showVolumeZLines) ? f_findEarliestByMetric(lowerZLevels, "Volume") : na
+
+    nearestUpperBuy   := (i_showUpperZLine and i_showBuyZLines)    ? f_findEarliestByMetric(upperZLevels, "Buy")    : na
+    nearestLowerBuy   := (i_showLowerZLine and i_showBuyZLines)    ? f_findEarliestByMetric(lowerZLevels, "Buy")    : na
+
+    nearestUpperSell  := (i_showUpperZLine and i_showSellZLines)   ? f_findEarliestByMetric(upperZLevels, "Sell")   : na
+    nearestLowerSell  := (i_showLowerZLine and i_showSellZLines)   ? f_findEarliestByMetric(lowerZLevels, "Sell")   : na
+
+    nearestUpperDelta := (i_showUpperZLine and i_showDeltaZLines)  ? f_findEarliestByMetric(upperZLevels, "Delta")  : na
+    nearestLowerDelta := (i_showLowerZLine and i_showDeltaZLines)  ? f_findEarliestByMetric(lowerZLevels, "Delta")  : na
+
+    // Build dashboard-selected sets: ONLY what is actually drawn
+    array.clear(dashUpperSel)
+    array.clear(dashLowerSel)
+
+    if not na(nearestUpperPrice)
+        array.push(dashUpperSel, nearestUpperPrice)
+    if not na(nearestUpperVol)
+        array.push(dashUpperSel, nearestUpperVol)
+    if not na(nearestUpperBuy)
+        array.push(dashUpperSel, nearestUpperBuy)
+    if not na(nearestUpperSell)
+        array.push(dashUpperSel, nearestUpperSell)
+    if not na(nearestUpperDelta)
+        array.push(dashUpperSel, nearestUpperDelta)
+
+    if not na(nearestLowerPrice)
+        array.push(dashLowerSel, nearestLowerPrice)
+    if not na(nearestLowerVol)
+        array.push(dashLowerSel, nearestLowerVol)
+    if not na(nearestLowerBuy)
+        array.push(dashLowerSel, nearestLowerBuy)
+    if not na(nearestLowerSell)
+        array.push(dashLowerSel, nearestLowerSell)
+    if not na(nearestLowerDelta)
+        array.push(dashLowerSel, nearestLowerDelta)
+
+    // --- Step 5: Cluster & draw UPPER lines (merge overlaps into one label/line) ---
+    dashLabelOverlapWarn := ""
+
+    float tolDraw   = syminfo.mintick * 2
+    float gapPct    = i_labelMinGapPct * 0.01
+    float maxOffAbs = globalAtr14 * i_labelMaxOffsetAtr
+
+    // UPPER
+    [uCP, uX1, uIds] = f_clusterAssign(dashUpperSel, tolDraw)
+    int uClusters = array.size(uCP)
+
+    // LOWER (pre-calculate for unified anti-overlap)
+    [lCP_pre, lX1_pre, lIds_pre] = f_clusterAssign(dashLowerSel, tolDraw)
+    int lClusters_pre = array.size(lCP_pre)
+
+    // === UNIFIED ANTI-OVERLAP: Combine ALL label Y positions ===
+    array<float> allBaseY = array.new<float>()
+    array<bool>  allIsUpper = array.new<bool>()
+    array<int>   allOrigIdx = array.new<int>()
+
+    // Add upper clusters
+    if uClusters > 0
+        for ci = 0 to uClusters - 1
+            array.push(allBaseY, array.get(uCP, ci))
+            array.push(allIsUpper, true)
+            array.push(allOrigIdx, ci)
+
+    // Add lower clusters
+    if lClusters_pre > 0
+        for ci = 0 to lClusters_pre - 1
+            array.push(allBaseY, array.get(lCP_pre, ci))
+            array.push(allIsUpper, false)
+            array.push(allOrigIdx, ci)
+
+    // Sort all labels by Y position (ascending)
+    int totalLabels = array.size(allBaseY)
+    array<int> sortOrder = array.new<int>()
+    if totalLabels > 0
+        for i = 0 to totalLabels - 1
+            array.push(sortOrder, i)
+        if totalLabels > 1
+            for i = 0 to totalLabels - 2
+                for j = i + 1 to totalLabels - 1
+                    int idxI = array.get(sortOrder, i)
+                    int idxJ = array.get(sortOrder, j)
+                    if array.get(allBaseY, idxJ) < array.get(allBaseY, idxI)
+                        array.set(sortOrder, i, idxJ)
+                        array.set(sortOrder, j, idxI)
+
+    // Apply unified anti-overlap
+    array<float> allDispY = array.new_float(totalLabels, na)
+    float refAbs = math.max(syminfo.mintick, math.abs(refPrice))
+    float gapAbs = refAbs * gapPct
+    string unifiedWarn = ""
+    int warnCnt = 0
+
+    if totalLabels > 0
+        float prevDispY = na
+        for k = 0 to totalLabels - 1
+            int idx = array.get(sortOrder, k)
+            float baseY = array.get(allBaseY, idx)
+            float dispY = baseY
+
+            if k > 0 and not na(prevDispY)
+                if dispY - prevDispY < gapAbs
+                    dispY := prevDispY + gapAbs
+
+            // Cap offset
+            float off = dispY - baseY
+            if maxOffAbs > 0 and math.abs(off) > maxOffAbs
+                float cappedY = baseY + (off > 0 ? maxOffAbs : -maxOffAbs)
+                if k > 0 and cappedY - prevDispY < gapAbs and warnCnt < 3
+                    unifiedWarn := unifiedWarn + (unifiedWarn == "" ? "" : "\n") + "⚠ Cross-label overlap near " + str.tostring(baseY, format.mintick)
+                    warnCnt += 1
+                dispY := cappedY
+
+            array.set(allDispY, idx, dispY)
+            prevDispY := dispY
+
+    if unifiedWarn != ""
+        dashLabelOverlapWarn := unifiedWarn
+
+    // Extract resolved Y positions back to upper/lower arrays
+    array<float> uLblY = array.new_float(uClusters, na)
+    array<float> lLblY_pre = array.new_float(lClusters_pre, na)
+
+    if totalLabels > 0
+        for i = 0 to totalLabels - 1
+            bool isUp = array.get(allIsUpper, i)
+            int origIdx = array.get(allOrigIdx, i)
+            float resolvedY = array.get(allDispY, i)
+            if isUp
+                array.set(uLblY, origIdx, resolvedY)
+            else
+                array.set(lLblY_pre, origIdx, resolvedY)
+
+    // Ensure pools match cluster count (create/update; delete extras)
+    if uClusters > 0
+        for ci = 0 to uClusters - 1
+            float yBase = array.get(uCP, ci)
+            float yLab  = array.get(uLblY, ci)
+            yLab := na(yLab) ? yBase : yLab
+
+            int x1  = array.get(uX1, ci)
+            int x2  = bar_index
+            int lblX = i_enableProjection ? (x2 + i_projectionLen) : (x2 + 2)
+            int x2Main = i_enableProjection ? x2 : lblX
+
+            array<ZLevel> members = array.new<ZLevel>()
+            int sN = array.size(dashUpperSel)
+            if sN > 0
+                for k = 0 to sN - 1
+                    if array.get(uIds, k) == ci
+                        array.push(members, array.get(dashUpperSel, k))
+
+            bool hasPos = false
+            bool hasNeg = false
+            int  mN     = array.size(members)
+            if mN > 0
+                for mi = 0 to mN - 1
+                    float zv = array.get(members, mi).zValue
+                    hasPos := hasPos or (zv >= 0)
+                    hasNeg := hasNeg or (zv < 0)
+
+            color lnClr =
+                 hasPos and hasNeg ? COLOR_YELLOW :
+                 hasPos            ? i_upperLineColor :
+                 hasNeg            ? i_lowerLineColor :
+                                     i_upperLineColor
+
+            // Main line (solid)
+            line ln = (array.size(upperLines) > ci) ? array.get(upperLines, ci) : na
+            if na(ln)
+                ln := line.new(x1, yBase, x2Main, yBase, color = lnClr, width = 2, style = line.style_solid)
+                if array.size(upperLines) > ci
+                    array.set(upperLines, ci, ln)
+                else
+                    array.push(upperLines, ln)
+            else
+                line.set_xy1(ln, x1, yBase)
+                line.set_xy2(ln, x2Main, yBase)
+                line.set_color(ln, lnClr)
+                line.set_width(ln, 2)
+                line.set_style(ln, line.style_solid)
+
+            // Projection (dashed) — extend to label X so the jog has a clean base
+            line pr = (array.size(upperProjLines) > ci) ? array.get(upperProjLines, ci) : na
+            if i_enableProjection
+                if na(pr)
+                    pr := line.new(x2, yBase, lblX, yBase,
+                         color = color.new(lnClr, 50), width = 1, style = line.style_dashed)
+                    if array.size(upperProjLines) > ci
+                        array.set(upperProjLines, ci, pr)
+                    else
+                        array.push(upperProjLines, pr)
+                else
+                    line.set_xy1(pr, x2, yBase)
+                    line.set_xy2(pr, lblX, yBase)
+                    line.set_color(pr, color.new(lnClr, 50))
+                    line.set_width(pr, 1)
+                    line.set_style(pr, line.style_dashed)
+            else
+                if not na(pr)
+                    line.delete(pr)
+                if array.size(upperProjLines) > ci
+                    array.set(upperProjLines, ci, na)
+
+            // Jog connector (vertical) to avoid “line through label center”
+            line jg = (array.size(upperJogs) > ci) ? array.get(upperJogs, ci) : na
+            if yLab != yBase
+                if na(jg)
+                    jg := line.new(lblX, yBase, lblX, yLab, color = color.new(lnClr, 35), width = 1, style = line.style_solid)
+                    if array.size(upperJogs) > ci
+                        array.set(upperJogs, ci, jg)
+                    else
+                        array.push(upperJogs, jg)
+                else
+                    line.set_xy1(jg, lblX, yBase)
+                    line.set_xy2(jg, lblX, yLab)
+                    line.set_color(jg, color.new(lnClr, 35))
+                    line.set_width(jg, 1)
+                    line.set_style(jg, line.style_solid)
+            else
+                if not na(jg)
+                    line.delete(jg)
+                if array.size(upperJogs) > ci
+                    array.set(upperJogs, ci, na)
+
+            // Label (combined) — keep true level in text; move label Y for anti-overlap
+            string lblTxt = f_buildCombinedLabel(members, true, yBase)
+
+            label lb = (array.size(upperLabels) > ci) ? array.get(upperLabels, ci) : na
+            if na(lb)
+                lb := label.new(lblX, yLab, lblTxt,
+                     style = label.style_label_left, color = color.new(lnClr, 85),
+                     textcolor = lnClr, size = f_getTextSize(i_textSizeStr))
+                if array.size(upperLabels) > ci
+                    array.set(upperLabels, ci, lb)
+                else
+                    array.push(upperLabels, lb)
+            else
+                label.set_xy(lb, lblX, yLab)
+                label.set_text(lb, lblTxt)
+                label.set_color(lb, color.new(lnClr, 85))
+                label.set_textcolor(lb, lnClr)
+                label.set_size(lb, f_getTextSize(i_textSizeStr))
+
+    // Delete extra upper objects if clusters shrank
+    if array.size(upperLines) > uClusters
+        for di = array.size(upperLines) - 1 to uClusters
+            line oldLn = array.get(upperLines, di)
+            if not na(oldLn)
+                line.delete(oldLn)
+            array.remove(upperLines, di)
+
+    if array.size(upperProjLines) > uClusters
+        for di = array.size(upperProjLines) - 1 to uClusters
+            line oldPr = array.get(upperProjLines, di)
+            if not na(oldPr)
+                line.delete(oldPr)
+            array.remove(upperProjLines, di)
+
+    if array.size(upperJogs) > uClusters
+        for di = array.size(upperJogs) - 1 to uClusters
+            line oldJg = array.get(upperJogs, di)
+            if not na(oldJg)
+                line.delete(oldJg)
+            array.remove(upperJogs, di)
+
+    if array.size(upperLabels) > uClusters
+        for di = array.size(upperLabels) - 1 to uClusters
+            label oldLb = array.get(upperLabels, di)
+            if not na(oldLb)
+                label.delete(oldLb)
+            array.remove(upperLabels, di)
+
+    // --- Step 6: Cluster & draw LOWER lines ---
+    // Use pre-calculated clusters and unified anti-overlap results
+    array<float> lCP = lCP_pre
+    array<int> lX1 = lX1_pre
+    array<int> lIds = lIds_pre
+    int lClusters = lClusters_pre
+    array<float> lLblY = lLblY_pre
+
+    if lClusters > 0
+        for ci = 0 to lClusters - 1
+            float yBase = array.get(lCP, ci)
+            float yLab  = array.get(lLblY, ci)
+            yLab := na(yLab) ? yBase : yLab
+
+            int x1  = array.get(lX1, ci)
+            int x2  = bar_index
+            int lblX = i_enableProjection ? (x2 + i_projectionLen) : (x2 + 2)
+            int x2Main = i_enableProjection ? x2 : lblX
+
+            array<ZLevel> members = array.new<ZLevel>()
+            int sN = array.size(dashLowerSel)
+            if sN > 0
+                for k = 0 to sN - 1
+                    if array.get(lIds, k) == ci
+                        array.push(members, array.get(dashLowerSel, k))
+
+            bool hasPos = false
+            bool hasNeg = false
+            int  mN     = array.size(members)
+            if mN > 0
+                for mi = 0 to mN - 1
+                    float zv = array.get(members, mi).zValue
+                    hasPos := hasPos or (zv >= 0)
+                    hasNeg := hasNeg or (zv < 0)
+
+            color lnClr =
+                 hasPos and hasNeg ? COLOR_YELLOW :
+                 hasPos            ? i_upperLineColor :
+                 hasNeg            ? i_lowerLineColor :
+                                     i_lowerLineColor
+
+            // Main line (solid)
+            line ln = (array.size(lowerLines) > ci) ? array.get(lowerLines, ci) : na
+            if na(ln)
+                ln := line.new(x1, yBase, x2Main, yBase, color = lnClr, width = 2, style = line.style_solid)
+                if array.size(lowerLines) > ci
+                    array.set(lowerLines, ci, ln)
+                else
+                    array.push(lowerLines, ln)
+            else
+                line.set_xy1(ln, x1, yBase)
+                line.set_xy2(ln, x2Main, yBase)
+                line.set_color(ln, lnClr)
+                line.set_width(ln, 2)
+                line.set_style(ln, line.style_solid)
+
+            // Projection (dashed) — extend to label X so the jog has a clean base
+            line pr = (array.size(lowerProjLines) > ci) ? array.get(lowerProjLines, ci) : na
+            if i_enableProjection
+                if na(pr)
+                    pr := line.new(x2, yBase, lblX, yBase,
+                         color = color.new(lnClr, 50), width = 1, style = line.style_dashed)
+                    if array.size(lowerProjLines) > ci
+                        array.set(lowerProjLines, ci, pr)
+                    else
+                        array.push(lowerProjLines, pr)
+                else
+                    line.set_xy1(pr, x2, yBase)
+                    line.set_xy2(pr, lblX, yBase)
+                    line.set_color(pr, color.new(lnClr, 50))
+                    line.set_width(pr, 1)
+                    line.set_style(pr, line.style_dashed)
+            else
+                if not na(pr)
+                    line.delete(pr)
+                if array.size(lowerProjLines) > ci
+                    array.set(lowerProjLines, ci, na)
+
+            // Jog connector (vertical)
+            line jg = (array.size(lowerJogs) > ci) ? array.get(lowerJogs, ci) : na
+            if yLab != yBase
+                if na(jg)
+                    jg := line.new(lblX, yBase, lblX, yLab, color = color.new(lnClr, 35), width = 1, style = line.style_solid)
+                    if array.size(lowerJogs) > ci
+                        array.set(lowerJogs, ci, jg)
+                    else
+                        array.push(lowerJogs, jg)
+                else
+                    line.set_xy1(jg, lblX, yBase)
+                    line.set_xy2(jg, lblX, yLab)
+                    line.set_color(jg, color.new(lnClr, 35))
+                    line.set_width(jg, 1)
+                    line.set_style(jg, line.style_solid)
+            else
+                if not na(jg)
+                    line.delete(jg)
+                if array.size(lowerJogs) > ci
+                    array.set(lowerJogs, ci, na)
+
+            // Label — keep true level in text; move label Y for anti-overlap
+            string lblTxt = f_buildCombinedLabel(members, false, yBase)
+
+            label lb = (array.size(lowerLabels) > ci) ? array.get(lowerLabels, ci) : na
+            if na(lb)
+                lb := label.new(lblX, yLab, lblTxt,
+                     style = label.style_label_left, color = color.new(lnClr, 85),
+                     textcolor = lnClr, size = f_getTextSize(i_textSizeStr))
+                if array.size(lowerLabels) > ci
+                    array.set(lowerLabels, ci, lb)
+                else
+                    array.push(lowerLabels, lb)
+            else
+                label.set_xy(lb, lblX, yLab)
+                label.set_text(lb, lblTxt)
+                label.set_color(lb, color.new(lnClr, 85))
+                label.set_textcolor(lb, lnClr)
+                label.set_size(lb, f_getTextSize(i_textSizeStr))
+
+    // Delete extra lower objects if clusters shrank
+    if array.size(lowerLines) > lClusters
+        for di = array.size(lowerLines) - 1 to lClusters
+            line oldLn = array.get(lowerLines, di)
+            if not na(oldLn)
+                line.delete(oldLn)
+            array.remove(lowerLines, di)
+
+    if array.size(lowerProjLines) > lClusters
+        for di = array.size(lowerProjLines) - 1 to lClusters
+            line oldPr = array.get(lowerProjLines, di)
+            if not na(oldPr)
+                line.delete(oldPr)
+            array.remove(lowerProjLines, di)
+
+    if array.size(lowerJogs) > lClusters
+        for di = array.size(lowerJogs) - 1 to lClusters
+            line oldJg = array.get(lowerJogs, di)
+            if not na(oldJg)
+                line.delete(oldJg)
+            array.remove(lowerJogs, di)
+
+    if array.size(lowerLabels) > lClusters
+        for di = array.size(lowerLabels) - 1 to lClusters
+            label oldLb = array.get(lowerLabels, di)
+            if not na(oldLb)
+                label.delete(oldLb)
+            array.remove(lowerLabels, di)
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// GROUP BOUNDARY LABELS
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+// Clear old group labels
+if array.size(groupLabels) > 0
+    for i = array.size(groupLabels) - 1 to 0
+        label.delete(array.get(groupLabels, i))
+    array.clear(groupLabels)
+
+// Pre-calculate ATR for label offset (must be called on every bar)
+float atrOffset = ta.atr(14) * 0.3
+
+// Draw group boundary labels
+if i_showGroupLabels and bar_index >= totalWindow - 1
+    for grp = 1 to i_numGroups
+        int boundaryOffset = (grp - 1) * i_zPeriod
+        int boundaryBarIdx = bar_index - boundaryOffset
+        
+        // Only draw if within valid range
+        if boundaryBarIdx >= 0
+            float labelY     = high[boundaryOffset] + atrOffset
+            string labelTxt  = str.tostring(grp)
+            color  labelClr  = grp == 1 ? COLOR_BULL : COLOR_TXT_DIM
+            
+            label grpLbl = label.new(boundaryBarIdx, labelY, labelTxt,
+                 style = label.style_none, 
+                 textcolor = labelClr, 
+                 size = f_getTextSize(i_textSizeStr))
+            
+            array.push(groupLabels, grpLbl)
+
+ 
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// DASHBOARD: PROFESSIONAL Z-SCORE HEATMAP
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+// Resolved settings
+textSize    = f_getTextSize(i_textSizeStr)
+dashPos     = f_getDashPos(i_dashPosStr)
+basisLabel  = baseOff == 0 ? "LIVE" : "CLOSED"
+
+// Table dimensions (expanded for events section)
+const int DASH_COLS  = 7
+const int DASH_ROWS  = 12
+
+// Create table once (use resolved position)
+var table dashT = table.new(dashPos, DASH_COLS, DASH_ROWS,
+     frame_color  = color.new(COLOR_HDR_BG, 0),
+     frame_width  = 2,
+     border_color = color.new(COLOR_TXT_DIM, 80),
+     border_width = 1)
+
+// Helper: Create visual Z-bar (heatmap style)
+f_zBar(float z) =>
+    float zClamped = math.max(-3.0, math.min(3.0, nz(z, 0)))
+    int barLen = 10
+    int midPoint = 5
+    int fillPos = int(math.round((zClamped + 3) / 6 * barLen))
+    
+    string result = ""
+    for i = 0 to barLen - 1
+        if i == midPoint
+            result += "|"
+        else if (zClamped >= 0 and i > midPoint and i <= fillPos) or (zClamped < 0 and i < midPoint and i >= fillPos)
+            result += "█"
+        else
+            result += "░"
+    result
+
+// Render dashboard on last confirmed history bar OR realtime last bar
+if barstate.islastconfirmedhistory or barstate.islast
+    if i_showDash
+        // Update table position dynamically
+        table.set_position(dashT, dashPos)
+        
+        // --- Data coverage: scannable/valid bars for current engine ---
+        int histBarsDash = math.max(0, bar_index - baseOff + 1)
+        histBarsDash := math.min(histBarsDash, 5000)
+
+        int scannableBars = histBarsDash
+        if i_calcMethod == "Intrabar (Precise)"
+            scannableBars := 0
+            if histBarsDash > 0
+                for off = baseOff to baseOff + histBarsDash - 1
+                    bool ok = not na(uDash[off]) and not na(dDash[off]) and not na(dlDash[off])
+                    if ok
+                        scannableBars += 1
+                    else
+                        break
+
+        string validTxt = i_calcMethod == "Intrabar (Precise)" ? str.tostring(scannableBars) + " bars" : str.tostring(histBarsDash) + " bars"
+        
+        // === ROW 0: HEADER ===
+        string basisLabelL10n = baseOff == 0 ? f_L3("LIVE", "CANLI", "실시간") : f_L3("CLOSED", "KAPALI", "확정")
+        string headerTxt = f_L3("ST-EP04 • Z-Score Dashboard", "ST-EP04 • Z-Skor Paneli", "ST-EP04 • Z-점수 대시보드") + "  [" + basisLabelL10n + "]"
+        table.cell(dashT, 0, 0, headerTxt, text_color = COLOR_TXT_HDR, bgcolor = COLOR_HDR_BG,
+             text_size = textSize, text_halign = text.align_left,
+             tooltip = "Price & Volume Strategy Z-Score Dashboard\n\n" +
+                       "Current Mode: " + (baseOff == 0 ? "LIVE (bar[0])" : "CLOSED (bar[1])") + "\n\n" +
+                       "Z-Score measures standard deviations from mean:\n" +
+                       "• Z > +2: Extremely high (rare event)\n" +
+                       "• Z > +1: Above average\n" +
+                       "• Z ≈ 0: Near average\n" +
+                       "• Z < -1: Below average\n" +
+                       "• Z < -2: Extremely low (rare event)")
+        table.merge_cells(dashT, 0, 0, DASH_COLS - 1, 0)
+        
+        // === ROW 1: COLUMN HEADERS ===
+        table.cell(dashT, 0, 1, f_L3("Metric", "Metrik", "지표"),   text_color = COLOR_TXT_DIM, bgcolor = COLOR_HDR_BG, text_size = textSize,
+             tooltip = f_L3("Metric being measured:\n• Price, Volume, Buy, Sell, Delta",
+                            "Ölçülen metrik:\n• Fiyat, Hacim, Alım, Satım, Delta",
+                            "측정 지표:\n• 가격, 거래량, 매수, 매도, 델타"))
+        table.cell(dashT, 1, 1, f_L3("Value", "Değer", "값"),       text_color = COLOR_TXT_DIM, bgcolor = COLOR_HDR_BG, text_size = textSize,
+             tooltip = f_L3("Current value of the metric", "Metriğin mevcut değeri", "지표의 현재 값"))
+        table.cell(dashT, 2, 1, "Z",                                 text_color = COLOR_TXT_DIM, bgcolor = COLOR_HDR_BG, text_size = textSize,
+             tooltip = f_L3("Z-Score: Standard deviations from mean\n\n• Z > +2: Extremely high\n• Z > +1: Above average\n• Z ≈ 0: Normal\n• Z < -1: Below average\n• Z < -2: Extremely low",
+                            "Z-Skor: Ortalamadan standart sapma\n\n• Z > +2: Aşırı yüksek\n• Z > +1: Ortalamanın üstü\n• Z ≈ 0: Normal\n• Z < -1: Ortalamanın altı\n• Z < -2: Aşırı düşük",
+                            "Z-점수: 평균으로부터의 표준편차\n\n• Z > +2: 극단적 고점\n• Z > +1: 평균 이상\n• Z ≈ 0: 보통\n• Z < -1: 평균 이하\n• Z < -2: 극단적 저점"))
+        table.cell(dashT, 3, 1, f_L3("Visual", "Görsel", "시각화"), text_color = COLOR_TXT_DIM, bgcolor = COLOR_HDR_BG, text_size = textSize,
+             tooltip = f_L3("Visual heatmap bar showing Z-Score position\n\nCenter line (|) = zero\nFilled blocks show deviation direction",
+                            "Z-Skor konumunu gösteren ısı haritası\n\nOrtadaki çizgi (|) = sıfır\nDolu bloklar sapma yönünü gösterir",
+                            "Z-점수 위치를 보여주는 시각적 막대\n\n중앙선 (|) = 영점\n채워진 블록은 편차 방향을 표시"))
+        table.cell(dashT, 4, 1, f_L3("Status", "Durum", "상태"),   text_color = COLOR_TXT_DIM, bgcolor = COLOR_HDR_BG, text_size = textSize,
+             tooltip = f_L3("Interpretation of Z-Score level:\n\n• ▲▲ Extreme High: Z ≥ +2\n• ▲ Above Avg: Z ≥ +1\n• ○ Normal: -1 < Z < +1\n• ▼ Below Avg: Z ≤ -1\n• ▼▼ Extreme Low: Z ≤ -2",
+                            "Z-Skor seviyesi yorumu:\n\n• ▲▲ Aşırı Yüksek: Z ≥ +2\n• ▲ Ort. Üstü: Z ≥ +1\n• ○ Normal: -1 < Z < +1\n• ▼ Ort. Altı: Z ≤ -1\n• ▼▼ Aşırı Düşük: Z ≤ -2",
+                            "Z-점수 수준 해석:\n\n• ▲▲ 극단적 고점: Z ≥ +2\n• ▲ 평균 이상: Z ≥ +1\n• ○ 보통: -1 < Z < +1\n• ▼ 평균 이하: Z ≤ -1\n• ▼▼ 극단적 저점: Z ≤ -2"))
+        table.cell(dashT, 5, 1, f_L3("▲ Upper", "▲ Üst", "▲ 상단"), text_color = COLOR_BULL, bgcolor = COLOR_HDR_BG, text_size = textSize,
+             tooltip = f_L3("Nearest UPPER Z-Line (Label Mirror)\n\nCell shows ONLY the nearest price.\nHover the cell to see FULL details.\n\n— means no active upper line",
+                            "En yakın ÜST Z-Çizgisi (Etiket Aynası)\n\nHücre SADECE en yakın fiyatı gösterir.\nTam detaylar için hücrenin üzerine gelin.\n\n— aktif üst çizgi yok demektir",
+                            "가장 가까운 상단 Z-라인 (라벨 미러)\n\n셀에는 가장 가까운 가격만 표시됩니다.\n전체 세부정보는 셀 위에 마우스를 올리세요.\n\n— 는 활성 상단 라인 없음"))
+        table.cell(dashT, 6, 1, f_L3("▼ Lower", "▼ Alt", "▼ 하단"), text_color = COLOR_BEAR, bgcolor = COLOR_HDR_BG, text_size = textSize,
+             tooltip = f_L3("Nearest LOWER Z-Line (Label Mirror)\n\nCell shows ONLY the nearest price.\nHover the cell to see FULL details.\n\n— means no active lower line",
+                            "En yakın ALT Z-Çizgisi (Etiket Aynası)\n\nHücre SADECE en yakın fiyatı gösterir.\nTam detaylar için hücrenin üzerine gelin.\n\n— aktif alt çizgi yok demektir",
+                            "가장 가까운 하단 Z-라인 (라벨 미러)\n\n셀에는 가장 가까운 가격만 표시됩니다.\n전체 세부정보는 셀 위에 마우스를 올리세요.\n\n— 는 활성 하단 라인 없음"))
+        
+        // === ROW 2: PRICE ===
+        float clusterTol = syminfo.mintick * 2
+        table.cell(dashT, 0, 2, f_L3("◈ Price", "◈ Fiyat", "◈ 가격"), text_color = COLOR_TXT_DIM, bgcolor = COLOR_ROW_BG, text_size = textSize, text_halign = text.align_left,
+             tooltip = f_L3("Price Z-Score (" + basisLabel + ")\n\nMeasures price deviation from its " + str.tostring(i_zPeriod) + "-bar mean.\n\n• Negative Z: Price below average (potential buy zone)\n• Positive Z: Price above average (potential sell zone)",
+                            "Fiyat Z-Skoru (" + basisLabel + ")\n\n" + str.tostring(i_zPeriod) + " bar ortalamasından fiyat sapmasını ölçer.\n\n• Negatif Z: Fiyat ortalamanın altında (potansiyel alım bölgesi)\n• Pozitif Z: Fiyat ortalamanın üstünde (potansiyel satım bölgesi)",
+                            "가격 Z-점수 (" + basisLabel + ")\n\n" + str.tostring(i_zPeriod) + "봉 평균으로부터의 가격 편차를 측정합니다.\n\n• 음수 Z: 평균 이하 가격 (잠재적 매수 구간)\n• 양수 Z: 평균 이상 가격 (잠재적 매도 구간)"))
+        table.cell(dashT, 1, 2, f_fmtPrice(close[baseOff]), text_color = COLOR_TXT_VAL, bgcolor = COLOR_ROW_BG, text_size = textSize, text_halign = text.align_right)
+        table.cell(dashT, 2, 2, f_fmtZ(zPrice.raw),  text_color = zPrice.clr, bgcolor = COLOR_ROW_BG, text_size = textSize, text_halign = text.align_center)
+        table.cell(dashT, 3, 2, f_zBar(zPrice.raw),  text_color = zPrice.clr, bgcolor = COLOR_ROW_BG, text_size = textSize, text_halign = text.align_center, text_font_family = font.family_monospace)
+        table.cell(dashT, 4, 2, zPrice.status,       text_color = zPrice.clr, bgcolor = COLOR_ROW_BG, text_size = textSize, text_halign = text.align_left)
+        table.cell(dashT, 5, 2, f_dashCellText(dashUpperSel, nearestUpperPrice, true,  clusterTol, i_showUpperZLine and i_showZLines), text_color = COLOR_BULL, bgcolor = COLOR_ROW_BG, text_size = textSize, text_halign = text.align_left, tooltip = f_dashCellTip(dashUpperSel, nearestUpperPrice, true,  clusterTol, i_showUpperZLine and i_showZLines))
+        table.cell(dashT, 6, 2, f_dashCellText(dashLowerSel, nearestLowerPrice, false, clusterTol, i_showLowerZLine and i_showZLines), text_color = COLOR_BEAR, bgcolor = COLOR_ROW_BG, text_size = textSize, text_halign = text.align_left, tooltip = f_dashCellTip(dashLowerSel, nearestLowerPrice, false, clusterTol, i_showLowerZLine and i_showZLines))
+        
+        // === ROW 3: TOTAL VOLUME ===
+        table.cell(dashT, 0, 3, f_L3("◉ Total Vol", "◉ Toplam Hcm", "◉ 총 거래량"), text_color = COLOR_TXT_DIM, bgcolor = COLOR_ROW_BG, text_size = textSize, text_halign = text.align_left,
+             tooltip = f_L3("Total Volume Z-Score\n\nMeasures current volume compared to average.\n\n• High Z (>1): Unusual activity, potential breakout\n• Low Z (<-1): Low interest, potential consolidation",
+                            "Toplam Hacim Z-Skoru\n\nMevcut hacmi ortalama ile karşılaştırır.\n\n• Yüksek Z (>1): Olağandışı aktivite, potansiyel kırılım\n• Düşük Z (<-1): Düşük ilgi, potansiyel konsolidasyon",
+                            "총 거래량 Z-점수\n\n현재 거래량을 평균과 비교합니다.\n\n• 높은 Z (>1): 비정상적 활동, 잠재적 돌파\n• 낮은 Z (<-1): 낮은 관심, 잠재적 횡보"))
+        table.cell(dashT, 1, 3, f_fmtVol(volData.total), text_color = COLOR_TXT_VAL, bgcolor = COLOR_ROW_BG, text_size = textSize, text_halign = text.align_right)
+        table.cell(dashT, 2, 3, f_fmtZ(zVolume.raw), text_color = zVolume.clr, bgcolor = COLOR_ROW_BG, text_size = textSize, text_halign = text.align_center)
+        table.cell(dashT, 3, 3, f_zBar(zVolume.raw), text_color = zVolume.clr, bgcolor = COLOR_ROW_BG, text_size = textSize, text_halign = text.align_center, text_font_family = font.family_monospace)
+        table.cell(dashT, 4, 3, zVolume.status,      text_color = zVolume.clr, bgcolor = COLOR_ROW_BG, text_size = textSize, text_halign = text.align_left)
+        table.cell(dashT, 5, 3, f_dashCellText(dashUpperSel, nearestUpperVol, true,  clusterTol, i_showUpperZLine and i_showVolumeZLines), text_color = COLOR_BULL, bgcolor = COLOR_ROW_BG, text_size = textSize, text_halign = text.align_left, tooltip = f_dashCellTip(dashUpperSel, nearestUpperVol, true,  clusterTol, i_showUpperZLine and i_showVolumeZLines))
+        table.cell(dashT, 6, 3, f_dashCellText(dashLowerSel, nearestLowerVol, false, clusterTol, i_showLowerZLine and i_showVolumeZLines), text_color = COLOR_BEAR, bgcolor = COLOR_ROW_BG, text_size = textSize, text_halign = text.align_left, tooltip = f_dashCellTip(dashLowerSel, nearestLowerVol, false, clusterTol, i_showLowerZLine and i_showVolumeZLines))
+        
+        // === ROW 4: BUY VOLUME ===
+        table.cell(dashT, 0, 4, f_L3("▲ Buy Vol", "▲ Alım Hcm", "▲ 매수량"), text_color = COLOR_TXT_DIM, bgcolor = COLOR_ROW_BG, text_size = textSize, text_halign = text.align_left,
+             tooltip = f_L3("Buy Volume Z-Score\n\nEstimated buying pressure.\n\n• High Z: Strong buying activity\n• Confirms bullish momentum",
+                            "Alım Hacmi Z-Skoru\n\nTahmini alım baskısı.\n\n• Yüksek Z: Güçlü alım aktivitesi\n• Yükseliş momentumunu doğrular",
+                            "매수량 Z-점수\n\n추정 매수 압력.\n\n• 높은 Z: 강한 매수 활동\n• 상승 모멘텀 확인"))
+        table.cell(dashT, 1, 4, f_fmtVol(volData.buy), text_color = COLOR_TXT_VAL, bgcolor = COLOR_ROW_BG, text_size = textSize, text_halign = text.align_right)
+        table.cell(dashT, 2, 4, f_fmtZ(zBuy.raw),    text_color = zBuy.clr, bgcolor = COLOR_ROW_BG, text_size = textSize, text_halign = text.align_center)
+        table.cell(dashT, 3, 4, f_zBar(zBuy.raw),    text_color = zBuy.clr, bgcolor = COLOR_ROW_BG, text_size = textSize, text_halign = text.align_center, text_font_family = font.family_monospace)
+        table.cell(dashT, 4, 4, zBuy.status,         text_color = zBuy.clr, bgcolor = COLOR_ROW_BG, text_size = textSize, text_halign = text.align_left)
+        table.cell(dashT, 5, 4, f_dashCellText(dashUpperSel, nearestUpperBuy, true,  clusterTol, i_showUpperZLine and i_showBuyZLines), text_color = COLOR_BULL, bgcolor = COLOR_ROW_BG, text_size = textSize, text_halign = text.align_left, tooltip = f_dashCellTip(dashUpperSel, nearestUpperBuy, true,  clusterTol, i_showUpperZLine and i_showBuyZLines))
+        table.cell(dashT, 6, 4, f_dashCellText(dashLowerSel, nearestLowerBuy, false, clusterTol, i_showLowerZLine and i_showBuyZLines), text_color = COLOR_BEAR, bgcolor = COLOR_ROW_BG, text_size = textSize, text_halign = text.align_left, tooltip = f_dashCellTip(dashLowerSel, nearestLowerBuy, false, clusterTol, i_showLowerZLine and i_showBuyZLines))
+        
+        // === ROW 5: SELL VOLUME ===
+        table.cell(dashT, 0, 5, f_L3("▼ Sell Vol", "▼ Satım Hcm", "▼ 매도량"), text_color = COLOR_TXT_DIM, bgcolor = COLOR_ROW_BG, text_size = textSize, text_halign = text.align_left,
+             tooltip = f_L3("Sell Volume Z-Score\n\nEstimated selling pressure.\n\n• High Z: Strong selling activity\n• Confirms bearish momentum",
+                            "Satım Hacmi Z-Skoru\n\nTahmini satış baskısı.\n\n• Yüksek Z: Güçlü satış aktivitesi\n• Düşüş momentumunu doğrular",
+                            "매도량 Z-점수\n\n추정 매도 압력.\n\n• 높은 Z: 강한 매도 활동\n• 하락 모멘텀 확인"))
+        table.cell(dashT, 1, 5, f_fmtVol(volData.sell), text_color = COLOR_TXT_VAL, bgcolor = COLOR_ROW_BG, text_size = textSize, text_halign = text.align_right)
+        table.cell(dashT, 2, 5, f_fmtZ(zSell.raw),   text_color = zSell.clr, bgcolor = COLOR_ROW_BG, text_size = textSize, text_halign = text.align_center)
+        table.cell(dashT, 3, 5, f_zBar(zSell.raw),   text_color = zSell.clr, bgcolor = COLOR_ROW_BG, text_size = textSize, text_halign = text.align_center, text_font_family = font.family_monospace)
+        table.cell(dashT, 4, 5, zSell.status,        text_color = zSell.clr, bgcolor = COLOR_ROW_BG, text_size = textSize, text_halign = text.align_left)
+        table.cell(dashT, 5, 5, f_dashCellText(dashUpperSel, nearestUpperSell, true,  clusterTol, i_showUpperZLine and i_showSellZLines), text_color = COLOR_BULL, bgcolor = COLOR_ROW_BG, text_size = textSize, text_halign = text.align_left, tooltip = f_dashCellTip(dashUpperSel, nearestUpperSell, true,  clusterTol, i_showUpperZLine and i_showSellZLines))
+        table.cell(dashT, 6, 5, f_dashCellText(dashLowerSel, nearestLowerSell, false, clusterTol, i_showLowerZLine and i_showSellZLines), text_color = COLOR_BEAR, bgcolor = COLOR_ROW_BG, text_size = textSize, text_halign = text.align_left, tooltip = f_dashCellTip(dashLowerSel, nearestLowerSell, false, clusterTol, i_showLowerZLine and i_showSellZLines))
+        
+        // === ROW 6: DELTA ===
+        table.cell(dashT, 0, 6, f_L3("⬥ Delta", "⬥ Delta", "⬥ 델타"), text_color = COLOR_TXT_DIM, bgcolor = COLOR_ROW_BG, text_size = textSize, text_halign = text.align_left,
+             tooltip = f_L3("Delta Z-Score (Buy - Sell)\n\nNet buying vs selling pressure.\n\n• Positive Z: Buyers dominating (bullish)\n• Negative Z: Sellers dominating (bearish)",
+                            "Delta Z-Skoru (Alım - Satım)\n\nNet alım vs satım baskısı.\n\n• Pozitif Z: Alıcılar hakim (yükseliş)\n• Negatif Z: Satıcılar hakim (düşüş)",
+                            "델타 Z-점수 (매수 - 매도)\n\n순 매수 대 매도 압력.\n\n• 양수 Z: 매수자 우위 (강세)\n• 음수 Z: 매도자 우위 (약세)"))
+        table.cell(dashT, 1, 6, f_fmtVol(volData.delta), text_color = COLOR_TXT_VAL, bgcolor = COLOR_ROW_BG, text_size = textSize, text_halign = text.align_right)
+        table.cell(dashT, 2, 6, f_fmtZ(zDelta.raw),  text_color = zDelta.clr, bgcolor = COLOR_ROW_BG, text_size = textSize, text_halign = text.align_center)
+        table.cell(dashT, 3, 6, f_zBar(zDelta.raw),  text_color = zDelta.clr, bgcolor = COLOR_ROW_BG, text_size = textSize, text_halign = text.align_center, text_font_family = font.family_monospace)
+        table.cell(dashT, 4, 6, zDelta.status,       text_color = zDelta.clr, bgcolor = COLOR_ROW_BG, text_size = textSize, text_halign = text.align_left)
+        table.cell(dashT, 5, 6, f_dashCellText(dashUpperSel, nearestUpperDelta, true,  clusterTol, i_showUpperZLine and i_showDeltaZLines), text_color = COLOR_BULL, bgcolor = COLOR_ROW_BG, text_size = textSize, text_halign = text.align_left, tooltip = f_dashCellTip(dashUpperSel, nearestUpperDelta, true,  clusterTol, i_showUpperZLine and i_showDeltaZLines))
+        table.cell(dashT, 6, 6, f_dashCellText(dashLowerSel, nearestLowerDelta, false, clusterTol, i_showLowerZLine and i_showDeltaZLines), text_color = COLOR_BEAR, bgcolor = COLOR_ROW_BG, text_size = textSize, text_halign = text.align_left, tooltip = f_dashCellTip(dashLowerSel, nearestLowerDelta, false, clusterTol, i_showLowerZLine and i_showDeltaZLines))
+        
+        // === ROW 7: EVENTS HEADER ===
+        string evtHeaderTxt = "⚡ " + f_L3("Event Detection", "Olay Tespiti", "이벤트 감지") + " [" + str.tostring(eventEngine.totalTriggered) + "/" + str.tostring(eventEngine.totalChecked) + "]"
+        table.cell(dashT, 0, 7, evtHeaderTxt, text_color = COLOR_TXT_HDR, bgcolor = COLOR_HDR_BG, text_size = textSize, text_halign = text.align_left,
+             tooltip = f_L3("Event Detection Engine\n\nAnalyzes 60 market scenarios based on Z-Score combinations.\nShows: [Triggered Events / Total Scenarios Checked]\n\nCategories:\n• A: Price-Volume (1-10)\n• B: Order-Flow (11-16)\n• C: Buy vs Sell (17-23)\n• D: Predictability (24-26)\n• E: Reversal/Continuation (27-30)\n• F: Imbalance Lag (31-33)\n• G: Support/Resistance (34-36)\n• H: Extended Analysis (37-50)\n• I: Trend-Integrated (51-60)",
+                            "Olay Tespit Motoru\n\nZ-Skor kombinasyonlarına dayalı 60 piyasa senaryosunu analiz eder.\nGösterim: [Tetiklenen Olaylar / Toplam Kontrol Edilen]\n\nKategoriler:\n• A: Fiyat-Hacim (1-10)\n• B: Emir Akışı (11-16)\n• C: Alım vs Satım (17-23)\n• D: Öngörülebilirlik (24-26)\n• E: Dönüş/Devam (27-30)\n• F: Dengesizlik Gecikmesi (31-33)\n• G: Destek/Direnç (34-36)\n• H: Genişletilmiş Analiz (37-50)\n• I: Trend Entegre (51-60)",
+                            "이벤트 감지 엔진\n\nZ-점수 조합을 기반으로 60가지 시장 시나리오를 분석합니다.\n표시: [트리거된 이벤트 / 총 검사 시나리오]\n\n카테고리:\n• A: 가격-거래량 (1-10)\n• B: 주문 흐름 (11-16)\n• C: 매수 vs 매도 (17-23)\n• D: 예측 가능성 (24-26)\n• E: 반전/지속 (27-30)\n• F: 불균형 지연 (31-33)\n• G: 지지/저항 (34-36)\n• H: 확장 분석 (37-50)\n• I: 추세 통합 (51-60)"))
+        table.merge_cells(dashT, 0, 7, DASH_COLS - 1, 7)
+        
+        // === ROW 8: MARKET BIAS ===
+        // Calculate bias percentages
+        float totalBiasScore = bullScore + bearScore + neutralScore
+        float bullPct  = totalBiasScore > 0 ? (bullScore / totalBiasScore) * 100.0 : 0.0
+        float bearPct  = totalBiasScore > 0 ? (bearScore / totalBiasScore) * 100.0 : 0.0
+        float neutPct  = totalBiasScore > 0 ? (neutralScore / totalBiasScore) * 100.0 : 0.0
+        
+        // Determine dominant bias (localized)
+        string biasDir = bullScore > bearScore ? 
+             (bullScore > neutralScore ? f_L3("BULL", "BOĞA", "강세") : f_L3("NEUTRAL", "NÖTR", "중립")) : 
+             (bearScore > neutralScore ? f_L3("BEAR", "AYI", "약세") : f_L3("NEUTRAL", "NÖTR", "중립"))
+        color  biasClr = biasDir == "BULL" ? COLOR_BULL : (biasDir == "BEAR" ? COLOR_BEAR : COLOR_NEUTRAL)
+        
+        // Build bias bar visual
+        int bullBars = int(math.round(bullPct / 10.0))
+        int bearBars = int(math.round(bearPct / 10.0))
+        int neutBars = 10 - bullBars - bearBars
+        neutBars := math.max(0, neutBars)
+        
+        string biasBar = ""
+        if bullBars > 0
+            for i = 1 to bullBars
+                biasBar += "▓"
+        if neutBars > 0
+            for i = 1 to neutBars
+                biasBar += "░"
+        if bearBars > 0
+            for i = 1 to bearBars
+                biasBar += "▓"
+        
+        table.cell(dashT, 0, 8, f_L3("Market Bias", "Piyasa Eğilimi", "시장 편향"), text_color = COLOR_TXT_DIM, bgcolor = COLOR_ROW_BG, text_size = textSize, text_halign = text.align_left,
+             tooltip = f_L3("Overall market bias based on triggered events.\n\nCalculated from confidence-weighted event directions:\n• Bullish events add to Bull score\n• Bearish events add to Bear score\n• Neutral/Warning events add to Neutral score",
+                            "Tetiklenen olaylara dayalı genel piyasa eğilimi.\n\nGüven ağırlıklı olay yönlerinden hesaplanır:\n• Yükseliş olayları Boğa skoruna eklenir\n• Düşüş olayları Ayı skoruna eklenir\n• Nötr/Uyarı olayları Nötr skora eklenir",
+                            "트리거된 이벤트를 기반으로 한 전체 시장 편향.\n\n신뢰도 가중 이벤트 방향에서 계산됨:\n• 강세 이벤트는 Bull 점수에 추가\n• 약세 이벤트는 Bear 점수에 추가\n• 중립/경고 이벤트는 중립 점수에 추가"))
+        table.cell(dashT, 1, 8, biasDir, text_color = biasClr, bgcolor = COLOR_ROW_BG, text_size = textSize, text_halign = text.align_center)
+        table.cell(dashT, 2, 8, biasBar, text_color = biasClr, bgcolor = COLOR_ROW_BG, text_size = textSize, text_halign = text.align_center, text_font_family = font.family_monospace)
+        table.merge_cells(dashT, 2, 8, 4, 8)
+        
+        string biasPctTxt = "▲" + str.tostring(bullPct, "#") + "% │ ▼" + str.tostring(bearPct, "#") + "%"
+        table.cell(dashT, 5, 8, biasPctTxt, text_color = COLOR_TXT_VAL, bgcolor = COLOR_ROW_BG, text_size = textSize, text_halign = text.align_center,
+             tooltip = "Bull: " + str.tostring(bullPct, "#.#") + "% (" + str.tostring(bullScore, "#.#") + " pts)\n" +
+                       "Bear: " + str.tostring(bearPct, "#.#") + "% (" + str.tostring(bearScore, "#.#") + " pts)\n" +
+                       "Neutral: " + str.tostring(neutPct, "#.#") + "% (" + str.tostring(neutralScore, "#.#") + " pts)")
+        table.merge_cells(dashT, 5, 8, 6, 8)
+        
+        // === ROW 9: STRONGEST EVENT ===
+        string strongestName = na(eventEngine.strongestEvent) ? "—" : eventEngine.strongestEvent.eventName
+        string strongestConf = na(eventEngine.strongestEvent) ? "" : str.tostring(eventEngine.strongestEvent.confidence, "#") + "%"
+        color  strongestClr  = na(eventEngine.strongestEvent) ? COLOR_TXT_DIM : 
+             (eventEngine.strongestEvent.direction == EVT_DIR_BULL ? COLOR_BULL : 
+              eventEngine.strongestEvent.direction == EVT_DIR_BEAR ? COLOR_BEAR : 
+              eventEngine.strongestEvent.direction == EVT_DIR_WARNING ? COLOR_YELLOW : COLOR_NEUTRAL)
+        string strongestDir  = na(eventEngine.strongestEvent) ? "" : f_directionName(eventEngine.strongestEvent.direction)
+        
+        table.cell(dashT, 0, 9, f_L3("Strongest", "En Güçlü", "최강"), text_color = COLOR_TXT_DIM, bgcolor = COLOR_ROW_BG, text_size = textSize, text_halign = text.align_left,
+             tooltip = f_L3("Highest confidence event currently triggered.\n\nConfidence is calculated based on:\n• Primary Z-Score magnitude\n• Secondary/Tertiary alignment\n• Direction consistency bonus",
+                            "Şu anda tetiklenen en yüksek güvenilirlikli olay.\n\nGüvenilirlik şunlara göre hesaplanır:\n• Birincil Z-Skor büyüklüğü\n• İkincil/Üçüncül uyum\n• Yön tutarlılığı bonusu",
+                            "현재 트리거된 가장 높은 신뢰도 이벤트.\n\n신뢰도는 다음을 기준으로 계산됩니다:\n• 기본 Z-점수 크기\n• 보조/삼차 정렬\n• 방향 일관성 보너스"))
+        table.cell(dashT, 1, 9, strongestName, text_color = strongestClr, bgcolor = COLOR_ROW_BG, text_size = textSize, text_halign = text.align_left)
+        table.merge_cells(dashT, 1, 9, 4, 9)
+        table.cell(dashT, 5, 9, strongestDir, text_color = strongestClr, bgcolor = COLOR_ROW_BG, text_size = textSize, text_halign = text.align_center)
+        table.cell(dashT, 6, 9, strongestConf, text_color = strongestClr, bgcolor = COLOR_ROW_BG, text_size = textSize, text_halign = text.align_right)
+        
+        // === ROW 10: TOP EVENTS LIST (up to 2 more) ===
+        array<EventResult> topEvents = eventEngine.getTopEvents(3)
+        int topCount = array.size(topEvents)
+        
+        string evt2Name = topCount > 1 ? array.get(topEvents, 1).eventName : "—"
+        string evt2Conf = topCount > 1 ? str.tostring(array.get(topEvents, 1).confidence, "#") + "%" : ""
+        color  evt2Clr  = topCount > 1 ? 
+             (array.get(topEvents, 1).direction == EVT_DIR_BULL ? COLOR_BULL : 
+              array.get(topEvents, 1).direction == EVT_DIR_BEAR ? COLOR_BEAR : 
+              array.get(topEvents, 1).direction == EVT_DIR_WARNING ? COLOR_YELLOW : COLOR_NEUTRAL) : COLOR_TXT_DIM
+        string evt2Dir  = topCount > 1 ? f_directionName(array.get(topEvents, 1).direction) : ""
+        
+        table.cell(dashT, 0, 10, "#2", text_color = COLOR_TXT_DIM, bgcolor = COLOR_ROW_BG, text_size = textSize, text_halign = text.align_left)
+        table.cell(dashT, 1, 10, evt2Name, text_color = evt2Clr, bgcolor = COLOR_ROW_BG, text_size = textSize, text_halign = text.align_left)
+        table.merge_cells(dashT, 1, 10, 4, 10)
+        table.cell(dashT, 5, 10, evt2Dir, text_color = evt2Clr, bgcolor = COLOR_ROW_BG, text_size = textSize, text_halign = text.align_center)
+        table.cell(dashT, 6, 10, evt2Conf, text_color = evt2Clr, bgcolor = COLOR_ROW_BG, text_size = textSize, text_halign = text.align_right)
+        
+        // === ROW 11: FOOTER/ENGINE INFO ===
+        string engineTxt  = i_calcMethod == "Intrabar (Precise)" ? "Intrabar (" + ltfResolved + ")" : f_L3("Geometry", "Geometri", "기하학")
+        string engineLbl  = f_L3("Engine", "Motor", "엔진")
+        string periodLbl  = f_L3("Period", "Periyot", "기간")
+        string basisLbl   = f_L3("Basis", "Temel", "기준")
+        string validLbl   = f_L3("Valid", "Geçerli", "유효")
+        string engineInfo = engineLbl + ": " + engineTxt + " │ " + periodLbl + ": " + str.tostring(i_zPeriod) + " │ " + basisLbl + ": " + basisLabelL10n + " │ " + validLbl + ": " + validTxt
+        
+        bool   insufficientData = i_calcMethod == "Intrabar (Precise)" and scannableBars < i_zPeriod
+        string warningMsg       = f_L3("⚠️ Only " + str.tostring(scannableBars) + " valid bars — need " + str.tostring(i_zPeriod) + ".\nTry a higher LTF or\nsmaller chart timeframe.",
+                                       "⚠️ Sadece " + str.tostring(scannableBars) + " geçerli bar — " + str.tostring(i_zPeriod) + " gerekli.\nDaha yüksek LTF veya\ndaha küçük grafik zaman dilimi deneyin.",
+                                       "⚠️ 유효한 봉 " + str.tostring(scannableBars) + "개만 — " + str.tostring(i_zPeriod) + "개 필요.\n더 높은 LTF 또는\n더 작은 차트 타임프레임을 시도하세요.")
+
+        bool   hasLblWarn       = dashLabelOverlapWarn != ""
+        string footerTextBase   = insufficientData ? warningMsg : engineInfo
+        string footerText       = hasLblWarn ? (footerTextBase + "\n" + dashLabelOverlapWarn) : footerTextBase
+        color  footerClr        = (insufficientData or hasLblWarn) ? color.rgb(251, 191, 36) : COLOR_TXT_DIM
+        
+        table.cell(dashT, 0, 11, footerText, text_color = footerClr, bgcolor = COLOR_HDR_BG, text_size = textSize, text_halign = text.align_left,
+             tooltip = f_L3("Volume Engine Method:\n• Geometry: Approximates buy/sell from candle structure\n• Intrabar: Uses lower timeframe for precision\n\nValid Data (Scannable):\n• Intrabar shows consecutive usable bars as scannable/available\n• Geometry is always available up to history\n\nZ-Score Period: " + str.tostring(i_zPeriod) + " bars\n\nCalculation Basis:\n• LIVE: Current candle (may repaint)\n• CLOSED: Last confirmed candle (stable)",
+                            "Hacim Motoru Yöntemi:\n• Geometri: Mum yapısından alım/satımı tahmin eder\n• Intrabar: Hassasiyet için alt zaman dilimi kullanır\n\nGeçerli Veri (Taranabilir):\n• Intrabar ardışık kullanılabilir barları gösterir\n• Geometri her zaman geçmişe kadar mevcuttur\n\nZ-Skor Periyodu: " + str.tostring(i_zPeriod) + " bar\n\nHesaplama Temeli:\n• CANLI: Mevcut mum (yeniden çizebilir)\n• KAPALI: Son onaylanmış mum (kararlı)",
+                            "거래량 엔진 방식:\n• 기하학: 캔들 구조에서 매수/매도 추정\n• Intrabar: 정밀도를 위해 하위 타임프레임 사용\n\n유효 데이터 (스캔 가능):\n• Intrabar는 연속 사용 가능한 봉을 표시\n• 기하학은 항상 과거까지 사용 가능\n\nZ-점수 기간: " + str.tostring(i_zPeriod) + "봉\n\n계산 기준:\n• 실시간: 현재 캔들 (다시 그릴 수 있음)\n• 확정: 마지막 확정 캔들 (안정적)"))
+        table.merge_cells(dashT, 0, 11, DASH_COLS - 1, 11)
+
+    else
+        // Hide table by clearing all cells
+        table.clear(dashT, 0, 0, DASH_COLS - 1, DASH_ROWS - 1)

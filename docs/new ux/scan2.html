@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Multi-Scanner Priority Feed</title>
+  <style>
+    * { box-sizing: border-box; }
+    :root {
+      --bg: #0b0913; --panel: #141021; --card: #191327; --card-2: #201936;
+      --line: rgba(236,231,220,0.12); --ink: #ece7dc; --muted: #a79fb2; --faint: #7d7590;
+      --gold: #d8b46a; --gold-ink: #e6c885; --gold-wash: rgba(216,180,106,0.12);
+      --green: #6fcf92; --green-wash: rgba(111,207,146,0.15);
+      --violet: #a596f5; --violet-wash: rgba(165,150,245,0.15);
+      --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      --mono: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, monospace;
+    }
+    body { background: var(--bg); color: var(--ink); font-family: var(--sans); margin: 0; padding: 20px; }
+    
+    .layout { display: flex; gap: 20px; max-width: 1200px; margin: 0 auto; }
+    .feed-container { flex: 1; }
+
+    /* SCANNER FILTER CHIPS */
+    .filter-bar { display: flex; gap: 8px; margin-bottom: 20px; overflow-x: auto; padding-bottom: 4px; }
+    .chip-btn { background: var(--panel); border: 1px solid var(--line); color: var(--muted); padding: 6px 14px; border-radius: 99px; font-family: var(--mono); font-size: 11px; cursor: pointer; white-space: nowrap; }
+    .chip-btn.active { background: var(--gold-wash); border-color: var(--gold); color: var(--gold-ink); }
+
+    /* SECTION LABELS */
+    .time-label { font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.15em; color: var(--faint); margin: 16px 0 10px; display: flex; align-items: center; gap: 8px; }
+    .time-label::after { content: ''; flex: 1; height: 1px; background: var(--line); }
+
+    /* FEED CARD */
+    .card-list { display: flex; flex-direction: column; gap: 10px; }
+    .feed-card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; cursor: pointer; transition: border-color 0.2s; display: grid; grid-template-columns: 140px 1fr 120px; gap: 12px; align-items: center; }
+    .feed-card:hover { border-color: var(--gold); }
+    
+    .sym-box .sym { font-family: var(--mono); font-weight: 700; font-size: 1.1rem; color: #fff; }
+    .sym-box .sec { font-size: 11px; color: var(--faint); }
+    
+    .badges { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 4px; }
+    .badge { font-family: var(--mono); font-size: 9.5px; padding: 2px 8px; border-radius: 4px; text-transform: uppercase; }
+    .badge.fp { background: var(--gold-wash); color: var(--gold-ink); border: 1px solid var(--gold); }
+    .badge.sc { background: var(--violet-wash); color: var(--violet); border: 1px solid var(--violet); }
+    
+    .summary { font-size: 12.5px; color: var(--muted); }
+    .price-box { text-align: right; font-family: var(--mono); }
+    .price-box .px { font-weight: 700; font-size: 1rem; }
+    .price-box .chg { font-size: 11px; color: var(--green); }
+
+    /* DETAIL DRAWER */
+    .drawer { width: 380px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 20px; display: none; flex-direction: column; gap: 16px; height: fit-content; }
+    .drawer.active { display: flex; }
+    .close-btn { background: none; border: none; color: var(--muted); font-size: 1.2rem; cursor: pointer; }
+  </style>
+</head>
+<body>
+
+<div class="layout">
+  <div class="feed-container">
+    <!-- Scanner Toggle Filters -->
+    <div class="filter-bar">
+      <button class="chip-btn active">All Scanners (4)</button>
+      <button class="chip-btn">Flower Pot Squeeze</button>
+      <button class="chip-btn">Strength Confluence</button>
+      <button class="chip-btn">Multi-Match Only</button>
+    </div>
+
+    <!-- Timeline Bucket 1 -->
+    <div class="time-label">⚡ Triggered / Breaking Out (30m)</div>
+    <div class="card-list">
+      <div class="feed-card" onclick="openDrawer('SHAKTIPUMP', 'Capital Goods', '₹912.75', 'Triggered high-volume expansion out of a 13-day Flower Pot coil.', ['Flower Pot', 'Strength Confluence'])">
+        <div class="sym-box">
+          <div class="sym">SHAKTIPUMP</div>
+          <div class="sec">Capital Goods</div>
+        </div>
+        <div>
+          <div class="badges">
+            <span class="badge fp">Flower Pot</span>
+            <span class="badge sc">6/6 Gauges</span>
+          </div>
+          <div class="summary">Triggered high-volume expansion (+9.6%) out of 13d coil.</div>
+        </div>
+        <div class="price-box">
+          <div class="px">₹912.75</div>
+          <div class="chg">+9.6%</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Timeline Bucket 2 -->
+    <div class="time-label">⏳ Coiling / Stored Energy (Today)</div>
+    <div class="card-list">
+      <div class="feed-card" onclick="openDrawer('SOLARINDS', 'Capital Goods', '₹13,482', 'Day 11 ultra-compression with 6/6 confluence lamps active.', ['Flower Pot'])">
+        <div class="sym-box">
+          <div class="sym">SOLARINDS</div>
+          <div class="sec">Capital Goods</div>
+        </div>
+        <div>
+          <div class="badges"><span class="badge fp">Flower Pot</span></div>
+          <div class="summary">Day 11 coil · ATR crushed to 0.44x · Delivery building.</div>
+        </div>
+        <div class="price-box">
+          <div class="px">₹13,482</div>
+          <div class="chg">+0.4%</div>
+        </div>
+      </div>
+
+      <div class="feed-card" onclick="openDrawer('QPOWER', 'Power', '₹864.20', 'All 6 strength gauges aligned with 5-session persistence.', ['Strength Confluence'])">
+        <div class="sym-box">
+          <div class="sym">QPOWER</div>
+          <div class="sec">Power / Energy</div>
+        </div>
+        <div>
+          <div class="badges"><span class="badge sc">Strength Confluence</span></div>
+          <div class="summary">6/6 Gauges Lit · 5 consecutive sessions active.</div>
+        </div>
+        <div class="price-box">
+          <div class="px">₹864.20</div>
+          <div class="chg">+1.2%</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Inspection Drawer -->
+  <div class="drawer" id="drawer">
+    <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+      <div>
+        <div style="font-family:var(--mono); font-weight:700; font-size:1.4rem;" id="dSym">SYMBOL</div>
+        <div style="font-size:11px; color:var(--muted);" id="dSec">Sector</div>
+      </div>
+      <button class="close-btn" onclick="closeDrawer()">✕</button>
+    </div>
+
+    <div style="background:var(--card-2); border-left:3px solid var(--gold); padding:10px; font-size:12px; color:var(--gold-ink);" id="dDesc">
+      Select a candidate from the feed to inspect setup mechanics.
+    </div>
+
+    <div style="font-family:var(--mono); font-size:10px; color:var(--faint); text-transform:uppercase;">Matched Scanner Rules</div>
+    <div id="dBadges" style="display:flex; gap:6px;"></div>
+
+    <button style="background:var(--gold-wash); border:1px solid var(--gold); color:var(--gold-ink); padding:10px; border-radius:6px; font-family:var(--mono); font-size:11px; text-transform:uppercase; cursor:pointer;">Set Alert / Add to TV</button>
+  </div>
+</div>
+
+<script>
+  function openDrawer(sym, sec, px, desc, badges) {
+    document.getElementById('dSym').innerText = `${sym} · ${px}`;
+    document.getElementById('dSec').innerText = sec;
+    document.getElementById('dDesc').innerText = desc;
+    
+    const bContainer = document.getElementById('dBadges');
+    bContainer.innerHTML = '';
+    badges.forEach(b => {
+      const span = document.createElement('span');
+      span.className = 'badge fp';
+      span.innerText = b;
+      bContainer.appendChild(span);
+    });
+
+    document.getElementById('drawer').style.display = 'flex';
+  }
+
+  function closeDrawer() {
+    document.getElementById('drawer').style.display = 'none';
+  }
+</script>
+
+</body>
+</html>
