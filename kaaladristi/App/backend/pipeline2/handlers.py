@@ -46,7 +46,7 @@ FIXABLE_DIMENSIONS = frozenset({
     'supertrend', 'rolling_metrics', 'd365', 'stage_classification', 'vani_flags',
     'equity_weekly', 'equity_monthly',
     'index_returns', 'industry_composites', 'market_breadth', 'breadth_roc',
-    'symbol_enrichment', 'scan_refresh', 'wg_journeys',
+    'symbol_enrichment', 'scan_refresh', 'wg_journeys', 'integrity_checks',
 })
 
 
@@ -650,6 +650,32 @@ def handle_equity_monthly(conn, trade_date: date, force: bool,
                                     on_progress, is_month_end, aggregate_monthly_bars, 'monthly')
 
 
+def handle_integrity_checks(conn, trade_date: date, force: bool,
+                            exchange: Optional[str], on_progress: ProgressFn) -> HandlerResult:
+    """Data-integrity sweep — reconciliation / invariant / staleness /
+    step-failure checks (lib/integrity_checks.py), persisted to
+    km_integrity_findings and pushed to any configured alert transport.
+
+    Deliberately reports 'failed' when a CRITICAL finding exists: the
+    audit's core lesson is that correctness bugs read green for months
+    because nothing ever turned red. This is the step that turns red.
+    Runs LAST so it can see every other step's outcome.
+    """
+    from scripts.run_integrity_checks import integrity_for_pipeline
+    on_progress('running data-integrity sweep', 20)
+    try:
+        rows, status = integrity_for_pipeline(conn, trade_date, force)
+    except Exception as e:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        return HandlerResult('failed', 0.0, 0.0, 0, error_msg=str(e)[:500])
+    return HandlerResult(status, 0.0, 100.0, rows,
+                         error_msg=None if status == 'completed'
+                         else 'critical data-integrity finding(s) — see km_integrity_findings')
+
+
 def handle_scan_refresh(conn, trade_date: date, force: bool,
                         exchange: Optional[str], on_progress: ProgressFn) -> HandlerResult:
     """Refresh the scanner materialized views (km_scan_results + companion
@@ -930,6 +956,8 @@ def handle(dimension: str, conn, trade_date: date, force: bool,
         return handle_scan_refresh(conn, trade_date, force, exchange, on_progress)
     if dimension == 'wg_journeys':
         return handle_wg_journeys(conn, trade_date, force, exchange, on_progress)
+    if dimension == 'integrity_checks':
+        return handle_integrity_checks(conn, trade_date, force, exchange, on_progress)
     raise ValueError(f'Unknown dimension: {dimension}')
 
 
@@ -962,4 +990,5 @@ KNOWN_DIMENSIONS = [
     'symbol_enrichment',
     'scan_refresh',
     'wg_journeys',
+    'integrity_checks',
 ]

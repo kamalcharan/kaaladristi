@@ -36,6 +36,7 @@ def aggregate_weekly_bars(
     from_date: date | None = None,
     run_indicators: bool = True,
     verbose: bool = False,
+    include_partial: bool = False,
 ) -> int:
     """
     Aggregate km_equity_eod into km_equity_weekly for all ISO weeks
@@ -68,7 +69,17 @@ def aggregate_weekly_bars(
     week = start_week
     week_count = 0
 
+    skipped_partial = 0
     while week <= today:
+        # Skip a week still in progress — see the monthly note: a partial
+        # week written by a mid-week force/fix job sits stale as the latest
+        # weekly bar. Week end = the Friday of `week` (ISO week start Monday).
+        if not include_partial and (week + timedelta(days=4)) > today:
+            skipped_partial += 1
+            if verbose:
+                print(f'    week {week}: still in progress — skipped')
+            week += timedelta(weeks=1)
+            continue
         result = db.rpc('aggregate_equity_weekly', {'p_trade_date': str(week)})
         n = result[0].get('aggregate_equity_weekly', 0) if result else 0
         total += n
