@@ -21,6 +21,7 @@ import { stage2WatchAdapter } from './stage2Watch';
 import { volumeDriveAdapter } from './volumeDrive';
 import { stage3WatchAdapter, stage4LeadersAdapter, vaniExitWatchAdapter } from './stageWeakness';
 import { flowerPotBurstAdapter } from './flowerPot';
+import { wakingGiantsAdapter, wgAscentAdapter, wgStirringAdapter } from './wakingGiants';
 
 SETUP_ADAPTERS['stage_2_leaders']      = stage2LeadersAdapter;
 SETUP_ADAPTERS['breakout_surge']       = breakoutSurgeAdapter;
@@ -36,6 +37,9 @@ SETUP_ADAPTERS['stage_3_watch']        = stage3WatchAdapter;
 SETUP_ADAPTERS['stage_4_leaders']      = stage4LeadersAdapter;
 SETUP_ADAPTERS['vani_exit_watch']      = vaniExitWatchAdapter;
 SETUP_ADAPTERS['flower_pot_burst']     = flowerPotBurstAdapter;
+SETUP_ADAPTERS['waking_giants']        = wakingGiantsAdapter;
+SETUP_ADAPTERS['wg_ascent']            = wgAscentAdapter;
+SETUP_ADAPTERS['wg_stirring']          = wgStirringAdapter;
 
 // COMPLETE: every preset in SCAN_PRESETS (scanEngine.ts) has a Story
 // View adapter. A new scanner needs one adapter file + one line here.
