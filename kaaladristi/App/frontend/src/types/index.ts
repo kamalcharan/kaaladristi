@@ -586,6 +586,12 @@ export interface ScanStock {
   fpb_atr_compression?: number | null;      // ATR15 / ATR60
   fpb_vol_death?: number | null;            // vol5 / vol22
   fpb_setup_days?: number | null;           // compressed days in the last 22 sessions
+  // Waking Giants / First Ascent fields (migration 174; null for all other scans)
+  wg_phase?: 'WAKING' | 'STIRRING' | 'DORMANT' | null;
+  gl_acc_days?: number | null;              // quiet delivery-backed sessions of last 60
+  listing_age_years?: number | null;        // years since NSE listing
+  pct_from_3y_high?: number | null;         // cliff-adjusted distance from 3-yr high
+  days_since_3y_high?: number | null;       // calendar days since the 3-yr high
 }
 
 export interface ScanDefinition {

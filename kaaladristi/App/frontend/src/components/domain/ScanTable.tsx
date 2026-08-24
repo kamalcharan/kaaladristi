@@ -36,6 +36,19 @@ const PRESET_COL_OVERRIDES: Partial<Record<string, string[]>> = {
     'symbol', 'dot_signal', 'delivery_pct', 'close', 'pct_chng',
     'rvol', 'delivery_surge_x', 'ret_5d', 'magic_rs', 'rsi_14', 'flow_type',
   ],
+
+  // Waking Giants / First Ascent — the watchlist dimensions lead: phase, quiet
+  // accumulation evidence, then the dormancy stats that put the stock here.
+  waking_giants: [
+    'symbol', 'close', 'pct_chng', 'wg_phase', 'gl_acc_days',
+    'listing_age_years', 'pct_from_3y_high', 'days_since_3y_high',
+    'delivery_pct', 'magic_rs', 'mcap_cr',
+  ],
+  first_ascent: [
+    'symbol', 'close', 'pct_chng', 'wg_phase', 'gl_acc_days',
+    'listing_age_years', 'pct_from_3y_high', 'days_since_3y_high',
+    'delivery_pct', 'magic_rs', 'mcap_cr',
+  ],
 }
 
 const DEFAULT_SORT: Record<string, { key: string; dir: 'asc' | 'desc' }> = {
@@ -56,6 +69,10 @@ const DEFAULT_SORT: Record<string, { key: string; dir: 'asc' | 'desc' }> = {
   // next-day move, so it would sort the list by a feature with no predictive
   // value.
   volume_drive:     { key: 'delivery_pct',      dir: 'desc' },
+  // Accumulation evidence first — matches the matview's phase-then-gl ranking
+  // closely enough for a single-key sort (WAKING rows have the highest counts).
+  waking_giants:    { key: 'gl_acc_days',       dir: 'desc' },
+  first_ascent:     { key: 'gl_acc_days',       dir: 'desc' },
 }
 
 function getDefaultSort(presetId: string) {

@@ -322,6 +322,60 @@ export const ALL_FIELDS: Record<string, FieldConfig> = {
     colorFn: () => 'var(--bull)',
   },
 
+  // ── Waking Giants / First Ascent (migration 174) ──────────────────────────
+  wg_phase: {
+    key: 'wg_phase',
+    label: 'Phase',
+    tooltip: 'Observational phase. Dormant = on the watchlist, no accumulation evidence yet. Stirring = a run of quiet delivery-backed sessions. Waking = accumulation plus relative strength rising while price is still flat.',
+    type: 'category',
+    width: 92,
+    formatFn: (val: any) =>
+      val === 'WAKING' ? '🌅 Waking' : val === 'STIRRING' ? '🌱 Stirring' : val === 'DORMANT' ? '🌑 Dormant' : '—',
+    colorFn: (val: any) =>
+      val === 'WAKING' ? 'var(--bull)' : val === 'STIRRING' ? 'var(--risk-amber)' : 'var(--text-secondary)',
+  },
+  gl_acc_days: {
+    key: 'gl_acc_days',
+    label: 'Quiet Acc',
+    tooltip: 'Sessions in the last 60 with delivery-backed, quiet building — delivery ≥ 55%, day move within ±2%, volume not explosive.',
+    type: 'number',
+    width: 76,
+    formatFn: (val: any) => (val == null ? '—' : `${Number(val)}d`),
+    colorFn: () => 'var(--text-secondary)',
+  },
+  listing_age_years: {
+    key: 'listing_age_years',
+    label: 'Listed',
+    tooltip: 'Years since NSE listing. Veteran 20y+ · Established 10–20y · Ascending 6–10y.',
+    type: 'category',
+    width: 108,
+    formatFn: (val: any) => {
+      if (val == null) return '—';
+      const y = Number(val);
+      const tier = y >= 20 ? 'Veteran' : y >= 10 ? 'Established' : 'Ascending';
+      return `${y}y · ${tier}`;
+    },
+    colorFn: (val: any) => (val != null && Number(val) >= 20 ? 'var(--text-primary)' : 'var(--text-secondary)'),
+  },
+  pct_from_3y_high: {
+    key: 'pct_from_3y_high',
+    label: '% vs 3Y High',
+    tooltip: 'Distance from the cliff-adjusted 3-year high close (split/bonus cliffs back-adjusted). Deeply negative with an old high, or a long flat range, is what put the stock on this watchlist.',
+    type: 'number',
+    width: 92,
+    formatFn: (val: any) => (val == null ? '—' : `${Number(val).toFixed(1)}%`),
+    colorFn: (val: any) => (val != null && Number(val) <= -60 ? 'var(--bear)' : 'var(--text-secondary)'),
+  },
+  days_since_3y_high: {
+    key: 'days_since_3y_high',
+    label: 'High Age',
+    tooltip: 'Calendar days since the 3-year high was set — an old high means dormancy, a recent one means a fresh decline.',
+    type: 'number',
+    width: 76,
+    formatFn: (val: any) => (val == null ? '—' : `${Math.round(Number(val) / 30.44)}mo`),
+    colorFn: () => 'var(--text-secondary)',
+  },
+
   mcap_cr: {
     key: 'mcap_cr',
     label: 'MCap',

@@ -48,6 +48,10 @@ export const SCAN_PRESETS: ScanDefinition[] = [
   { id: 'stage_4_leaders',      name: 'Stage 4 Leaders',       description: 'Confirmed downtrend — death cross, below both MAs',                                        limit: 200, universe: 'NSE_ONLY', category: 'stage_analysis', category_label: 'Stage Analysis', category_color: '#22c55e', category_sort: 2, is_default_tab: false, timeframe: 'daily', vani_rule: 'is_vani_weakness' },
   { id: 'stage_3_watch',        name: 'Stage 3 Watch',         description: 'Entering weakness — SMA50 converging toward SMA200',                                       limit: 100, universe: 'NSE_ONLY', category: 'stage_analysis', category_label: 'Stage Analysis', category_color: '#22c55e', category_sort: 2, is_default_tab: false, timeframe: 'daily', vani_rule: 'is_vani_weakness' },
   { id: 'vani_exit_watch',      name: 'VaNi Weakness Watch',   description: 'Highest conviction weakness — lowest RS, death cross confirmed',                            limit: 25,  universe: 'NSE_ONLY', category: 'stage_analysis', category_label: 'Stage Analysis', category_color: '#22c55e', category_sort: 2, is_default_tab: false, timeframe: 'daily', vani_rule: 'always_true' },
+  // Placeholder rows only — real metadata (incl. category color) comes from
+  // kd_scan_presets (migration 174); empty color keeps the literal ratchet flat.
+  { id: 'waking_giants',        name: 'Waking Giants',         description: 'Long-listed companies (10y+) in multi-year dormancy where delivery-backed positions are quietly building', limit: 150, universe: 'NSE_ONLY', category: 'stage_analysis', category_label: 'Stage Analysis', category_color: '', category_sort: 2, is_default_tab: false, timeframe: 'daily', vani_rule: null },
+  { id: 'first_ascent',         name: 'First Ascent',          description: 'Younger listings (6–10y) emerging from a long quiet phase for the first time — no prior peak overhead',   limit: 50,  universe: 'NSE_ONLY', category: 'stage_analysis', category_label: 'Stage Analysis', category_color: '', category_sort: 2, is_default_tab: false, timeframe: 'daily', vani_rule: null },
 ];
 
 // ── Preset metadata — DB is the source of truth ────────────────
@@ -1540,6 +1544,14 @@ const MATVIEW_BUNDLE_PRESETS: ReadonlySet<string> = new Set([
   'conviction_flow',
 ]);
 
+// Waking Giants / First Ascent (migration 174) — matview-only presets, same
+// read path as the bundle six. Kept in a separate set because they were never
+// part of the JS-bundle era and their rows carry the wg_* columns.
+const WG_MATVIEW_PRESETS: ReadonlySet<string> = new Set([
+  'waking_giants',
+  'first_ascent',
+]);
+
 /** Map a km_scan_results row (one of the 6 bundle presets) to a ScanStock.
  *  Mirrors fpbRowToScanStock's shape; fields the matview does not carry for
  *  these presets stay null (they were null under the JS path too). */
@@ -1606,6 +1618,12 @@ function scanRowToScanStock(r: any): ScanStock {
     ret_66d: num(r.ret_66d),
     d_pct:   num(r.d_pct),
     deliv_value_cr: num(r.deliv_value_cr),
+    // Waking Giants / First Ascent (migration 174; null for other presets)
+    wg_phase: r.wg_phase ?? null,
+    gl_acc_days: num(r.gl_acc_days),
+    listing_age_years: num(r.listing_age_years),
+    pct_from_3y_high: num(r.pct_from_3y_high),
+    days_since_3y_high: num(r.days_since_3y_high),
   };
 }
 
@@ -1668,7 +1686,7 @@ async function fetchAllScanCountsFromMatview(
   try {
     const { data, error } = await from('km_scan_results')
       .select('preset_id,exchange,isin,vani_flag,trade_date')
-      .in('preset_id', [...MATVIEW_BUNDLE_PRESETS])
+      .in('preset_id', [...MATVIEW_BUNDLE_PRESETS, ...WG_MATVIEW_PRESETS])
       .limit(2000)
       .execute();
     if (error || !Array.isArray(data)) {
@@ -1694,7 +1712,7 @@ async function fetchAllScanCountsFromMatview(
     }
     // Presets with zero matview rows still need a 0 entry so the landing UI
     // doesn't read them as "unknown".
-    for (const id of MATVIEW_BUNDLE_PRESETS) {
+    for (const id of [...MATVIEW_BUNDLE_PRESETS, ...WG_MATVIEW_PRESETS]) {
       if (!(id in counts)) counts[id] = 0;
     }
     return { counts, latestDate };
@@ -1727,7 +1745,7 @@ export async function executeScan(
   // silently downgrading, so an ops issue (nightly refresh failed, migration
   // rolled back) is visible on the scan page rather than hidden by a slow
   // parallel compute.
-  if (timeframe === 'daily' && MATVIEW_BUNDLE_PRESETS.has(scanId)) {
+  if (timeframe === 'daily' && (MATVIEW_BUNDLE_PRESETS.has(scanId) || WG_MATVIEW_PRESETS.has(scanId))) {
     const matview = await fetchFromScanMatview(scanId, exchangeFilter);
     if (matview) return matview;
     throw new Error(`Scan matview unavailable for ${scanId} — check pipeline scan_refresh step`);
