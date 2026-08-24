@@ -43,11 +43,18 @@ def _month_starts(from_date: date, to_date: date) -> list[date]:
     return months
 
 
+def _month_end(month_start: date) -> date:
+    """Last calendar day of month_start's month."""
+    return date(month_start.year, month_start.month,
+                _cal.monthrange(month_start.year, month_start.month)[1])
+
+
 def aggregate_monthly_bars(
     db,
     from_date: date | None = None,
     run_indicators: bool = True,
     verbose: bool = False,
+    include_partial: bool = False,
 ) -> int:
     """
     Aggregate km_equity_eod into km_equity_monthly for all calendar months
@@ -77,7 +84,22 @@ def aggregate_monthly_bars(
     months = _month_starts(start, today)
     total = 0
 
+    skipped_partial = 0
     for month_start in months:
+        # A month still in progress must NOT be written as a monthly bar:
+        # the RPC aggregates whatever daily rows exist so far, producing a
+        # month-to-date bar stamped with the last traded day, which then sits
+        # STALE until the next run. Live example found 2026-08-24: a
+        # 2026-08-05 "August" bar (Aug 1-5 data, 43M volume vs the month's
+        # 168M) had been the latest monthly bar for three weeks — every
+        # monthly consumer read a partial month as if complete. Reached via
+        # any force/fix job on a mid-month date (the 19:30 gap sweep enqueues
+        # those automatically).
+        if not include_partial and _month_end(month_start) > today:
+            skipped_partial += 1
+            if verbose:
+                print(f'    month {month_start.strftime("%Y-%m")}: still in progress — skipped')
+            continue
         result = db.rpc('aggregate_equity_monthly', {'p_trade_date': str(month_start)})
         n = result[0].get('aggregate_equity_monthly', 0) if result else 0
         total += n
