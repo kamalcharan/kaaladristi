@@ -36,7 +36,10 @@ strongest (rediscovery visible on every clock). Data rules:
   2024-admitted cohort lacks 145 weekly bars).
 - "Data missing" must never silently score as red.
 - "Green" = bull side of center incl. Neutral Bull (7-band lesson) —
-  ASSUMED default, owner may veto for Strong/Mild-only.
+  ACCEPTED (owner 2026-08-24) with a SEBI caveat: "green"/"bull" is
+  INTERNAL shorthand only; every surfaced string uses the neutral
+  ZONE_LABELS vocabulary (Leading / Improving / Neutral — D39), e.g.
+  "alignment 6/6 — Leading on all three clocks".
 Echoes the multi-timeframe "aligned rotation" idea in Rsspec.md.
 
 ### Journey state machine (the scanner IS this roster)
@@ -57,13 +60,13 @@ stock can wake again — SHIVALIK: woke 2021, journey died, re-basing).
 - State persists in a table (the `km_fpb_active` pattern on a
   multi-year clock); nightly evaluation updates it; daily noise cannot
   erase a journey.
-- **Journey death — ⚠ ONE OPEN CALIBRATION**: owner rule "Golden Line
-  distance turns negative on weekly" taken literally (one weekly close
-  below GL) would have killed WALCHANNAG in its 2025 dips — which the
-  owner reads as mid-journey. Proposal: single weekly close below GL ⇒
-  state **RESTING** (journey alive, flagged); death = **N consecutive
-  weekly closes below the Golden Line (propose N=8) OR weekly close
-  back inside the old hibernation range**. Owner to set N.
+- **Journey end — RESOLVED (owner 2026-08-24): there is no "death",
+  a stock just GOES BACK TO SLEEP.** Weekly close below the Golden
+  Line ⇒ **RESTING** (journey alive, flagged — WALCHANNAG's 2025 dips
+  are Resting, not an exit). The journey ends and the stock returns to
+  HIBERNATING when the **MagicRS Alignment Score collapses to ≤ 1**
+  (the clocks going dark) — the same dial that confirms the wake (6/6)
+  also ends the journey. No price-persistence rule needed.
 
 ### Wake detection ingredients (owner list, by role)
 - Structure: daily breakout of the consolidation ceiling + weekly
@@ -101,9 +104,10 @@ is: Ascent = the JOURNEY-STATE tab (Stage-2-Leaders analog), and the
 age dimension (Veteran 20y+/Established 10–20y/Ascending 6–10y,
 effective per-ISIN age) becomes the tier badge + a filter inside every
 tab — the family is split by STATE, not by age band.
-⚠ CONFIRM with owner: state-tabs REPLACE the two age-banded presets
-(3 focused tabs), vs keeping Giants/Ascent age-banded scanners with
-states inside each (6 diluted tabs). Recommendation: the former.
+CONFIRMED (owner 2026-08-24): state-tabs REPLACE the two age-banded
+presets — three focused tabs (Stirring / Waking Giants / Ascent), age
+tiers as badges + filter. Tab one-liners must pass the D39 sweep
+(observational; no directional verbs or bull/bear words).
 
 ### Story-chart integration (owner point 1)
 Hibernation paints as a background band exactly like the stage bands
@@ -118,10 +122,23 @@ base_years filter (state table read, not matview-baked); backtest =
 run the wake detector over history → real events + forward returns →
 km_rule_confidence-style stats (audit's 30-signal minimum before ★).
 
-### Open before build
-1. Journey-death persistence N (propose 8 weekly closes; WALCHANNAG
-   2025 = the calibration case — must REST, not die).
-2. "Green" definition veto (default: bull side incl. Neutral Bull).
+### Spec CLOSED 2026-08-24 — v4 build order
+All design questions resolved. Build sequence:
+1. Base/hibernation detector — extend the cliff-adjusted machinery in
+   `compute_dormancy.py` to FULL history; store base_start/end/high/
+   low/base_years per stock.
+2. `km_wg_journeys` state table + nightly evaluator (weekly+monthly
+   clock; states, Resting flag, alignment score, transition history —
+   transitions are the backtest record).
+3. Alignment score compute (daily/weekly/monthly zone reads with the
+   short-variant fallbacks).
+4. Historical backfill: run the wake detector over full history so
+   journeys, past wakes, and forward-return stats exist on day one
+   (audit's 30-signal minimum before any ★).
+5. Three presets (stirring / waking_giants / ascent) reading the state
+   table; retire interim 174–176 WG blocks; runtime base_years filter.
+6. Story chart: hibernation bands + wake pins + journey band
+   (AnnotationOverlay reuse); D39 sweep on all surfaced copy.
 
 
 Spec home: `docs/claude/scanner-audit-2026-07-12.md` §6b/§7/§8 (the full
