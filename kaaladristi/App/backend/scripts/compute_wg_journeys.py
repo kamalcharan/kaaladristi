@@ -310,13 +310,33 @@ def walk_stock(s: pd.Series, zones: pd.Series, wk: pd.DataFrame, mo: pd.DataFram
     score_arr = d_green.astype(int) + 2 * w_green.astype(int) + 3 * m_green.astype(int)
     clocks_known_arr = d_known & w_known & m_known
 
+    # Record-day bookkeeping for the all-time-high case: last index (before i)
+    # where a NEW running-window record was set. A stock rallying to fresh
+    # highs sets records constantly → drought ≈ 0 → NOT a wake. Without this,
+    # every post-sleep new high on a 2-yr rally re-"woke" with base = window
+    # length (the INDIAGLYCO "slept 15y while up 300%" bug).
+    cummax = np.maximum.accumulate(vals)
+    last_rec = np.empty(n, dtype=np.int64)
+    r = 0
+    for i_ in range(n):
+        if vals[i_] >= cummax[i_] - 1e-9:
+            r = i_
+        last_rec[i_] = r
+
     def base_years_at(i):
-        """Years since close was last >= vals[i], before the quiet stretch."""
+        """Sleep length at a breakout of vals[i]:
+        - level traded before → years since it was LAST traded there
+          ("highest close since 2016" — WALCHANNAG's 7-yr read);
+        - fresh window record  → years since the PREVIOUS record was set
+          (the drought — 0 for a stock continuously making highs)."""
         level = vals[i]
         before = np.where(vals[:i] >= level)[0]
-        if len(before) == 0:
-            return (idx[i] - idx[0]).days / 365.25, idx[0]
-        j = before[-1]
+        if len(before) > 0:
+            j = before[-1]
+        elif i > 0:
+            j = last_rec[i - 1]
+        else:
+            j = 0
         return (idx[i] - idx[j]).days / 365.25, idx[j]
 
     state = 'HIBERNATING'

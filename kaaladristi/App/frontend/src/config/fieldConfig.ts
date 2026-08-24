@@ -343,10 +343,14 @@ export const ALL_FIELDS: Record<string, FieldConfig> = {
   base_years: {
     key: 'base_years',
     label: 'Slept',
-    tooltip: 'Length of the hibernation — how many years the price had not traded at the wake level before breaking it. "7y" reads as: the breakout printed the highest close in 7 years.',
+    tooltip: 'Length of the hibernation the wake broke — "7y" reads as: the breakout printed the highest close in 7 years. "14y+" means the sleep exceeds our loaded history window.',
     type: 'number',
     width: 66,
-    formatFn: (val: any) => (val == null ? '—' : `${Number(val).toFixed(1)}y`),
+    formatFn: (val: any) => {
+      if (val == null) return '—';
+      const v = Number(val);
+      return v >= 14.5 ? '14y+' : `${v.toFixed(1)}y`;
+    },
     colorFn: () => 'var(--text-primary)',
   },
   align_score: {

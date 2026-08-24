@@ -1554,6 +1554,10 @@ const WG_JOURNEY_PRESETS: Record<string, string> = {
   wg_stirring: 'STIRRING',
 };
 
+// A wake is shown on the Waking tab only while fresh — the formation window
+// where the breakout is still an observation about NOW.
+const WAKING_FRESH_DAYS = 90;
+
 /** Map a km_wg_journeys row to a ScanStock (display fields are stamped
  *  denormalized on the row by compute_wg_journeys.py). */
 function wgJourneyRowToScanStock(r: any): ScanStock {
@@ -1613,10 +1617,20 @@ async function fetchWgJourneys(presetId: string, exchangeFilter: ExchangeFilter)
     state === 'ASCENDING' ? 'align_score' :    // strongest alignment first
                             'stir_days';       // strongest quiet building first
   const lim = getPresetMeta(presetId)?.limit ?? 60;
-  const { data, error } = await from('km_wg_journeys')
+  let q = from('km_wg_journeys')
     .select('*')
     .is('is_current', 'true')
-    .eq('state', state)
+    .eq('state', state);
+  if (state === 'WAKING') {
+    // The Waking tab is an OPPORTUNITY feed, not a history lesson (owner
+    // 2026-08-24: a breakout from years ago is no opportunity now). Only
+    // wakes still in their formation window are shown; older unconfirmed
+    // journeys stay in the table but off the tab.
+    const cutoff = new Date(Date.now() - WAKING_FRESH_DAYS * 24 * 60 * 60 * 1000)
+      .toISOString().slice(0, 10);
+    q = q.gte('wake_date', cutoff);
+  }
+  const { data, error } = await q
     .order(orderCol, { ascending: false, nullsFirst: false })
     .limit(lim)
     .execute();
@@ -1631,14 +1645,17 @@ async function fetchWgJourneyCounts(): Promise<Record<string, number>> {
   const counts: Record<string, number> = { waking_giants: 0, wg_ascent: 0, wg_stirring: 0 };
   try {
     const { data, error } = await from('km_wg_journeys')
-      .select('state')
+      .select('state,wake_date')
       .is('is_current', 'true')
       .limit(3000)
       .execute();
     if (error || !Array.isArray(data)) return counts;
+    const cutoff = new Date(Date.now() - WAKING_FRESH_DAYS * 24 * 60 * 60 * 1000)
+      .toISOString().slice(0, 10);
     for (const r of data as any[]) {
-      if (r.state === 'WAKING') counts.waking_giants += 1;
-      else if (r.state === 'ASCENDING') counts.wg_ascent += 1;
+      if (r.state === 'WAKING') {
+        if (r.wake_date && r.wake_date >= cutoff) counts.waking_giants += 1;
+      } else if (r.state === 'ASCENDING') counts.wg_ascent += 1;
       else if (r.state === 'STIRRING') counts.wg_stirring += 1;
     }
   } catch { /* table not deployed yet — zeros */ }

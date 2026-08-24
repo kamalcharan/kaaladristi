@@ -41,7 +41,7 @@ const PRESET_COL_OVERRIDES: Partial<Record<string, string[]>> = {
   // "Slept", align_score = the 0-6 timeframe alignment, pct_from_3y_high
   // carries % vs the hibernation ceiling on these presets.
   waking_giants: [
-    'symbol', 'close', 'pct_chng', 'base_years', 'align_score',
+    'symbol', 'close', 'pct_chng', 'base_years', 'journey_age_days', 'align_score',
     'gl_dist_pct', 'pct_from_3y_high', 'listing_age_years',
     'delivery_pct', 'magic_rs', 'mcap_cr',
   ],
