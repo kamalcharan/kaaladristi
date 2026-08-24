@@ -26,6 +26,24 @@ compressed version is authoritative). Owner decisions below are FINAL.
    fundamentals. (Audit §6b/§8, reaffirmed.)
 5. **SEBI**: spec's directive alert copy ships as logic only; all
    surfaced strings observational (D39).
+6. **v2 corrections from the owner's first live review (2026-08-24)** —
+   migration 175 supersedes 174's WG parts. The three canonical
+   examples (SOLARA, SHIVALIK, WALCHANNAG) were all missing from v1;
+   each exposed a distinct flaw, now FINAL design:
+   - **Age = earliest listing evidence per ISIN** (min of listing_date
+     and first_trade_date across both exchange rows). NSE listing age
+     is not company age — SHIVALIK's NSE row says 2021 but its BSE
+     history reaches 2015 (actually listed 1980s).
+   - **Dormancy is a HISTORY read, not today's price**: deep arm =
+     `drawdown_3y_pct ≤ −50` (post-peak trough) AND high ≥ 365 days
+     old AND today still ≤ −20% below the high. SOLARA (−26% today,
+     trough −56%) is mid-awakening — exactly what the scanner must
+     catch; v1's today-distance gate excluded it.
+   - **The scanner emits ONLY Stirring/Waking rows** (caps 60/30).
+     v1's 145-row dump killed the niche; the dormant bulk is
+     watchlist material for the step-6 curated flow, not scan rows.
+   - **Own category `discovery`** (Discovery, #14b8a6, sort 5) — these
+     are structural discovery scanners, not Stage Analysis.
 
 ## Thesis summary
 
@@ -55,7 +73,7 @@ compressed version is authoritative). Owner decisions below are FINAL.
 | 1b | mcap freshness — migration 172 + shares_outstanding lane in `enrich_equity_metadata.py` + daily `recompute_mcap_from_shares()` | ✅ run 2026-08-24 (see below) |
 | 2 | Dormancy metrics — migration 173 (`high_3y_adj`/`low_3y_adj`/`pct_from_3y_high`/`days_since_3y_high` on `km_equity_symbols`) + `scripts/compute_dormancy.py` (cliff-adjusted via `lib/breadth_common.adjust_close_cliffs` since `km_corporate_actions` is empty; MIN_BARS=150; ends with a per-band calibration report — the step-4 threshold constants get set from that report, not guesses; candidate gate: ≤ −50% from an ≥1-yr-old 3-yr high OR 3-yr range ratio ≤ 1.8. Raw preview 2026-08-24: Giants ≤−50% = 259, ≤−60% = 155, flat = 77 of the 1,013 mcap-passed pool pre-ADV). Weekly cadence; pipeline shim `compute_dormancy_for_pipeline` wires in at step 4. | ✅ script ready — owner runs migration 173 + script |
 | 3 | GL_acc_days rolling compute — computed INSIDE the migration-174 matview (`wg_metrics` CTE: count of last-60-session GL days, delivery ≥ 55 · \|pct_chng\| ≤ 2 · rvol ≤ 2.5, v1 estimates pending calibration), refreshed nightly by `handle_scan_refresh`; no separate pipeline column needed | ✅ (in 174) |
-| 4 | Matview CTE + two preset SELECTs + `kd_scan_presets` rows — `km_migration_174_waking_giants_scan.sql` (migration-170 body + ONE `wg_const`→`wg_scored` chain, `waking_giants`/`first_ascent` UNION blocks, 5 wg columns appended NULL elsewhere; dormancy constants locked: deep ≤ −60% from a ≥1-yr-old high OR flat ratio ≤ 1.8 → 142 Giants / 27 FA. Phases: WAKING = GL ≥ 12 + Magic RS > 22-sessions-ago while price within ±10%; STIRRING = GL ≥ 6; DORMANT else. EXPLAIN-validated against live DB; 9 UNION arms × 67 cols verified) | ✅ script ready — owner runs 174 as superuser + REFRESH both matviews |
+| 4 | Matview CTE + two preset SELECTs + `kd_scan_presets` rows — **`km_migration_175_wg_dormancy_v2.sql`** (supersedes 174's WG parts after owner review — see decision 6 above; adds `drawdown_3y_pct`/`first_trade_date` columns, `wg_first` per-ISIN age CTE, trough-based dormancy, evidence-only emission, Discovery category. Phases: WAKING = GL ≥ 12 + Magic RS > 22-sessions-ago while price within ±10%; STIRRING = GL ≥ 6. All 3 canonical examples verified passing the v2 deep arm against live data: SOLARA −50.1/630d/−26.2, SHIVALIK −75.4/565d/−68.1, WALCHANNAG −68.6/754d/−46.9. pglast + 9×68 arity validated) | ✅ owner: run 175 → re-run compute_dormancy.py → REFRESH both matviews |
 | 5 | ScanView tabs + engine wiring — `scanEngine.ts` (WG_MATVIEW_PRESETS read path, wg fields in row mapper + counts), `ScanTable.tsx` (per-preset columns + gl_acc_days sort), `fieldConfig.ts` (wg_phase/gl_acc_days/listing_age_years tier badge/pct_from_3y_high/days_since_3y_high), `types/index.ts` | ✅ typecheck + build green |
 | 6 | Curated Layer-0 watchlist admin flow (Discover pattern) | ⬜ |
 | 7 | Story View adapters (shared builder, two voices) | ⬜ |

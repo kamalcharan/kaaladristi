@@ -90,8 +90,15 @@ def load_window_closes(conn) -> pd.DataFrame:
 
 
 def compute_metrics(closes: pd.DataFrame) -> list[tuple]:
-    """Per stock: (high_3y, low_3y, pct_from_high, days_since_high, id).
-    Tuple order matches the UPDATE statement."""
+    """Per stock: (high_3y, low_3y, pct_from_high, days_since_high,
+    drawdown_3y_pct, id). Tuple order matches the UPDATE statement.
+
+    drawdown_3y_pct is the trough AFTER the 3-yr high — "how far did it
+    fall", vs pct_from_high's "where is it now". The distinction matters
+    (owner review 2026-08-24): SOLARA is −26% today but its post-peak
+    trough was −56% — a stock mid-awakening is still a dormancy story,
+    and judging by today's distance alone excludes exactly the names
+    that have started waking."""
     today = date.today()
     out = []
     skipped_thin = 0
@@ -108,24 +115,63 @@ def compute_metrics(closes: pd.DataFrame) -> list[tuple]:
             continue
         pct_from_high = (last / high - 1.0) * 100.0
         pct_from_high = max(-999.99, min(999.99, pct_from_high))
-        days_since_high = (s.index[-1] - s.idxmax()).days
+        hi_date = s.idxmax()
+        days_since_high = (s.index[-1] - hi_date).days
+        trough_after = float(s.loc[hi_date:].min())
+        drawdown = (trough_after / high - 1.0) * 100.0
+        drawdown = max(-999.99, min(0.0, drawdown))
         out.append((
             round(high, 2), round(low, 2), round(pct_from_high, 2),
-            int(days_since_high), today, int(equity_id),
+            int(days_since_high), round(drawdown, 2), today, int(equity_id),
         ))
     if skipped_thin:
         print(f'  Skipped {skipped_thin} stocks with < {MIN_BARS} bars in window (stay NULL)')
     return out
 
 
+def populate_first_trade_dates(conn) -> int:
+    """Fill km_equity_symbols.first_trade_date (migration 175) for rows that
+    lack it — per-row index-min lookups, so incremental runs are cheap. Runs
+    over ALL exchanges: the per-ISIN effective-age join in the matview needs
+    the BSE twin's history (an NSE migrant like SHIVALIK carries its real age
+    through its BSE row)."""
+    with conn.cursor() as cur:
+        cur.execute("""
+            UPDATE km_equity_symbols s
+            SET first_trade_date = (
+              SELECT MIN(e.trade_date) FROM km_equity_eod e WHERE e.equity_id = s.id
+            )
+            WHERE s.first_trade_date IS NULL
+        """)
+        n = cur.rowcount
+    conn.commit()
+    return n
+
+
 CALIBRATION_SQL = """
-WITH pool AS (
-  SELECT s.id, s.pct_from_3y_high, s.days_since_3y_high,
+WITH first_listed AS (
+  SELECT isin, MIN(evt) AS first_listed
+  FROM (
+    SELECT isin, listing_date AS evt
+    FROM km_equity_symbols WHERE isin IS NOT NULL AND listing_date IS NOT NULL
+    UNION ALL
+    SELECT isin, first_trade_date
+    FROM km_equity_symbols WHERE isin IS NOT NULL AND first_trade_date IS NOT NULL
+  ) t GROUP BY isin
+),
+pool AS (
+  SELECT s.id, s.pct_from_3y_high, s.days_since_3y_high, s.drawdown_3y_pct,
          s.high_3y_adj / NULLIF(s.low_3y_adj, 0) AS range_ratio,
-         EXTRACT(YEAR FROM AGE(CURRENT_DATE, s.listing_date)) AS age_yr
+         EXTRACT(YEAR FROM AGE(CURRENT_DATE,
+                 LEAST(COALESCE(f.first_listed, s.listing_date),
+                       COALESCE(s.listing_date, f.first_listed)))) AS age_yr
   FROM km_equity_symbols s
-  WHERE s.is_active AND s.exchange = 'NSE' AND s.listing_date IS NOT NULL
-    AND EXTRACT(YEAR FROM AGE(CURRENT_DATE, s.listing_date)) >= 6
+  LEFT JOIN first_listed f ON f.isin = s.isin
+  WHERE s.is_active AND s.exchange = 'NSE'
+    AND COALESCE(f.first_listed, s.listing_date) IS NOT NULL
+    AND EXTRACT(YEAR FROM AGE(CURRENT_DATE,
+                LEAST(COALESCE(f.first_listed, s.listing_date),
+                      COALESCE(s.listing_date, f.first_listed)))) >= 6
     AND s.mcap_cr >= 200
     AND s.pct_from_3y_high IS NOT NULL
 ),
@@ -140,44 +186,56 @@ adv AS (
 ),
 m AS (
   SELECT p.*,
-         CASE WHEN p.age_yr >= 10 THEN 'Giants 10y+' ELSE 'First Ascent 6-10y' END AS band
+         CASE WHEN p.age_yr >= 10 THEN 'Giants 10y+' ELSE 'First Ascent 6-10y' END AS band,
+         ((p.drawdown_3y_pct <= -50 AND p.days_since_3y_high >= 365
+           AND p.pct_from_3y_high <= -20)
+          OR p.range_ratio <= 1.8) AS dormant_v2
   FROM pool p JOIN adv a ON a.equity_id = p.id AND a.adv_cr >= 1
 )
 SELECT band,
   COUNT(*) AS pool_after_adv,
-  COUNT(*) FILTER (WHERE pct_from_3y_high <= -40) AS deep40,
-  COUNT(*) FILTER (WHERE pct_from_3y_high <= -50) AS deep50,
-  COUNT(*) FILTER (WHERE pct_from_3y_high <= -60) AS deep60,
-  COUNT(*) FILTER (WHERE pct_from_3y_high <= -50 AND days_since_3y_high >= 365) AS deep50_oldhigh,
-  COUNT(*) FILTER (WHERE pct_from_3y_high <= -60 AND days_since_3y_high >= 365) AS deep60_oldhigh,
-  COUNT(*) FILTER (WHERE pct_from_3y_high > -40 AND range_ratio <= 1.8) AS flat_not_deep,
-  COUNT(*) FILTER (WHERE (pct_from_3y_high <= -50 AND days_since_3y_high >= 365)
-                      OR (pct_from_3y_high > -40 AND range_ratio <= 1.8)) AS candidate_gate
+  COUNT(*) FILTER (WHERE drawdown_3y_pct <= -50)  AS fell50,
+  COUNT(*) FILTER (WHERE drawdown_3y_pct <= -50 AND days_since_3y_high >= 365) AS fell50_oldhigh,
+  COUNT(*) FILTER (WHERE drawdown_3y_pct <= -50 AND days_since_3y_high >= 365
+                     AND pct_from_3y_high <= -20) AS deep_arm,
+  COUNT(*) FILTER (WHERE range_ratio <= 1.8 AND NOT (drawdown_3y_pct <= -50
+                     AND days_since_3y_high >= 365 AND pct_from_3y_high <= -20)) AS flat_arm_only,
+  COUNT(*) FILTER (WHERE dormant_v2) AS dormant_v2_watchlist
 FROM m GROUP BY band ORDER BY band
 """
 
 
 def print_calibration(conn):
-    """The step-4 constants get set from this table, not from guesses.
-    candidate_gate = (≤ −50% from an ≥1-yr-old 3-yr high) OR (3-yr
-    range ratio ≤ 1.8 — long flat range that never crashed)."""
+    """v2 gate (migration 175): the WATCHLIST is
+    (fell ≥ 50% after a ≥ 1-yr-old 3-yr high AND still ≥ 20% below it)
+    OR (3-yr range ratio ≤ 1.8). The SCANNER then shows only the
+    STIRRING/WAKING subset of this watchlist — the matview decides
+    phases; this report sizes the pool the phases draw from."""
     with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
         cur.execute(CALIBRATION_SQL)
         rows = cur.fetchall()
-    print('\nDormancy calibration (age + mcap ≥ ₹200 Cr + ADV ≥ ₹1 Cr pool, cliff-adjusted):')
+    print('\nDormancy v2 calibration (effective age + mcap ≥ ₹200 Cr + ADV ≥ ₹1 Cr, cliff-adjusted):')
     if not rows:
         print('  (no rows — run the compute first)')
         return
     cols = list(rows[0].keys())
-    print('  ' + '  '.join(f'{c:>16}' for c in cols))
+    print('  ' + '  '.join(f'{c:>20}' for c in cols))
     for r in rows:
-        print('  ' + '  '.join(f'{str(r[c]):>16}' for c in cols))
-    print('  candidate_gate = deep50_oldhigh OR flat_not_deep — target ~100-150 Giants (audit §6b)')
+        print('  ' + '  '.join(f'{str(r[c]):>20}' for c in cols))
+    print('  dormant_v2_watchlist = deep_arm OR flat arm; the scanner shows only its Stirring/Waking subset')
+
+
+UPDATE_SQL = """UPDATE km_equity_symbols
+   SET high_3y_adj = %s, low_3y_adj = %s,
+       pct_from_3y_high = %s, days_since_3y_high = %s,
+       drawdown_3y_pct = %s,
+       dormancy_updated_at = %s
+   WHERE id = %s"""
 
 
 def run(dry_run: bool):
     conn = get_conn()
-    print('Compute Dormancy Metrics (3-yr, cliff-adjusted)')
+    print('Compute Dormancy Metrics (3-yr, cliff-adjusted, v2)')
     print('=' * 50)
     closes = load_window_closes(conn)
     closes = adjust_close_cliffs(closes)
@@ -187,16 +245,10 @@ def run(dry_run: bool):
     if dry_run:
         print('  (dry run — nothing written)')
     else:
+        n_first = populate_first_trade_dates(conn)
+        print(f'  first_trade_date filled for {n_first:,} rows (all exchanges, NULL-only)')
         with conn.cursor() as cur:
-            psycopg2.extras.execute_batch(
-                cur,
-                """UPDATE km_equity_symbols
-                   SET high_3y_adj = %s, low_3y_adj = %s,
-                       pct_from_3y_high = %s, days_since_3y_high = %s,
-                       dormancy_updated_at = %s
-                   WHERE id = %s""",
-                updates, page_size=1000,
-            )
+            psycopg2.extras.execute_batch(cur, UPDATE_SQL, updates, page_size=1000)
         conn.commit()
         print(f'  ✓ {len(updates):,} rows updated')
         print_calibration(conn)
@@ -210,16 +262,9 @@ def compute_dormancy_for_pipeline(conn_unused, trade_date, force: bool = False) 
     try:
         closes = adjust_close_cliffs(load_window_closes(conn))
         updates = compute_metrics(closes)
+        populate_first_trade_dates(conn)
         with conn.cursor() as cur:
-            psycopg2.extras.execute_batch(
-                cur,
-                """UPDATE km_equity_symbols
-                   SET high_3y_adj = %s, low_3y_adj = %s,
-                       pct_from_3y_high = %s, days_since_3y_high = %s,
-                       dormancy_updated_at = %s
-                   WHERE id = %s""",
-                updates, page_size=1000,
-            )
+            psycopg2.extras.execute_batch(cur, UPDATE_SQL, updates, page_size=1000)
         conn.commit()
         return len(updates), 'completed'
     finally:

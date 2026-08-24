@@ -41,12 +41,12 @@ const PRESET_COL_OVERRIDES: Partial<Record<string, string[]>> = {
   // accumulation evidence, then the dormancy stats that put the stock here.
   waking_giants: [
     'symbol', 'close', 'pct_chng', 'wg_phase', 'gl_acc_days',
-    'listing_age_years', 'pct_from_3y_high', 'days_since_3y_high',
+    'listing_age_years', 'drawdown_3y_pct', 'pct_from_3y_high', 'days_since_3y_high',
     'delivery_pct', 'magic_rs', 'mcap_cr',
   ],
   first_ascent: [
     'symbol', 'close', 'pct_chng', 'wg_phase', 'gl_acc_days',
-    'listing_age_years', 'pct_from_3y_high', 'days_since_3y_high',
+    'listing_age_years', 'drawdown_3y_pct', 'pct_from_3y_high', 'days_since_3y_high',
     'delivery_pct', 'magic_rs', 'mcap_cr',
   ],
 }

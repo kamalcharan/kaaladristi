@@ -326,13 +326,22 @@ export const ALL_FIELDS: Record<string, FieldConfig> = {
   wg_phase: {
     key: 'wg_phase',
     label: 'Phase',
-    tooltip: 'Observational phase. Dormant = on the watchlist, no accumulation evidence yet. Stirring = a run of quiet delivery-backed sessions. Waking = accumulation plus relative strength rising while price is still flat.',
+    tooltip: 'Observational phase — only names with evidence appear here. Stirring = a run of quiet delivery-backed sessions. Waking = that plus relative strength rising while price is still flat.',
     type: 'category',
     width: 92,
     formatFn: (val: any) =>
       val === 'WAKING' ? '🌅 Waking' : val === 'STIRRING' ? '🌱 Stirring' : val === 'DORMANT' ? '🌑 Dormant' : '—',
     colorFn: (val: any) =>
       val === 'WAKING' ? 'var(--bull)' : val === 'STIRRING' ? 'var(--risk-amber)' : 'var(--text-secondary)',
+  },
+  drawdown_3y_pct: {
+    key: 'drawdown_3y_pct',
+    label: 'Fell',
+    tooltip: 'Deepest fall after the cliff-adjusted 3-year high — how far the stock dropped from its peak before going quiet. Read with "% vs 3Y High" to see how much of the fall has been recovered.',
+    type: 'number',
+    width: 76,
+    formatFn: (val: any) => (val == null ? '—' : `${Number(val).toFixed(0)}%`),
+    colorFn: () => 'var(--text-secondary)',
   },
   gl_acc_days: {
     key: 'gl_acc_days',
@@ -360,11 +369,11 @@ export const ALL_FIELDS: Record<string, FieldConfig> = {
   pct_from_3y_high: {
     key: 'pct_from_3y_high',
     label: '% vs 3Y High',
-    tooltip: 'Distance from the cliff-adjusted 3-year high close (split/bonus cliffs back-adjusted). Deeply negative with an old high, or a long flat range, is what put the stock on this watchlist.',
+    tooltip: 'Where the price sits today vs the cliff-adjusted 3-year high (split/bonus cliffs back-adjusted). Less negative than "Fell" means part of the fall has already been recovered — the awakening in progress.',
     type: 'number',
     width: 92,
     formatFn: (val: any) => (val == null ? '—' : `${Number(val).toFixed(1)}%`),
-    colorFn: (val: any) => (val != null && Number(val) <= -60 ? 'var(--bear)' : 'var(--text-secondary)'),
+    colorFn: (val: any) => (val != null && Number(val) <= -50 ? 'var(--bear)' : 'var(--text-secondary)'),
   },
   days_since_3y_high: {
     key: 'days_since_3y_high',

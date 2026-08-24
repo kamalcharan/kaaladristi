@@ -49,9 +49,9 @@ export const SCAN_PRESETS: ScanDefinition[] = [
   { id: 'stage_3_watch',        name: 'Stage 3 Watch',         description: 'Entering weakness — SMA50 converging toward SMA200',                                       limit: 100, universe: 'NSE_ONLY', category: 'stage_analysis', category_label: 'Stage Analysis', category_color: '#22c55e', category_sort: 2, is_default_tab: false, timeframe: 'daily', vani_rule: 'is_vani_weakness' },
   { id: 'vani_exit_watch',      name: 'VaNi Weakness Watch',   description: 'Highest conviction weakness — lowest RS, death cross confirmed',                            limit: 25,  universe: 'NSE_ONLY', category: 'stage_analysis', category_label: 'Stage Analysis', category_color: '#22c55e', category_sort: 2, is_default_tab: false, timeframe: 'daily', vani_rule: 'always_true' },
   // Placeholder rows only — real metadata (incl. category color) comes from
-  // kd_scan_presets (migration 174); empty color keeps the literal ratchet flat.
-  { id: 'waking_giants',        name: 'Waking Giants',         description: 'Long-listed companies (10y+) in multi-year dormancy where delivery-backed positions are quietly building', limit: 150, universe: 'NSE_ONLY', category: 'stage_analysis', category_label: 'Stage Analysis', category_color: '', category_sort: 2, is_default_tab: false, timeframe: 'daily', vani_rule: null },
-  { id: 'first_ascent',         name: 'First Ascent',          description: 'Younger listings (6–10y) emerging from a long quiet phase for the first time — no prior peak overhead',   limit: 50,  universe: 'NSE_ONLY', category: 'stage_analysis', category_label: 'Stage Analysis', category_color: '', category_sort: 2, is_default_tab: false, timeframe: 'daily', vani_rule: null },
+  // kd_scan_presets (migration 175); empty color keeps the literal ratchet flat.
+  { id: 'waking_giants',        name: 'Waking Giants',         description: 'Long-listed companies that fell hard from an old peak or sat flat for years — shown only when quiet delivery-backed building appears', limit: 60, universe: 'NSE_ONLY', category: 'discovery', category_label: 'Discovery', category_color: '', category_sort: 5, is_default_tab: false, timeframe: 'daily', vani_rule: null },
+  { id: 'first_ascent',         name: 'First Ascent',          description: 'Younger listings (6–10y) emerging from a deep quiet phase for the first time — shown only on accumulation evidence',                    limit: 30, universe: 'NSE_ONLY', category: 'discovery', category_label: 'Discovery', category_color: '', category_sort: 5, is_default_tab: false, timeframe: 'daily', vani_rule: null },
 ];
 
 // ── Preset metadata — DB is the source of truth ────────────────
@@ -1618,12 +1618,13 @@ function scanRowToScanStock(r: any): ScanStock {
     ret_66d: num(r.ret_66d),
     d_pct:   num(r.d_pct),
     deliv_value_cr: num(r.deliv_value_cr),
-    // Waking Giants / First Ascent (migration 174; null for other presets)
+    // Waking Giants / First Ascent (migration 175; null for other presets)
     wg_phase: r.wg_phase ?? null,
     gl_acc_days: num(r.gl_acc_days),
     listing_age_years: num(r.listing_age_years),
     pct_from_3y_high: num(r.pct_from_3y_high),
     days_since_3y_high: num(r.days_since_3y_high),
+    drawdown_3y_pct: num(r.drawdown_3y_pct),
   };
 }
 

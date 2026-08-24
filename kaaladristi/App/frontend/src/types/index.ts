@@ -590,8 +590,9 @@ export interface ScanStock {
   wg_phase?: 'WAKING' | 'STIRRING' | 'DORMANT' | null;
   gl_acc_days?: number | null;              // quiet delivery-backed sessions of last 60
   listing_age_years?: number | null;        // years since NSE listing
-  pct_from_3y_high?: number | null;         // cliff-adjusted distance from 3-yr high
+  pct_from_3y_high?: number | null;         // cliff-adjusted distance from 3-yr high (today)
   days_since_3y_high?: number | null;       // calendar days since the 3-yr high
+  drawdown_3y_pct?: number | null;          // deepest close AFTER the 3-yr high vs that high
 }
 
 export interface ScanDefinition {
