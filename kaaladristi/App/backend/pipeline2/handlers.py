@@ -46,7 +46,7 @@ FIXABLE_DIMENSIONS = frozenset({
     'supertrend', 'rolling_metrics', 'd365', 'stage_classification', 'vani_flags',
     'equity_weekly', 'equity_monthly',
     'index_returns', 'industry_composites', 'market_breadth', 'breadth_roc',
-    'symbol_enrichment', 'scan_refresh',
+    'symbol_enrichment', 'scan_refresh', 'wg_journeys',
 })
 
 
@@ -286,11 +286,48 @@ def handle_symbol_enrichment(conn, trade_date: date, force: bool,
                              exchange: Optional[str], on_progress: ProgressFn) -> HandlerResult:
     # Closes the untagged-symbol gap that used to accumulate silently every
     # time symbol_registrar admitted a new bhavcopy symbol. Enriches
-    # industry/company_name/is_fno/is_etf/listing_date via NSE quote-equity
-    # (with Yahoo fallback for BSE-only). See scripts/enrich_equity_metadata.py.
+    # industry/company_name/is_fno/is_etf via Yahoo, refreshes
+    # shares_outstanding on a rolling cadence, and recomputes mcap_cr from
+    # today's closes. See scripts/enrich_equity_metadata.py.
+    #
+    # BUGFIX 2026-08-24: this used to route through _handle_script, which
+    # (a) probes fill_rate('symbol_enrichment') — a key DIMENSION_HEALTH
+    # never contained, so the step raised ValueError before the script
+    # ever ran — and (b) passes verbose=, which enrich_for_pipeline does
+    # not accept. Net effect: the nightly dimension NEVER successfully ran;
+    # the backlog only moved on manual CLI runs. Bespoke handler now (the
+    # scan_refresh pattern): no fill-rate probe on a master table.
     from scripts.enrich_equity_metadata import enrich_for_pipeline
-    return _handle_script('symbol_enrichment', conn, trade_date, force, on_progress,
-                          enrich_for_pipeline)
+    on_progress('running capped symbol enrichment + mcap recompute', 20)
+    try:
+        rows, status = enrich_for_pipeline(conn, trade_date, force)
+    except Exception as e:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        return HandlerResult('failed', 0.0, 0.0, 0, error_msg=str(e)[:500])
+    return HandlerResult(status, 0.0, 100.0, rows)
+
+
+def handle_wg_journeys(conn, trade_date: date, force: bool,
+                       exchange: Optional[str], on_progress: ProgressFn) -> HandlerResult:
+    # Waking Giants v4: re-derives the full Hibernation → Wake → Ascent
+    # journey state (km_wg_journeys, migration 177) from 15y of
+    # cliff-adjusted per-ISIN merged history. Idempotent full rewrite;
+    # runs after scan_refresh so daily zones/weekly/monthly aggregates are
+    # final. See scripts/compute_wg_journeys.py.
+    from scripts.compute_wg_journeys import compute_wg_for_pipeline
+    on_progress('evaluating hibernation → wake → ascent journeys', 20)
+    try:
+        rows, status = compute_wg_for_pipeline(conn, trade_date, force)
+    except Exception as e:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        return HandlerResult('failed', 0.0, 0.0, 0, error_msg=str(e)[:500])
+    return HandlerResult(status, 0.0, 100.0, rows)
 
 
 def handle_rs_percentile(conn, trade_date: date, force: bool,
@@ -891,6 +928,8 @@ def handle(dimension: str, conn, trade_date: date, force: bool,
         return handle_breadth_roc(conn, trade_date, force, exchange, on_progress)
     if dimension == 'scan_refresh':
         return handle_scan_refresh(conn, trade_date, force, exchange, on_progress)
+    if dimension == 'wg_journeys':
+        return handle_wg_journeys(conn, trade_date, force, exchange, on_progress)
     raise ValueError(f'Unknown dimension: {dimension}')
 
 
@@ -922,4 +961,5 @@ KNOWN_DIMENSIONS = [
     'breadth_roc',
     'symbol_enrichment',
     'scan_refresh',
+    'wg_journeys',
 ]

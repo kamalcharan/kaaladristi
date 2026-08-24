@@ -322,6 +322,131 @@ export const ALL_FIELDS: Record<string, FieldConfig> = {
     colorFn: () => 'var(--bull)',
   },
 
+  // ── Waking Giants / First Ascent (migration 174) ──────────────────────────
+  wg_phase: {
+    key: 'wg_phase',
+    label: 'Phase',
+    tooltip: 'Observational phase — only names with evidence appear here. Stirring = a run of quiet delivery-backed sessions. Waking = that plus relative strength rising while price is still flat.',
+    type: 'category',
+    width: 92,
+    formatFn: (val: any) =>
+      val === 'WAKING' ? '🌅 Waking'
+        : val === 'ASCENDING' ? '🧗 Ascent'
+        : val === 'STIRRING' ? '🌱 Stirring'
+        : val === 'HIBERNATING' || val === 'DORMANT' ? '🌑 Asleep'
+        : '—',
+    colorFn: (val: any) =>
+      val === 'WAKING' || val === 'ASCENDING' ? 'var(--bull)'
+        : val === 'STIRRING' ? 'var(--risk-amber)'
+        : 'var(--text-secondary)',
+  },
+  base_years: {
+    key: 'base_years',
+    label: 'Slept',
+    tooltip: 'Length of the hibernation the wake broke — "7y" reads as: the breakout printed the highest close in 7 years. "14y+" means the sleep exceeds our loaded history window.',
+    type: 'number',
+    width: 66,
+    formatFn: (val: any) => {
+      if (val == null) return '—';
+      const v = Number(val);
+      return v >= 14.5 ? '14y+' : `${v.toFixed(1)}y`;
+    },
+    colorFn: () => 'var(--text-primary)',
+  },
+  align_score: {
+    key: 'align_score',
+    label: 'Align',
+    tooltip: 'MagicRS alignment across timeframes: daily counts 1, weekly 2, monthly 3 — 6/6 means Leading/Improving on all three clocks at once. A journey confirms into Ascent at 6 and returns to sleep at 1 or below.',
+    type: 'number',
+    width: 64,
+    formatFn: (val: any) => (val == null ? '—' : `${Number(val)}/6`),
+    colorFn: (val: any) =>
+      val != null && Number(val) >= 6 ? 'var(--bull)'
+        : val != null && Number(val) >= 3 ? 'var(--risk-amber)'
+        : 'var(--text-secondary)',
+  },
+  journey_age_days: {
+    key: 'journey_age_days',
+    label: 'Journey',
+    tooltip: 'Time since the wake event (the day the hibernation ceiling broke).',
+    type: 'number',
+    width: 72,
+    formatFn: (val: any) => {
+      if (val == null) return '—';
+      const d = Number(val);
+      return d >= 365 ? `${(d / 365).toFixed(1)}y` : `${Math.round(d / 30.44)}mo`;
+    },
+    colorFn: () => 'var(--text-secondary)',
+  },
+  wg_resting: {
+    key: 'wg_resting',
+    label: 'Resting',
+    tooltip: 'Weekly close currently below the Golden Line — the journey is pausing, not over. A journey returns to sleep only when the timeframe alignment collapses.',
+    type: 'category',
+    width: 68,
+    formatFn: (val: any) => (val === true || val === 't' ? '😴 Yes' : '—'),
+    colorFn: () => 'var(--text-secondary)',
+  },
+  gl_dist_pct: {
+    key: 'gl_dist_pct',
+    label: 'vs GL',
+    tooltip: 'Distance of the close from the Golden Line (SMA 150). Expanding distance after a wake is follow-through; negative marks a rest.',
+    type: 'number',
+    width: 70,
+    formatFn: (val: any) => (val == null ? '—' : `${Number(val).toFixed(1)}%`),
+    colorFn: (val: any) => (val != null && Number(val) < 0 ? 'var(--risk-amber)' : 'var(--text-secondary)'),
+  },
+  drawdown_3y_pct: {
+    key: 'drawdown_3y_pct',
+    label: 'Fell',
+    tooltip: 'Deepest fall after the cliff-adjusted 3-year high — how far the stock dropped from its peak before going quiet. Read with "% vs 3Y High" to see how much of the fall has been recovered.',
+    type: 'number',
+    width: 76,
+    formatFn: (val: any) => (val == null ? '—' : `${Number(val).toFixed(0)}%`),
+    colorFn: () => 'var(--text-secondary)',
+  },
+  gl_acc_days: {
+    key: 'gl_acc_days',
+    label: 'Quiet Acc',
+    tooltip: 'Sessions in the last 60 with delivery-backed, quiet building — delivery ≥ 55%, day move within ±2%, volume not explosive.',
+    type: 'number',
+    width: 76,
+    formatFn: (val: any) => (val == null ? '—' : `${Number(val)}d`),
+    colorFn: () => 'var(--text-secondary)',
+  },
+  listing_age_years: {
+    key: 'listing_age_years',
+    label: 'Listed',
+    tooltip: 'Years since NSE listing. Veteran 20y+ · Established 10–20y · Ascending 6–10y.',
+    type: 'category',
+    width: 108,
+    formatFn: (val: any) => {
+      if (val == null) return '—';
+      const y = Number(val);
+      const tier = y >= 20 ? 'Veteran' : y >= 10 ? 'Established' : 'Ascending';
+      return `${y}y · ${tier}`;
+    },
+    colorFn: (val: any) => (val != null && Number(val) >= 20 ? 'var(--text-primary)' : 'var(--text-secondary)'),
+  },
+  pct_from_3y_high: {
+    key: 'pct_from_3y_high',
+    label: '% vs 3Y High',
+    tooltip: 'Where the price sits today vs the cliff-adjusted 3-year high (split/bonus cliffs back-adjusted). Less negative than "Fell" means part of the fall has already been recovered — the awakening in progress.',
+    type: 'number',
+    width: 92,
+    formatFn: (val: any) => (val == null ? '—' : `${Number(val).toFixed(1)}%`),
+    colorFn: (val: any) => (val != null && Number(val) <= -50 ? 'var(--bear)' : 'var(--text-secondary)'),
+  },
+  days_since_3y_high: {
+    key: 'days_since_3y_high',
+    label: 'High Age',
+    tooltip: 'Calendar days since the 3-year high was set — an old high means dormancy, a recent one means a fresh decline.',
+    type: 'number',
+    width: 76,
+    formatFn: (val: any) => (val == null ? '—' : `${Math.round(Number(val) / 30.44)}mo`),
+    colorFn: () => 'var(--text-secondary)',
+  },
+
   mcap_cr: {
     key: 'mcap_cr',
     label: 'MCap',

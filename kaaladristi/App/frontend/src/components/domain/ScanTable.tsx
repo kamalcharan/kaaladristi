@@ -36,6 +36,23 @@ const PRESET_COL_OVERRIDES: Partial<Record<string, string[]>> = {
     'symbol', 'dot_signal', 'delivery_pct', 'close', 'pct_chng',
     'rvol', 'delivery_surge_x', 'ret_5d', 'magic_rs', 'rsi_14', 'flow_type',
   ],
+
+  // Waking Giants v4 journey tabs — the journey dimensions lead. base_years =
+  // "Slept", align_score = the 0-6 timeframe alignment, pct_from_3y_high
+  // carries % vs the hibernation ceiling on these presets.
+  waking_giants: [
+    'symbol', 'close', 'pct_chng', 'base_years', 'journey_age_days', 'align_score',
+    'gl_dist_pct', 'pct_from_3y_high', 'listing_age_years',
+    'delivery_pct', 'magic_rs', 'mcap_cr',
+  ],
+  wg_ascent: [
+    'symbol', 'close', 'pct_chng', 'align_score', 'journey_age_days', 'wg_resting',
+    'base_years', 'gl_dist_pct', 'listing_age_years', 'magic_rs', 'mcap_cr',
+  ],
+  wg_stirring: [
+    'symbol', 'close', 'pct_chng', 'gl_acc_days', 'base_years',
+    'pct_from_3y_high', 'listing_age_years', 'delivery_pct', 'magic_rs', 'mcap_cr',
+  ],
 }
 
 const DEFAULT_SORT: Record<string, { key: string; dir: 'asc' | 'desc' }> = {
@@ -56,6 +73,10 @@ const DEFAULT_SORT: Record<string, { key: string; dir: 'asc' | 'desc' }> = {
   // next-day move, so it would sort the list by a feature with no predictive
   // value.
   volume_drive:     { key: 'delivery_pct',      dir: 'desc' },
+  // v4 journey tabs — match each fetcher's engine ranking.
+  waking_giants:    { key: 'base_years',        dir: 'desc' },
+  wg_ascent:        { key: 'align_score',       dir: 'desc' },
+  wg_stirring:      { key: 'gl_acc_days',       dir: 'desc' },
 }
 
 function getDefaultSort(presetId: string) {

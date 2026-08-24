@@ -48,6 +48,11 @@ export const SCAN_PRESETS: ScanDefinition[] = [
   { id: 'stage_4_leaders',      name: 'Stage 4 Leaders',       description: 'Confirmed downtrend — death cross, below both MAs',                                        limit: 200, universe: 'NSE_ONLY', category: 'stage_analysis', category_label: 'Stage Analysis', category_color: '#22c55e', category_sort: 2, is_default_tab: false, timeframe: 'daily', vani_rule: 'is_vani_weakness' },
   { id: 'stage_3_watch',        name: 'Stage 3 Watch',         description: 'Entering weakness — SMA50 converging toward SMA200',                                       limit: 100, universe: 'NSE_ONLY', category: 'stage_analysis', category_label: 'Stage Analysis', category_color: '#22c55e', category_sort: 2, is_default_tab: false, timeframe: 'daily', vani_rule: 'is_vani_weakness' },
   { id: 'vani_exit_watch',      name: 'VaNi Weakness Watch',   description: 'Highest conviction weakness — lowest RS, death cross confirmed',                            limit: 25,  universe: 'NSE_ONLY', category: 'stage_analysis', category_label: 'Stage Analysis', category_color: '#22c55e', category_sort: 2, is_default_tab: false, timeframe: 'daily', vani_rule: 'always_true' },
+  // Placeholder rows only — real metadata (incl. category color) comes from
+  // kd_scan_presets (migration 177); empty color keeps the literal ratchet flat.
+  { id: 'waking_giants',        name: 'Waking Giants',         description: 'Stocks breaking out of a multi-year hibernation at the Golden Line — the first sessions of a structural transition', limit: 60, universe: 'NSE_ONLY', category: 'discovery', category_label: 'Discovery', category_color: '', category_sort: 5, is_default_tab: false, timeframe: 'daily', vani_rule: null },
+  { id: 'wg_ascent',            name: 'Ascent',                description: 'Confirmed multi-year journeys in progress — aligned across the daily, weekly and monthly clocks',                     limit: 60, universe: 'NSE_ONLY', category: 'discovery', category_label: 'Discovery', category_color: '', category_sort: 5, is_default_tab: false, timeframe: 'daily', vani_rule: null },
+  { id: 'wg_stirring',          name: 'Stirring',              description: 'Quiet delivery-backed building inside a multi-year hibernation — no breakout yet',                                    limit: 40, universe: 'NSE_ONLY', category: 'discovery', category_label: 'Discovery', category_color: '', category_sort: 5, is_default_tab: false, timeframe: 'daily', vani_rule: null },
 ];
 
 // ── Preset metadata — DB is the source of truth ────────────────
@@ -1540,6 +1545,123 @@ const MATVIEW_BUNDLE_PRESETS: ReadonlySet<string> = new Set([
   'conviction_flow',
 ]);
 
+// Waking Giants v4 (migration 177) — the three journey-state presets read the
+// km_wg_journeys state table (the km_fpb_active pattern on a multi-year
+// clock), NOT the scan matview. Map: preset id → journey state.
+const WG_JOURNEY_PRESETS: Record<string, string> = {
+  waking_giants: 'WAKING',
+  wg_ascent: 'ASCENDING',
+  wg_stirring: 'STIRRING',
+};
+
+// A wake is shown on the Waking tab only while fresh — the formation window
+// where the breakout is still an observation about NOW.
+const WAKING_FRESH_DAYS = 90;
+
+/** Map a km_wg_journeys row to a ScanStock (display fields are stamped
+ *  denormalized on the row by compute_wg_journeys.py). */
+function wgJourneyRowToScanStock(r: any): ScanStock {
+  const num = (v: any) => (v == null ? null : Number(v));
+  const truthy = (v: any) => v === true || v === 't' || v === 'true' || v === 1;
+  return {
+    equity_id: r.equity_id,
+    symbol: r.symbol ?? String(r.equity_id),
+    company_name: r.company_name ?? null,
+    industry: r.industry ?? null,
+    exchange: r.exchange ?? null,
+    mcap_cr: num(r.mcap_cr),
+    trade_date: r.trade_date,
+    close: Number(r.close ?? 0),
+    open: null, high: null, low: null,
+    pct_chng: num(r.pct_chng),
+    rsi_14: null,
+    magic_rs: num(r.magic_rs),
+    magic_rs_zone: r.magic_rs_zone ?? null,
+    flow_type: null, rvol: null, sniper_inst: null, sniper_hot: null,
+    accum_distrib: null, rss_value: null, rss_spread: null,
+    sma_150: null, volume_divergence_flag: null,
+    has_recent_svd: false, has_recent_sbd: false, has_recent_syd: false,
+    ema_20: null, atr_14: null,
+    delivery_pct: num(r.delivery_pct),
+    w52_high: null, sma_50: null, sma_200: null, w52_low: null,
+    supertrend_dir: null, lifetime_high: null, stage: null,
+    xAmt: null,
+    rel_5d_n50: null, rel_22d_n50: null, rel_66d_n50: null,
+    rel_5d_n500: null, rel_22d_n500: null, rel_66d_n500: null,
+    magicRsTrend: [], reward: null, rewardPct: null, pctBelow52wHigh: null,
+    vaniOpportunity: false,
+    avg_amt_5d: null, avg_amt_22d: null, avg_amt_66d: null,
+    // journey fields
+    wg_phase: r.state ?? null,
+    gl_acc_days: num(r.stir_days),
+    listing_age_years: num(r.listing_age_years),
+    pct_from_3y_high: num(r.pct_from_base_high),
+    days_since_3y_high: null,
+    drawdown_3y_pct: null,
+    base_years: num(r.base_years),
+    align_score: num(r.align_score),
+    journey_age_days: num(r.journey_age_days),
+    wg_resting: truthy(r.resting),
+    wake_date: r.wake_date ?? null,
+    gl_dist_pct: num(r.gl_dist_pct),
+  };
+}
+
+/** One journey-state tab = one indexed read of km_wg_journeys. */
+async function fetchWgJourneys(presetId: string, exchangeFilter: ExchangeFilter): Promise<ScanStock[]> {
+  if (exchangeFilter === 'BSE') return [];
+  const state = WG_JOURNEY_PRESETS[presetId];
+  // QueryBuilder.order() appends the direction itself — pass the bare column.
+  const orderCol =
+    state === 'WAKING'    ? 'wake_date' :      // freshest wakes first
+    state === 'ASCENDING' ? 'align_score' :    // strongest alignment first
+                            'stir_days';       // strongest quiet building first
+  const lim = getPresetMeta(presetId)?.limit ?? 60;
+  let q = from('km_wg_journeys')
+    .select('*')
+    .is('is_current', 'true')
+    .eq('state', state);
+  if (state === 'WAKING') {
+    // The Waking tab is an OPPORTUNITY feed, not a history lesson (owner
+    // 2026-08-24: a breakout from years ago is no opportunity now). Only
+    // wakes still in their formation window are shown; older unconfirmed
+    // journeys stay in the table but off the tab.
+    const cutoff = new Date(Date.now() - WAKING_FRESH_DAYS * 24 * 60 * 60 * 1000)
+      .toISOString().slice(0, 10);
+    q = q.gte('wake_date', cutoff);
+  }
+  const { data, error } = await q
+    .order(orderCol, { ascending: false, nullsFirst: false })
+    .limit(lim)
+    .execute();
+  if (error || !Array.isArray(data)) {
+    throw new Error(`km_wg_journeys unavailable for ${presetId} — run migration 177 + compute_wg_journeys.py`);
+  }
+  return (data as any[]).map(wgJourneyRowToScanStock);
+}
+
+/** Counts for the three journey tabs (landing page). */
+async function fetchWgJourneyCounts(): Promise<Record<string, number>> {
+  const counts: Record<string, number> = { waking_giants: 0, wg_ascent: 0, wg_stirring: 0 };
+  try {
+    const { data, error } = await from('km_wg_journeys')
+      .select('state,wake_date')
+      .is('is_current', 'true')
+      .limit(3000)
+      .execute();
+    if (error || !Array.isArray(data)) return counts;
+    const cutoff = new Date(Date.now() - WAKING_FRESH_DAYS * 24 * 60 * 60 * 1000)
+      .toISOString().slice(0, 10);
+    for (const r of data as any[]) {
+      if (r.state === 'WAKING') {
+        if (r.wake_date && r.wake_date >= cutoff) counts.waking_giants += 1;
+      } else if (r.state === 'ASCENDING') counts.wg_ascent += 1;
+      else if (r.state === 'STIRRING') counts.wg_stirring += 1;
+    }
+  } catch { /* table not deployed yet — zeros */ }
+  return counts;
+}
+
 /** Map a km_scan_results row (one of the 6 bundle presets) to a ScanStock.
  *  Mirrors fpbRowToScanStock's shape; fields the matview does not carry for
  *  these presets stay null (they were null under the JS path too). */
@@ -1606,6 +1728,13 @@ function scanRowToScanStock(r: any): ScanStock {
     ret_66d: num(r.ret_66d),
     d_pct:   num(r.d_pct),
     deliv_value_cr: num(r.deliv_value_cr),
+    // Waking Giants / First Ascent (migration 175; null for other presets)
+    wg_phase: r.wg_phase ?? null,
+    gl_acc_days: num(r.gl_acc_days),
+    listing_age_years: num(r.listing_age_years),
+    pct_from_3y_high: num(r.pct_from_3y_high),
+    days_since_3y_high: num(r.days_since_3y_high),
+    drawdown_3y_pct: num(r.drawdown_3y_pct),
   };
 }
 
@@ -1697,6 +1826,8 @@ async function fetchAllScanCountsFromMatview(
     for (const id of MATVIEW_BUNDLE_PRESETS) {
       if (!(id in counts)) counts[id] = 0;
     }
+    // Journey-tab counts ride along (separate table, graceful zeros pre-177).
+    Object.assign(counts, await fetchWgJourneyCounts());
     return { counts, latestDate };
   } catch (e) {
     console.warn('[scan] matview counts read failed, using bundle fallback', e);
@@ -1727,6 +1858,9 @@ export async function executeScan(
   // silently downgrading, so an ops issue (nightly refresh failed, migration
   // rolled back) is visible on the scan page rather than hidden by a slow
   // parallel compute.
+  // Waking Giants v4 journey tabs — km_wg_journeys reads (migration 177).
+  if (scanId in WG_JOURNEY_PRESETS) return fetchWgJourneys(scanId, exchangeFilter);
+
   if (timeframe === 'daily' && MATVIEW_BUNDLE_PRESETS.has(scanId)) {
     const matview = await fetchFromScanMatview(scanId, exchangeFilter);
     if (matview) return matview;

@@ -66,7 +66,8 @@ DAILY_STEPS: list[tuple[str, Optional[str]]] = [
     ('industry_composites',   None),
     ('market_breadth',        None),
     ('breadth_roc',           None),
-    ('scan_refresh',          None),   # LAST — matview reads all equity/industry compute above
+    ('scan_refresh',          None),   # matview reads all equity/industry compute above
+    ('wg_journeys',           None),   # LAST — journey state reads final daily zones + weekly/monthly aggregates
 ]
 
 
