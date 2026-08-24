@@ -44,6 +44,40 @@ compressed version is authoritative). Owner decisions below are FINAL.
      watchlist material for the step-6 curated flow, not scan rows.
    - **Own category `discovery`** (Discovery, #14b8a6, sort 5) — these
      are structural discovery scanners, not Stage Analysis.
+7. **v3 corrections from 175's first refresh (2026-08-24, migration
+   176 — run INSTEAD of re-running 175; no script re-run needed):**
+   - **Flat arm capped at mcap ≤ ₹5,000 Cr.** 175's top Giants were
+     RELIANCE/KOTAK/TITAN and First Ascent filled with 2017-listed
+     insurers: a mega cap drifting ±30% for 3y has range ratio ≤ 1.8,
+     but that is maturity, not dormancy — and normal large-cap
+     sessions (delivery 60%+, small moves) count as GL days, so they
+     even phased WAKING. Owner: "reliance, icici, axis, HUL should
+     not be part — a waking giant is going for a multi-year journey."
+     Deep-fall arm keeps no ceiling (a fallen giant can be any size).
+   - **ADV is per-ISIN combined-exchange** (wg_adv CTE): SHIVALIK
+     trades 0.96 Cr NSE + 0.09 BSE = 1.05 Cr — the NSE-only floor cut
+     it by 4 lakh.
+   - **Stirring display-capped to top 10 by GL days per band**
+     (`stirring_display_cap`); WAKING uncapped. Stirring stays (it is
+     the early-warning tier that differentiates this scanner) but only
+     its strongest evidence surfaces.
+   - Live v3 preview (2026-08-24): Giants 16 WAKING + top-10 of 253
+     STIRRING; First Ascent 1 WAKING (PRINCEPIPE) + top-10 of 36
+     STIRRING incl. **SOLARA(12d)** ✓. SHIVALIK/WALCHANNAG are in the
+     pool as DORMANT (0 GL days today — correct; they surface when
+     evidence fires).
+   - ⚠ OPEN (owner): fallen LARGE caps qualify via genuine deep falls
+     (INFY −50.7%/619d, TRENT −67%, COLPAL −53%, ACC −55% — verified
+     real). Add a scanner-wide mcap ceiling (e.g. ≤ 25,000 Cr) to keep
+     it a forgotten-names instrument, or keep fallen large caps?
+     One-line constant either way.
+   - ⚠ CALIBRATION (later): GL-day delivery gate is ABSOLUTE (≥ 55%),
+     which measures stock character as much as change — perpetual
+     high-delivery illiquid names rack up 40-50 GL days
+     (GANDHITUBE 54/60). v2 of the GL definition should measure
+     delivery/turnover vs the stock's own baseline. WAKING's RS-turn
+     requirement already captures change, so this mostly affects the
+     Stirring ranking.
 
 ## Thesis summary
 

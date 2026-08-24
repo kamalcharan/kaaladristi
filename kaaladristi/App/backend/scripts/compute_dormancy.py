@@ -161,6 +161,7 @@ WITH first_listed AS (
 ),
 pool AS (
   SELECT s.id, s.pct_from_3y_high, s.days_since_3y_high, s.drawdown_3y_pct,
+         s.mcap_cr,
          s.high_3y_adj / NULLIF(s.low_3y_adj, 0) AS range_ratio,
          EXTRACT(YEAR FROM AGE(CURRENT_DATE,
                  LEAST(COALESCE(f.first_listed, s.listing_date),
@@ -189,7 +190,7 @@ m AS (
          CASE WHEN p.age_yr >= 10 THEN 'Giants 10y+' ELSE 'First Ascent 6-10y' END AS band,
          ((p.drawdown_3y_pct <= -50 AND p.days_since_3y_high >= 365
            AND p.pct_from_3y_high <= -20)
-          OR p.range_ratio <= 1.8) AS dormant_v2
+          OR (p.range_ratio <= 1.8 AND p.mcap_cr <= 5000)) AS dormant_v2
   FROM pool p JOIN adv a ON a.equity_id = p.id AND a.adv_cr >= 1
 )
 SELECT band,
@@ -198,7 +199,8 @@ SELECT band,
   COUNT(*) FILTER (WHERE drawdown_3y_pct <= -50 AND days_since_3y_high >= 365) AS fell50_oldhigh,
   COUNT(*) FILTER (WHERE drawdown_3y_pct <= -50 AND days_since_3y_high >= 365
                      AND pct_from_3y_high <= -20) AS deep_arm,
-  COUNT(*) FILTER (WHERE range_ratio <= 1.8 AND NOT (drawdown_3y_pct <= -50
+  COUNT(*) FILTER (WHERE range_ratio <= 1.8 AND mcap_cr <= 5000
+                     AND NOT (drawdown_3y_pct <= -50
                      AND days_since_3y_high >= 365 AND pct_from_3y_high <= -20)) AS flat_arm_only,
   COUNT(*) FILTER (WHERE dormant_v2) AS dormant_v2_watchlist
 FROM m GROUP BY band ORDER BY band
