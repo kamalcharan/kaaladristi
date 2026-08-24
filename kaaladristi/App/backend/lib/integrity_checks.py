@@ -203,15 +203,20 @@ def check_period_bars(conn, run_date: date) -> list[Finding]:
         # A monthly bar inside the CURRENT month means a month-to-date bar
         # is masquerading as complete (the 2026-08-05 bug).
         if mo_max >= run_date.replace(day=1):
-            n_rows = _rows(conn, 'SELECT COUNT(*) FROM km_equity_monthly WHERE trade_date = %s',
-                           (mo_max,))[0][0]
+            month_start = run_date.replace(day=1)
+            n_rows, n_dates = _rows(conn, '''
+                SELECT COUNT(*), COUNT(DISTINCT trade_date)
+                FROM km_equity_monthly WHERE trade_date >= %s
+            ''', (month_start,))[0]
             out.append(Finding(
                 check_key='monthly_partial_bar', check_class='invariant', severity='critical',
                 subject='km_equity_monthly',
-                summary=(f'{n_rows:,} monthly bars dated {mo_max} sit inside the current, incomplete '
-                         f'month — a month-to-date bar is being served as the monthly bar'),
+                summary=(f'{n_rows:,} monthly bars across {n_dates} date(s) up to {mo_max} sit inside '
+                         f'the current, incomplete month — a month-to-date bar is being served as '
+                         f'the monthly bar'),
                 metric=n_rows, expected=0,
-                detail={'bar_date': str(mo_max), 'rows': int(n_rows)}))
+                detail={'newest_bar': str(mo_max), 'month_start': str(month_start),
+                        'rows': int(n_rows), 'distinct_dates': int(n_dates)}))
 
     return out
 

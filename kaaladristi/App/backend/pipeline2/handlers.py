@@ -46,7 +46,7 @@ FIXABLE_DIMENSIONS = frozenset({
     'supertrend', 'rolling_metrics', 'd365', 'stage_classification', 'vani_flags',
     'equity_weekly', 'equity_monthly',
     'index_returns', 'industry_composites', 'market_breadth', 'breadth_roc',
-    'symbol_enrichment', 'scan_refresh', 'wg_journeys', 'integrity_checks',
+    'symbol_enrichment', 'scan_refresh', 'wg_journeys', 'integrity_checks', 'dots',
 })
 
 
@@ -650,6 +650,30 @@ def handle_equity_monthly(conn, trade_date: date, force: bool,
                                     on_progress, is_month_end, aggregate_monthly_bars, 'monthly')
 
 
+def handle_dots(conn, trade_date: date, force: bool,
+                exchange: Optional[str], on_progress: ProgressFn) -> HandlerResult:
+    """Rebuild dot_svd / dot_sbd / dot_syd for the trade date.
+
+    These are the owner's Chartink screener definitions and the selection
+    basis for the Volume Drive scanner. The script existed but was never
+    wired into pipeline2 — so after the last manual run (2026-08-03) the
+    columns went all-FALSE universe-wide again and Volume Drive went
+    inert, exactly as CLAUDE.md warned it would. Found by the integrity
+    sweep's staleness check on its first live run.
+    """
+    from scripts.compute_dots import compute_dots_for_pipeline
+    on_progress('computing SVD / SBD / SYD dots', 20)
+    try:
+        rows, status = compute_dots_for_pipeline(conn, trade_date, force)
+    except Exception as e:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        return HandlerResult('failed', 0.0, 0.0, 0, error_msg=str(e)[:500])
+    return HandlerResult(status, 0.0, 100.0, rows)
+
+
 def handle_integrity_checks(conn, trade_date: date, force: bool,
                             exchange: Optional[str], on_progress: ProgressFn) -> HandlerResult:
     """Data-integrity sweep — reconciliation / invariant / staleness /
@@ -956,6 +980,8 @@ def handle(dimension: str, conn, trade_date: date, force: bool,
         return handle_scan_refresh(conn, trade_date, force, exchange, on_progress)
     if dimension == 'wg_journeys':
         return handle_wg_journeys(conn, trade_date, force, exchange, on_progress)
+    if dimension == 'dots':
+        return handle_dots(conn, trade_date, force, exchange, on_progress)
     if dimension == 'integrity_checks':
         return handle_integrity_checks(conn, trade_date, force, exchange, on_progress)
     raise ValueError(f'Unknown dimension: {dimension}')
@@ -988,6 +1014,7 @@ KNOWN_DIMENSIONS = [
     'market_breadth',
     'breadth_roc',
     'symbol_enrichment',
+    'dots',
     'scan_refresh',
     'wg_journeys',
     'integrity_checks',

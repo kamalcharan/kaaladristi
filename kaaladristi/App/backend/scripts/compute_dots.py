@@ -280,6 +280,32 @@ def run_verify(conn, target_date):
           'conditions.')
 
 
+# ── pipeline2 entry point ────────────────────────────────────────────────
+# The dots had NO nightly writer: the script existed but was never wired
+# into pipeline2, so dot_svd/dot_sbd/dot_syd went all-FALSE again after
+# the last manual run (2026-08-03) and the Volume Drive scanner went
+# inert — caught by the integrity sweep's staleness check on its first
+# live run, 2026-08-24. Scoped to a single date for the nightly path;
+# the window look-back inside the SQL still spans full history.
+
+def compute_dots_for_pipeline(conn, trade_date, force: bool = False) -> tuple[int, str]:
+    own_conn = conn is None
+    if own_conn:
+        conn = get_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(build_sql(single_date=str(trade_date)), {'d': str(trade_date)})
+            updated = cur.rowcount
+        conn.commit()
+        return updated, ('completed' if updated > 0 else 'partial')
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        if own_conn:
+            conn.close()
+
+
 def main():
     ap = argparse.ArgumentParser(description='Compute dot_svd / dot_sbd on km_equity_eod')
     ap.add_argument('--from', dest='date_from', default=None, help='Start date YYYY-MM-DD')
