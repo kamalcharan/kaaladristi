@@ -341,6 +341,21 @@ MIN_AVG_AMT_22D_CR = 1.0   # owner decision 2026-08-24 — uniform, all presets
 # combined (2026-08-25) — it passes the floor, the column just cannot see it.
 WG_ADV_PRESETS = ['waking_giants', 'first_ascent']
 
+# The preset ids the FRONTEND actually reads out of km_scan_results.
+# Source of truth: scanEngine.ts — MATVIEW_BUNDLE_PRESETS (the 6 bundles) plus
+# flower_pot_burst, which has its own fetcher against the same matview.
+#
+# This exists because "has rows in km_scan_results" is NOT the same thing as
+# "served from the matview", and conflating the two hid a real defect for a
+# whole migration cycle: executeScan() routes waking_giants to fetchWgJourneys
+# (km_wg_journeys, migration 177) BEFORE the matview branch is reached, so the
+# rows migration 180 computes for it are discarded on every refresh. Produce
+# and consume are separate sets; drift between them is the finding.
+MATVIEW_SERVED_PRESETS = frozenset({
+    'power_buy', 'power_sell', 'smart_money', 'quiet_accumulation',
+    'distribution_warning', 'conviction_flow', 'flower_pot_burst',
+})
+
 # Effective liquidity per matview row, measured the way the preset's own gate
 # measures it. Two special cases, both verified rather than waived:
 #   * WG family      -> combined-exchange ADV, summed across ISIN twins.
@@ -425,6 +440,29 @@ def check_scanner_contract(conn, run_date: date) -> list[Finding]:
             'then REFRESH MATERIALIZED VIEW km_scan_exclusion_counts;',
             subject='km_scan_results', metric=0, expected=1,
             detail={'remedy': 'REFRESH MATERIALIZED VIEW km_scan_results'})]
+
+    # C0 — produced vs consumed. An arm the frontend never reads is dead
+    # weight: it costs refresh time, inflates the matview, and makes every
+    # reader (this audit included) believe a preset is matview-backed when it
+    # is served from somewhere else entirely.
+    produced = {r[0] for r in _rows(
+        conn, 'SELECT DISTINCT preset_id FROM km_scan_results')}
+    for orphan in sorted(produced - MATVIEW_SERVED_PRESETS):
+        n = _rows(conn, 'SELECT COUNT(*) FROM km_scan_results WHERE preset_id = %s',
+                  (orphan,))[0][0]
+        out.append(Finding(
+            f'contract_arm_unconsumed_{orphan}', 'invariant', 'warning',
+            f'{orphan}: {n} rows computed into km_scan_results on every refresh but no '
+            f'frontend path reads them — the arm is dead weight or the preset lost its UI',
+            subject=orphan, metric=int(n), expected=0,
+            detail={'preset': orphan, 'rows': int(n)}))
+    for missing in sorted(MATVIEW_SERVED_PRESETS - produced):
+        out.append(Finding(
+            f'contract_arm_missing_{missing}', 'invariant', 'critical',
+            f'{missing}: the frontend reads this preset from km_scan_results but the '
+            f'matview produces no rows for it — the scan returns empty',
+            subject=missing, metric=0, expected=1,
+            detail={'preset': missing}))
 
     # C1 — columns present and populated
     for preset, cols in MATVIEW_PRESET_COLUMNS.items():

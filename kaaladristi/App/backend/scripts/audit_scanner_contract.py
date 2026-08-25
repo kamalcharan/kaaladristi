@@ -32,7 +32,7 @@ import psycopg2.extras
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from lib.config import DATABASE_URL
 from lib.integrity_checks import (MATVIEW_PRESET_COLUMNS, MIN_AVG_AMT_22D_CR,
-                                  measure_liquidity)
+                                  MATVIEW_SERVED_PRESETS, measure_liquidity)
 
 
 def get_conn():
@@ -98,8 +98,17 @@ def main():
     defects = []
     for p in presets:
         pid, rows = p['id'], p['rows']
-        in_mv = rows > 0
-        src = 'matview' if in_mv else 'direct'
+        # 'matview' means the FRONTEND reads it from km_scan_results — not
+        # merely that rows exist there. waking_giants/first_ascent have rows
+        # and are served from km_wg_journeys; calling them matview-backed is
+        # how their dead arms stayed invisible.
+        served = pid in MATVIEW_SERVED_PRESETS
+        in_mv = served and rows > 0
+        src = 'matview' if served else ('ORPHAN' if rows else 'direct')
+        if rows and not served:
+            defects.append(f'{pid}: {rows} rows computed but no frontend path reads them')
+        if served and not rows:
+            defects.append(f'{pid}: served from the matview but it produces no rows')
 
         # 1. columns
         cols_v = 'n/a'
