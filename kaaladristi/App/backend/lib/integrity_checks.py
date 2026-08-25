@@ -352,7 +352,34 @@ def matview_preset_columns(db_columns: set[str], db_meta: dict | None = None) ->
     return out
 
 
-MIN_AVG_AMT_22D_CR = 1.0   # owner decision 2026-08-24 — uniform, all presets
+# vani_rule -> the SQL predicate it evaluates to, so the base rate of the rule
+# can be measured on the same day the preset ran. Mirrors computeVaniOpportunity
+# in scanEngine.ts.
+VANI_RULE_SQL = {
+    'is_vani_s2':                   'is_vani_s2',
+    'is_vani_smart':                'is_vani_smart',
+    'is_vani_weakness':             'is_vani_weakness',
+    'is_vani_distrib_and_weakness': '(is_vani_distrib OR is_vani_weakness)',
+    'is_vani_surge_or_breakout':    '(is_vani_surge OR is_vani_breakout)',
+    'svd_delivery_conviction':      '(dot_svd AND delivery_pct >= 50)',
+}
+
+# Below this many EXPECTED hits, "zero flags" carries no information and must
+# not be reported as a defect.
+#
+# The original check was `flagged == 0 -> DEAD`. Measured 2026-08-25, that test
+# has no power at the sizes these presets run at. is_vani_smart is true for 37
+# of 7,635 stocks (0.48%); in a 25-row preset the expected count is 0.12 and
+# P(zero) is 89% EVEN IF THE RULE IS PERFECTLY CORRECT. It reported
+# smart_money / quiet_accumulation / distribution_warning as broken on that
+# basis. Worse, it reported power_buy as healthy while that preset would read
+# DEAD on 94% of days by chance alone — the verdict was flipping on noise.
+#
+# What actually distinguishes a working rule is ENRICHMENT: power_buy flags 2
+# of 25 against a 0.25% base rate (32x), power_sell 6 of 25 against 1.44%
+# (17x). Those are real. Zero-in-25 is not evidence of anything.
+VANI_MIN_EXPECTED = 3.0
+   # owner decision 2026-08-24 — uniform, all presets
 
 # Presets whose own gate measures COMBINED-exchange ADV (wg_adv sums every ISIN
 # twin's 22-session average turnover) rather than the NSE-only avg_amt_22d
@@ -559,13 +586,41 @@ def check_scanner_contract(conn, run_date: date) -> list[Finding]:
                 f'session — the liquidity floor cannot be verified for them',
                 subject=preset, metric=unmeasured_n, expected=0,
                 detail={'preset': preset, 'unmeasured': int(unmeasured_n), 'rows': int(rows_n)}))
-        if vani_rule and vani_rule != 'always_true' and vani_n == 0:
-            out.append(Finding(
-                f'contract_vani_dead_{preset}', 'staleness', 'warning',
-                f'{preset} declares vani_rule "{vani_rule}" but not one of its {rows_n} rows carries '
-                f'the flag — the VaNi filter is dead on this scan',
-                subject=preset, metric=0, expected=1,
-                detail={'preset': preset, 'vani_rule': vani_rule, 'rows': int(rows_n)}))
+        if vani_rule and vani_rule != 'always_true':
+            pred = VANI_RULE_SQL.get(vani_rule)
+            base = None
+            if pred:
+                r = _rows(conn, f"""
+                    SELECT COUNT(*) FILTER (WHERE {pred})::float / NULLIF(COUNT(*),0)
+                    FROM km_equity_eod
+                    WHERE trade_date = (SELECT max(trade_date) FROM km_equity_eod)
+                """)
+                base = r[0][0] if r and r[0][0] is not None else None
+            expected = (base or 0) * rows_n
+            if base is not None and expected < VANI_MIN_EXPECTED:
+                # Not a defect — the sample cannot answer the question. Say so
+                # rather than manufacturing a finding.
+                if vani_n == 0:
+                    out.append(Finding(
+                        f'contract_vani_unpowered_{preset}', 'staleness', 'info',
+                        f'{preset}: vani_rule {vani_rule} produced 0 flags, but with a '
+                        f'{base*100:.2f}% base rate over {rows_n} rows the expected count is '
+                        f'{expected:.2f} — zero is the normal outcome and says nothing about '
+                        f'whether the rule is right',
+                        subject=preset, metric=0, expected=0,
+                        detail={'preset': preset, 'rule': vani_rule, 'rows': int(rows_n),
+                                'base_rate': base, 'expected': expected}))
+            elif vani_n == 0:
+                # Powered: at this base rate we EXPECTED >= VANI_MIN_EXPECTED
+                # hits and got none, so zero means something.
+                out.append(Finding(
+                    f'contract_vani_dead_{preset}', 'staleness', 'warning',
+                    f'{preset} declares vani_rule "{vani_rule}" and none of its {rows_n} rows '
+                    f'carries the flag, against an expected {expected:.1f} at the rule\'s '
+                    f'{(base or 0)*100:.2f}% base rate — the VaNi filter is dead on this scan',
+                    subject=preset, metric=0, expected=1,
+                    detail={'preset': preset, 'vani_rule': vani_rule, 'rows': int(rows_n),
+                            'base_rate': base, 'expected_hits': expected}))
     return out
 
 

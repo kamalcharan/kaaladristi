@@ -32,6 +32,7 @@ import psycopg2.extras
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from lib.config import DATABASE_URL
 from lib.integrity_checks import (MIN_AVG_AMT_22D_CR, measure_liquidity,
+                                  VANI_RULE_SQL, VANI_MIN_EXPECTED,
                                   matview_preset_columns, matview_served_presets,
                                   _db_preset_meta)
 
@@ -156,11 +157,30 @@ def main():
             else:
                 liq_v = 'OK'
 
-        # 4. vani
+        # 4. vani — enrichment, not presence. "0 flags" on a 25-row preset whose
+        # rule has a 0.5% base rate is the EXPECTED outcome, not a defect; the
+        # old presence test reported three healthy presets as broken and would
+        # have flipped power_buy to DEAD on 94% of days. See VANI_MIN_EXPECTED.
         vani_v = 'n/a'
         if in_mv and p['vani_rule'] and p['vani_rule'] != 'always_true':
-            vani_v = 'DEAD' if p['vani'] == 0 else 'OK'
-            if p['vani'] == 0: defects.append(f"{pid}: vani_rule {p['vani_rule']} produces 0 flags")
+            pred = VANI_RULE_SQL.get(p['vani_rule'])
+            base = None
+            if pred:
+                cur.execute(f"""SELECT COUNT(*) FILTER (WHERE {pred})::float
+                                     / NULLIF(COUNT(*),0) AS b
+                               FROM km_equity_eod
+                               WHERE trade_date=(SELECT max(trade_date) FROM km_equity_eod)""")
+                base = cur.fetchone()['b']
+            exp = (base or 0) * rows
+            if p['vani'] > 0:
+                lift = (p['vani'] / rows) / base if base else 0
+                vani_v = f'{lift:.0f}x' if lift else 'OK'
+            elif exp < VANI_MIN_EXPECTED:
+                vani_v = 'LOWPWR'      # cannot tell — not counted as a defect
+            else:
+                vani_v = 'DEAD'
+                defects.append(f"{pid}: vani_rule {p['vani_rule']} produced 0 of an "
+                               f"expected {exp:.1f} flags")
 
         # 5. limit
         lim_v = 'n/a'
@@ -180,7 +200,7 @@ def main():
         print('All presets green on every dimension.')
     print()
     print('NOTE: "direct" presets query km_equity_eod live and cannot be audited from the DB;')
-    print('their liquidity floor is enforced in scanEngine.ts (MIN_AVG_AMT_22D_CR).')
+    print('they are NOT covered by any dimension above — n/a means unverified, not passed.')
     conn.close()
     sys.exit(1 if defects else 0)
 
