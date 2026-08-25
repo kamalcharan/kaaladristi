@@ -671,7 +671,10 @@ async function fetchStage2Watch(exchangeFilter: ExchangeFilter): Promise<ScanSto
       'sniper_inst', 'sniper_hot', 'accum_distrib',
       'volume_divergence_flag', 'delivery_pct',
       'dot_svd', 'dot_sbd', 'dot_syd',
-      'stage', 'rs_percentile', 'chartink_score', 'is_vani_s2',
+      // is_vani_smart is this preset's vani_rule (migration 182). A rule the
+      // SELECT does not fetch reads as undefined and the chip stays dark, so
+      // the rule change is only half the fix — the column has to come with it.
+      'stage', 'rs_percentile', 'chartink_score', 'is_vani_s2', 'is_vani_smart',
       'score_5d', 'score_22d',
       'km_equity_symbols(id,symbol,company_name,exchange,industry,mcap_cr,isin)',
     ].join(','))
@@ -752,6 +755,7 @@ async function fetchStage2Watch(exchangeFilter: ExchangeFilter): Promise<ScanSto
       sma200_rising: row.sma200_rising ?? null,
       chartink_score: row.chartink_score ?? null,
       is_vani_s2: row.is_vani_s2 ?? null,
+      is_vani_smart: row.is_vani_smart ?? null,
     };
   });
 }
