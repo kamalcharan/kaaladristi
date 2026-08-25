@@ -28,6 +28,17 @@ const PRESET_COL_OVERRIDES: Partial<Record<string, string[]>> = {
     'delivery_pct', 'rvol', 'magic_rs',
   ],
 
+  // Weekly Movers selects on pct_wtd, so the week-to-date pair leads: the
+  // gain, then the reference close it is measured from (the export's
+  // "Breakout" column). D% follows because it is a DIFFERENT number from
+  // % WTD on every day except Monday, and showing them side by side is what
+  // makes the distinction legible.
+  weekly_movers: [
+    'symbol', 'close', 'pct_wtd', 'prev_week_close', 'pct_chng',
+    'rsi_14', 'ret_5d', 'ret_22d', 'delivery_pct', 'magic_rs',
+    'pct_below_52w_high', 'mcap_cr',
+  ],
+
   // Volume Drive selects ON the dot, so the dot leads — without it the grid
   // gives no clue why a row is present. Delivery follows because it is the
   // ranking key and the VaNi chip's threshold (dot_svd + deliv >= 50 measured

@@ -555,6 +555,9 @@ export interface ScanStock {
   // Breakout Surge computed fields (null for all other scans)
   breakout_level?: number | null;
   pct_from_breakout?: number | null;
+  // Weekly Movers (WTD) computed fields (migration 183; null for other scans)
+  prev_week_close?: number | null;
+  pct_wtd?: number | null;
   // Breakout Surge Daily — DB score/pct columns (migration 111)
   score_5d?: number | null;
   score_22d?: number | null;

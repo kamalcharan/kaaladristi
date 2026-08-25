@@ -41,6 +41,7 @@ export const SCAN_PRESETS: ScanDefinition[] = [
   { id: 'distribution_warning', name: 'Falling Flow Warnings', description: 'Previously strong stocks showing signs of institutional exit',                             limit: 25,  universe: 'NSE_BSE',  category: 'market',        category_label: 'Market',        category_color: '#8b5cf6', category_sort: 4, is_default_tab: false, timeframe: 'daily', vani_rule: 'is_vani_distrib_and_weakness' },
   { id: 'conviction_flow',      name: 'Conviction Flow',       description: 'Stocks where 5-day delivery value is outpacing the 22-day norm',                          limit: 50,  universe: 'NSE_ONLY', category: 'flow',          category_label: 'Flow',          category_color: '#3b82f6', category_sort: 3, is_default_tab: true,  timeframe: 'daily', vani_rule: 'is_vani_surge_or_breakout' },
   { id: 'breakout_surge',       name: 'Breakout Surge',        description: 'NSE stocks closing above their 20-day high on a green day — ranked by Score 5D',        limit: 500, universe: 'NSE_ONLY', category: 'price_action',  category_label: 'Price Action',  category_color: '#f59e0b', category_sort: 1, is_default_tab: true,  timeframe: 'daily', vani_rule: 'is_vani_surge_or_breakout' },
+  { id: 'weekly_movers',        name: 'Weekly Movers',         description: 'NSE stocks trading above last week\u2019s close \u2014 ranked by week-to-date gain', limit: 500, universe: 'NSE_ONLY', category: 'price_action',  category_label: 'Price Action',  category_color: '#f59e0b', category_sort: 1, is_default_tab: false, timeframe: 'daily', vani_rule: 'is_vani_surge_or_breakout' },
   { id: 'volume_drive',         name: 'Volume Drive',          description: 'Stocks printing a volume-drive or accumulation bar — ranked by delivery conviction',                                limit: 60,  universe: 'NSE_BSE',  category: 'flow',          category_label: 'Flow',          category_color: '#3b82f6', category_sort: 3, is_default_tab: false, timeframe: 'daily', vani_rule: 'svd_delivery_conviction' },
   { id: 'flower_pot_burst',     name: 'Flower Pot Burst',      description: 'Stocks coiling in tight compression — dying volume, contracting range — plus the rare session when a coil releases with an explosive volume-and-range expansion',  limit: 60,  universe: 'NSE_ONLY', category: 'price_action',  category_label: 'Price Action',  category_color: '#f59e0b', category_sort: 1, is_default_tab: false, timeframe: 'daily', vani_rule: null },
   { id: 'stage_2_leaders',      name: 'Stage 2 Leaders',       description: 'Stocks in confirmed Weinstein Stage 2 — SMA200 rising, proper 52-week position',          limit: 500, universe: 'NSE_ONLY', category: 'stage_analysis', category_label: 'Stage Analysis', category_color: '#22c55e', category_sort: 2, is_default_tab: false, timeframe: 'daily', vani_rule: 'is_vani_s2' },
@@ -352,6 +353,165 @@ async function fetchBreakoutSurge(exchangeFilter: ExchangeFilter): Promise<ScanS
     if (as5 == null) return 1;
     if (bs5 == null) return -1;
     return bs5 - as5;
+  });
+  return results.slice(0, resultLimit);
+}
+
+/** Scan: Weekly Movers (WTD) — stocks trading above LAST WEEK'S CLOSE.
+ *
+ *  Reverse-engineered from the owner's weekly export (2026-08-24) and verified
+ *  against it exactly: its "Breakout" column is the previous week's close and
+ *  its "% from Breakout" is a week-to-date return, NOT a rolling-high breakout.
+ *  See docs/claude/price-action-matrix-poa.md section 3a for the evidence.
+ *
+ *  prev_week_close / pct_wtd are DB-precomputed (migration 183) by
+ *  compute_rolling_range(). That is what keeps this a DIRECT query: PostgREST
+ *  filters compare a column to a LITERAL only, so `close > prev_week_close`
+ *  is unexpressible — precomputing collapses it to `pct_wtd > 0`, exactly as
+ *  breakout_surge uses pct_from_breakout.
+ *
+ *  Universe: full active NSE, close >= 50 (penny filter). The export's
+ *  Rs 14,000 Cr large-cap gate is deliberately NOT baked in — same owner
+ *  doctrine as Breakout Surge, whose Rs 10,000 Cr gate became the MCap filter
+ *  in the filter bar. Ranked by week-to-date gain, the screener's own metric.
+ */
+async function fetchWeeklyMovers(exchangeFilter: ExchangeFilter): Promise<ScanStock[]> {
+  const completedDates = await fetchRecentDates(1);
+  const latestDate: string | null = completedDates[0] ?? null;
+  if (!latestDate) return [];
+
+  const { data: rows } = await from('km_equity_eod')
+    .select([
+      'equity_id', 'trade_date', 'close', 'open', 'high', 'low',
+      'pct_chng', 'magic_rs', 'magic_rs_zone', 'rss_value', 'rss_spread',
+      'rsi_14', 'rvol', 'flow_type', 'supertrend_dir',
+      'sma_50', 'sma_150', 'sma_200', 'ema_20', 'atr_14',
+      'w52_high', 'w52_low', 'lifetime_high',
+      'avg_amt_5d', 'avg_amt_22d', 'avg_amt_66d', 'delivery_surge_x',
+      'sniper_inst', 'sniper_hot', 'accum_distrib',
+      'volume_divergence_flag', 'delivery_pct', 'deliv_value_cr',
+      'dot_svd', 'dot_sbd', 'dot_syd', 'stage',
+      'score_5d', 'score_22d', 'ret_5d', 'ret_22d', 'ret_66d',
+      'breakout_level', 'pct_from_breakout', 'pct_below_52w_high',
+      'prev_week_close', 'pct_wtd',
+      'is_vani_surge', 'is_vani_breakout',
+      'km_equity_symbols(id,symbol,company_name,exchange,industry,mcap_cr,isin)',
+    ].join(','))
+    .eq('trade_date', latestDate)
+    .gt('pct_wtd', 0)
+    .gte('close', 50)
+    .limit(2000)
+    .execute();
+
+  const eodRows = (rows ?? []) as any[];
+
+  // Zero results is ambiguous: "nothing up on the week" vs "pct_wtd never
+  // populated" (house lesson: silent NULL columns). Probe one row to tell.
+  if (eodRows.length === 0) {
+    const { data: probe } = await from('km_equity_eod')
+      .select('pct_wtd')
+      .eq('trade_date', latestDate)
+      .gt('pct_wtd', -100000)
+      .limit(1)
+      .execute();
+    if (!probe || probe.length === 0) {
+      console.warn(`[weekly_movers] pct_wtd is NULL for all rows on ${latestDate} — migration 183 not applied or backfill not run`);
+    }
+    return [];
+  }
+
+  // ISIN-dedup: prefer NSE over BSE; apply exchange filter
+  const isinMap = new Map<string, any>();
+  for (const row of eodRows) {
+    const sym = row.km_equity_symbols;
+    if (!sym) continue;
+    if (exchangeFilter === 'NSE' && sym.exchange !== 'NSE') continue;
+    if (exchangeFilter === 'BSE' && sym.exchange !== 'BSE') continue;
+    const isin = sym.isin;
+    if (!isin) { isinMap.set(`noisin:${row.equity_id}`, row); continue; }
+    const existing = isinMap.get(isin);
+    if (!existing || sym.exchange === 'NSE') isinMap.set(isin, row);
+  }
+
+  const vaniRule = getPresetMeta('weekly_movers')?.vani_rule;
+  const resultLimit = getPresetMeta('weekly_movers')?.limit ?? 500;
+
+  const results = Array.from(isinMap.values()).map((row): ScanStock => {
+    const sym = row.km_equity_symbols;
+    const ema20 = row.ema_20 ?? null;
+    const atr14 = row.atr_14 ?? null;
+    return {
+      equity_id:            row.equity_id,
+      symbol:               sym?.symbol ?? String(row.equity_id),
+      company_name:         sym?.company_name ?? null,
+      industry:             sym?.industry ?? null,
+      exchange:             sym?.exchange ?? null,
+      mcap_cr:              sym?.mcap_cr ?? null,
+      trade_date:           row.trade_date,
+      close:                row.close,
+      open:                 row.open ?? null,
+      high:                 row.high ?? null,
+      low:                  row.low ?? null,
+      pct_chng:             row.pct_chng ?? null,
+      magic_rs:             row.magic_rs ?? null,
+      magic_rs_zone:        row.magic_rs_zone ?? null,
+      rss_value:            row.rss_value ?? null,
+      rss_spread:           row.rss_spread ?? null,
+      rsi_14:               row.rsi_14 ?? null,
+      rvol:                 row.rvol ?? null,
+      flow_type:            row.flow_type ?? null,
+      supertrend_dir:       row.supertrend_dir ?? null,
+      sma_50:               row.sma_50 ?? null,
+      sma_150:              row.sma_150 ?? null,
+      sma_200:              row.sma_200 ?? null,
+      ema_20:               ema20,
+      atr_14:               atr14,
+      w52_high:             row.w52_high ?? null,
+      w52_low:              row.w52_low ?? null,
+      lifetime_high:        row.lifetime_high ?? null,
+      avg_amt_5d:           row.avg_amt_5d ?? null,
+      avg_amt_22d:          row.avg_amt_22d ?? null,
+      avg_amt_66d:          row.avg_amt_66d ?? null,
+      delivery_surge_x:     row.delivery_surge_x ?? null,
+      sniper_inst:          row.sniper_inst ?? null,
+      sniper_hot:           row.sniper_hot ?? null,
+      accum_distrib:        row.accum_distrib ?? null,
+      volume_divergence_flag: row.volume_divergence_flag ?? null,
+      delivery_pct:         row.delivery_pct ?? null,
+      deliv_value_cr:       row.deliv_value_cr ?? null,
+      has_recent_svd:       !!row.dot_svd,
+      has_recent_sbd:       !!row.dot_sbd,
+      has_recent_syd:       !!row.dot_syd,
+      pctBelow52wHigh:      row.pct_below_52w_high ?? null,
+      reward:               ema20 && atr14 ? (ema20 + atr14) - row.close : null,
+      rewardPct:            ema20 && atr14 && atr14 > 0 ? ((ema20 + atr14) - row.close) / atr14 : null,
+      magicRsTrend:         [],
+      score_5d:             row.score_5d  != null ? Number(row.score_5d)  : null,
+      score_22d:            row.score_22d != null ? Number(row.score_22d) : null,
+      ret_5d:               row.ret_5d  ?? null,
+      ret_22d:              row.ret_22d ?? null,
+      ret_66d:              row.ret_66d ?? null,
+      xAmt:                 null,
+      rel_5d_n50:           null, rel_22d_n50:  null, rel_66d_n50:  null,
+      rel_5d_n500:          null, rel_22d_n500: null, rel_66d_n500: null,
+      vaniOpportunity:      computeVaniOpportunity(row, vaniRule),
+      stage:                row.stage ?? null,
+      d_pct:                row.pct_chng != null ? Math.round(Number(row.pct_chng) * 100) / 100 : null,
+      breakout_level:       row.breakout_level    != null ? Number(row.breakout_level)    : null,
+      pct_from_breakout:    row.pct_from_breakout != null ? Number(row.pct_from_breakout) : null,
+      prev_week_close:      row.prev_week_close != null ? Number(row.prev_week_close) : null,
+      pct_wtd:              row.pct_wtd         != null ? Number(row.pct_wtd)         : null,
+    };
+  });
+
+  // Week-to-date gain DESC, NULLS LAST
+  results.sort((a, b) => {
+    const aw = a.pct_wtd ?? null;
+    const bw = b.pct_wtd ?? null;
+    if (aw == null && bw == null) return 0;
+    if (aw == null) return 1;
+    if (bw == null) return -1;
+    return bw - aw;
   });
   return results.slice(0, resultLimit);
 }
@@ -1883,6 +2043,7 @@ export async function executeScan(
   if (scanId === 'vani_exit_watch')      return fetchVaNiExitWatch(exchangeFilter);
   // breakout_surge_daily merged into breakout_surge (kept as alias for stale links)
   if (scanId === 'breakout_surge' || scanId === 'breakout_surge_daily') return fetchBreakoutSurge(exchangeFilter);
+  if (scanId === 'weekly_movers')        return fetchWeeklyMovers(exchangeFilter);
 
   // The 6 daily bundle presets read from km_scan_results (Phase 3). The old
   // client-side bundle path was deleted in the follow-up cleanup — a matview

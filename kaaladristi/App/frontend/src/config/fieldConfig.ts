@@ -611,6 +611,20 @@ export const ALL_FIELDS: Record<string, FieldConfig> = {
     width: 80,
   },
 
+  prev_week_close: {
+    key: 'prev_week_close',
+    label: 'Prev Wk Close',
+    tooltip: "Last week's closing price — the reference the week-to-date move is measured from. Gap-safe: for a stock that did not trade last week this is its last available close.",
+    type: 'price',
+    width: 96,
+  },
+  pct_wtd: {
+    key: 'pct_wtd',
+    label: '% WTD',
+    tooltip: 'Week-to-date change vs last week\u2019s close. Observational: it states how far this week has travelled, not where it is heading.',
+    type: 'pct',
+    width: 78,
+  },
   pct_from_breakout: {
     key: 'pct_from_breakout',
     label: '% Above',

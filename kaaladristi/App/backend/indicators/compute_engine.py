@@ -309,6 +309,20 @@ def compute_rolling_range(df: pd.DataFrame) -> dict:
     breakout_level    = close.shift(1).rolling(20, min_periods=1).max().round(2)
     pct_from_breakout = ((close - breakout_level) / breakout_level * 100).round(2)
 
+    # ── Week-to-date: reference = last close before this week's Monday ────
+    # Buckets are Mon-Sun calendar weeks. shift(1) over the weeks PRESENT in
+    # this symbol's history yields "the last close strictly before this week",
+    # which is gap-safe: a symbol that did not trade last week references its
+    # last available close rather than dropping out with a NULL.
+    _wk             = df['trade_date'].dt.to_period('W-SUN')
+    _last_by_week   = df.groupby(_wk)['close'].last()
+    prev_week_close = _wk.map(_last_by_week.shift(1)).astype(float).round(2)
+    pct_wtd = (
+        ((close - prev_week_close) / prev_week_close * 100)
+        .where(prev_week_close > 0)
+        .round(2)
+    )
+
     # ── pct_below_52w_high ────────────────────────────────────────────────
     pct_below_52w_high = ((w52_high - close) / w52_high * 100).where(w52_high > 0).round(2)
 
@@ -338,6 +352,8 @@ def compute_rolling_range(df: pd.DataFrame) -> dict:
         'ret_66d':             ret_66d,
         'breakout_level':      breakout_level,
         'pct_from_breakout':   pct_from_breakout,
+        'prev_week_close':     prev_week_close,
+        'pct_wtd':             pct_wtd,
         'pct_below_52w_high':  pct_below_52w_high,
         'deliv_value_cr':      deliv_value_cr,
     }
@@ -747,6 +763,7 @@ ROLLING_COLUMNS = [
     'ret_5d', 'ret_22d', 'ret_66d',
     'breakout_level', 'pct_from_breakout', 'pct_below_52w_high',
     'deliv_value_cr',
+    'prev_week_close', 'pct_wtd',
 ]
 
 
@@ -901,7 +918,9 @@ def _flush_rolling_batch(conn, batch: list):
           breakout_level      = v.breakout_level,
           pct_from_breakout   = v.pct_from_breakout,
           pct_below_52w_high  = v.pct_below_52w_high,
-          deliv_value_cr      = v.deliv_value_cr
+          deliv_value_cr      = v.deliv_value_cr,
+          prev_week_close     = v.prev_week_close,
+          pct_wtd             = v.pct_wtd
         FROM (VALUES %s) AS v(
           id, w52_high, w52_low, lifetime_high,
           d30_pct_chng, d365_pct_chng,
@@ -910,7 +929,7 @@ def _flush_rolling_batch(conn, batch: list):
           surge_22d, score_5d, score_22d,
           ret_5d, ret_22d, ret_66d,
           breakout_level, pct_from_breakout, pct_below_52w_high,
-          deliv_value_cr
+          deliv_value_cr, prev_week_close, pct_wtd
         )
         WHERE e.id = v.id::int
     """
@@ -924,6 +943,7 @@ def _flush_rolling_batch(conn, batch: list):
             r['ret_5d'], r['ret_22d'], r['ret_66d'],
             r['breakout_level'], r['pct_from_breakout'], r['pct_below_52w_high'],
             r['deliv_value_cr'],
+            r['prev_week_close'], r['pct_wtd'],
         )
         for r in batch
     ]
