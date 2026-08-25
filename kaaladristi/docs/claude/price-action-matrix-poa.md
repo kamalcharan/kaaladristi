@@ -174,6 +174,66 @@ Close* — and keep "breakout" for a rule with a real lookback. Both are cheap;
 they can ship side by side, and the `% from Breakout` header should read
 `% WTD` under the loose rule so the column is not mislabelled.
 
+### 3b. The monthly export — same family, confirmed
+
+The owner then supplied the **monthly** export (same date, ~250 rows). It
+resolves the family completely:
+
+**`Breakout` = the PREVIOUS MONTH'S CLOSE** (2026-07-31). 15 of 15 sampled
+values match exactly — RATNAMANI 2358.90, SIEMENS 3760.00, WELCORP 1650.60,
+PTCIL 17737.00, URBANCO 129.39, RELIANCE 1307.80, TITAN 4875.20, SBIN 1027.40,
+BOSCHLTD 41085.00. So `% from Breakout` = **month-to-date return**.
+
+(MUTHOOTFIN's 3119.60 equals our stored 20-day `breakout_level` by coincidence
+— July's close happened to be the 20-day high. One row agreeing is not the rule.)
+
+**The two exports prove each other.** In the weekly export every `D%` was
+positive; in the monthly, 141 of 259 rows are **red today**. That is exactly
+what the hypothesis predicts: the weekly export ran on a Monday, so
+week-to-date == day change and a WTD > 0 filter forces a green day; the monthly
+filter (MTD > 0) says nothing about today. An internal consistency check that
+could not pass by accident.
+
+### The family, stated plainly
+
+Both screeners are **period-to-date momentum**, not breakouts:
+
+| | Weekly export | Monthly export |
+|---|---|---|
+| `Breakout` reference | previous **week's** close (Fri 08-21) | previous **month's** close (Jul 31) |
+| `% from Breakout` | week-to-date return | month-to-date return |
+| Filter | close > prev week close | close > prev month close |
+| Sort | `D%` descending | `D%` descending |
+| Universe | NSE, `mcap_cr >= ~14,000` | same |
+| Export rows / we reproduce | ~190 / **199** | ~250 / **259** |
+
+`D%` is the plain daily change in both, correctly mapped (`d_pct` <- `pct_chng`).
+
+### Strictness ladder — monthly, same date (universe 473)
+
+| Definition | Rows |
+|---|---|
+| Above previous month's **close** *(the export's rule)* | **259** (55% of universe) |
+| Above previous month's **high** | 124 |
+| Above the **12-month high** | 84 |
+
+The pattern holds from the weekly case: the export's rule admits over half the
+eligible universe, because "up on the month" is a low bar. The stricter rules
+land at 26% and 18%.
+
+### What this means for the build
+
+The whole family is **one fetcher with a parameterised reference close**:
+`prev_week_close` / `prev_month_close`, both derivable from `km_equity_eod`
+alone (last close before the current period start) or read from
+`km_equity_weekly`/`km_equity_monthly`. **No new columns, no backfill, no
+pipeline change** — the cheapest thing in this document.
+
+Recommended: ship them as **Week-to-Date** and **Month-to-Date** movers, with
+the column headed `% WTD` / `% MTD`, and keep the word *breakout* for the
+lookback-based rules in section 4. Same data, honest label, and the two
+families can sit side by side in Price Action.
+
 ---
 
 ## 4. Recommended shape — one screener, four depths
