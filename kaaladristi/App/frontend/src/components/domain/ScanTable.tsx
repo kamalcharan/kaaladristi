@@ -35,8 +35,8 @@ const PRESET_COL_OVERRIDES: Partial<Record<string, string[]>> = {
   // makes the distinction legible.
   weekly_movers: [
     'symbol', 'close', 'pct_wtd', 'prev_week_close', 'pct_chng',
-    'rsi_14', 'ret_5d', 'ret_22d', 'delivery_pct', 'magic_rs',
-    'pct_below_52w_high', 'mcap_cr',
+    'mcap_cr', 'delivery_pct', 'rsi_14', 'ret_5d', 'ret_22d',
+    'magic_rs', 'pct_below_52w_high',
   ],
 
   // Volume Drive selects ON the dot, so the dot leads — without it the grid

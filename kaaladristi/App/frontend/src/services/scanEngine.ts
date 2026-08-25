@@ -420,11 +420,15 @@ async function fetchWeeklyMovers(exchangeFilter: ExchangeFilter): Promise<ScanSt
     return [];
   }
 
-  // ISIN-dedup: prefer NSE over BSE; apply exchange filter
+  // Declared universe FIRST, then ISIN-dedup, then the user's exchange filter.
+  // The universe gate is what keeps a preset honest to kd_scan_presets; without
+  // it NSE_ONLY leaks BSE-only symbols, which have no delivery data.
+  const declaredUniverse = getPresetMeta('weekly_movers')?.universe;
   const isinMap = new Map<string, any>();
   for (const row of eodRows) {
     const sym = row.km_equity_symbols;
     if (!sym) continue;
+    if (!passesUniverse(sym.exchange, declaredUniverse)) continue;
     if (exchangeFilter === 'NSE' && sym.exchange !== 'NSE') continue;
     if (exchangeFilter === 'BSE' && sym.exchange !== 'BSE') continue;
     const isin = sym.isin;
@@ -1280,6 +1284,21 @@ async function fetchVaNiExitWatch(exchangeFilter: ExchangeFilter): Promise<ScanS
  * For dual-listed stocks this picks the NSE row; for NSE-only or BSE-only it picks whichever exists.
  * Used by scan functions to avoid processing BSE numeric-code duplicates.
  */
+/** Does a symbol's exchange satisfy a preset's DECLARED universe?
+ *
+ *  buildNsePreferredIds() only DEDUPES dual-listed ISINs (NSE preferred); it
+ *  does not exclude BSE-ONLY symbols, so a preset declared NSE_ONLY still
+ *  returns them. Measured on 2026-08-25 after ISIN dedup: 139 of 500 rows
+ *  (28%) on weekly_movers were BSE-only, and BSE carries NO delivery data, so
+ *  the Delivery column rendered blank for every one of them.
+ */
+export function passesUniverse(exchange: string | null | undefined,
+                               universe: string | null | undefined): boolean {
+  if (universe === 'NSE_ONLY') return exchange === 'NSE';
+  if (universe === 'BSE_ONLY') return exchange === 'BSE';
+  return true;   // NSE_BSE / unset — no restriction
+}
+
 export function buildNsePreferredIds(symbols: Map<number, EquitySymbolRow>): Set<number> {
   const isinToId = new Map<string, { id: number; exchange: string }>();
   for (const [id, sym] of symbols) {
