@@ -74,11 +74,15 @@ WITH bars AS (
     SELECT b.id,
            ROUND(p.prev_wk_close, 2) AS prev_week_close,
            -- Representability guard, NOT a business threshold: pct_wtd is
-           -- NUMERIC(10,2), so |value| must stay under 1e8. Junk historical BSE
-           -- bars (20 rows, 10 symbols, OHLC all exactly 100000.0) sit next to
-           -- 0.01 closes in the same symbol and produce ratios of ~1e7, i.e.
-           -- ~999,999,900%. Those are not returns; store NULL rather than
-           -- overflow the UPDATE or rank garbage first in the screener.
+           -- NUMERIC(10,2), so the absolute value must stay under 1e8. Junk
+           -- historical BSE bars (20 rows, 10 symbols, OHLC all exactly
+           -- 100000.0) sit next to 0.01 closes in the same symbol and produce
+           -- ratios near 1e7 -- a "return" of roughly 1e9 percent. Those are
+           -- not returns; store NULL rather than overflow the UPDATE or rank
+           -- garbage first in the screener.
+           -- NOTE: never write a literal percent sign anywhere in this
+           -- template. psycopg2 treats it as a parameter placeholder whenever
+           -- a params sequence is passed and raises IndexError. Spell the word.
            CASE
              WHEN p.prev_wk_close > 0
               AND abs((b.close - p.prev_wk_close) / p.prev_wk_close * 100.0) < 100000000
@@ -96,6 +100,15 @@ FROM scored s
 WHERE e.id = s.id
   AND s.prev_week_close IS NOT NULL;
 """
+
+
+# psycopg2 interpolates whenever a params sequence is passed, so any literal
+# percent sign in the template is parsed as a placeholder. Fail loudly at import
+# rather than at execute time, where it surfaces as a bare IndexError.
+assert "%" not in _SQL_TEMPLATE, (
+    "backfill_week_to_date: _SQL_TEMPLATE contains a literal percent sign; "
+    "psycopg2 will treat it as a parameter placeholder. Spell out 'percent'."
+)
 
 
 def build_sql(from_date, to_date):
