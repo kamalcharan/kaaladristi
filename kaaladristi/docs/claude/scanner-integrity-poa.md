@@ -84,13 +84,28 @@ uncapped, which correctly removed an accidental shield. There is no prior
 liquidity rule to restore — full-universe coverage is a Settled Decision and
 re-truncating is not an option.
 
-### D4 — Three dead VaNi rules are a SYMPTOM, not a separate defect
+### D4 — Three dead VaNi rules: a SEPARATE defect (hypothesis disproved)
 `smart_money`, `quiet_accumulation`, `distribution_warning` declare a
-`vani_rule` that yields **zero** flags. The flags are alive at source today
-(37 `is_vani_smart`, 19 `is_vani_s2`, 109 distrib-or-weakness) — but they
-fire on stocks averaging **₹3.98 Cr / ₹3.78 Cr** turnover, ~3× the presets'
-own average. The two populations barely intersect. **Fixing D3 should revive
-these on its own** — re-verify rather than patch separately.
+`vani_rule` that yields **zero** flags.
+
+The first hypothesis — that the liquidity flood caused this, since the flags
+fire on stocks ~3x more liquid than the presets' picks — was **tested on
+2026-08-24 and DISPROVED**:
+
+| flag | stocks | NSE | clear the preset's own gate | clear everything |
+|---|---|---|---|---|
+| `is_vani_smart` | 37 | 14 | 4 (delivery > 60) | **0** |
+| `is_vani_s2` | 19 | 9 | 0 (`accum_distrib='ACCUMULATION'`) | **0** |
+
+The flags do not intersect these presets' gates **at any liquidity level**.
+`is_vani_s2` is a Stage-2 quality overlay and has no reason to coincide with
+quiet_accumulation's ACCUMULATION + rising-sniper selection — the rule
+assignments are simply mismatched to what the presets select on.
+
+**Left open deliberately.** Re-pointing a preset's `vani_rule` is a product
+decision about intent, not a bug fix, and silently retuning a threshold so a
+chip lights up would be worse than the dash. The nightly contract check
+reports it as a warning until the owner decides.
 
 ## Build plan
 
@@ -100,7 +115,8 @@ these on its own** — re-verify rather than patch separately.
 | 2 | Enforce `universe` per preset in the matview | migration, fixes quiet_accumulation |
 | 3 | Liquidity floor ADV ≥ ₹1 Cr | **all 14 presets** — matview SQL + direct fetchers |
 | 4 | `contract` check class in the nightly integrity sweep | covers D1–D4 permanently |
-| 5 | Re-verify the 3 VaNi rules revive; patch only if they do not | verification step |
+| 5 | ~~Re-verify the 3 VaNi rules revive~~ — **tested, they do not** (D4 above). Left open for an owner call on intent. | open |
+| 6 | `scripts/audit_scanner_contract.py` — repeatable completeness audit, all presets x 5 dimensions, exit 1 on any defect | verification |
 
 Sizing for #3 (power_buy gate, candidates for 25 slots):
 no floor **294** → 0.25 Cr **104** → 0.5 Cr **88** → **1 Cr 69** → 1.5 Cr 63.
@@ -139,3 +155,22 @@ these five columns.
 4. `python scripts/run_integrity_checks.py --dry-run` — zero findings.
 
 Not "trust me" — the matrix is the evidence.
+
+## What the completeness audit caught that the build missed
+
+Run against the pre-migration state before claiming completion, and it
+found two things the hand-written migration had not:
+
+1. **`flower_pot_burst`: 71 rows below the floor** — a matview preset that
+   the first draft of migration 180 did not gate. Fixed: the floor is applied
+   at final selection so the 140-day compression window feeding the FPB math
+   stays complete.
+2. **`waking_giants`: 6 rows apparently below the floor** — a false positive,
+   not a defect. WG enforces ADV >= Rs 1 Cr on a **combined-exchange** basis
+   (`wg_adv` sums each ISIN twin's 22-session average), which is stricter than
+   and not comparable to the row-level NSE-only `avg_amt_22d`. The WG presets
+   are exempted from the row-level check with that reasoning recorded, so the
+   audit does not carry a permanent false positive.
+
+Both are the point of the exercise: the audit is what makes "complete" a
+measured claim rather than an assertion.

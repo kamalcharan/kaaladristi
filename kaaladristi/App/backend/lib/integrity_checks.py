@@ -308,3 +308,116 @@ def run_all(conn, run_date: date) -> list[Finding]:
                 summary=f'Integrity check {fn.__name__} raised: {str(e)[:200]}',
                 detail={'checker': fn.__name__, 'error': str(e)[:500]}))
     return findings
+
+
+# ── 5. Contract — the guard for the class that produced this file ────────
+# Scanner-integrity audit, 2026-08-24. The matview was recreated three
+# times in one session and a five-column gap survived every check,
+# because every check was self-referential: syntax parses, UNION arms
+# agree, EXPLAIN resolves — none asked whether the OUTPUT satisfied its
+# CONSUMER. The existing parity harness compares rank/equity_id/symbol/
+# vani_flag only, so it would have reported clean while every display
+# column rendered a dash.
+#
+# Root cause of the class: the matview<->frontend contract is written
+# down nowhere. These checks write it down and test it nightly.
+# See docs/claude/scanner-integrity-poa.md.
+
+MATVIEW_PRESET_COLUMNS = {
+    # preset -> columns the UI renders that MUST exist and be populated
+    'power_buy':            ['score_5d', 'score_22d', 'rsi_14', 'avg_amt_5d'],
+    'power_sell':           ['score_5d', 'score_22d', 'rsi_14', 'avg_amt_5d'],
+    'conviction_flow':      ['score_5d', 'score_22d', 'rsi_14', 'avg_amt_5d'],
+    'smart_money':          ['score_5d', 'score_22d', 'rsi_14', 'avg_amt_5d', 'supertrend_dir'],
+    'quiet_accumulation':   ['score_5d', 'score_22d', 'rsi_14', 'avg_amt_5d', 'supertrend_dir'],
+    'distribution_warning': ['score_5d', 'score_22d', 'rsi_14', 'avg_amt_5d', 'supertrend_dir'],
+}
+MIN_AVG_AMT_22D_CR = 1.0   # owner decision 2026-08-24 — uniform, all presets
+
+
+def check_scanner_contract(conn, run_date: date) -> list[Finding]:
+    """Per matview preset: rendered columns exist and are populated, the
+    declared universe holds, the liquidity floor holds, and a declared
+    vani_rule actually produces flags."""
+    out: list[Finding] = []
+
+    existing = {r[0] for r in _rows(conn, """
+        SELECT a.attname FROM pg_attribute a
+        JOIN pg_class c ON c.oid = a.attrelid
+        JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE c.relname = 'km_scan_results' AND n.nspname = 'public'
+          AND a.attnum > 0 AND NOT a.attisdropped
+    """)}
+    if not existing:
+        return [Finding('contract_matview_missing', 'invariant', 'critical',
+                        'km_scan_results does not exist — every matview preset is dead',
+                        subject='km_scan_results')]
+
+    # C1 — columns present and populated
+    for preset, cols in MATVIEW_PRESET_COLUMNS.items():
+        absent = [c for c in cols if c not in existing]
+        if absent:
+            out.append(Finding(
+                f'contract_cols_absent_{preset}', 'invariant', 'critical',
+                f'{preset}: the UI renders {", ".join(absent)} but km_scan_results has no such column '
+                f'— every row shows a dash',
+                subject=preset, metric=len(absent), expected=0,
+                detail={'preset': preset, 'absent': absent}))
+            continue
+        present = [c for c in cols if c in existing]
+        sel = ', '.join(f'COUNT({c}) AS n_{c}' for c in present)
+        row = _rows(conn, f"SELECT COUNT(*), {sel} FROM km_scan_results WHERE preset_id = %s",
+                    (preset,))
+        if not row or not row[0][0]:
+            continue                       # preset legitimately empty today
+        total, *counts = row[0]
+        dead = [c for c, n in zip(present, counts) if n == 0]
+        if dead:
+            out.append(Finding(
+                f'contract_cols_null_{preset}', 'invariant', 'warning',
+                f'{preset}: {", ".join(dead)} present in the matview but 100% NULL across all '
+                f'{total} rows — renders as a dash',
+                subject=preset, metric=len(dead), expected=0,
+                detail={'preset': preset, 'all_null': dead, 'rows': int(total)}))
+
+    # C2/C3/C4 — universe, liquidity, vani_rule, straight off the declared metadata
+    for preset, universe, vani_rule, rows_n, bse_n, illiquid_n, vani_n in _rows(conn, """
+        SELECT p.id, p.universe, p.vani_rule,
+               (SELECT COUNT(*) FROM km_scan_results r WHERE r.preset_id = p.id),
+               (SELECT COUNT(*) FROM km_scan_results r WHERE r.preset_id = p.id AND r.exchange = 'BSE'),
+               (SELECT COUNT(*) FROM km_scan_results r WHERE r.preset_id = p.id
+                  AND COALESCE(r.avg_amt_22d, 0) < %s),
+               (SELECT COUNT(*) FROM km_scan_results r WHERE r.preset_id = p.id AND r.vani_flag)
+        FROM kd_scan_presets p
+        WHERE p.is_active AND EXISTS (SELECT 1 FROM km_scan_results r WHERE r.preset_id = p.id)
+    """, (MIN_AVG_AMT_22D_CR,)):
+        if not rows_n:
+            continue
+        if universe == 'NSE_ONLY' and bse_n:
+            out.append(Finding(
+                f'contract_universe_{preset}', 'invariant', 'critical',
+                f'{preset} is declared {universe} in kd_scan_presets but returned {bse_n} BSE rows',
+                subject=preset, metric=bse_n, expected=0,
+                detail={'preset': preset, 'declared': universe, 'bse_rows': int(bse_n)}))
+        # Waking Giants presets enforce ADV >= Rs 1 Cr on a COMBINED-exchange
+        # basis (wg_adv sums each ISIN twin's 22-session average), which is
+        # stricter than — and not comparable to — the row-level NSE-only
+        # avg_amt_22d column. Exempt, or they log a permanent false positive.
+        if illiquid_n and not preset.startswith(('waking_giants', 'wg_')):
+            out.append(Finding(
+                f'contract_liquidity_{preset}', 'invariant', 'warning',
+                f'{preset}: {illiquid_n} of {rows_n} rows trade under Rs {MIN_AVG_AMT_22D_CR} Cr/day '
+                f'— below the platform liquidity floor',
+                subject=preset, metric=illiquid_n, expected=0,
+                detail={'preset': preset, 'below_floor': int(illiquid_n), 'rows': int(rows_n)}))
+        if vani_rule and vani_rule != 'always_true' and vani_n == 0:
+            out.append(Finding(
+                f'contract_vani_dead_{preset}', 'staleness', 'warning',
+                f'{preset} declares vani_rule "{vani_rule}" but not one of its {rows_n} rows carries '
+                f'the flag — the VaNi filter is dead on this scan',
+                subject=preset, metric=0, expected=1,
+                detail={'preset': preset, 'vani_rule': vani_rule, 'rows': int(rows_n)}))
+    return out
+
+
+ALL_CHECKS.append(check_scanner_contract)
