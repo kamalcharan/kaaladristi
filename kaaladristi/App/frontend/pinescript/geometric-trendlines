@@ -1,0 +1,2068 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © ata_sabanci
+//
+// SmartTraders Research Labs — Geometric Trend Lines (GTL)
+// Episode 1 · Open-source research indicator
+//
+// Visualizes ceiling and floor geometric angles from the
+// Isotropic Coordinate System (ICS) as trend lines on the
+// price chart. Two right-triangles — ceiling (HH → high)
+// and floor (LL → low) — reveal the geometric trajectory
+// of price relative to its frozen structural boundaries.
+//
+// ICS coordinate space:
+//   y = log(price) / sigma    (dimensionless)
+//   x = bars / lookback       (dimensionless)
+//   theta = atan(Δy/Δx) × 180/π   (degrees, signed)
+//
+// © SmartTraders Research Labs — Open Source
+//@version=6
+indicator("SmartTraders Research Labs -Episode 1-Geometric Trend Lines - GTL",
+     shorttitle       = "STRL-GTL",
+     overlay          = true,
+     max_lines_count  = 500,
+     max_labels_count = 500,
+     max_boxes_count  = 500)
+
+// ══════════════
+// Constants
+// ══════════════
+
+const int   SIGMA_LEN = 500
+const float MIN_SIGMA = 1e-10
+const float PI        = math.pi
+
+// — Online calibration constants —
+// Validated 2026-07-02 on 14 datasets / 30,288 structures.
+// Stability window/threshold re-validated 2026-07-06 on the
+// same pipeline, walk-forward: JUMP_WIN 5 -> 3 with
+// CAL_JUMPTH 2.0 -> 1.5 keeps accuracy (76.9% vs 76.7%),
+// raises coverage (54.2% vs 46.4%) and improves prequential
+// ECE (1.82 vs 1.87 pp, paired identical metric, 14 datasets).
+// Fading-factor prequential counters: Gama et al.,
+// "On evaluating stream learning algorithms",
+// Machine Learning (Springer), 2013.
+const float CAL_LAMBDA = 0.999
+const float CAL_JUMPTH = 1.5
+const float CAL_MINW   = 30.0
+const int   JUMP_WIN   = 3
+const int   TRACK_CAP  = 500
+
+// ══════════════
+// Inputs
+// ══════════════
+
+int  i_lookback    = input.int(23, "Lookback period", minval = 5, maxval = 500,
+     tooltip = "Analysis window for HH/LL anchors.\nSmaller = faster resets, reacts to recent price.\nLarger = wider structure, captures bigger swings.")
+bool i_showAnchors = input.bool(true, "Show anchor lines",
+     tooltip = "HH and LL horizontal reference lines with price labels.")
+int  i_lblSize     = input.int(13, "Label size", minval = 1, maxval = 100,
+     tooltip = "Size of all on-chart labels and markers.")
+string i_lang      = input.string("English", "Language",
+     options = ["English", "Türkçe", "Deutsch", "Italiano", "Français",
+                "Español", "Bahasa Indonesia", "Bahasa Melayu", "Ελληνικά",
+                "Русский", "中文", "日本語", "한국어", "हिन्दी",
+                "العربية", "فارسی", "עברית"],
+     tooltip = "Display language for the angle map table, chart labels\nand the estimate label. Right-to-left scripts mirror\nthe table layout automatically. Input settings and alert\nmessages stay in English (Pine requires constant text there).")
+// ── Structure Box Settings ──
+string GRP_BOX      = "Structure boxes"
+bool   i_showBoxes  = input.bool(true, "Show structure boxes",
+     group   = GRP_BOX,
+     tooltip = "Master toggle for box visualization.\nData collection stays active for pattern analysis.")
+int    i_histBoxes  = input.int(13, "History count", minval = 0, maxval = 50,
+     group   = GRP_BOX,
+     tooltip = "Completed structure boxes to display.\nActive structure always shown.")
+color  i_boxUpClr   = input.color(#26a69a, "UP break color",   group = GRP_BOX)
+color  i_boxDnClr   = input.color(#ef5350, "DOWN break color", group = GRP_BOX)
+color  i_boxActClr  = input.color(#ff9800, "Active box color",  group = GRP_BOX)
+int    i_boxBgAlpha = input.int(83, "Background transparency", minval = 0, maxval = 100,
+     group   = GRP_BOX,
+     tooltip = "0 = fully opaque, 100 = fully transparent.")
+int    i_boxBorder  = input.int(1, "Border width", minval = 0, maxval = 4,
+     group   = GRP_BOX)
+string i_boxStyle   = input.string("None", "Border style",
+     options = ["None", "Solid", "Dashed", "Dotted"],
+     group   = GRP_BOX)
+bool   i_showAngMap = input.bool(true, "Angle map",
+     group   = GRP_BOX,
+     tooltip = "Sorted break-angle table with live position.\nLeft = ceiling, right = floor.")
+string i_tblPos    = input.string("Top right", "Table position",
+     options = ["Top left", "Top center", "Top right",
+                "Middle left", "Middle center", "Middle right",
+                "Bottom left", "Bottom center", "Bottom right"],
+     group   = GRP_BOX)
+bool   i_showPredLbl = input.bool(true, "Estimate label",
+     group   = GRP_BOX,
+     tooltip = "Simple estimate label floating ahead of the current\ncandle: direction, probability and live accuracy.\nLive readings may change before candle close.\nConfirmed statistics update on bar close.")
+int    i_lblOffset = input.int(23, "Label offset (bars)", minval = 1, maxval = 500,
+     group   = GRP_BOX,
+     tooltip = "How many bars ahead of the current candle\nthe estimate label floats.")
+bool   i_mobileMode = input.bool(false, "Mobile compact mode",
+     group   = GRP_BOX,
+     tooltip = "Compact display for small screens. Hides the angle\nmap table and shrinks the estimate label to a small\nbadge with direction and the verified number only.\nTap the badge to read the full message.")
+bool   i_sigUp      = input.bool(false, "Signal trace: UP calls",
+     group   = GRP_BOX,
+     tooltip = "Neon green triangles below candles where the\nmodel made a full directional call UP (state 6).\nRepaint-free: confirmed-bar log only.")
+bool   i_sigDn      = input.bool(false, "Signal trace: DOWN calls",
+     group   = GRP_BOX,
+     tooltip = "Neon red triangles below candles where the\nmodel made a full directional call DOWN (state 6).\nRepaint-free: confirmed-bar log only.")
+bool   i_sigNc      = input.bool(false, "Signal trace: silent bars",
+     group   = GRP_BOX,
+     tooltip = "Silver triangles below candles that were\nevaluated but received no directional call\n(states 1-5). Repaint-free: confirmed-bar log only.")
+
+// ══════════════
+// Types
+// ══════════════
+
+// One triangle's measurements in ICS space.
+// theta and dy are signed (+/-); area is always >= 0.
+type TriangleData
+    float theta     = 0.0
+    float dy        = 0.0
+    float area      = 0.0
+    float centroidY = 0.0
+
+// Archived structure — one completed ceiling/floor cycle.
+// Stores geometry, timing, and break statistics for chart
+// boxes and downstream pattern analysis.
+type StructureBox
+    float hh          = 0.0
+    float ll          = 0.0
+    int   startTime   = 0
+    int   endTime     = 0
+    int   startBar    = 0
+    int   endBar      = 0
+    float breakDir    = 0.0
+    int   duration    = 0
+    float maxHi       = 0.0
+    float minLo       = 0.0
+    float thCeilAtMax = 0.0
+    float thFlrAtMin  = 0.0
+    float thCeilAtBrk = 0.0
+    float thFlrAtBrk  = 0.0
+    float thCeilPend  = na
+    float thFlrPend   = na
+
+// The anchors frozen on the current structure, plus reset state.
+// hh = highest high, ll = lowest low, mid = geometric mean sqrt(hh*ll).
+type FrozenAnchors
+    float hh        = 0.0
+    float ll        = 0.0
+    int   bar_x     = 0
+    int   time_x    = 0
+    bool  is_active = false
+
+// ══════════════
+// Functions
+// ══════════════
+
+// Yang-Zhang volatility estimator.
+// Combines overnight, close-to-open, and Rogers-Satchell components
+// into a single sigma that normalizes the ICS coordinate space.
+f_yangZhangSigma(int length) =>
+    float yzOR = math.log(open / nz(close[1], open))
+    float yzCO = math.log(close / open)
+    float yzHO = math.log(high / open)
+    float yzHC = math.log(high / close)
+    float yzLO = math.log(low / open)
+    float yzLC = math.log(low / close)
+    float sqOR = ta.variance(yzOR, length, false)
+    float sqCO = ta.variance(yzCO, length, false)
+    float sqRS = ta.sma(yzHO * yzHC + yzLO * yzLC, length)
+    float k  = 0.34 / (1.34 + (length + 1.0) / math.max(length - 1.0, 1.0))
+    float sq = nz(sqOR) + k * nz(sqCO) + (1.0 - k) * nz(sqRS)
+    math.max(math.sqrt(math.max(sq, 0.0)), MIN_SIGMA)
+
+// Right-triangle in fully dimensionless ICS space.
+// Vertical axis: y = log(price)/sigma (dimensionless).
+// Horizontal axis: dx normalized by the lookback window,
+// so x = bars/lookback is also dimensionless.
+// theta and area are therefore scale-intrinsic.
+// dy and theta are SIGNED (target above anchor => positive);
+// area >= 0. In-place: writes directly into the passed TriangleData.
+f_triangle(TriangleData td, float anchorPrice, int anchorBar,
+           float targetPrice, int targetBar, float sig, int lookback) =>
+    td.theta     := na
+    td.dy        := na
+    td.area      := na
+    td.centroidY := na
+    float dxBars = float(targetBar - anchorBar)
+    float dx     = dxBars / math.max(float(lookback), 1.0)
+    if math.abs(dx) > 0.0 and anchorPrice > 0.0 and targetPrice > 0.0 and sig > MIN_SIGMA
+        float yA     = math.log(anchorPrice) / sig
+        float yT     = math.log(targetPrice) / sig
+        float _vd    = yT - yA
+        td.theta     := math.atan(_vd / dx) * (180.0 / PI)
+        td.area      := 0.5 * math.abs(_vd) * math.abs(dx)
+        td.centroidY := (2.0 * yA + yT) / 3.0
+        float _mag   = math.sqrt(dx * dx + _vd * _vd)
+        td.dy        := _vd >= 0.0 ? _mag : -_mag
+
+// Insertion sort — three parallel arrays, descending by keys.
+// O(n²); n ≤ 50 in practice (angle map table rows).
+f_sortParallelDesc(array<float> keys, array<float> dirs, array<int> durs) =>
+    int n = keys.size()
+    if n > 1
+        for i = 1 to n - 1
+            float kv = keys.get(i)
+            float dv = dirs.get(i)
+            int   uv = durs.get(i)
+            int   j  = i - 1
+            while j >= 0 and keys.get(j) < kv
+                keys.set(j + 1, keys.get(j))
+                dirs.set(j + 1, dirs.get(j))
+                durs.set(j + 1, durs.get(j))
+                j -= 1
+            keys.set(j + 1, kv)
+            dirs.set(j + 1, dv)
+            durs.set(j + 1, uv)
+
+// Insertion index for val in a descending-sorted float array.
+f_insertPosDesc(array<float> sorted, float val) =>
+    int pos = sorted.size()
+    for i = 0 to sorted.size() - 1
+        if val >= sorted.get(i)
+            pos := i
+            break
+    pos
+
+// Resets a TriangleData to na (prevents inactive periods from
+// entering downstream pipelines as real zero values).
+f_zeroTri(TriangleData td) =>
+    td.theta     := na
+    td.dy        := na
+    td.area      := na
+    td.centroidY := na
+
+// Adaptive dual-model Gaussian KDE (parameter-free).
+// pendMode false: features = θ at break, label = own direction.
+// pendMode true : features = pending θ, label = NEXT break dir.
+// Bandwidth   : Silverman's rule, d = 2 → h_i = σ̂_i · n^(−1/6).
+// Probability : Beta(1,1) posterior scaled by Kish effective n.
+// Significance: 95% credible interval vs 50% (normal approx).
+// @returns [pUp 0-100, significant, effective sample size]
+f_kdeProb(array<StructureBox> hist, float qC, float qF, bool pendMode) =>
+    float _p  = 50.0
+    bool  _sg = false
+    float _ne = 0.0
+    int _minN = pendMode ? 2 : 1
+    if not na(qC) and not na(qF) and hist.size() >= _minN
+        int _iEnd = hist.size() - _minN
+        float _sumC = 0.0
+        float _sumF = 0.0
+        float _sqC  = 0.0
+        float _sqF  = 0.0
+        int   _nT   = 0
+        for i = 0 to _iEnd
+            StructureBox sb = hist.get(i)
+            float fC = pendMode ? sb.thCeilPend : sb.thCeilAtBrk
+            float fF = pendMode ? sb.thFlrPend  : sb.thFlrAtBrk
+            if not na(fC) and not na(fF)
+                _sumC += fC
+                _sumF += fF
+                _sqC  += fC * fC
+                _sqF  += fF * fF
+                _nT   += 1
+        if _nT >= 2
+            float _mC  = _sumC / _nT
+            float _mF  = _sumF / _nT
+            float _vC  = math.max((_sqC - _nT * _mC * _mC) / (_nT - 1.0), 0.0)
+            float _vF  = math.max((_sqF - _nT * _mF * _mF) / (_nT - 1.0), 0.0)
+            float _fac = math.pow(_nT, -1.0 / 6.0)
+            float _hC  = math.max(_fac * math.sqrt(_vC), 1e-6)
+            float _hF  = math.max(_fac * math.sqrt(_vF), 1e-6)
+            float _wUp = 0.0
+            float _wDn = 0.0
+            float _w2  = 0.0
+            for i = 0 to _iEnd
+                StructureBox sb = hist.get(i)
+                float fC = pendMode ? sb.thCeilPend : sb.thCeilAtBrk
+                float fF = pendMode ? sb.thFlrPend  : sb.thFlrAtBrk
+                float lb = pendMode ? hist.get(i + 1).breakDir : sb.breakDir
+                if not na(fC) and not na(fF)
+                    float zC = (qC - fC) / _hC
+                    float zF = (qF - fF) / _hF
+                    float w  = math.exp(-0.5 * (zC * zC + zF * zF))
+                    _w2 += w * w
+                    if lb > 0.0
+                        _wUp += w
+                    else
+                        _wDn += w
+            float _S = _wUp + _wDn
+            if _S > 0.0 and _w2 > 0.0
+                _ne := _S * _S / _w2
+                float _aP = 1.0 + _wUp / _S * _ne
+                float _bP = 1.0 + _wDn / _S * _ne
+                float _mu = _aP / (_aP + _bP)
+                _p := _mu * 100.0
+                float _sd = math.sqrt(_aP * _bP / ((_aP + _bP) * (_aP + _bP) * (_aP + _bP + 1.0)))
+                _sg := math.abs(_mu - 0.5) >= 1.645 * _sd
+    [_p, _sg, _ne]
+
+// ══════════════
+// Multilanguage
+// ══════════════
+
+// Display language index — resolved from the dropdown label.
+//  0 English    1 Türkçe     2 العربية    3 हिन्दी      4 中文
+//  5 한국어      6 Deutsch    7 Italiano   8 Русский    9 Français
+// 10 Español   11 日本語     12 فارسی     13 עברית     14 Ελληνικά
+// 15 Indonesia 16 Melayu
+int LANG = switch i_lang
+    "Türkçe"           => 1
+    "العربية"          => 2
+    "हिन्दी"            => 3
+    "中文"              => 4
+    "한국어"            => 5
+    "Deutsch"          => 6
+    "Italiano"         => 7
+    "Русский"          => 8
+    "Français"         => 9
+    "Español"          => 10
+    "日本語"            => 11
+    "فارسی"            => 12
+    "עברית"            => 13
+    "Ελληνικά"         => 14
+    "Bahasa Indonesia" => 15
+    "Bahasa Melayu"    => 16
+    =>                    0
+
+// Right-to-left scripts (Arabic, Persian, Hebrew): the angle map
+// columns are mirrored and direction-sensitive symbols flipped.
+bool RTL = LANG == 2 or LANG == 12 or LANG == 13
+
+// Mirrors a 6-column table index when an RTL language is active.
+f_col(int c) =>
+    RTL ? 5 - c : c
+
+// — Table strings — one translator per string, indexed by LANG.
+// Unmapped indices fall back to English for forward compatibility.
+
+f_txDir() => switch LANG
+    1  => "Yön"
+    2  => "الاتجاه"
+    3  => "दिशा"
+    4  => "方向"
+    5  => "방향"
+    6  => "Richtung"
+    7  => "Direzione"
+    8  => "Направление"
+    9  => "Direction"
+    10 => "Dirección"
+    11 => "方向"
+    12 => "جهت"
+    13 => "כיוון"
+    14 => "Κατεύθυνση"
+    15 => "Arah"
+    16 => "Arah"
+    =>    "Direction"
+
+f_txCeil() => switch LANG
+    1  => "Tavan açısı"
+    2  => "زاوية السقف"
+    3  => "ऊपरी कोण"
+    4  => "顶部角度"
+    5  => "천장 각도"
+    6  => "Deckenwinkel"
+    7  => "Angolo soffitto"
+    8  => "Угол потолка"
+    9  => "Angle plafond"
+    10 => "Ángulo techo"
+    11 => "天井角度"
+    12 => "زاویهٔ سقف"
+    13 => "זווית תקרה"
+    14 => "Γωνία οροφής"
+    15 => "Sudut atas"
+    16 => "Sudut atas"
+    =>    "Ceiling angle"
+
+f_txFloor() => switch LANG
+    1  => "Taban açısı"
+    2  => "زاوية القاع"
+    3  => "निचला कोण"
+    4  => "底部角度"
+    5  => "바닥 각도"
+    6  => "Bodenwinkel"
+    7  => "Angolo pavimento"
+    8  => "Угол дна"
+    9  => "Angle plancher"
+    10 => "Ángulo suelo"
+    11 => "床角度"
+    12 => "زاویهٔ کف"
+    13 => "זווית רצפה"
+    14 => "Γωνία δαπέδου"
+    15 => "Sudut bawah"
+    16 => "Sudut bawah"
+    =>    "Floor angle"
+
+f_txDur() => switch LANG
+    1  => "Süre"
+    2  => "المدة"
+    3  => "अवधि"
+    4  => "时长"
+    5  => "기간"
+    6  => "Dauer"
+    7  => "Durata"
+    8  => "Длительность"
+    9  => "Durée"
+    10 => "Duración"
+    11 => "期間"
+    12 => "مدت"
+    13 => "משך"
+    14 => "Διάρκεια"
+    15 => "Durasi"
+    16 => "Tempoh"
+    =>    "Duration"
+
+f_txPUp() => switch LANG
+    1  => "Yükseliş olasılığı"
+    2  => "احتمال الصعود"
+    3  => "तेजी की संभावना"
+    4  => "上涨概率"
+    5  => "상승 확률"
+    6  => "Aufwärtswahrscheinlichkeit"
+    7  => "Probabilità rialzo"
+    8  => "Вероятность роста"
+    9  => "Probabilité hausse"
+    10 => "Probabilidad alcista"
+    11 => "上昇確率"
+    12 => "احتمال صعود"
+    13 => "הסתברות עלייה"
+    14 => "Πιθανότητα ανόδου"
+    15 => "Probabilitas naik"
+    16 => "Kebarangkalian naik"
+    =>    "Up probability"
+
+f_txPDn() => switch LANG
+    1  => "Düşüş olasılığı"
+    2  => "احتمال الهبوط"
+    3  => "मंदी की संभावना"
+    4  => "下跌概率"
+    5  => "하락 확률"
+    6  => "Abwärtswahrscheinlichkeit"
+    7  => "Probabilità ribasso"
+    8  => "Вероятность падения"
+    9  => "Probabilité baisse"
+    10 => "Probabilidad bajista"
+    11 => "下落確率"
+    12 => "احتمال نزول"
+    13 => "הסתברות ירידה"
+    14 => "Πιθανότητα καθόδου"
+    15 => "Probabilitas turun"
+    16 => "Kebarangkalian turun"
+    =>    "Down probability"
+
+// — Anchor label strings —
+
+f_txHH() => switch LANG
+    1  => "Tavan"
+    2  => "السقف"
+    3  => "उच्च"
+    4  => "高点"
+    5  => "고점"
+    6  => "Hoch"
+    7  => "Massimo"
+    8  => "Максимум"
+    9  => "Sommet"
+    10 => "Máximo"
+    11 => "高値"
+    12 => "سقف"
+    13 => "שיא"
+    14 => "Κορυφή"
+    15 => "Puncak"
+    16 => "Puncak"
+    =>    "HH"
+
+f_txLL() => switch LANG
+    1  => "Taban"
+    2  => "القاع"
+    3  => "निम्न"
+    4  => "低点"
+    5  => "저점"
+    6  => "Tief"
+    7  => "Minimo"
+    8  => "Минимум"
+    9  => "Plancher"
+    10 => "Mínimo"
+    11 => "安値"
+    12 => "کف"
+    13 => "שפל"
+    14 => "Πυθμένας"
+    15 => "Dasar"
+    16 => "Dasar"
+    =>    "LL"
+
+f_txHHPend() => switch LANG
+    1  => "Tavan bekliyor"
+    2  => "السقف قيد الانتظار"
+    3  => "उच्च लंबित"
+    4  => "高点待定"
+    5  => "고점 대기"
+    6  => "Hoch ausstehend"
+    7  => "Massimo in attesa"
+    8  => "Максимум ожидается"
+    9  => "Sommet en attente"
+    10 => "Máximo pendiente"
+    11 => "高値保留中"
+    12 => "سقف در انتظار"
+    13 => "שיא ממתין"
+    14 => "Κορυφή σε αναμονή"
+    15 => "Puncak tertunda"
+    16 => "Puncak menunggu"
+    =>    "HH pending"
+
+f_txLLPend() => switch LANG
+    1  => "Taban bekliyor"
+    2  => "القاع قيد الانتظار"
+    3  => "निम्न लंबित"
+    4  => "低点待定"
+    5  => "저점 대기"
+    6  => "Tief ausstehend"
+    7  => "Minimo in attesa"
+    8  => "Минимум ожидается"
+    9  => "Plancher en attente"
+    10 => "Mínimo pendiente"
+    11 => "安値保留中"
+    12 => "کف در انتظار"
+    13 => "שפל ממתין"
+    14 => "Πυθμένας σε αναμονή"
+    15 => "Dasar tertunda"
+    16 => "Dasar menunggu"
+    =>    "LL pending"
+
+// — Estimate label strings —
+// {0} and {1} are placeholders filled with str.replace at render
+// time, so each language keeps its own natural word order.
+
+f_txIntro() => switch LANG
+    1  => "Şu anki okumam?"
+    2  => "قراءتي الآن؟"
+    3  => "अभी मेरा आकलन?"
+    4  => "我现在的判断？"
+    5  => "지금 내 판단은?"
+    6  => "Meine Einschätzung jetzt?"
+    7  => "La mia lettura ora?"
+    8  => "Мой прогноз сейчас?"
+    9  => "Ma lecture maintenant ?"
+    10 => "¿Mi lectura ahora?"
+    11 => "今の私の見立ては？"
+    12 => "برداشت من همین حالا؟"
+    13 => "הקריאה שלי כרגע?"
+    14 => "Η εκτίμησή μου τώρα;"
+    15 => "Bacaan saya sekarang?"
+    16 => "Bacaan saya sekarang?"
+    =>    "My read right now?"
+
+// — Engine v2 scenario strings (unified single-number label) —
+// Human first-person voice, flowing sentences, no fragments.
+// Every state carries its own real diagnostics. Skeletons per
+// GTL_Label_Scenarios_v2 (locked with the operator, 2026-07-03).
+
+f_txWarmup() => switch LANG
+    1  => "Ölçümlerimi hâlâ ısıtıyorum, değerlendirebilmem için {0} mum daha gerekiyor"
+    2  => "ما زلت أجهّز قياساتي وأحتاج إلى {0} شمعة أخرى قبل أن أتمكن من التقييم"
+    3  => "मैं अभी अपनी गणनाएँ तैयार कर रहा हूँ, आकलन के लिए मुझे {0} और कैंडल चाहिए"
+    4  => "我还在预热我的测量，还需要 {0} 根K线才能开始评估"
+    5  => "아직 측정을 준비하는 중이라 평가하려면 캔들 {0}개가 더 필요합니다"
+    6  => "Ich kalibriere meine Messungen noch und brauche {0} weitere Kerzen, bevor ich bewerten kann"
+    7  => "Sto ancora scaldando le mie misurazioni, mi servono altre {0} candele prima di poter valutare"
+    8  => "Я ещё прогреваю свои измерения, мне нужно ещё {0} свечей, прежде чем я смогу оценивать"
+    9  => "Je suis encore en train de préparer mes mesures, il me faut {0} bougies de plus avant de pouvoir évaluer"
+    10 => "Todavía estoy calentando mis mediciones, necesito {0} velas más antes de poder evaluar"
+    11 => "まだ測定のウォームアップ中です。評価にはあと {0} 本のローソク足が必要です"
+    12 => "هنوز دارم اندازه‌گیری‌هام رو آماده می‌کنم و {0} کندل دیگه لازم دارم تا بتونم ارزیابی کنم"
+    13 => "אני עדיין מחמם את המדידות שלי וצריך עוד {0} נרות לפני שאוכל להעריך"
+    14 => "Ακόμη προθερμαίνω τις μετρήσεις μου, χρειάζομαι {0} ακόμη κεριά πριν μπορέσω να αξιολογήσω"
+    15 => "Saya masih menyiapkan pengukuran dan butuh {0} candle lagi sebelum bisa menilai"
+    16 => "Saya masih menyiapkan pengukuran saya dan perlukan {0} lagi lilin sebelum boleh menilai"
+    =>    "I am still warming up my measurements and I need {0} more candles before I can evaluate"
+
+f_txNoData() => switch LANG
+    1  => "Henüz yargıya varacak kadar verim yok. Şimdiye dek yalnızca {0} yapı arşivledim, konuşabilmem için daha fazlası gerek"
+    2  => "ليست لدي بيانات كافية للحكم بعد. لم أؤرشف حتى الآن سوى {0} من الهياكل وأحتاج إلى المزيد قبل أن أتحدث"
+    3  => "अभी मेरे पास आकलन के लिए पर्याप्त डेटा नहीं है। अब तक केवल {0} संरचनाएँ संग्रहित की हैं, बोलने से पहले और चाहिए"
+    4  => "我还没有足够的数据来判断。到目前为止只归档了 {0} 个结构，需要更多才能发言"
+    5  => "아직 판단할 데이터가 부족합니다. 지금까지 구조 {0}개만 보관했고 말하려면 더 필요합니다"
+    6  => "Ich habe noch nicht genug Daten für ein Urteil. Bisher habe ich nur {0} Strukturen archiviert und brauche mehr, bevor ich sprechen kann"
+    7  => "Non ho ancora abbastanza dati per giudicare. Finora ho archiviato solo {0} strutture e me ne servono di più prima di parlare"
+    8  => "У меня пока недостаточно данных для суждения. Я заархивировал лишь {0} структур и мне нужно больше, прежде чем говорить"
+    9  => "Je n'ai pas encore assez de données pour juger. Je n'ai archivé que {0} structures et il m'en faut plus avant de parler"
+    10 => "Aún no tengo datos suficientes para juzgar. Solo he archivado {0} estructuras y necesito más antes de hablar"
+    11 => "まだ判断に足るデータがありません。これまでに {0} 個の構造しか記録しておらず、発言するにはもっと必要です"
+    12 => "هنوز دادهٔ کافی برای قضاوت ندارم. تا این لحظه فقط {0} ساختار بایگانی کرده‌م و برای اظهارنظر به بیشتر نیاز دارم"
+    13 => "אין לי עדיין מספיק נתונים כדי לשפוט. עד כה תיעדתי רק {0} מבנים ואני צריך עוד לפני שאדבר"
+    14 => "Δεν έχω ακόμη αρκετά δεδομένα για να κρίνω. Έχω αρχειοθετήσει μόνο {0} δομές και χρειάζομαι περισσότερες πριν μιλήσω"
+    15 => "Saya belum punya cukup data untuk menilai. Sejauh ini baru {0} struktur yang saya arsipkan dan saya butuh lebih banyak sebelum bicara"
+    16 => "Saya belum ada data yang cukup untuk menilai. Setakat ini saya hanya arkibkan {0} struktur dan perlukan lebih sebelum bercakap"
+    =>    "I do not have enough data to judge yet. I have only archived {0} structures so far and I need more before I can speak"
+
+f_txBirthUp() => switch LANG
+    1  => "Bu yapı henüz yeni doğdu ve doğum anında geometrisi yukarı eğilimliydi ▲"
+    2  => "هذا الهيكل وُلد للتو وكانت هندسته عند الولادة تميل إلى الأعلى ▲"
+    3  => "यह संरचना अभी जन्मी है और जन्म के समय इसकी ज्यामिति ऊपर की ओर झुकी थी ▲"
+    4  => "这个结构刚刚诞生，诞生时它的几何形态偏向上方 ▲"
+    5  => "이 구조는 방금 태어났고 탄생 시점의 기하 구조는 위쪽으로 기울어 있었습니다 ▲"
+    6  => "Diese Struktur ist gerade erst entstanden und ihre Geometrie neigte bei der Geburt nach oben ▲"
+    7  => "Questa struttura è appena nata e alla nascita la sua geometria pendeva verso l'alto ▲"
+    8  => "Эта структура только что родилась, и при рождении её геометрия склонялась вверх ▲"
+    9  => "Cette structure vient de naître et à sa naissance sa géométrie penchait vers le haut ▲"
+    10 => "Esta estructura acaba de nacer y en su nacimiento la geometría se inclinaba al alza ▲"
+    11 => "この構造は生まれたばかりで、誕生時の形状は上方向に傾いていました ▲"
+    12 => "این ساختار تازه متولد شده و هندسه‌ش در لحظهٔ تولد به بالا متمایل بود ▲"
+    13 => "המבנה הזה נולד זה עתה ובלידתו הגאומטריה שלו נטתה כלפי מעלה ▲"
+    14 => "Αυτή η δομή μόλις γεννήθηκε και στη γέννησή της η γεωμετρία της έγερνε προς τα πάνω ▲"
+    15 => "Struktur ini baru saja lahir dan saat lahir geometrinya condong ke atas ▲"
+    16 => "Struktur ini baru sahaja lahir dan ketika lahir geometrinya condong ke atas ▲"
+    =>    "This structure was just born and at its birth the geometry leaned up ▲"
+
+f_txBirthDn() => switch LANG
+    1  => "Bu yapı henüz yeni doğdu ve doğum anında geometrisi aşağı eğilimliydi ▼"
+    2  => "هذا الهيكل وُلد للتو وكانت هندسته عند الولادة تميل إلى الأسفل ▼"
+    3  => "यह संरचना अभी जन्मी है और जन्म के समय इसकी ज्यामिति नीचे की ओर झुकी थी ▼"
+    4  => "这个结构刚刚诞生，诞生时它的几何形态偏向下方 ▼"
+    5  => "이 구조는 방금 태어났고 탄생 시점의 기하 구조는 아래쪽으로 기울어 있었습니다 ▼"
+    6  => "Diese Struktur ist gerade erst entstanden und ihre Geometrie neigte bei der Geburt nach unten ▼"
+    7  => "Questa struttura è appena nata e alla nascita la sua geometria pendeva verso il basso ▼"
+    8  => "Эта структура только что родилась, и при рождении её геометрия склонялась вниз ▼"
+    9  => "Cette structure vient de naître et à sa naissance sa géométrie penchait vers le bas ▼"
+    10 => "Esta estructura acaba de nacer y en su nacimiento la geometría se inclinaba a la baja ▼"
+    11 => "この構造は生まれたばかりで、誕生時の形状は下方向に傾いていました ▼"
+    12 => "این ساختار تازه متولد شده و هندسه‌ش در لحظهٔ تولد به پایین متمایل بود ▼"
+    13 => "המבנה הזה נולד זה עתה ובלידתו הגאומטריה שלו נטתה כלפי מטה ▼"
+    14 => "Αυτή η δομή μόλις γεννήθηκε και στη γέννησή της η γεωμετρία της έγερνε προς τα κάτω ▼"
+    15 => "Struktur ini baru saja lahir dan saat lahir geometrinya condong ke bawah ▼"
+    16 => "Struktur ini baru sahaja lahir dan ketika lahir geometrinya condong ke bawah ▼"
+    =>    "This structure was just born and at its birth the geometry leaned down ▼"
+
+f_txBirthUnclear() => switch LANG
+    1  => "Bu yapı henüz yeni doğdu ve açıkçası geometrisi hâlâ karar vermek için çok yakın"
+    2  => "هذا الهيكل وُلد للتو وبصراحة هندسته ما زالت متقاربة جدا للحسم"
+    3  => "यह संरचना अभी जन्मी है और सच कहूँ तो इसकी ज्यामिति अभी बहुत अनिर्णीत है"
+    4  => "这个结构刚刚诞生，说实话它的几何形态目前仍难分胜负"
+    5  => "이 구조는 방금 태어났고 솔직히 그 기하 구조는 아직 판단하기 어렵습니다"
+    6  => "Diese Struktur ist gerade erst entstanden und ehrlich gesagt ist ihre Geometrie noch zu knapp für ein Urteil"
+    7  => "Questa struttura è appena nata e onestamente la sua geometria è ancora troppo incerta"
+    8  => "Эта структура только что родилась, и, честно говоря, её геометрия пока слишком неопределённа"
+    9  => "Cette structure vient de naître et honnêtement sa géométrie est encore trop indécise"
+    10 => "Esta estructura acaba de nacer y honestamente su geometría todavía está demasiado ajustada"
+    11 => "この構造は生まれたばかりで、正直なところ形状はまだ判断がつきません"
+    12 => "این ساختار تازه متولد شده و راستش هندسه‌ش هنوز خیلی سربه‌سره"
+    13 => "המבנה הזה נולד זה עתה ובכנות הגאומטריה שלו עדיין קרובה מדי להכרעה"
+    14 => "Αυτή η δομή μόλις γεννήθηκε και ειλικρινά η γεωμετρία της είναι ακόμη πολύ αμφίρροπη"
+    15 => "Struktur ini baru saja lahir dan jujur geometrinya masih terlalu sulit dipastikan"
+    16 => "Struktur ini baru sahaja lahir dan jujurnya geometrinya masih terlalu sukar dipastikan"
+    =>    "This structure was just born and honestly its geometry is still too close to call"
+
+f_txStageRate() => switch LANG
+    1  => "Bu durumda hesaplarım zamanın yüzde {0}'ında doğru çıktı"
+    2  => "في هذا الوضع كانت حساباتي صحيحة في {0} بالمئة من الحالات"
+    3  => "इस स्थिति में मेरी गणनाएँ {0} प्रतिशत बार सही रही हैं"
+    4  => "在这种情形下，我的计算有 {0}% 的时候是对的"
+    5  => "이런 상황에서 제 계산은 {0}퍼센트의 확률로 맞았습니다"
+    6  => "In dieser Lage lagen meine Berechnungen in {0} Prozent der Fälle richtig"
+    7  => "In questa situazione i miei calcoli sono stati giusti il {0} per cento delle volte"
+    8  => "В такой ситуации мои расчёты были верны в {0} процентах случаев"
+    9  => "Dans cette situation, mes calculs ont été justes {0} pour cent du temps"
+    10 => "En esta situación mis cálculos han acertado el {0} por ciento de las veces"
+    11 => "この状況では、私の計算は {0} パーセントの割合で正しくありました"
+    12 => "در این وضعیت محاسباتم در {0} درصد مواقع درست بوده"
+    13 => "במצב הזה החישובים שלי היו נכונים ב-{0} אחוז מהמקרים"
+    14 => "Σε αυτή την κατάσταση οι υπολογισμοί μου ήταν σωστοί στο {0} τοις εκατό των περιπτώσεων"
+    15 => "Dalam situasi ini perhitungan saya benar dalam {0} persen kasus"
+    16 => "Dalam keadaan ini pengiraan saya betul dalam {0} peratus kes"
+    =>    "In this situation my calculations have been right {0} percent of the time"
+
+f_txNoStageRec() => switch LANG
+    1  => "Bu aşama için henüz bir sicilim yok"
+    2  => "ليس لدي سجل لهذه المرحلة بعد"
+    3  => "इस चरण के लिए मेरे पास अभी कोई रिकॉर्ड नहीं है"
+    4  => "这个阶段我还没有任何战绩记录"
+    5  => "이 단계에 대한 기록은 아직 없습니다"
+    6  => "Für diese Phase habe ich noch keine Bilanz"
+    7  => "Per questa fase non ho ancora uno storico"
+    8  => "Для этой стадии у меня пока нет послужного списка"
+    9  => "Je n'ai pas encore d'historique pour cette phase"
+    10 => "Aún no tengo historial para esta fase"
+    11 => "この段階の実績はまだありません"
+    12 => "برای این مرحله هنوز کارنامه‌ای ندارم"
+    13 => "אין לי עדיין רקורד לשלב הזה"
+    14 => "Δεν έχω ακόμη ιστορικό για αυτό το στάδιο"
+    15 => "Saya belum punya rekam jejak untuk tahap ini"
+    16 => "Saya belum ada rekod untuk peringkat ini"
+    =>    "I have no track record for this stage yet"
+
+f_txStabFrom5() => switch LANG
+    1  => "Üçüncü mumdan itibaren istikrarı da ölçebilirim"
+    2  => "ابتداء من الشمعة الثالثة يمكنني قياس الاستقرار أيضا"
+    3  => "तीसरी कैंडल से मैं स्थिरता भी माप सकता हूँ"
+    4  => "从第三根K线开始我还能测量稳定性"
+    5  => "세 번째 캔들부터는 안정성도 측정할 수 있습니다"
+    6  => "Ab der dritten Kerze kann ich auch die Stabilität messen"
+    7  => "Dalla terza candela posso misurare anche la stabilità"
+    8  => "Начиная с третьей свечи я смогу измерять и устойчивость"
+    9  => "À partir de la troisième bougie je pourrai aussi mesurer la stabilité"
+    10 => "A partir de la tercera vela también podré medir la estabilidad"
+    11 => "3本目のローソク足からは安定性も測定できます"
+    12 => "از کندل سوم به بعد پایداری رو هم می‌تونم بسنجم"
+    13 => "מהנר השלישי אוכל למדוד גם את היציבות"
+    14 => "Από το τρίτο κερί μπορώ να μετρήσω και τη σταθερότητα"
+    15 => "Mulai candle ketiga saya juga bisa mengukur stabilitas"
+    16 => "Mulai lilin ketiga saya juga boleh mengukur kestabilan"
+    =>    "From the third candle I can also measure stability"
+
+f_txUnstable() => switch LANG
+    1  => "Tahminim şu an fazla dalgalanıyor. Son üç mumdaki sapması {0} ve 1.5 istikrar eşiğimin üzerinde, bu yüzden sakinleşene kadar yön söylemiyorum"
+    2  => "تقديري يتأرجح كثيرا الآن. انحرافه في آخر ثلاث شموع {0} وهو فوق عتبة الاستقرار 1.5، لذا لن أعلن اتجاها حتى يهدأ"
+    3  => "मेरा आकलन अभी बहुत झूल रहा है। पिछली तीन कैंडल में इसका विचलन {0} है, जो 1.5 की स्थिरता सीमा से ऊपर है, इसलिए शांत होने तक मैं कोई दिशा नहीं बताऊँगा"
+    4  => "我的估计现在波动太大。最近三根K线的偏差为 {0}，高于 1.5 的稳定阈值，所以在它平稳下来之前我不给出方向"
+    5  => "제 추정치가 지금 너무 흔들립니다. 최근 세 캔들의 편차가 {0}로 안정 임계값 1.5를 넘어서, 잠잠해질 때까지 방향을 말하지 않겠습니다"
+    6  => "Meine Schätzung schwankt gerade zu stark. Ihre Abweichung über die letzten drei Kerzen liegt bei {0}, über meiner Stabilitätsschwelle von 1.5, daher nenne ich keine Richtung, bis sie sich beruhigt"
+    7  => "La mia stima sta oscillando troppo in questo momento. La sua deviazione nelle ultime tre candele è {0}, sopra la mia soglia di stabilità di 1.5, quindi non indico una direzione finché non si calma"
+    8  => "Моя оценка сейчас слишком колеблется. Её отклонение за последние три свечи равно {0}, выше моего порога устойчивости 1.5, поэтому я не называю направление, пока она не успокоится"
+    9  => "Mon estimation oscille trop en ce moment. Son écart sur les trois dernières bougies est de {0}, au-dessus de mon seuil de stabilité de 1.5, donc je ne donne pas de direction tant qu'elle ne se calme pas"
+    10 => "Mi estimación está oscilando demasiado ahora mismo. Su desviación en las últimas tres velas es {0}, por encima de mi umbral de estabilidad de 1.5, así que no doy dirección hasta que se calme"
+    11 => "私の推定は今、揺れが大きすぎます。直近3本での偏差は {0} で、安定しきい値 1.5 を超えているため、落ち着くまで方向は示しません"
+    12 => "برآوردم الان زیادی نوسان داره. انحرافش در سه کندل اخیر {0} شده و از آستانهٔ پایداری 1.5 بالاتره، پس تا آروم نشه جهتی اعلام نمی‌کنم"
+    13 => "ההערכה שלי מתנדנדת יותר מדי כרגע. הסטייה בשלושת הנרות האחרונים היא {0}, מעל סף היציבות 1.5 שלי, ולכן לא אכריז על כיוון עד שתירגע"
+    14 => "Η εκτίμησή μου ταλαντεύεται υπερβολικά αυτή τη στιγμή. Η απόκλισή της στα τρία τελευταία κεριά είναι {0}, πάνω από το όριο σταθερότητας 1.5, οπότε δεν δίνω κατεύθυνση μέχρι να ηρεμήσει"
+    15 => "Perkiraan saya sedang terlalu berayun. Deviasinya dalam tiga candle terakhir adalah {0}, di atas ambang stabilitas 1.5, jadi saya tidak menyebut arah sampai tenang"
+    16 => "Anggaran saya kini terlalu berayun. Sisihannya dalam tiga lilin terakhir ialah {0}, melebihi ambang kestabilan 1.5, jadi saya tidak menyatakan arah sehingga ia tenang"
+    =>    "My estimate is swinging too much right now. Its deviation over the last three candles is {0}, above my 1.5 stability threshold, so I am not calling a direction until it settles"
+
+f_txTooClose() => switch LANG
+    1  => "Açıkçası tahminim şu an istatistiksel olarak yazı turadan ayırt edilemiyor. Netleşince konuşurum"
+    2  => "بصراحة، تقديري الآن لا يمكن تمييزه إحصائيا عن رمية عملة. سأتكلم عندما تتضح الصورة"
+    3  => "सच कहूँ तो मेरा आकलन अभी सांख्यिकीय रूप से सिक्का उछालने से अलग नहीं है। स्पष्ट होने पर बोलूँगा"
+    4  => "说实话，我的估计目前在统计上与抛硬币无异。等更明朗时我会发言"
+    5  => "솔직히 지금 제 추정치는 통계적으로 동전 던지기와 구분되지 않습니다. 더 명확해지면 말씀드리겠습니다"
+    6  => "Ehrlich gesagt ist meine Schätzung derzeit statistisch nicht von einem Münzwurf zu unterscheiden. Ich melde mich, wenn es klarer ist"
+    7  => "Onestamente la mia stima al momento non è statisticamente distinguibile dal lancio di una moneta. Parlerò quando sarà più chiaro"
+    8  => "Честно говоря, моя оценка сейчас статистически неотличима от подбрасывания монеты. Я выскажусь, когда станет яснее"
+    9  => "Honnêtement, mon estimation n'est pas statistiquement distinguable d'un pile ou face en ce moment. Je parlerai quand ce sera plus clair"
+    10 => "Honestamente, mi estimación ahora mismo no se distingue estadísticamente de lanzar una moneda. Hablaré cuando esté más claro"
+    11 => "正直なところ、今の推定は統計的にコイン投げと区別がつきません。はっきりしたらお伝えします"
+    12 => "راستش برآورد الانم از نظر آماری از پنجاه‌پنجاه جداشدنی نیست. هر وقت شفاف‌تر شد حرف می‌زنم"
+    13 => "בכנות, ההערכה שלי כרגע אינה ניתנת להבחנה סטטיסטית מהטלת מטבע. אדבר כשיהיה ברור יותר"
+    14 => "Ειλικρινά, η εκτίμησή μου αυτή τη στιγμή δεν ξεχωρίζει στατιστικά από ρίψη νομίσματος. Θα μιλήσω όταν ξεκαθαρίσει"
+    15 => "Jujur, perkiraan saya saat ini secara statistik tidak berbeda dari lempar koin. Saya akan bicara saat lebih jelas"
+    16 => "Jujurnya, anggaran saya kini secara statistik tidak dapat dibezakan daripada lambungan syiling. Saya akan bercakap bila lebih jelas"
+    =>    "Honestly, my estimate is not statistically separable from a coin flip right now. I will speak up when it is clearer"
+
+f_txColdUp() => switch LANG
+    1  => "Geometri yukarı eğilimli ▲, ama bu sınıftan şimdiye dek yalnızca {0} an gördüm ve bir sınıfa ancak otuzdan sonra güvenirim. O zamana kadar sayıyı saklıyorum"
+    2  => "الهندسة تميل إلى الأعلى ▲، لكنني لم أر من هذه الفئة حتى الآن سوى {0} من اللحظات وأنا لا أثق بفئة إلا بعد ثلاثين. سأحتفظ بالرقم حتى ذلك الحين"
+    3  => "ज्यामिति ऊपर की ओर झुकी है ▲, पर इस वर्ग के अभी केवल {0} क्षण देखे हैं और मैं किसी वर्ग पर तीस के बाद ही भरोसा करता हूँ। तब तक संख्या रोक रखूँगा"
+    4  => "几何形态偏向上方 ▲，但这个类别我目前只见过 {0} 个时刻，而我要在三十个之后才信任一个类别。在那之前我先保留数字"
+    5  => "기하 구조는 위쪽으로 기울었지만 ▲ 이 클래스는 아직 {0}개의 순간만 보았고 저는 서른 개가 넘어야 클래스를 신뢰합니다. 그때까지 숫자는 보류하겠습니다"
+    6  => "Die Geometrie neigt nach oben ▲, aber ich habe von dieser Klasse erst {0} Momente gesehen und ich vertraue einer Klasse erst ab dreißig. Bis dahin halte ich die Zahl zurück"
+    7  => "La geometria pende verso l'alto ▲, ma di questa classe ho visto finora solo {0} momenti e mi fido di una classe solo dopo trenta. Fino ad allora trattengo il numero"
+    8  => "Геометрия склоняется вверх ▲, но моментов этого класса я видел пока лишь {0}, а классу я доверяю только после тридцати. До тех пор придержу число"
+    9  => "La géométrie penche vers le haut ▲, mais je n'ai vu que {0} moments de cette classe et je ne fais confiance à une classe qu'après trente. D'ici là je garde le chiffre"
+    10 => "La geometría se inclina al alza ▲, pero de esta clase solo he visto {0} momentos y solo confío en una clase después de treinta. Hasta entonces me guardo el número"
+    11 => "形状は上方向に傾いています ▲ が、このクラスの事例はまだ {0} 件しか見ておらず、私は30件を超えて初めてクラスを信頼します。それまで数字は控えます"
+    12 => "هندسه به بالا متمایله ▲ ولی از این کلاس فقط {0} نمونه دیده‌م و من به یه کلاس بعد از سی نمونه اعتماد می‌کنم. تا اون موقع عددش رو نگه می‌دارم"
+    13 => "הגאומטריה נוטה כלפי מעלה ▲, אבל ראיתי עד כה רק {0} רגעים מהמחלקה הזו ואני סומך על מחלקה רק אחרי שלושים. עד אז אחזיק את המספר"
+    14 => "Η γεωμετρία γέρνει προς τα πάνω ▲, αλλά από αυτή την κατηγορία έχω δει μόνο {0} στιγμές και εμπιστεύομαι μια κατηγορία μόνο μετά τις τριάντα. Ως τότε κρατώ τον αριθμό"
+    15 => "Geometri condong ke atas ▲, tapi dari kelas ini saya baru melihat {0} momen dan saya hanya percaya sebuah kelas setelah tiga puluh. Sampai saat itu saya tahan angkanya"
+    16 => "Geometri condong ke atas ▲, tetapi daripada kelas ini saya baru melihat {0} detik dan saya hanya percaya sesuatu kelas selepas tiga puluh. Sehingga itu saya simpan angkanya"
+    =>    "The geometry leans up ▲, but I have only seen {0} moments of this class so far and I trust a class only after thirty. I will hold the number until then"
+
+f_txColdDn() => switch LANG
+    1  => "Geometri aşağı eğilimli ▼, ama bu sınıftan şimdiye dek yalnızca {0} an gördüm ve bir sınıfa ancak otuzdan sonra güvenirim. O zamana kadar sayıyı saklıyorum"
+    2  => "الهندسة تميل إلى الأسفل ▼، لكنني لم أر من هذه الفئة حتى الآن سوى {0} من اللحظات وأنا لا أثق بفئة إلا بعد ثلاثين. سأحتفظ بالرقم حتى ذلك الحين"
+    3  => "ज्यामिति नीचे की ओर झुकी है ▼, पर इस वर्ग के अभी केवल {0} क्षण देखे हैं और मैं किसी वर्ग पर तीस के बाद ही भरोसा करता हूँ। तब तक संख्या रोक रखूँगा"
+    4  => "几何形态偏向下方 ▼，但这个类别我目前只见过 {0} 个时刻，而我要在三十个之后才信任一个类别。在那之前我先保留数字"
+    5  => "기하 구조는 아래쪽으로 기울었지만 ▼ 이 클래스는 아직 {0}개의 순간만 보았고 저는 서른 개가 넘어야 클래스를 신뢰합니다. 그때까지 숫자는 보류하겠습니다"
+    6  => "Die Geometrie neigt nach unten ▼, aber ich habe von dieser Klasse erst {0} Momente gesehen und ich vertraue einer Klasse erst ab dreißig. Bis dahin halte ich die Zahl zurück"
+    7  => "La geometria pende verso il basso ▼, ma di questa classe ho visto finora solo {0} momenti e mi fido di una classe solo dopo trenta. Fino ad allora trattengo il numero"
+    8  => "Геометрия склоняется вниз ▼, но моментов этого класса я видел пока лишь {0}, а классу я доверяю только после тридцати. До тех пор придержу число"
+    9  => "La géométrie penche vers le bas ▼, mais je n'ai vu que {0} moments de cette classe et je ne fais confiance à une classe qu'après trente. D'ici là je garde le chiffre"
+    10 => "La geometría se inclina a la baja ▼, pero de esta clase solo he visto {0} momentos y solo confío en una clase después de treinta. Hasta entonces me guardo el número"
+    11 => "形状は下方向に傾いています ▼ が、このクラスの事例はまだ {0} 件しか見ておらず、私は30件を超えて初めてクラスを信頼します。それまで数字は控えます"
+    12 => "هندسه به پایین متمایله ▼ ولی از این کلاس فقط {0} نمونه دیده‌م و من به یه کلاس بعد از سی نمونه اعتماد می‌کنم. تا اون موقع عددش رو نگه می‌دارم"
+    13 => "הגאומטריה נוטה כלפי מטה ▼, אבל ראיתי עד כה רק {0} רגעים מהמחלקה הזו ואני סומך על מחלקה רק אחרי שלושים. עד אז אחזיק את המספר"
+    14 => "Η γεωμετρία γέρνει προς τα κάτω ▼, αλλά από αυτή την κατηγορία έχω δει μόνο {0} στιγμές και εμπιστεύομαι μια κατηγορία μόνο μετά τις τριάντα. Ως τότε κρατώ τον αριθμό"
+    15 => "Geometri condong ke bawah ▼, tapi dari kelas ini saya baru melihat {0} momen dan saya hanya percaya sebuah kelas setelah tiga puluh. Sampai saat itu saya tahan angkanya"
+    16 => "Geometri condong ke bawah ▼, tetapi daripada kelas ini saya baru melihat {0} detik dan saya hanya percaya sesuatu kelas selepas tiga puluh. Sehingga itu saya simpan angkanya"
+    =>    "The geometry leans down ▼, but I have only seen {0} moments of this class so far and I trust a class only after thirty. I will hold the number until then"
+
+f_txNeutralRec() => switch LANG
+    1  => "Geometri kararlı görünüyor, ama aynı sınıfın anları zamanın yalnızca yüzde {0}'ında doğru çıktı, bu neredeyse yazı tura demek, o yüzden pas geçiyorum"
+    2  => "الهندسة تبدو حاسمة، لكن لحظات هذه الفئة نفسها كانت صحيحة في {0} بالمئة فقط من الحالات، وهو عمليا رمية عملة، لذا أمتنع"
+    3  => "ज्यामिति निर्णायक दिखती है, पर इसी वर्ग के क्षण केवल {0} प्रतिशत बार सही रहे हैं, जो लगभग सिक्का उछालना है, इसलिए मैं आगे नहीं बढ़ता"
+    4  => "几何形态看起来很坚决，但同类时刻只有 {0}% 的时候是对的，几乎等于抛硬币，所以我选择放弃"
+    5  => "기하 구조는 확신에 차 보이지만 같은 클래스의 순간들은 {0}퍼센트만 맞았는데, 사실상 동전 던지기라서 저는 넘어가겠습니다"
+    6  => "Die Geometrie wirkt entschieden, aber Momente derselben Klasse lagen nur in {0} Prozent der Fälle richtig, praktisch ein Münzwurf, also passe ich"
+    7  => "La geometria sembra decisa, ma i momenti di questa stessa classe sono stati giusti solo il {0} per cento delle volte, praticamente un lancio di moneta, quindi passo"
+    8  => "Геометрия выглядит решительной, но моменты того же класса были верны лишь в {0} процентах случаев, что практически монетка, поэтому я пас"
+    9  => "La géométrie semble décisive, mais les moments de cette même classe n'ont été justes que {0} pour cent du temps, pratiquement un pile ou face, donc je passe"
+    10 => "La geometría parece decidida, pero los momentos de esta misma clase solo han acertado el {0} por ciento de las veces, prácticamente una moneda al aire, así que paso"
+    11 => "形状は決定的に見えますが、同じクラスの事例は {0} パーセントしか正しくなく、ほぼコイン投げなので、今回は見送ります"
+    12 => "هندسه قاطع به نظر می‌رسه ولی لحظه‌های همین کلاس فقط در {0} درصد مواقع درست از آب دراومدن که عملاً شیر یا خطه، پس رد می‌شم"
+    13 => "הגאומטריה נראית נחרצת, אבל רגעים מאותה מחלקה היו נכונים רק ב-{0} אחוז מהמקרים, כמעט הטלת מטבע, אז אני מוותר"
+    14 => "Η γεωμετρία δείχνει αποφασιστική, αλλά οι στιγμές της ίδιας κατηγορίας ήταν σωστές μόνο στο {0} τοις εκατό, πρακτικά ρίψη νομίσματος, οπότε απέχω"
+    15 => "Geometrinya tampak tegas, tapi momen dari kelas yang sama hanya benar dalam {0} persen kasus, praktis seperti lempar koin, jadi saya lewati"
+    16 => "Geometrinya kelihatan tegas, tetapi detik daripada kelas yang sama hanya betul dalam {0} peratus kes, hampir seperti lambungan syiling, jadi saya berlalu"
+    =>    "The geometry looks decisive, but moments of this same class have been right only {0} percent of the time, which is practically a coin toss, so I pass"
+
+f_txCallUp() => switch LANG
+    1  => "Bu geometriyi benzer yapılarla karşılaştırdım ve benzer durumların yüzde {0}'ında kırılım yukarı oldu ▲"
+    2  => "قارنت هذه الهندسة بهياكل مشابهة، وفي {0} بالمئة من الحالات المشابهة كان الكسر إلى الأعلى ▲"
+    3  => "मैंने इस ज्यामिति को समान संरचनाओं से मापा और समान मामलों में {0} प्रतिशत बार टूट ऊपर की ओर हुई ▲"
+    4  => "我将这个几何形态与相似结构进行了对比，在相似情形中有 {0}% 是向上突破 ▲"
+    5  => "이 기하 구조를 유사한 구조들과 비교해 보니 유사 사례의 {0}퍼센트에서 돌파가 위쪽이었습니다 ▲"
+    6  => "Ich habe diese Geometrie mit ähnlichen Strukturen verglichen und in {0} Prozent der ähnlichen Fälle ging der Bruch nach oben ▲"
+    7  => "Ho confrontato questa geometria con strutture simili e nel {0} per cento dei casi simili la rottura è andata al rialzo ▲"
+    8  => "Я сравнил эту геометрию с похожими структурами, и в {0} процентах похожих случаев пробой шёл вверх ▲"
+    9  => "J'ai comparé cette géométrie à des structures similaires et dans {0} pour cent des cas similaires la cassure est partie vers le haut ▲"
+    10 => "Comparé esta geometría con estructuras similares y en el {0} por ciento de los casos similares la ruptura fue al alza ▲"
+    11 => "この形状を類似の構造と照合したところ、類似ケースの {0} パーセントでブレイクは上方向でした ▲"
+    12 => "این هندسه رو با ساختارهای مشابه سنجیدم و در {0} درصد موارد مشابه، شکست رو به بالا بوده ▲"
+    13 => "מדדתי את הגאומטריה הזו מול מבנים דומים וב-{0} אחוז מהמקרים הדומים השבירה הייתה כלפי מעלה ▲"
+    14 => "Μέτρησα αυτή τη γεωμετρία απέναντι σε παρόμοιες δομές και στο {0} τοις εκατό των παρόμοιων περιπτώσεων η διάσπαση πήγε ανοδικά ▲"
+    15 => "Saya mengukur geometri ini terhadap struktur serupa dan dalam {0} persen kasus serupa tembusnya ke atas ▲"
+    16 => "Saya mengukur geometri ini dengan struktur serupa dan dalam {0} peratus kes serupa pecahannya ke atas ▲"
+    =>    "I measured this geometry against similar structures and in {0} percent of similar cases the break went up ▲"
+
+f_txCallDn() => switch LANG
+    1  => "Bu geometriyi benzer yapılarla karşılaştırdım ve benzer durumların yüzde {0}'ında kırılım aşağı oldu ▼"
+    2  => "قارنت هذه الهندسة بهياكل مشابهة، وفي {0} بالمئة من الحالات المشابهة كان الكسر إلى الأسفل ▼"
+    3  => "मैंने इस ज्यामिति को समान संरचनाओं से मापा और समान मामलों में {0} प्रतिशत बार टूट नीचे की ओर हुई ▼"
+    4  => "我将这个几何形态与相似结构进行了对比，在相似情形中有 {0}% 是向下突破 ▼"
+    5  => "이 기하 구조를 유사한 구조들과 비교해 보니 유사 사례의 {0}퍼센트에서 돌파가 아래쪽이었습니다 ▼"
+    6  => "Ich habe diese Geometrie mit ähnlichen Strukturen verglichen und in {0} Prozent der ähnlichen Fälle ging der Bruch nach unten ▼"
+    7  => "Ho confrontato questa geometria con strutture simili e nel {0} per cento dei casi simili la rottura è andata al ribasso ▼"
+    8  => "Я сравнил эту геометрию с похожими структурами, и в {0} процентах похожих случаев пробой шёл вниз ▼"
+    9  => "J'ai comparé cette géométrie à des structures similaires et dans {0} pour cent des cas similaires la cassure est partie vers le bas ▼"
+    10 => "Comparé esta geometría con estructuras similares y en el {0} por ciento de los casos similares la ruptura fue a la baja ▼"
+    11 => "この形状を類似の構造と照合したところ、類似ケースの {0} パーセントでブレイクは下方向でした ▼"
+    12 => "این هندسه رو با ساختارهای مشابه سنجیدم و در {0} درصد موارد مشابه، شکست رو به پایین بوده ▼"
+    13 => "מדדתי את הגאומטריה הזו מול מבנים דומים וב-{0} אחוז מהמקרים הדומים השבירה הייתה כלפי מטה ▼"
+    14 => "Μέτρησα αυτή τη γεωμετρία απέναντι σε παρόμοιες δομές και στο {0} τοις εκατό των παρόμοιων περιπτώσεων η διάσπαση πήγε καθοδικά ▼"
+    15 => "Saya mengukur geometri ini terhadap struktur serupa dan dalam {0} persen kasus serupa tembusnya ke bawah ▼"
+    16 => "Saya mengukur geometri ini dengan struktur serupa dan dalam {0} peratus kes serupa pecahannya ke bawah ▼"
+    =>    "I measured this geometry against similar structures and in {0} percent of similar cases the break went down ▼"
+
+f_txSteadyJ() => switch LANG
+    1  => "Tahminim son üç mumda da istikrarlı kaldı, sapması yalnızca {0}"
+    2  => "كما بقي تقديري مستقرا في آخر ثلاث شموع، بانحراف لا يتجاوز {0}"
+    3  => "मेरा आकलन पिछली तीन कैंडल में भी स्थिर रहा है, विचलन केवल {0} है"
+    4  => "我的估计在最近三根K线中也保持稳定，偏差只有 {0}"
+    5  => "제 추정치는 최근 세 캔들 동안에도 안정적이었고 편차는 {0}에 불과합니다"
+    6  => "Meine Schätzung blieb auch über die letzten drei Kerzen stabil, mit einer Abweichung von nur {0}"
+    7  => "La mia stima è rimasta stabile anche nelle ultime tre candele, con una deviazione di appena {0}"
+    8  => "Моя оценка также оставалась устойчивой последние три свечи, с отклонением всего {0}"
+    9  => "Mon estimation est aussi restée stable sur les trois dernières bougies, avec un écart de seulement {0}"
+    10 => "Mi estimación también se ha mantenido estable en las últimas tres velas, con una desviación de solo {0}"
+    11 => "私の推定は直近3本でも安定しており、偏差はわずか {0} です"
+    12 => "برآوردم توی سه کندل اخیر هم پایدار مونده و انحرافش فقط {0} بوده"
+    13 => "ההערכה שלי גם נשארה יציבה בשלושת הנרות האחרונים, עם סטייה של {0} בלבד"
+    14 => "Η εκτίμησή μου έμεινε επίσης σταθερή στα τρία τελευταία κεριά, με απόκλιση μόλις {0}"
+    15 => "Perkiraan saya juga tetap stabil selama tiga candle terakhir, dengan deviasi hanya {0}"
+    16 => "Anggaran saya juga kekal stabil sepanjang tiga lilin terakhir, dengan sisihan hanya {0}"
+    =>    "My estimate has also held steady over the last three candles, with a deviation of only {0}"
+
+f_txPendUp() => switch LANG
+    1  => "Son yapı az önce kırıldı ve bir sonraki daha oluşmadı. Geçiş geometrisi yukarı eğilimli ▲"
+    2  => "الهيكل الأخير كُسر للتو والتالي لم يتشكل بعد. هندسة الانتقال تميل إلى الأعلى ▲"
+    3  => "पिछली संरचना अभी टूटी है और अगली अभी बनी नहीं है। संक्रमण की ज्यामिति ऊपर की ओर झुकी है ▲"
+    4  => "上一个结构刚刚突破，下一个尚未形成。过渡几何形态偏向上方 ▲"
+    5  => "직전 구조가 방금 돌파됐고 다음 구조는 아직 형성되지 않았습니다. 전환 기하 구조는 위쪽으로 기울어 있습니다 ▲"
+    6  => "Die letzte Struktur ist gerade gebrochen und die nächste hat sich noch nicht gebildet. Die Übergangsgeometrie neigt nach oben ▲"
+    7  => "L'ultima struttura si è appena rotta e la prossima non si è ancora formata. La geometria di transizione pende verso l'alto ▲"
+    8  => "Последняя структура только что пробита, а следующая ещё не сформировалась. Геометрия перехода склоняется вверх ▲"
+    9  => "La dernière structure vient de casser et la suivante ne s'est pas encore formée. La géométrie de transition penche vers le haut ▲"
+    10 => "La última estructura acaba de romper y la siguiente aún no se ha formado. La geometría de transición se inclina al alza ▲"
+    11 => "直前の構造がブレイクしたばかりで、次の構造はまだ形成されていません。移行期の形状は上方向に傾いています ▲"
+    12 => "ساختار قبلی تازه شکسته و بعدی هنوز شکل نگرفته. هندسهٔ گذار به بالا متمایله ▲"
+    13 => "המבנה האחרון נשבר זה עתה והבא עדיין לא נוצר. גאומטריית המעבר נוטה כלפי מעלה ▲"
+    14 => "Η τελευταία δομή μόλις έσπασε και η επόμενη δεν έχει σχηματιστεί ακόμη. Η γεωμετρία της μετάβασης γέρνει προς τα πάνω ▲"
+    15 => "Struktur terakhir baru saja tembus dan yang berikutnya belum terbentuk. Geometri transisi condong ke atas ▲"
+    16 => "Struktur terakhir baru sahaja pecah dan yang seterusnya belum terbentuk. Geometri peralihan condong ke atas ▲"
+    =>    "The last structure just broke and the next one has not formed yet. The transition geometry leans up ▲"
+
+f_txPendDn() => switch LANG
+    1  => "Son yapı az önce kırıldı ve bir sonraki daha oluşmadı. Geçiş geometrisi aşağı eğilimli ▼"
+    2  => "الهيكل الأخير كُسر للتو والتالي لم يتشكل بعد. هندسة الانتقال تميل إلى الأسفل ▼"
+    3  => "पिछली संरचना अभी टूटी है और अगली अभी बनी नहीं है। संक्रमण की ज्यामिति नीचे की ओर झुकी है ▼"
+    4  => "上一个结构刚刚突破，下一个尚未形成。过渡几何形态偏向下方 ▼"
+    5  => "직전 구조가 방금 돌파됐고 다음 구조는 아직 형성되지 않았습니다. 전환 기하 구조는 아래쪽으로 기울어 있습니다 ▼"
+    6  => "Die letzte Struktur ist gerade gebrochen und die nächste hat sich noch nicht gebildet. Die Übergangsgeometrie neigt nach unten ▼"
+    7  => "L'ultima struttura si è appena rotta e la prossima non si è ancora formata. La geometria di transizione pende verso il basso ▼"
+    8  => "Последняя структура только что пробита, а следующая ещё не сформировалась. Геометрия перехода склоняется вниз ▼"
+    9  => "La dernière structure vient de casser et la suivante ne s'est pas encore formée. La géométrie de transition penche vers le bas ▼"
+    10 => "La última estructura acaba de romper y la siguiente aún no se ha formado. La geometría de transición se inclina a la baja ▼"
+    11 => "直前の構造がブレイクしたばかりで、次の構造はまだ形成されていません。移行期の形状は下方向に傾いています ▼"
+    12 => "ساختار قبلی تازه شکسته و بعدی هنوز شکل نگرفته. هندسهٔ گذار به پایین متمایله ▼"
+    13 => "המבנה האחרון נשבר זה עתה והבא עדיין לא נוצר. גאומטריית המעבר נוטה כלפי מטה ▼"
+    14 => "Η τελευταία δομή μόλις έσπασε και η επόμενη δεν έχει σχηματιστεί ακόμη. Η γεωμετρία της μετάβασης γέρνει προς τα κάτω ▼"
+    15 => "Struktur terakhir baru saja tembus dan yang berikutnya belum terbentuk. Geometri transisi condong ke bawah ▼"
+    16 => "Struktur terakhir baru sahaja pecah dan yang seterusnya belum terbentuk. Geometri peralihan condong ke bawah ▼"
+    =>    "The last structure just broke and the next one has not formed yet. The transition geometry leans down ▼"
+
+f_txPendStage() => switch LANG
+    1  => "Bu ara aşamada hesaplarım zamanın yüzde {0}'ında doğru çıktı"
+    2  => "في هذه المرحلة الانتقالية كانت حساباتي صحيحة في {0} بالمئة من الحالات"
+    3  => "इस मध्यवर्ती चरण में मेरी गणनाएँ {0} प्रतिशत बार सही रही हैं"
+    4  => "在这个过渡阶段，我的计算有 {0}% 的时候是对的"
+    5  => "이 중간 단계에서 제 계산은 {0}퍼센트의 확률로 맞았습니다"
+    6  => "In dieser Zwischenphase lagen meine Berechnungen in {0} Prozent der Fälle richtig"
+    7  => "In questa fase intermedia i miei calcoli sono stati giusti il {0} per cento delle volte"
+    8  => "На этой промежуточной стадии мои расчёты были верны в {0} процентах случаев"
+    9  => "Dans cette phase intermédiaire, mes calculs ont été justes {0} pour cent du temps"
+    10 => "En esta fase intermedia mis cálculos han acertado el {0} por ciento de las veces"
+    11 => "この中間段階では、私の計算は {0} パーセントの割合で正しくありました"
+    12 => "در این مرحلهٔ بین دو ساختار محاسباتم در {0} درصد مواقع درست بوده"
+    13 => "בשלב הביניים הזה החישובים שלי היו נכונים ב-{0} אחוז מהמקרים"
+    14 => "Σε αυτό το ενδιάμεσο στάδιο οι υπολογισμοί μου ήταν σωστοί στο {0} τοις εκατό των περιπτώσεων"
+    15 => "Pada tahap peralihan ini perhitungan saya benar dalam {0} persen kasus"
+    16 => "Pada peringkat peralihan ini pengiraan saya betul dalam {0} peratus kes"
+    =>    "At this in-between stage my calculations have been right {0} percent of the time"
+
+// Word-wrap for the scenario label texts. Breaks lines at spaces
+// where the language has them; scripts without spaces (Chinese,
+// Japanese) get a clean hard break at the width limit, which is
+// typographically valid for CJK. Explicit newlines already in the
+// text reset the line counter. Runs once per render on islast, so
+// the O(n) character walk has negligible cost.
+f_wrap(string src, int width) =>
+    string out = ""
+    int lineLen = 0
+    int lastSp = -1
+    int n = str.length(src)
+    if n > 0
+        for i = 0 to n - 1
+            string ch = str.substring(src, i, i + 1)
+            if ch == "\n"
+                out := out + ch
+                lineLen := 0
+                lastSp := -1
+            else
+                out := out + ch
+                lineLen += 1
+                if ch == " "
+                    lastSp := str.length(out) - 1
+                if lineLen > width
+                    if lastSp >= 0
+                        out := str.substring(out, 0, lastSp) + "\n" + str.substring(out, lastSp + 1)
+                        lineLen := str.length(out) - lastSp - 1
+                        lastSp := -1
+                    else
+                        out := out + "\n"
+                        lineLen := 0
+    out
+
+// — Angle map cell tooltips —
+// Table cell tooltips accept dynamic strings, unlike input
+// tooltips which Pine forces to stay constant (English).
+
+f_ttDir() => switch LANG
+    1  => "Bu yapının kırılım yönü."
+    2  => "اتجاه كسر هذا الهيكل."
+    3  => "इस संरचना की टूट दिशा।"
+    4  => "该结构的突破方向。"
+    5  => "이 구조의 돌파 방향."
+    6  => "Ausbruchsrichtung dieser Struktur."
+    7  => "Direzione di rottura di questa struttura."
+    8  => "Направление пробоя этой структуры."
+    9  => "Direction de cassure de cette structure."
+    10 => "Dirección de ruptura de esta estructura."
+    11 => "この構造のブレイク方向。"
+    12 => "جهت شکست این ساختار."
+    13 => "כיוון השבירה של המבנה הזה."
+    14 => "Κατεύθυνση διάσπασης αυτής της δομής."
+    15 => "Arah tembus struktur ini."
+    16 => "Arah pecahan struktur ini."
+    =>    "Break direction of this structure."
+
+f_ttCeil() => switch LANG
+    1  => "Kırılım anındaki tavan açısı, büyükten küçüğe sıralı."
+    2  => "زاوية السقف لحظة الكسر، مرتبة من الأعلى إلى الأدنى."
+    3  => "टूट के समय ऊपरी कोण, बड़े से छोटे क्रम में।"
+    4  => "突破时的顶部角度，从高到低排序。"
+    5  => "돌파 시점의 천장 각도, 높은 순 정렬."
+    6  => "Deckenwinkel im Bruchmoment, absteigend sortiert."
+    7  => "Angolo soffitto al momento della rottura, in ordine decrescente."
+    8  => "Угол потолка в момент пробоя, по убыванию."
+    9  => "Angle plafond au moment de la cassure, trié décroissant."
+    10 => "Ángulo techo en el momento de la ruptura, de mayor a menor."
+    11 => "ブレイク時点の天井角度。降順に並びます。"
+    12 => "زاویهٔ سقف در لحظهٔ شکست، مرتب از بزرگ به کوچک."
+    13 => "זווית התקרה ברגע השבירה, ממוין מגבוה לנמוך."
+    14 => "Γωνία οροφής τη στιγμή της διάσπασης, με φθίνουσα σειρά."
+    15 => "Sudut atas saat tembus, diurutkan dari besar ke kecil."
+    16 => "Sudut atas ketika pecah, disusun besar ke kecil."
+    =>    "Ceiling angle at the moment of the break, sorted high to low."
+
+f_ttDur() => switch LANG
+    1  => "Yapının kırılmadan önce kaç bar sürdüğü."
+    2  => "عدد الشموع التي استمر فيها الهيكل قبل الكسر."
+    3  => "टूटने से पहले संरचना कितने बार चली।"
+    4  => "结构在突破前持续的K线数量。"
+    5  => "돌파 전까지 구조가 지속된 봉 수."
+    6  => "Wie viele Kerzen die Struktur vor dem Bruch hielt."
+    7  => "Quante barre è durata la struttura prima della rottura."
+    8  => "Сколько баров структура держалась до пробоя."
+    9  => "Nombre de bougies avant la cassure de la structure."
+    10 => "Cuántas velas duró la estructura antes de romper."
+    11 => "ブレイクまでに構造が続いたバー数。"
+    12 => "این ساختار چند بار قبل از شکست دوام آورد."
+    13 => "כמה נרות החזיק המבנה לפני השבירה."
+    14 => "Πόσες μπάρες κράτησε η δομή πριν τη διάσπαση."
+    15 => "Berapa bar struktur bertahan sebelum tembus."
+    16 => "Berapa bar struktur bertahan sebelum pecah."
+    =>    "How many bars the structure lasted before breaking."
+
+f_ttFloor() => switch LANG
+    1  => "Kırılım anındaki taban açısı, büyükten küçüğe sıralı."
+    2  => "زاوية القاع لحظة الكسر، مرتبة من الأعلى إلى الأدنى."
+    3  => "टूट के समय निचला कोण, बड़े से छोटे क्रम में।"
+    4  => "突破时的底部角度，从高到低排序。"
+    5  => "돌파 시점의 바닥 각도, 높은 순 정렬."
+    6  => "Bodenwinkel im Bruchmoment, absteigend sortiert."
+    7  => "Angolo pavimento al momento della rottura, in ordine decrescente."
+    8  => "Угол дна в момент пробоя, по убыванию."
+    9  => "Angle plancher au moment de la cassure, trié décroissant."
+    10 => "Ángulo suelo en el momento de la ruptura, de mayor a menor."
+    11 => "ブレイク時点の床角度。降順に並びます。"
+    12 => "زاویهٔ کف در لحظهٔ شکست، مرتب از بزرگ به کوچک."
+    13 => "זווית הרצפה ברגע השבירה, ממוין מגבוה לנמוך."
+    14 => "Γωνία δαπέδου τη στιγμή της διάσπασης, με φθίνουσα σειρά."
+    15 => "Sudut bawah saat tembus, diurutkan dari besar ke kecil."
+    16 => "Sudut bawah ketika pecah, disusun besar ke kecil."
+    =>    "Floor angle at the moment of the break, sorted high to low."
+
+f_ttPUp() => switch LANG
+    1  => "Yukarı kırılım olasılığı, mevcut sinyal sınıfının siciliyle doğrulanır. Yalnızca kanıt, istikrar, sınıf olgunluğu ve anlamlılık testi geçildiğinde gösterilir."
+    2  => "احتمال الكسر للأعلى، مُتحقق منه عبر سجل فئة الإشارة الحالية. يُعرض فقط عند اجتياز الدليل والاستقرار ونضج الفئة واختبار الدلالة."
+    3  => "ऊपर टूटने की संभावना, वर्तमान संकेत वर्ग के रिकॉर्ड से सत्यापित। केवल तभी दिखती है जब प्रमाण, स्थिरता, वर्ग की परिपक्वता और सार्थकता परीक्षण सब पास हों।"
+    4  => "向上突破概率，已用当前信号类别的历史记录验证。仅当证据、稳定性、类别成熟度和显著性检验全部通过时显示。"
+    5  => "상승 돌파 확률로, 현재 신호 클래스의 기록으로 검증됩니다. 증거, 안정성, 클래스 성숙, 유의성 검정을 모두 통과할 때만 표시됩니다."
+    6  => "Aufwärtsbruch-Wahrscheinlichkeit, verifiziert an der Bilanz der aktuellen Signalklasse. Wird nur gezeigt, wenn Evidenz, Stabilität, Klassenreife und Signifikanztest bestehen."
+    7  => "Probabilità di rottura al rialzo, verificata sullo storico della classe di segnale corrente. Mostrata solo quando evidenza, stabilità, maturità della classe e test di significatività passano tutti."
+    8  => "Вероятность пробоя вверх, проверенная по истории текущего класса сигнала. Показывается только когда пройдены доказательность, устойчивость, зрелость класса и тест значимости."
+    9  => "Probabilité de cassure haussière, vérifiée sur l'historique de la classe de signal actuelle. Affichée seulement quand preuve, stabilité, maturité de classe et test de significativité passent tous."
+    10 => "Probabilidad de ruptura alcista, verificada con el historial de la clase de señal actual. Se muestra solo cuando evidencia, estabilidad, madurez de clase y prueba de significancia pasan todas."
+    11 => "上方向ブレイクの確率。現在のシグナルクラスの実績で検証済み。証拠・安定性・クラスの成熟・有意性検定のすべてを通過した場合のみ表示。"
+    12 => "احتمال شکست رو به بالا، راستی‌آزمایی‌شده با کارنامهٔ کلاس فعلی سیگنال. فقط وقتی نشون داده می‌شه که شواهد، پایداری، رسیدن کلاس به حداقل نمونه و آزمون معناداری همگی تأیید بشن."
+    13 => "הסתברות לשבירה כלפי מעלה, מאומתת מול הרקורד של מחלקת האות הנוכחית. מוצגת רק כאשר ראיות, יציבות, בשלות המחלקה ומבחן המובהקות עוברים כולם."
+    14 => "Πιθανότητα ανοδικής διάσπασης, επαληθευμένη στο ιστορικό της τρέχουσας κατηγορίας σήματος. Εμφανίζεται μόνο όταν περνούν τεκμήρια, σταθερότητα, ωρίμανση κατηγορίας και έλεγχος σημαντικότητας."
+    15 => "Probabilitas tembus naik, terverifikasi terhadap rekam jejak kelas sinyal saat ini. Hanya tampil bila bukti, stabilitas, kematangan kelas, dan uji signifikansi semuanya lolos."
+    16 => "Kebarangkalian pecah naik, disahkan dengan rekod kelas isyarat semasa. Hanya dipaparkan apabila bukti, kestabilan, kematangan kelas dan ujian signifikan semuanya lulus."
+    =>    "Up-break probability, verified against the record of the current signal class. Shown only when evidence, stability, class warm-up and the significance test all pass."
+
+f_ttPDn() => switch LANG
+    1  => "Aşağı kırılım olasılığı, mevcut sinyal sınıfının siciliyle doğrulanır. Yalnızca kanıt, istikrar, sınıf olgunluğu ve anlamlılık testi geçildiğinde gösterilir."
+    2  => "احتمال الكسر للأسفل، مُتحقق منه عبر سجل فئة الإشارة الحالية. يُعرض فقط عند اجتياز الدليل والاستقرار ونضج الفئة واختبار الدلالة."
+    3  => "नीचे टूटने की संभावना, वर्तमान संकेत वर्ग के रिकॉर्ड से सत्यापित। केवल तभी दिखती है जब प्रमाण, स्थिरता, वर्ग की परिपक्वता और सार्थकता परीक्षण सब पास हों।"
+    4  => "向下突破概率，已用当前信号类别的历史记录验证。仅当证据、稳定性、类别成熟度和显著性检验全部通过时显示。"
+    5  => "하락 돌파 확률로, 현재 신호 클래스의 기록으로 검증됩니다. 증거, 안정성, 클래스 성숙, 유의성 검정을 모두 통과할 때만 표시됩니다."
+    6  => "Abwärtsbruch-Wahrscheinlichkeit, verifiziert an der Bilanz der aktuellen Signalklasse. Wird nur gezeigt, wenn Evidenz, Stabilität, Klassenreife und Signifikanztest bestehen."
+    7  => "Probabilità di rottura al ribasso, verificata sullo storico della classe di segnale corrente. Mostrata solo quando evidenza, stabilità, maturità della classe e test di significatività passano tutti."
+    8  => "Вероятность пробоя вниз, проверенная по истории текущего класса сигнала. Показывается только когда пройдены доказательность, устойчивость, зрелость класса и тест значимости."
+    9  => "Probabilité de cassure baissière, vérifiée sur l'historique de la classe de signal actuelle. Affichée seulement quand preuve, stabilité, maturité de classe et test de significativité passent tous."
+    10 => "Probabilidad de ruptura bajista, verificada con el historial de la clase de señal actual. Se muestra solo cuando evidencia, estabilidad, madurez de clase y prueba de significancia pasan todas."
+    11 => "下方向ブレイクの確率。現在のシグナルクラスの実績で検証済み。証拠・安定性・クラスの成熟・有意性検定のすべてを通過した場合のみ表示。"
+    12 => "احتمال شکست رو به پایین، راستی‌آزمایی‌شده با کارنامهٔ کلاس فعلی سیگنال. فقط وقتی نشون داده می‌شه که شواهد، پایداری، رسیدن کلاس به حداقل نمونه و آزمون معناداری همگی تأیید بشن."
+    13 => "הסתברות לשבירה כלפי מטה, מאומתת מול הרקורד של מחלקת האות הנוכחית. מוצגת רק כאשר ראיות, יציבות, בשלות המחלקה ומבחן המובהקות עוברים כולם."
+    14 => "Πιθανότητα καθοδικής διάσπασης, επαληθευμένη στο ιστορικό της τρέχουσας κατηγορίας σήματος. Εμφανίζεται μόνο όταν περνούν τεκμήρια, σταθερότητα, ωρίμανση κατηγορίας και έλεγχος σημαντικότητας."
+    15 => "Probabilitas tembus turun, terverifikasi terhadap rekam jejak kelas sinyal saat ini. Hanya tampil bila bukti, stabilitas, kematangan kelas, dan uji signifikansi semuanya lolos."
+    16 => "Kebarangkalian pecah turun, disahkan dengan rekod kelas isyarat semasa. Hanya dipaparkan apabila bukti, kestabilan, kematangan kelas dan ujian signifikan semuanya lulus."
+    =>    "Down-break probability, verified against the record of the current signal class. Shown only when evidence, stability, class warm-up and the significance test all pass."
+
+// — Verified track record row —
+// {0} = correct calls · {1} = graded calls · {2} = accuracy %.
+// One entry per confirmed full call (state 6), graded against the
+// actual break direction; rolling window of TRACK_CAP graded calls.
+
+f_txTrackRec() => switch LANG
+    1  => "Son {1} tahminimden {0}'i pratikte doğru çıktı · doğrulanmış isabet %{2}"
+    2  => "تأكد {0} من أصل {1} من تقديراتي السابقة عمليا · دقة موثقة {2} بالمئة"
+    3  => "पिछले {1} आकलनों में से {0} व्यवहार में सही निकले · सत्यापित सटीकता {2}%"
+    4  => "过去 {1} 次估计中有 {0} 次在实践中得到验证 · 已验证准确率 {2}%"
+    5  => "지난 추정 {1}건 중 {0}건이 실제로 확인되었습니다 · 검증된 정확도 {2}%"
+    6  => "{0} von {1} bisherigen Schätzungen haben sich in der Praxis bestätigt · verifizierte Trefferquote {2}%"
+    7  => "{0} delle ultime {1} stime confermate nella pratica · accuratezza verificata {2}%"
+    8  => "{0} из {1} прошлых оценок подтвердились на практике · проверенная точность {2}%"
+    9  => "{0} des {1} dernières estimations confirmées dans la pratique · précision vérifiée {2}%"
+    10 => "{0} de las últimas {1} estimaciones confirmadas en la práctica · precisión verificada {2}%"
+    11 => "過去 {1} 件の推定のうち {0} 件が実際に確認されました · 検証済み精度 {2}%"
+    12 => "در عمل {0} از {1} تخمین پیشین تأیید شد · دقت راستی‌آزمایی‌شده {2} درصد"
+    13 => "אומתו בפועל {0} מתוך {1} הערכות קודמות · דיוק מאומת {2} אחוז"
+    14 => "{0} από τις {1} προηγούμενες εκτιμήσεις επιβεβαιώθηκαν στην πράξη · επαληθευμένη ακρίβεια {2}%"
+    15 => "{0} dari {1} estimasi sebelumnya terkonfirmasi dalam praktik · akurasi terverifikasi {2}%"
+    16 => "{0} daripada {1} anggaran lepas disahkan dalam praktik · ketepatan disahkan {2}%"
+    =>    "{0} of {1} past estimates confirmed in practice · verified accuracy {2}%"
+
+f_ttTrack() => switch LANG
+    1  => "Canlı öz değerlendirmem. Kapanan mumlarda verdiğim her yön çağrısı, yapı kırıldığında gerçekleşen yönle karşılaştırılıp son 500 çağrı üzerinden notlanır."
+    2  => "تقييمي الذاتي المباشر. كل نداء اتجاه أصدره عند إغلاق الشمعة يُقارن بالكسر الفعلي عند حدوثه ويُقيَّم ضمن آخر 500 نداء."
+    3  => "मेरा लाइव स्व-मूल्यांकन। बंद कैंडल पर दी गई हर दिशा-घोषणा वास्तविक टूट से मिलाकर पिछली 500 घोषणाओं में आँकी जाती है।"
+    4  => "我的实时自我评估。每次在收盘K线上给出的方向判断都会与实际突破对比，按最近 500 次判断打分。"
+    5  => "실시간 자기 평가입니다. 종가 기준으로 내린 모든 방향 판단은 실제 돌파와 비교되어 최근 500건 기준으로 채점됩니다."
+    6  => "Meine laufende Selbstprüfung. Jeder Richtungsruf auf einer geschlossenen Kerze wird am tatsächlichen Bruch gemessen, über die letzten 500 bewerteten Rufe."
+    7  => "La mia autovalutazione dal vivo. Ogni chiamata di direzione su candela chiusa viene valutata contro la rottura reale, sulle ultime 500 chiamate."
+    8  => "Моя живая самопроверка. Каждый направленный вызов на закрытой свече сверяется с фактическим пробоем, по последним 500 оценённым вызовам."
+    9  => "Mon auto-évaluation en direct. Chaque appel de direction sur bougie clôturée est noté face à la cassure réelle, sur les 500 derniers appels."
+    10 => "Mi autoevaluación en vivo. Cada llamada de dirección en vela cerrada se califica frente a la ruptura real, sobre las últimas 500 llamadas."
+    11 => "リアルタイムの自己評価です。確定足で出した方向判断は実際のブレイクと照合され、直近500件で採点されます。"
+    12 => "خودارزیابی زندهٔ من. هر اعلام جهتی که روی کندل بسته‌شده می‌دم، با شکست واقعی سنجیده می‌شه و روی ۵۰۰ اعلام اخیر نمره می‌گیره."
+    13 => "הערכה עצמית חיה. כל קריאת כיוון על נר סגור נבחנת מול השבירה בפועל, על פני 500 הקריאות האחרונות."
+    14 => "Η ζωντανή αυτοαξιολόγησή μου. Κάθε κλήση κατεύθυνσης σε κλειστό κερί βαθμολογείται με βάση την πραγματική διάσπαση, στις τελευταίες 500 κλήσεις."
+    15 => "Evaluasi diri langsung saya. Setiap panggilan arah pada candle tertutup dinilai terhadap tembus yang sebenarnya, atas 500 panggilan terakhir."
+    16 => "Penilaian kendiri langsung saya. Setiap panggilan arah pada lilin tertutup dinilai berdasarkan pecahan sebenar, atas 500 panggilan terakhir."
+    =>    "My live self-test. Every direction call I make on a closed candle is graded against the actual break once the structure resolves, over the last 500 graded calls."
+
+// — Pending calls (verification latency) —
+// {0} = confirmed full calls of the active structure that are
+// not graded yet (callBuf size). True labels arrive only at the
+// structure break, so ungraded predictions are reported
+// separately, following the delayed-labelling evaluation
+// methodology: Grzenda, Gomes & Bifet, "Delayed labelling
+// evaluation for data streams", Data Mining and Knowledge
+// Discovery 34(5), Springer, 2020.
+
+f_txPendCalls() => switch LANG
+    1  => "{0} çağrı sonuç bekliyor"
+    2  => "{0} نداء بانتظار النتيجة"
+    3  => "{0} कॉल परिणाम की प्रतीक्षा में"
+    4  => "{0} 次判断等待结果"
+    5  => "{0}건 결과 대기 중"
+    6  => "{0} Rufe warten auf das Ergebnis"
+    7  => "{0} chiamate in attesa dell'esito"
+    8  => "{0} вызовов ждут результата"
+    9  => "{0} appels en attente du résultat"
+    10 => "{0} llamadas a la espera del resultado"
+    11 => "{0} 件の判断が結果待ちです"
+    12 => "{0} اعلام در انتظار نتیجه"
+    13 => "{0} קריאות ממתינות לתוצאה"
+    14 => "{0} κλήσεις σε αναμονή αποτελέσματος"
+    15 => "{0} panggilan menunggu hasil"
+    16 => "{0} panggilan menunggu keputusan"
+    =>    "{0} calls awaiting the outcome"
+
+// ══════════════
+// Sigma
+// ══════════════
+
+max_bars_back(open,  500)
+max_bars_back(high,  500)
+max_bars_back(low,   500)
+max_bars_back(close, 500)
+max_bars_back(time,  502)
+
+float sigma = f_yangZhangSigma(SIGMA_LEN)
+
+// ══════════════
+// Anchor Freeze / Reset + Structure Tracking
+// ══════════════
+
+// HH/LL over the lookback window, excluding the current bar.
+float _triHH = ta.highest(high[1], i_lookback)
+float _triLL = ta.lowest(low[1],   i_lookback)
+
+// Pending anchors preview — window includes the current bar,
+// so these equal exactly what the next bar's freeze will lock.
+float _pvHH = ta.highest(high, i_lookback)
+float _pvLL = ta.lowest(low,   i_lookback)
+
+int  minCalcBars = math.max(SIGMA_LEN, i_lookback)
+bool hasData     = bar_index >= minCalcBars
+
+var FrozenAnchors fa = FrozenAnchors.new()
+var array<StructureBox> boxHistory  = array.new<StructureBox>()
+var array<box>          _drawnBoxes = array.new<box>()
+
+// Structure-level accumulators (persist via var).
+var int   stDur       = 0
+var float stMaxHi     = na
+var float stMinLo     = na
+var float stThCeilMax = na
+var float stThFlrMin  = na
+
+// — Estimate log state —
+var float pPendHeld   = na
+var bool  sigPendHeld = false
+var float nePendHeld   = na
+var float pBirthHeld   = na
+var bool  sigBirthHeld = false
+var int   cntPend     = 0
+var int   okPend      = 0
+var int   cntBirth    = 0
+var int   okBirth     = 0
+
+// — Online calibration state —
+// 20 cells = 10 confidence bins (5-pt) × 2 stability states.
+// Granularity validated 2026-07-03 on 14 datasets / 543,070 bars:
+// design C, walk-forward ECE 3.37 pp vs 3.56 pp baseline,
+// coverage 97.6%, second-half transfer 3.40 pp.
+// Stability dimension re-validated 2026-07-06 with JUMP_WIN 3 /
+// CAL_JUMPTH 1.5: paired prequential ECE 1.82 vs 1.87 pp across
+// all 14 datasets — passes the ECE <= baseline + 0.5 pp rule.
+// calHitW / calTotW : fading counters, per-cell λ decay.
+// probRing : last JUMP_WIN per-bar P values of the active structure.
+// cellBuf  : per-bar (cell, side) log, graded at the break.
+var array<float> calHitW   = array.new<float>(20, 0.0)
+var array<float> calTotW   = array.new<float>(20, 0.0)
+var array<float> probRing  = array.new<float>()
+var array<int>   cellBuf   = array.new<int>()
+
+// — Verified track record state —
+// callBuf   : side of each confirmed full call (state 6) inside
+//             the active structure — 1 up, 0 down. Graded at break.
+// trackRing : rolling 1/0 results of graded calls, FIFO capped at
+//             TRACK_CAP. trackOk mirrors its running hit sum.
+var array<int>   callBuf   = array.new<int>()
+var array<int>   trackRing = array.new<int>()
+var int          trackOk   = 0
+
+// Per-bar CSV log columns (na except on event bars).
+float lgEvent = na
+float lgThCB  = na
+float lgThFB  = na
+float lgPB    = na
+float lgSigB  = na
+float lgNeB   = na
+float lgPP    = na
+float lgSigP  = na
+float lgNeP   = na
+float lgHitP  = na
+float lgHitB  = na
+float lgAccP  = na
+float lgAccB  = na
+float lgThCP  = na
+float lgThFP  = na
+float lgPBar  = na
+float lgJmpB  = na
+float lgCellB = na
+float lgStateB = na
+float lgCalBar = na
+float lgAccC   = na
+float lgCntC   = na
+
+// Freeze when inactive and enough data exists.
+// Birth bookkeeping: reset accumulators for the new structure.
+if not fa.is_active and hasData and _triHH > 0.0 and _triLL > 0.0
+    fa.hh        := _triHH
+    fa.ll        := _triLL
+    fa.bar_x     := bar_index - i_lookback + 1
+    fa.time_x    := time[i_lookback - 1]
+    fa.is_active := true
+    stDur        := 0
+    stMaxHi      := na
+    stMinLo      := na
+    stThCeilMax  := na
+    stThFlrMin   := na
+    probRing.clear()
+    cellBuf.clear()
+    callBuf.clear()
+
+// ══════════════
+// Triangle Calc + Per-bar Tracking (runs before reset)
+// ══════════════
+
+var TriangleData tri1 = TriangleData.new()
+var TriangleData tri3 = TriangleData.new()
+
+// Scratch triangle for pending-anchor angle measurements.
+var TriangleData triPd = TriangleData.new()
+
+if fa.is_active
+    f_triangle(tri1, fa.hh, fa.bar_x, high, bar_index, sigma, i_lookback)
+    f_triangle(tri3, fa.ll, fa.bar_x, low,  bar_index, sigma, i_lookback)
+    stDur += 1
+    if stDur == 1
+        // Birth (freeze) event — log angles and birth forecast.
+        [_bp, _bs, _bn] = f_kdeProb(boxHistory, tri1.theta, tri3.theta, false)
+        pBirthHeld   := _bp
+        sigBirthHeld := _bs
+        lgEvent    := 1
+        lgThCB     := tri1.theta
+        lgThFB     := tri3.theta
+        lgPB       := _bp
+        lgSigB     := _bs ? 1.0 : 0.0
+        lgNeB      := _bn
+    if na(stMaxHi) or high >= stMaxHi
+        stMaxHi     := high
+        stThCeilMax := tri1.theta
+    if na(stMinLo) or low <= stMinLo
+        stMinLo     := low
+        stThFlrMin  := tri3.theta
+    // — Per-bar probability, jumpiness ring, cell log —
+    // Exact replication of the validated pipeline:
+    // population stdev (denominator = JUMP_WIN) over a
+    // JUMP_WIN-bar window of P; only significant bars
+    // with a full ring are logged for calibration.
+    if barstate.isconfirmed
+        [_cp, _cs, _cn] = f_kdeProb(boxHistory, tri1.theta, tri3.theta, false)
+        lgPBar   := _cp
+        probRing.push(_cp)
+        if probRing.size() > JUMP_WIN
+            probRing.shift()
+        // Jumpiness on every full ring — the state ladder needs it
+        // even on non-significant bars. LEARNING is unchanged: cells
+        // are logged only on significant bars with a full ring, the
+        // exact validated prequential pipeline.
+        bool  _ringFull = probRing.size() == JUMP_WIN
+        float _jstd     = na
+        if _ringFull
+            float _jm = 0.0
+            for i = 0 to JUMP_WIN - 1
+                _jm += probRing.get(i)
+            _jm /= float(JUMP_WIN)
+            float _jv = 0.0
+            for i = 0 to JUMP_WIN - 1
+                float _dv = probRing.get(i) - _jm
+                _jv += _dv * _dv
+            _jstd  := math.sqrt(_jv / float(JUMP_WIN))
+            lgJmpB := _jstd
+        if _cs and _ringFull
+            float _cc   = math.max(_cp, 100.0 - _cp)
+            int   _bin  = math.min(int((_cc - 50.0) / 5.0), 9)
+            int   _cell = _bin * 2 + (_jstd < CAL_JUMPTH ? 0 : 1)
+            lgCellB := float(_cell)
+            cellBuf.push(_cell * 2 + (_cp > 50.0 ? 1 : 0))
+        // — Unified per-bar state (Engine v2 decision ladder) —
+        // 1 newborn (ring not full) · 2 unstable · 3 too close ·
+        // 4 cold class · 5 class record neutral (Wald fails) ·
+        // 6 full call. Wald (1943) large-sample test applied to the
+        // prequential fading-factor rate (Gama et al., 2013), so the
+        // significance gate sits on the number the user actually
+        // sees. Confirmed bars only — repaint-free by construction.
+        if not _ringFull
+            lgStateB := 1.0
+        else if _jstd >= CAL_JUMPTH
+            lgStateB := 2.0
+        else if not _cs
+            lgStateB := 3.0
+        else
+            float _cc2   = math.max(_cp, 100.0 - _cp)
+            int   _bin2  = math.min(int((_cc2 - 50.0) / 5.0), 9)
+            int   _cell2 = _bin2 * 2
+            float _tw    = calTotW.get(_cell2)
+            if _tw < CAL_MINW
+                lgStateB := 4.0
+            else
+                float _r    = calHitW.get(_cell2) / _tw
+                bool  _wald = math.abs(_r - 0.5) >= 1.645 * math.sqrt(math.max(_r * (1.0 - _r), 1e-9) / _tw)
+                lgCalBar := 100.0 * _r
+                lgStateB := _wald ? 6.0 : 5.0
+                if _wald
+                    callBuf.push(_cp > 50.0 ? 1 : 0)
+else
+    f_zeroTri(tri1)
+    f_zeroTri(tri3)
+    // Pending-phase per-bar probability — same engine the estimate
+    // label uses (pendMode = true), sampled on confirmed bars so the
+    // alert series stays repaint-free. Ring holds pending-only values
+    // (cleared at break) to keep jumpiness phase-pure. No cell logging:
+    // calibration cells are trained on active-mode samples only.
+    // Alerts only need recent history — deep-history pending KDE is
+    // skipped to stay inside TradingView's computation budget. This
+    // block feeds no learning or calibration state, so skipping old
+    // bars changes nothing in the model.
+    if hasData and barstate.isconfirmed and last_bar_index - bar_index <= 5000
+        f_triangle(triPd, _pvHH, bar_index - i_lookback + 2, high, bar_index, sigma, i_lookback)
+        float _pdQC = triPd.theta
+        f_triangle(triPd, _pvLL, bar_index - i_lookback + 2, low,  bar_index, sigma, i_lookback)
+        float _pdQF = triPd.theta
+        [_cp, _cs, _cn] = f_kdeProb(boxHistory, _pdQC, _pdQF, true)
+        lgPBar   := _cp
+        probRing.push(_cp)
+        if probRing.size() > JUMP_WIN
+            probRing.shift()
+        if _cs and probRing.size() == JUMP_WIN
+            float _jm = 0.0
+            for i = 0 to JUMP_WIN - 1
+                _jm += probRing.get(i)
+            _jm /= float(JUMP_WIN)
+            float _jv = 0.0
+            for i = 0 to JUMP_WIN - 1
+                float _dv = probRing.get(i) - _jm
+                _jv += _dv * _dv
+            lgJmpB := math.sqrt(_jv / float(JUMP_WIN))
+
+// ══════════════
+// Break Detection — snapshot then deactivate
+// ══════════════
+
+float brDur       = na
+float brHH        = na
+float brLL        = na
+float brMaxHi     = na
+float brMinLo     = na
+float brThCeilMax = na
+float brThFlrMin  = na
+float brDir       = na
+
+if fa.is_active and hasData
+    if close > fa.hh or close < fa.ll
+        brDur        := float(stDur)
+        brHH         := fa.hh
+        brLL         := fa.ll
+        brMaxHi      := stMaxHi
+        brMinLo      := stMinLo
+        brThCeilMax  := stThCeilMax
+        brThFlrMin   := stThFlrMin
+        brDir        := close > fa.hh ? 1.0 : -1.0
+        // Pending θ at this break — measured against the preview
+        // anchors. Training feature for predicting the direction
+        // of the NEXT structure's break while in pending mode.
+        f_triangle(triPd, _pvHH, bar_index - i_lookback + 2, high, bar_index, sigma, i_lookback)
+        float _pdC = triPd.theta
+        f_triangle(triPd, _pvLL, bar_index - i_lookback + 2, low,  bar_index, sigma, i_lookback)
+        float _pdF = triPd.theta
+        boxHistory.push(StructureBox.new(
+             hh          = fa.hh,
+             ll          = fa.ll,
+             startTime   = fa.time_x,
+             endTime     = time,
+             startBar    = fa.bar_x,
+             endBar      = bar_index,
+             breakDir    = brDir,
+             duration    = stDur,
+             maxHi       = stMaxHi,
+             minLo       = stMinLo,
+             thCeilAtMax = stThCeilMax,
+             thFlrAtMin  = stThFlrMin,
+             thCeilAtBrk = tri1.theta,
+             thFlrAtBrk  = tri3.theta,
+             thCeilPend  = _pdC,
+             thFlrPend   = _pdF))
+        while boxHistory.size() > 500
+            boxHistory.shift()
+        // — P31 · grade cell buffer, update fading counters —
+        // Leak-free: learning happens only after the outcome is
+        // known. λ decay is applied per cell, only on that cell's
+        // own samples, in chronological order — the exact
+        // prequential fading-factor estimator that was validated
+        // (mean ECE 20.0 → 3.5 pp across 14 datasets).
+        if cellBuf.size() > 0
+            for i = 0 to cellBuf.size() - 1
+                int  _enc = cellBuf.get(i)
+                int  _cl  = _enc / 2
+                bool _sUp = _enc % 2 == 1
+                float _h  = _sUp == (brDir > 0.0) ? 1.0 : 0.0
+                calHitW.set(_cl, calHitW.get(_cl) * CAL_LAMBDA + _h)
+                calTotW.set(_cl, calTotW.get(_cl) * CAL_LAMBDA + 1.0)
+            cellBuf.clear()
+        // — Grade call buffer for verified track record —
+        if callBuf.size() > 0
+            for i = 0 to callBuf.size() - 1
+                int _side = callBuf.get(i)
+                int _hit  = (_side == 1) == (brDir > 0.0) ? 1 : 0
+                trackRing.push(_hit)
+                trackOk += _hit
+                if trackRing.size() > TRACK_CAP
+                    trackOk -= trackRing.shift()
+            callBuf.clear()
+        lgAccC := trackRing.size() > 0 ? 100.0 * trackOk / trackRing.size() : na
+        lgCntC := float(trackRing.size())
+        // — Estimate log: score held estimates, emit CSV row —
+        lgEvent := na(lgEvent) ? 2.0 : 3.0
+        if not na(pPendHeld)
+            lgHitP  := (pPendHeld > 50.0) == (brDir > 0.0) ? 1.0 : 0.0
+            cntPend += 1
+            okPend  += int(lgHitP)
+            lgPP    := pPendHeld
+            lgSigP  := sigPendHeld ? 1.0 : 0.0
+            lgNeP   := nePendHeld
+        if not na(pBirthHeld)
+            lgHitB   := (pBirthHeld > 50.0) == (brDir > 0.0) ? 1.0 : 0.0
+            cntBirth += 1
+            okBirth  += int(lgHitB)
+        lgAccP := cntPend  > 0 ? 100.0 * okPend  / cntPend  : na
+        lgAccB := cntBirth > 0 ? 100.0 * okBirth / cntBirth : na
+        lgThCP := _pdC
+        lgThFP := _pdF
+        // Estimate for the NEXT structure, made at this break.
+        [_np, _ns, _nn] = f_kdeProb(boxHistory, _pdC, _pdF, true)
+        pPendHeld    := _np
+        sigPendHeld  := _ns
+        nePendHeld   := _nn
+        pBirthHeld   := na
+        sigBirthHeld := false
+        probRing.clear()
+        fa.is_active := false
+
+// ══════════════
+// Data Window / CSV Outputs
+// ══════════════
+
+plot(tri1.theta, "Ceiling θ",        display = display.data_window)
+plot(tri3.theta, "Floor θ",          display = display.data_window)
+plot(brDur,       "Str Duration",     display = display.data_window)
+plot(brHH,        "Str Frozen HH",    display = display.data_window)
+plot(brLL,        "Str Frozen LL",    display = display.data_window)
+plot(brMaxHi,     "Str Max High",     display = display.data_window)
+plot(brMinLo,     "Str Min Low",      display = display.data_window)
+plot(brThCeilMax, "Str θ Ceil @Max",  display = display.data_window)
+plot(brThFlrMin,  "Str θ Floor @Min", display = display.data_window)
+plot(brDir,       "Str Break Dir",    display = display.data_window)
+
+// — Estimate log columns (CSV export) —
+plot(lgEvent, "Log Event",      display = display.data_window)
+plot(lgThCB,  "Log θC Birth",   display = display.data_window)
+plot(lgThFB,  "Log θF Birth",   display = display.data_window)
+plot(lgPB,    "Log P Birth",    display = display.data_window)
+plot(lgSigB,  "Log Sig Birth",  display = display.data_window)
+plot(lgNeB,   "Log nEff Birth", display = display.data_window)
+plot(lgPP,    "Log P Pend",     display = display.data_window)
+plot(lgSigP,  "Log Sig Pend",   display = display.data_window)
+plot(lgNeP,   "Log nEff Pend",  display = display.data_window)
+plot(lgHitP,  "Log Hit Pend",   display = display.data_window)
+plot(lgHitB,  "Log Hit Birth",  display = display.data_window)
+plot(lgAccP,  "Log Acc Pend",   display = display.data_window)
+plot(lgAccB,  "Log Acc Birth",  display = display.data_window)
+plot(lgThCP, "Log θC Pend",    display = display.data_window)
+plot(lgThFP, "Log θF Pend",    display = display.data_window)
+plot(lgPBar,  "Probability UP", display = display.data_window)
+plot(lgJmpB,  "Log Jump Bar",  display = display.data_window)
+plot(lgCellB, "Log Cell Bar",  display = display.data_window)
+plot(lgStateB, "Log State Bar",   display = display.data_window)
+plot(lgCalBar, "Calibrated Rate", display = display.data_window)
+plot(lgAccC,   "Track Accuracy",  display = display.data_window)
+plot(lgCntC,   "Track Count",     display = display.data_window)
+
+// ══════════════
+// Chart Overlay — Anchor Lines + Geometric Trend Lines
+// ══════════════
+
+const color CLR_CEIL = #ef5350
+const color CLR_FLR  = #26a69a
+
+var line  _aHhLn      = na
+var line  _aLlLn      = na
+var line  _aVtLn      = na
+var label _aHhLbl     = na
+var label _aLlLbl     = na
+var line  _trendCeil  = na
+var line  _trendFlr   = na
+var label _angCeilLbl = na
+var label _angFlrLbl  = na
+var table _tblAngMap  = na
+var label _predLbl    = na
+var line  _predLn     = na
+
+if barstate.islast
+
+    line.delete(_aHhLn)
+    line.delete(_aLlLn)
+    line.delete(_aVtLn)
+    label.delete(_aHhLbl)
+    label.delete(_aLlLbl)
+    line.delete(_trendCeil)
+    line.delete(_trendFlr)
+    label.delete(_angCeilLbl)
+    label.delete(_angFlrLbl)
+    label.delete(_predLbl)
+    line.delete(_predLn)
+
+    // — Structure Boxes —
+    while _drawnBoxes.size() > 0
+        box.delete(_drawnBoxes.pop())
+    if i_showBoxes
+        int    _bw    = i_boxStyle == "None" ? 0 : i_boxBorder
+        string _bs    = switch i_boxStyle
+            "Dashed" => line.style_dashed
+            "Dotted" => line.style_dotted
+            =>          line.style_solid
+        color  _upBg  = color.new(i_boxUpClr,  i_boxBgAlpha)
+        color  _dnBg  = color.new(i_boxDnClr,  i_boxBgAlpha)
+        color  _actBg = color.new(i_boxActClr, i_boxBgAlpha)
+        int _drawN    = math.min(i_histBoxes, boxHistory.size())
+        int _drawOfs  = boxHistory.size() - _drawN
+        for i = _drawOfs to boxHistory.size() - 1
+            StructureBox sb = boxHistory.get(i)
+            bool _isUp = sb.breakDir > 0.0
+            _drawnBoxes.push(box.new(
+                 sb.startTime, sb.hh, sb.endTime, sb.ll,
+                 xloc         = xloc.bar_time,
+                 border_color = _isUp ? i_boxUpClr : i_boxDnClr,
+                 border_width = _bw,
+                 border_style = _bs,
+                 bgcolor      = _isUp ? _upBg : _dnBg))
+        if fa.is_active
+            _drawnBoxes.push(box.new(
+                 fa.time_x, fa.hh, time, fa.ll,
+                 xloc         = xloc.bar_time,
+                 border_color = i_boxActClr,
+                 border_width = math.max(_bw, 1),
+                 border_style = line.style_dashed,
+                 bgcolor      = _actBg))
+
+    // — Live query angles: active → structure θ · pending → preview θ —
+    bool  _pendMode = not fa.is_active
+    float _qC = tri1.theta
+    float _qF = tri3.theta
+    if _pendMode and hasData
+        f_triangle(triPd, _pvHH, bar_index - i_lookback + 2, high, bar_index, sigma, i_lookback)
+        _qC := triPd.theta
+        f_triangle(triPd, _pvLL, bar_index - i_lookback + 2, low,  bar_index, sigma, i_lookback)
+        _qF := triPd.theta
+
+    // — KDE Probability (adaptive, parameter-free) —
+    float _pUp     = 50.0
+    float _pDn     = 50.0
+    bool  _pSig    = false
+    string _trdSym = "—"
+    // Probability + significance via the shared adaptive engine.
+    if not na(_qC) and not na(_qF) and boxHistory.size() > 0
+        [_kp, _ks, _kn] = f_kdeProb(boxHistory, _qC, _qF, _pendMode)
+        _pUp  := _kp
+        _pDn  := 100.0 - _kp
+        _pSig := _ks
+        int _tN  = math.min(5, boxHistory.size())
+        int _tUp = 0
+        for i = boxHistory.size() - _tN to boxHistory.size() - 1
+            if boxHistory.get(i).breakDir > 0.0
+                _tUp += 1
+        int _tDn = _tN - _tUp
+        if _tUp >= 4
+            _trdSym := "▲▲"
+        else if _tUp == 3
+            _trdSym := "▲"
+        else if _tDn >= 4
+            _trdSym := "▼▼"
+        else if _tDn == 3
+            _trdSym := "▼"
+
+    // — Engine v2 · display-side unified state (decision ladder) —
+    // Mirrors the confirmed-bar ladder. Live-bar jumpiness = last
+    // JUMP_WIN - 1 confirmed P values + current live P, which
+    // equals the logged value at bar close. States: 0 warm-up · 1 thin archive ·
+    // 2 newborn · 3 unstable · 4 too close · 5 cold class ·
+    // 6 class record neutral · 7 full call · 8 pending call.
+    // The label always exists and every state shows its own real
+    // diagnostics (operator rule, 2026-07-03). No raw fallback.
+    int   _lblState = 0
+    bool  _dirUp    = false
+    float _numA     = na
+    float _jShow    = na
+    if not hasData
+        _lblState := 0
+        _numA     := float(minCalcBars - bar_index)
+    else if boxHistory.size() < 2
+        _lblState := 1
+        _numA     := float(boxHistory.size())
+    else if not _pendMode
+        if probRing.size() < JUMP_WIN - 1
+            _lblState := 2
+            _dirUp    := pBirthHeld > 50.0
+            _numA     := cntBirth > 0 ? 100.0 * okBirth / cntBirth : na
+        else
+            int _rN = probRing.size()
+            float _jm = _pUp
+            for i = _rN - (JUMP_WIN - 1) to _rN - 1
+                _jm += probRing.get(i)
+            _jm /= float(JUMP_WIN)
+            float _jv = (_pUp - _jm) * (_pUp - _jm)
+            for i = _rN - (JUMP_WIN - 1) to _rN - 1
+                float _dv = probRing.get(i) - _jm
+                _jv += _dv * _dv
+            float _jstd = math.sqrt(_jv / float(JUMP_WIN))
+            _jShow := _jstd
+            if _jstd >= CAL_JUMPTH
+                _lblState := 3
+                _numA     := _jstd
+            else if not _pSig
+                _lblState := 4
+            else
+                float _dConf = math.max(_pUp, _pDn)
+                int   _dBin  = math.min(int((_dConf - 50.0) / 5.0), 9)
+                int   _dCell = _dBin * 2
+                float _dTw   = calTotW.get(_dCell)
+                _dirUp := _pUp > _pDn
+                if _dTw < CAL_MINW
+                    _lblState := 5
+                    _numA     := _dTw
+                else
+                    float _dR    = calHitW.get(_dCell) / _dTw
+                    bool  _dWald = math.abs(_dR - 0.5) >= 1.645 * math.sqrt(math.max(_dR * (1.0 - _dR), 1e-9) / _dTw)
+                    _numA     := 100.0 * _dR
+                    _lblState := _dWald ? 7 : 6
+    else
+        if probRing.size() >= JUMP_WIN - 1
+            int _rN2 = probRing.size()
+            float _jm2 = _pUp
+            for i = _rN2 - (JUMP_WIN - 1) to _rN2 - 1
+                _jm2 += probRing.get(i)
+            _jm2 /= float(JUMP_WIN)
+            float _jv2 = (_pUp - _jm2) * (_pUp - _jm2)
+            for i = _rN2 - (JUMP_WIN - 1) to _rN2 - 1
+                float _dv2 = probRing.get(i) - _jm2
+                _jv2 += _dv2 * _dv2
+            _jShow := math.sqrt(_jv2 / float(JUMP_WIN))
+        if not na(_jShow) and _jShow >= CAL_JUMPTH
+            _lblState := 3
+            _numA     := _jShow
+        else if na(pPendHeld) or not sigPendHeld
+            _lblState := 4
+        else
+            _lblState := 8
+            _dirUp    := pPendHeld > 50.0
+            _numA     := cntPend > 0 ? 100.0 * okPend / cntPend : na
+
+    // — Estimate Label · Engine v2 unified scenarios —
+    // The label ALWAYS exists (operator rule): every state speaks
+    // and every message carries its own real diagnostics. Single
+    // headline number = the verified class rate; the raw claim is
+    // never displayed. Percentages as integers, deviation with one
+    // decimal. Scenario texts per GTL_Label_Scenarios_v2.
+    if i_showPredLbl
+        string _lt = ""
+        color  _lc = #9598a1
+        if _lblState == 0
+            _lt := str.replace(f_txWarmup(), "{0}", str.tostring(_numA, "#"))
+        else if _lblState == 1
+            _lt := str.replace(f_txNoData(), "{0}", str.tostring(_numA, "#"))
+        else if _lblState == 2
+            if sigBirthHeld
+                _lt := _dirUp ? f_txBirthUp() : f_txBirthDn()
+                _lt += "\n" + (na(_numA) ? f_txNoStageRec() : str.replace(f_txStageRate(), "{0}", str.tostring(_numA, "#")))
+                _lc := _dirUp ? i_boxUpClr : i_boxDnClr
+            else
+                _lt := f_txBirthUnclear()
+            _lt += "\n" + f_txStabFrom5()
+        else if _lblState == 3
+            _lt := str.replace(f_txUnstable(), "{0}", str.tostring(_numA, "#.#"))
+        else if _lblState == 4
+            _lt := f_txIntro() + "\n" + f_txTooClose()
+        else if _lblState == 5
+            _lt := str.replace(_dirUp ? f_txColdUp() : f_txColdDn(), "{0}", str.tostring(_numA, "#"))
+            _lc := _dirUp ? i_boxUpClr : i_boxDnClr
+        else if _lblState == 6
+            _lt := str.replace(f_txNeutralRec(), "{0}", str.tostring(_numA, "#"))
+        else if _lblState == 7
+            _lt := f_txIntro() + "\n" + str.replace(_dirUp ? f_txCallUp() : f_txCallDn(), "{0}", str.tostring(_numA, "#"))
+            _lt += "\n" + str.replace(f_txSteadyJ(), "{0}", str.tostring(_jShow, "#.#"))
+            _lc := _dirUp ? i_boxUpClr : i_boxDnClr
+        else
+            _lt := _dirUp ? f_txPendUp() : f_txPendDn()
+            _lt += "\n" + (na(_numA) ? f_txNoStageRec() : str.replace(f_txPendStage(), "{0}", str.tostring(_numA, "#")))
+            _lc := _dirUp ? i_boxUpClr : i_boxDnClr
+        // Mobile compact mode — badge text uses the existing symbol
+        // vocabulary only (up/down arrows, hourglass, warning, dash).
+        // The untouched scenario sentence rides in the label tooltip,
+        // shown on tap (mobile) or hover (desktop).
+        string _ltFull = _lt
+        if i_mobileMode
+            string _sn = na(_numA) ? "—" : str.tostring(_numA, "#")
+            _lt := switch _lblState
+                0 => "⧗ " + _sn
+                1 => "⧗ " + _sn
+                2 => sigBirthHeld ? (_dirUp ? "▲" : "▼") : "—"
+                3 => "⚠ " + str.tostring(_numA, "#.#")
+                4 => "—"
+                5 => (_dirUp ? "▲" : "▼") + " ⧗"
+                6 => "—"
+                7 => (_dirUp ? "▲ " : "▼ ") + _sn + "%"
+                => "⧗ " + (_dirUp ? "▲" : "▼") + (na(_numA) ? "" : " " + _sn + "%")
+        else
+            _lt := f_wrap(_lt, 34)
+        float _midY = _pendMode ? (_pvHH + _pvLL) / 2.0 : (fa.hh + fa.ll) / 2.0
+        int _lx = bar_index + i_lblOffset
+        _predLbl := label.new(_lx, _midY, _lt,
+             xloc = xloc.bar_index,
+             color = color.new(_lc, 82), textcolor = _lc,
+             style = label.style_label_left,
+             size = i_mobileMode ? i_lblSize + 5 : i_lblSize + 15,
+             tooltip = i_mobileMode ? _ltFull : "")
+        _predLn := line.new(bar_index, close, _lx, _midY,
+             xloc = xloc.bar_index,
+             color = color.new(_lc, 20), width = 2,
+             style = line.style_dashed)
+
+
+    // — Angle Map —
+    if not na(_tblAngMap)
+        table.delete(_tblAngMap)
+        _tblAngMap := na
+    if i_showAngMap and not i_mobileMode and boxHistory.size() > 0
+        int _amN = math.min(i_histBoxes, boxHistory.size())
+        if _amN > 0
+            int _amOfs = boxHistory.size() - _amN
+            array<float> _cK = array.new<float>()
+            array<float> _cD = array.new<float>()
+            array<int>   _cU = array.new<int>()
+            array<float> _fK = array.new<float>()
+            array<float> _fD = array.new<float>()
+            array<int>   _fU = array.new<int>()
+            for i = _amOfs to boxHistory.size() - 1
+                StructureBox sb = boxHistory.get(i)
+                _cK.push(sb.thCeilAtBrk)
+                _cD.push(sb.breakDir)
+                _cU.push(sb.duration)
+                _fK.push(sb.thFlrAtBrk)
+                _fD.push(sb.breakDir)
+                _fU.push(sb.duration)
+            f_sortParallelDesc(_cK, _cD, _cU)
+            f_sortParallelDesc(_fK, _fD, _fU)
+            bool  _hasNow = not na(_qC) and not na(_qF)
+            int   _cPos   = _hasNow ? f_insertPosDesc(_cK, _qC) : -1
+            int   _fPos   = _hasNow ? f_insertPosDesc(_fK, _qF) : -1
+            int   _extra  = _hasNow ? 1 : 0
+            // NOW color: significant → direction color;
+            // neutral → amber (active) or gray (pending).
+            color _nC     = _pendMode ? #9598a1 : #EF9F27
+            color _nBg    = color.new(_nC, 85)
+            if _pSig
+                if _pUp > _pDn
+                    _nC  := i_boxUpClr
+                    _nBg := color.new(i_boxUpClr, 82)
+                else
+                    _nC  := i_boxDnClr
+                    _nBg := color.new(i_boxDnClr, 82)
+            color _tBg    = color.new(#1a1a1a, 20)
+            string _pos   = switch i_tblPos
+                "Top left"      => position.top_left
+                "Top center"    => position.top_center
+                "Middle left"   => position.middle_left
+                "Middle center" => position.middle_center
+                "Middle right"  => position.middle_right
+                "Bottom left"   => position.bottom_left
+                "Bottom center" => position.bottom_center
+                "Bottom right"  => position.bottom_right
+                =>                 position.top_right
+            int _probRow = 0
+            if _hasNow
+                _probRow := 1
+            int _trackRow = trackRing.size() > 0 ? 1 : 0
+            int _rows = _amN + _extra + 1 + _probRow + _trackRow
+            _tblAngMap := table.new(_pos,
+                 columns = 6, rows = _rows,
+                 bgcolor = _tBg,
+                 frame_color  = color.new(color.gray, 60), frame_width  = 1,
+                 border_color = color.new(color.gray, 80), border_width = 1)
+            color _hcBg = color.new(#ef5350, 88)
+            color _hfBg = color.new(#26a69a, 88)
+            table.cell(_tblAngMap, f_col(0), 0, f_txDir(),   text_color = color.gray, text_size = i_lblSize, bgcolor = _hcBg, tooltip = f_ttDir())
+            table.cell(_tblAngMap, f_col(1), 0, f_txCeil(),  text_color = #ef5350,    text_size = i_lblSize, bgcolor = _hcBg, tooltip = f_ttCeil())
+            table.cell(_tblAngMap, f_col(2), 0, f_txDur(),   text_color = color.gray, text_size = i_lblSize, bgcolor = _hcBg, tooltip = f_ttDur())
+            table.cell(_tblAngMap, f_col(3), 0, f_txDir(),   text_color = color.gray, text_size = i_lblSize, bgcolor = _hfBg, tooltip = f_ttDir())
+            table.cell(_tblAngMap, f_col(4), 0, f_txFloor(), text_color = #26a69a,    text_size = i_lblSize, bgcolor = _hfBg, tooltip = f_ttFloor())
+            table.cell(_tblAngMap, f_col(5), 0, f_txDur(),   text_color = color.gray, text_size = i_lblSize, bgcolor = _hfBg, tooltip = f_ttDur())
+            int  _cdi = 0
+            int  _fdi = 0
+            bool _cd  = false
+            bool _fd  = false
+            int _lastData = _rows - 1 - _probRow - _trackRow
+            string _nowSym = _pendMode ? "⧗" : RTL ? "←" : "→"
+            for _r = 1 to _lastData
+                if _hasNow and not _cd and _cdi == _cPos
+                    table.cell(_tblAngMap, f_col(0), _r, _nowSym,                                text_color = _nC, text_size = i_lblSize, bgcolor = _nBg)
+                    table.cell(_tblAngMap, f_col(1), _r, str.tostring(_qC, "#.#") + "°",         text_color = _nC, text_size = i_lblSize, bgcolor = _nBg)
+                    table.cell(_tblAngMap, f_col(2), _r, _pendMode ? "0" : str.tostring(stDur),  text_color = _nC, text_size = i_lblSize, bgcolor = _nBg)
+                    _cd := true
+                else
+                    bool _cu = _cD.get(_cdi) > 0.0
+                    color _cc = _cu ? i_boxUpClr : i_boxDnClr
+                    table.cell(_tblAngMap, f_col(0), _r, _cu ? "▲" : "▼",                        text_color = _cc,         text_size = i_lblSize)
+                    table.cell(_tblAngMap, f_col(1), _r, str.tostring(_cK.get(_cdi), "#.#") + "°", text_color = color.white, text_size = i_lblSize)
+                    table.cell(_tblAngMap, f_col(2), _r, str.tostring(_cU.get(_cdi)),               text_color = color.gray,  text_size = i_lblSize)
+                    _cdi += 1
+                if _hasNow and not _fd and _fdi == _fPos
+                    table.cell(_tblAngMap, f_col(3), _r, _nowSym,                                text_color = _nC, text_size = i_lblSize, bgcolor = _nBg)
+                    table.cell(_tblAngMap, f_col(4), _r, str.tostring(_qF, "#.#") + "°",         text_color = _nC, text_size = i_lblSize, bgcolor = _nBg)
+                    table.cell(_tblAngMap, f_col(5), _r, _pendMode ? "0" : str.tostring(stDur),  text_color = _nC, text_size = i_lblSize, bgcolor = _nBg)
+                    _fd := true
+                else
+                    bool _fu = _fD.get(_fdi) > 0.0
+                    color _fc = _fu ? i_boxUpClr : i_boxDnClr
+                    table.cell(_tblAngMap, f_col(3), _r, _fu ? "▲" : "▼",                        text_color = _fc,         text_size = i_lblSize)
+                    table.cell(_tblAngMap, f_col(4), _r, str.tostring(_fK.get(_fdi), "#.#") + "°", text_color = color.white, text_size = i_lblSize)
+                    table.cell(_tblAngMap, f_col(5), _r, str.tostring(_fU.get(_fdi)),               text_color = color.gray,  text_size = i_lblSize)
+                    _fdi += 1
+            if _probRow > 0
+                int _pr = _rows - 1 - _trackRow
+                color _puBg = color.new(i_boxUpClr, 90)
+                color _pdBg = color.new(i_boxDnClr, 90)
+                bool  _spk  = _lblState == 7
+                color _puTx = _spk and _dirUp     ? i_boxUpClr : color.gray
+                color _pdTx = _spk and not _dirUp ? i_boxDnClr : color.gray
+                string _puTxt = "—"
+                string _pdTxt = "—"
+                if _spk
+                    _puTxt := str.tostring(_dirUp ? _numA : 100.0 - _numA, "#") + "%"
+                    _pdTxt := str.tostring(_dirUp ? 100.0 - _numA : _numA, "#") + "%"
+                table.cell(_tblAngMap, f_col(0), _pr, f_txPUp(),                       text_color = _puTx, text_size = i_lblSize, bgcolor = _puBg, tooltip = f_ttPUp())
+                table.cell(_tblAngMap, f_col(1), _pr, _puTxt,                          text_color = _puTx, text_size = i_lblSize, bgcolor = _puBg)
+                table.cell(_tblAngMap, f_col(2), _pr, _pUp >= _pDn ? _trdSym : "",     text_color = _puTx, text_size = i_lblSize, bgcolor = _puBg)
+                table.cell(_tblAngMap, f_col(3), _pr, f_txPDn(),                       text_color = _pdTx, text_size = i_lblSize, bgcolor = _pdBg, tooltip = f_ttPDn())
+                table.cell(_tblAngMap, f_col(4), _pr, _pdTxt,                          text_color = _pdTx, text_size = i_lblSize, bgcolor = _pdBg)
+                table.cell(_tblAngMap, f_col(5), _pr, _pDn > _pUp ? _trdSym : "",      text_color = _pdTx, text_size = i_lblSize, bgcolor = _pdBg)
+            if _trackRow > 0
+                int _tr  = _rows - 1
+                int _tN  = trackRing.size()
+                // BiDi fix: U+2066 (LRI) and U+2069 (PDI) isolate
+                // left-to-right numbers inside right-to-left text,
+                // preventing the table renderer from reordering digits.
+                string _lri = RTL ? "⁦" : ""
+                string _pdi = RTL ? "⁩" : ""
+                string _t0 = _lri + str.tostring(trackOk) + _pdi
+                string _t1 = _lri + str.tostring(_tN) + _pdi
+                string _t2 = _lri + str.tostring(math.round(100.0 * trackOk / _tN), "#") + _pdi
+                string _tTxt = str.replace(str.replace(str.replace(f_txTrackRec(), "{0}", _t0), "{1}", _t1), "{2}", _t2)
+                // Ungraded calls of the active structure — appended
+                // only while at least one call awaits its outcome.
+                if callBuf.size() > 0
+                    _tTxt += " · " + str.replace(f_txPendCalls(), "{0}", str.tostring(callBuf.size()))
+                // Balanced two-line layout: every translation of
+                // f_txTrackRec carries exactly one " · " at its
+                // midpoint; str.replace swaps only the first
+                // occurrence, so that midpoint becomes the break.
+                _tTxt := str.replace(_tTxt, " · ", "\n")
+                color  _trBg = color.new(#EF9F27, 88)
+                table.cell(_tblAngMap, 0, _tr, _tTxt, text_color = #EF9F27, text_size = i_lblSize + 2, bgcolor = _trBg, tooltip = f_ttTrack(), text_formatting = text.format_bold)
+                table.cell(_tblAngMap, 1, _tr, "", bgcolor = _trBg)
+                table.cell(_tblAngMap, 2, _tr, "", bgcolor = _trBg)
+                table.cell(_tblAngMap, 3, _tr, "", bgcolor = _trBg)
+                table.cell(_tblAngMap, 4, _tr, "", bgcolor = _trBg)
+                table.cell(_tblAngMap, 5, _tr, "", bgcolor = _trBg)
+                table.merge_cells(_tblAngMap, 0, _tr, 5, _tr)
+
+
+    if fa.is_active
+        int _tfMs = timeframe.in_seconds() * 1000
+
+        // Anchor lines (HH, LL, vertical freeze marker).
+        if i_showAnchors
+            _aHhLn  := line.new(fa.time_x, fa.hh, time, fa.hh,
+                 xloc = xloc.bar_time,
+                 color = CLR_CEIL, width = 1, style = line.style_dashed)
+            _aLlLn  := line.new(fa.time_x, fa.ll, time, fa.ll,
+                 xloc = xloc.bar_time,
+                 color = CLR_FLR, width = 1, style = line.style_dashed)
+            _aVtLn  := line.new(fa.time_x, fa.ll, fa.time_x, fa.hh,
+                 xloc = xloc.bar_time,
+                 color = color.new(color.gray, 40), width = 1,
+                 style = line.style_dotted)
+            _aHhLbl := label.new(time + 2 * _tfMs, fa.hh,
+                 f_txHH() + " " + str.tostring(fa.hh, format.mintick),
+                 xloc = xloc.bar_time,
+                 color = color.new(CLR_CEIL, 80), textcolor = CLR_CEIL,
+                 style = label.style_label_left, size = i_lblSize)
+            _aLlLbl := label.new(time + 2 * _tfMs, fa.ll,
+                 f_txLL() + " " + str.tostring(fa.ll, format.mintick),
+                 xloc = xloc.bar_time,
+                 color = color.new(CLR_FLR, 80), textcolor = CLR_FLR,
+                 style = label.style_label_left, size = i_lblSize)
+
+        // Geometric trend lines (triangle hypotenuse).
+        // Each line runs from the frozen anchor to the current
+        // bar's candle extreme (high for ceiling, low for floor).
+        // When the two lines converge, they meet at the intersection
+        // and stop — no crossing, no infinite extension.
+        float _dx = float(bar_index - fa.bar_x)
+        int   _endCeilT = time
+        float _endCeilY = high
+        int   _endFlrT  = time
+        float _endFlrY  = low
+
+        if _dx > 0.0
+            float _slopeCeil = (high - fa.hh) / _dx
+            float _slopeFlr  = (low  - fa.ll) / _dx
+            float _slopeDiff = _slopeCeil - _slopeFlr
+            if math.abs(_slopeDiff) > 1e-10
+                float _dxCross = (fa.ll - fa.hh) / _slopeDiff
+                if _dxCross > _dx
+                    int   _tC = fa.time_x + int(math.round(_dxCross)) * _tfMs
+                    float _yC = fa.hh + _slopeCeil * _dxCross
+                    _endCeilT := _tC
+                    _endCeilY := _yC
+                    _endFlrT  := _tC
+                    _endFlrY  := _yC
+
+        _trendCeil := line.new(fa.time_x, fa.hh, _endCeilT, _endCeilY,
+             xloc = xloc.bar_time, color = CLR_CEIL, width = 2)
+        _trendFlr  := line.new(fa.time_x, fa.ll, _endFlrT, _endFlrY,
+             xloc = xloc.bar_time, color = CLR_FLR, width = 2)
+
+        // Angle labels on the vertical anchor.
+        if not na(tri1.theta)
+            _angCeilLbl := label.new(fa.time_x, fa.hh,
+                 str.tostring(tri1.theta, "#.#") + "°",
+                 xloc = xloc.bar_time,
+                 color = color.new(CLR_CEIL, 80), textcolor = CLR_CEIL,
+                 style = label.style_label_down, size = i_lblSize)
+        if not na(tri3.theta)
+            _angFlrLbl := label.new(fa.time_x, fa.ll,
+                 str.tostring(tri3.theta, "#.#") + "°",
+                 xloc = xloc.bar_time,
+                 color = color.new(CLR_FLR, 80), textcolor = CLR_FLR,
+                 style = label.style_label_up, size = i_lblSize)
+    else if i_showAnchors and hasData
+        int   _tfMsPv = timeframe.in_seconds() * 1000
+        int   _pvT    = time[i_lookback - 2]
+        color _pvLn   = color.new(color.gray, 30)
+        color _pvBg   = color.new(color.gray, 85)
+        color _pvTx   = color.new(color.gray, 10)
+        _aHhLn  := line.new(_pvT, _pvHH, time, _pvHH,
+             xloc = xloc.bar_time,
+             color = _pvLn, width = 1, style = line.style_dotted)
+        _aLlLn  := line.new(_pvT, _pvLL, time, _pvLL,
+             xloc = xloc.bar_time,
+             color = _pvLn, width = 1, style = line.style_dotted)
+        _aVtLn  := line.new(_pvT, _pvLL, _pvT, _pvHH,
+             xloc = xloc.bar_time,
+             color = color.new(color.gray, 60), width = 1,
+             style = line.style_dotted)
+        _aHhLbl := label.new(time + 2 * _tfMsPv, _pvHH,
+             f_txHHPend() + " " + str.tostring(_pvHH, format.mintick),
+             xloc = xloc.bar_time,
+             color = _pvBg, textcolor = _pvTx,
+             style = label.style_label_left, size = i_lblSize)
+        _aLlLbl := label.new(time + 2 * _tfMsPv, _pvLL,
+             f_txLLPend() + " " + str.tostring(_pvLL, format.mintick),
+             xloc = xloc.bar_time,
+             color = _pvBg, textcolor = _pvTx,
+             style = label.style_label_left, size = i_lblSize)
+
+// ══════════════
+// Alert Module
+// ══════════════
+
+// Alerts follow the unified engine state (Engine v2). The model
+// "speaks" only when all four gates pass on the confirmed bar:
+// sufficient evidence, stability (JUMP_WIN-bar jumpiness below
+// CAL_JUMPTH), a warm class and
+// the Wald test on the calibrated class rate (state 6). State 2
+// marks an unstable estimate. All conditions read the confirmed
+// per-bar log series, so alerts are repaint-free by construction.
+// Transition pattern fires once when ENTERING a state.
+// Recommended alert frequency: Once Per Bar Close.
+// Custom probability thresholds: create the alert directly on the
+// "Probability UP" or "Probability DOWN" plot with the built-in
+// Crossing Up / Greater Than conditions — the threshold value is
+// then set inside the alert dialog itself.
+
+plot(100.0 - lgPBar, "Probability DOWN", display = display.data_window)
+
+bool _isSpkUp  = nz(lgStateB) == 6.0 and nz(lgPBar, 50.0) > 50.0
+bool _isSpkDn  = nz(lgStateB) == 6.0 and nz(lgPBar, 50.0) < 50.0
+bool _isUnstab = nz(lgStateB) == 2.0
+
+// — Signal trace markers (repaint-free) —
+// Per-candle view of the confirmed-bar ladder: full call UP,
+// full call DOWN, or evaluated-but-silent. Reads the same
+// logged series the alerts use, so every marker appears on
+// bar close only. Pending-phase bars carry no marker because
+// the confirmed ladder is defined inside structures only.
+bool _sigUndec = i_sigNc and not na(lgStateB) and lgStateB != 6.0
+plotshape(i_sigUp and _isSpkUp, "Signal trace UP",
+     style = shape.triangleup, location = location.belowbar,
+     color = #00FF66, size = size.tiny)
+plotshape(i_sigDn and _isSpkDn, "Signal trace DOWN",
+     style = shape.triangleup, location = location.belowbar,
+     color = #FF1744, size = size.tiny)
+plotshape(_sigUndec, "Signal trace silent",
+     style = shape.triangleup, location = location.belowbar,
+     color = #B0BEC5, size = size.tiny)
+
+bool _enterSpkUp  = _isSpkUp  and not _isSpkUp[1]
+bool _enterSpkDn  = _isSpkDn  and not _isSpkDn[1]
+bool _enterUnstab = _isUnstab and not _isUnstab[1]
+
+alertcondition(_enterSpkUp,  "Model speaks UP",   '▲ The model speaks — calls of this class were right {{plot("Calibrated Rate")}}% of the time, direction UP. Price: {{close}}')
+alertcondition(_enterSpkDn,  "Model speaks DOWN", '▼ The model speaks — calls of this class were right {{plot("Calibrated Rate")}}% of the time, direction DOWN. Price: {{close}}')
+alertcondition(_enterUnstab, "Estimate unstable", '⚠ Estimate unstable — deviation {{plot("Log Jump Bar")}} is above the 1.5 threshold. The model holds direction until it settles. Price: {{close}}')

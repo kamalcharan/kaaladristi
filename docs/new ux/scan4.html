@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DristiQ · Stage & Squeeze Analytics</title>
+  <style>
+    * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; }
+    :root {
+      --bg: #0d0f17; --panel: #151824; --card: #1c2030; --border: #282d42;
+      --text: #e2e8f0; --muted: #8c96ab; --faint: #5a6478;
+      --primary: #3b82f6; --primary-light: rgba(59,130,246,0.12);
+      --green: #22c55e; --green-bg: rgba(34,197,94,0.12);
+      --gold: #eab308; --gold-bg: rgba(234,179,8,0.12);
+      --red: #ef4444; --red-bg: rgba(239,68,68,0.12);
+    }
+    body { background: var(--bg); color: var(--text); margin: 0; padding: 24px; font-size: 13.5px; }
+    .container { max-width: 1280px; margin: 0 auto; }
+
+    /* Top Bar Header */
+    .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+    .title-area h1 { font-size: 1.5rem; font-weight: 700; margin: 0 0 4px; display: flex; align-items: center; gap: 8px; }
+    .title-area p { color: var(--muted); margin: 0; font-size: 13px; }
+    .btn-action { background: var(--primary); color: #fff; border: none; padding: 8px 16px; border-radius: 8px; font-weight: 600; cursor: pointer; }
+
+    /* KPI Stat Cards */
+    .kpi-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 20px; }
+    .kpi-card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; }
+    .kpi-num { font-size: 1.6rem; font-weight: 700; line-height: 1; margin-bottom: 4px; }
+    .kpi-label { font-size: 11px; text-transform: uppercase; color: var(--muted); font-weight: 600; letter-spacing: 0.05em; }
+
+    /* Analytics Middle Panel (Industry + Cap Distribution) */
+    .analytics-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; }
+    @media (max-width: 800px) { .analytics-grid { grid-template-columns: 1fr; } }
+    .panel-box { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+    .panel-head { font-size: 13px; font-weight: 700; margin-bottom: 12px; display: flex; justify-content: space-between; color: var(--text); }
+    
+    .list-row { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.04); font-size: 12px; }
+    .bar-bg { background: var(--card); height: 6px; border-radius: 3px; overflow: hidden; margin-top: 4px; }
+    .bar-fill { background: var(--primary); height: 100%; border-radius: 3px; }
+
+    /* Control & Filter Bar */
+    .control-card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 16px; margin-bottom: 16px; }
+    .search-row { display: flex; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+    .input-field, .select-field { background: var(--card); border: 1px solid var(--border); color: var(--text); padding: 8px 12px; border-radius: 8px; font-size: 12.5px; }
+    .input-field { flex: 1; min-width: 200px; }
+    
+    .filter-sliders { display: flex; gap: 24px; align-items: center; flex-wrap: wrap; font-size: 12px; color: var(--muted); }
+    .slider-group { display: flex; align-items: center; gap: 10px; }
+
+    /* Table Styling */
+    .table-container { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+    table { width: 100%; border-collapse: collapse; text-align: left; }
+    th { background: var(--card); color: var(--muted); font-size: 11px; text-transform: uppercase; font-weight: 700; padding: 12px 14px; border-bottom: 1px solid var(--border); }
+    td { padding: 12px 14px; border-bottom: 1px solid var(--border); font-size: 13px; }
+    tr:hover { background: rgba(255,255,255,0.02); }
+
+    /* Badges */
+    .badge { display: inline-block; padding: 3px 8px; border-radius: 6px; font-weight: 700; font-size: 11px; text-align: center; }
+    .badge-green { background: var(--green-bg); color: var(--green); }
+    .badge-gold { background: var(--gold-bg); color: var(--gold); }
+    .badge-blue { background: var(--primary-light); color: var(--primary); }
+
+    .p-up { color: var(--green); font-weight: 600; }
+    .p-dn { color: var(--red); font-weight: 600; }
+  </style>
+</head>
+<body>
+
+<div class="container">
+
+  <!-- Header -->
+  <div class="header">
+    <div class="title-area">
+      <h1>Flower Pot Squeeze <span>🪴</span></h1>
+      <p>Advancing — stocks currently coiling with volume compression and high relative strength</p>
+    </div>
+    <button class="btn-action">Jump to Stocks ↓</button>
+  </div>
+
+  <!-- KPI Top Stats -->
+  <div class="kpi-row">
+    <div class="kpi-card">
+      <div class="kpi-num" style="color:var(--green)">142</div>
+      <div class="kpi-label">Active Coils</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-num" style="color:var(--gold)">48</div>
+      <div class="kpi-label">Tightness &lt; 1.5</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-num" style="color:var(--primary)">18</div>
+      <div class="kpi-label">New In Squeeze This Week</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-num" style="color:var(--text)">11d</div>
+      <div class="kpi-label">Avg Days Coiled</div>
+    </div>
+  </div>
+
+  <!-- Analytics Grid (Sectors & Cap Distribution) -->
+  <div class="analytics-grid">
+    <!-- Industry Breakdown -->
+    <div class="panel-box">
+      <div class="panel-head"><span>Sector Concentration</span><span style="color:var(--muted); font-weight:400">By Stock Count</span></div>
+      <div class="list-row"><span>CAPITAL GOODS</span><b>18 <span style="color:var(--muted); font-weight:400">(12.6%)</span></b></div>
+      <div class="bar-bg"><div class="bar-fill" style="width: 60%;"></div></div>
+      
+      <div class="list-row" style="margin-top:8px;"><span>AUTO ANCILLARIES</span><b>14 <span style="color:var(--muted); font-weight:400">(9.8%)</span></b></div>
+      <div class="bar-bg"><div class="bar-fill" style="width: 45%;"></div></div>
+    </div>
+
+    <!-- Market Cap Distribution -->
+    <div class="panel-box">
+      <div class="panel-head"><span>Market Cap Distribution</span><span style="color:var(--muted); font-weight:400">By Count</span></div>
+      <div class="list-row"><span>Large Cap (&gt;₹20k Cr)</span><b>24 stocks <span style="color:var(--muted); font-weight:400">(16.9%)</span></b></div>
+      <div class="bar-bg"><div class="bar-fill" style="width: 30%; background:var(--green);"></div></div>
+      
+      <div class="list-row" style="margin-top:8px;"><span>Mid Cap (₹5k - ₹20k Cr)</span><b>62 stocks <span style="color:var(--muted); font-weight:400">(43.6%)</span></b></div>
+      <div class="bar-bg"><div class="bar-fill" style="width: 75%; background:var(--primary);"></div></div>
+    </div>
+  </div>
+
+  <!-- Search & Filter Controls -->
+  <div class="control-card">
+    <div class="search-row">
+      <input type="text" class="input-field" placeholder="🔍 Search by symbol or name...">
+      <select class="select-field"><option>All Sectors</option></select>
+      <select class="select-field"><option>All Market Caps</option></select>
+      <select class="select-field"><option>Sort: Highest Tightness</option></select>
+    </div>
+    <div class="filter-sliders">
+      <div class="slider-group">
+        <span>RS Percentile: <b>80 - 100</b></span>
+        <input type="range" value="80">
+      </div>
+      <div class="slider-group">
+        <span>Days Coiled: <b>1 - 30+</b></span>
+        <input type="range" value="5">
+      </div>
+    </div>
+  </div>
+
+  <!-- Data Table -->
+  <div class="table-container">
+    <table>
+      <thead>
+        <tr>
+          <th>Stock</th>
+          <th>Close</th>
+          <th>1D %</th>
+          <th>RS Rating</th>
+          <th>Tightness</th>
+          <th>ATR ×60D</th>
+          <th>Vol ×Norm</th>
+          <th>Coiled</th>
+          <th>Sector</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>
+            <b style="color:#fff">SOLARINDS</b>
+            <div style="font-size:11px; color:var(--faint)">Solar Industries Ltd</div>
+          </td>
+          <td>₹13,482.00</td>
+          <td class="p-up">+1.24%</td>
+          <td><span class="badge badge-green">94.0</span></td>
+          <td><b style="color:var(--gold)">1.89</b></td>
+          <td>0.44×</td>
+          <td>0.28×</td>
+          <td><span class="badge badge-blue">11d</span></td>
+          <td style="color:var(--muted)">Capital Goods</td>
+        </tr>
+        <tr>
+          <td>
+            <b style="color:#fff">BIKAJI</b>
+            <div style="font-size:11px; color:var(--faint)">Bikaji Foods Int</div>
+          </td>
+          <td>₹772.20</td>
+          <td class="p-dn">-0.42%</td>
+          <td><span class="badge badge-green">88.5</span></td>
+          <td><b style="color:var(--gold)">1.60</b></td>
+          <td>0.51×</td>
+          <td>0.38×</td>
+          <td><span class="badge badge-blue">8d</span></td>
+          <td style="color:var(--muted)">FMCG</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+</div>
+
+</body>
+</html>
