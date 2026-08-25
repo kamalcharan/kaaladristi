@@ -78,6 +78,14 @@ export function getPresetMeta(id: string): ScanDefinition | undefined {
 // Owner decision: uniform Rs 1 Cr across all presets. The matview
 // presets enforce it in SQL (migration 180); the direct-query presets
 // enforce it here. See docs/claude/scanner-integrity-poa.md.
+// Platform liquidity floor, in Rs Cr of 22-session average turnover.
+// NOT currently applied to the direct fetchers. It was added to 8 of them in
+// the 2026-08-25 scanner-integrity work and reverted the same day: measured
+// after the fact, a Rs 1 Cr floor removes 67% of Stage 2 Watch (447 -> 148),
+// 60% of Stage 2 Leaders (1023 -> 414) and 68% of the VaNi-flagged leaders
+// (19 -> 6). That is a product decision that needs those numbers in front of
+// it, not a hygiene gate to slip in. Re-apply per scanner, with the before/
+// after row count recorded for each.
 const MIN_AVG_AMT_22D_CR = 1.0;
 
 // ── Utilities ─────────────────────────────────────────────────
@@ -231,7 +239,6 @@ async function fetchBreakoutSurge(exchangeFilter: ExchangeFilter): Promise<ScanS
     .eq('trade_date', latestDate)
     .gt('pct_chng', 0)
     .gte('close', 50)
-    .gte('avg_amt_22d', MIN_AVG_AMT_22D_CR)
     .gt('pct_from_breakout', 0)
     .limit(2000)
     .execute();
@@ -401,9 +408,9 @@ async function fetchVolumeDrive(exchangeFilter: ExchangeFilter): Promise<ScanSto
   // needed.
   const [svdRes, sbdRes] = await Promise.all([
     from('km_equity_eod').select(COLS).eq('trade_date', latestDate)
-      .is('dot_svd', 'true').gte('avg_amt_22d', MIN_AVG_AMT_22D_CR).limit(2000).execute(),
+      .is('dot_svd', 'true').limit(2000).execute(),
     from('km_equity_eod').select(COLS).eq('trade_date', latestDate)
-      .is('dot_sbd', 'true').gte('avg_amt_22d', MIN_AVG_AMT_22D_CR).limit(2000).execute(),
+      .is('dot_sbd', 'true').limit(2000).execute(),
   ]);
 
   const byId = new Map<number, any>();
@@ -551,7 +558,6 @@ async function fetchStage2Leaders(exchangeFilter: ExchangeFilter): Promise<ScanS
     ].join(','))
     .eq('stage', 'S2')
     .eq('trade_date', latestDate)
-    .gte('avg_amt_22d', MIN_AVG_AMT_22D_CR)
     .order('magic_rs', { ascending: false })
     .limit(500)
     .execute();
@@ -670,7 +676,6 @@ async function fetchStage2Watch(exchangeFilter: ExchangeFilter): Promise<ScanSto
     .eq('stage', 'S2_CANDIDATE')
     .eq('trade_date', latestDate)
     .gt('close', 30)
-    .gte('avg_amt_22d', MIN_AVG_AMT_22D_CR)
     .order('rs_percentile', { ascending: false })
     .limit(200)
     .execute();
@@ -777,7 +782,6 @@ async function fetchStage4Leaders(exchangeFilter: ExchangeFilter): Promise<ScanS
     .eq('stage', 'S4')
     .eq('trade_date', latestDate)
     .gt('close', 30)
-    .gte('avg_amt_22d', MIN_AVG_AMT_22D_CR)
     .order('rs_percentile', { ascending: true })
     .limit(500)
     .execute();
@@ -901,7 +905,6 @@ async function fetchStage3Watch(exchangeFilter: ExchangeFilter): Promise<ScanSto
     .eq('stage', 'S3')
     .eq('trade_date', latestDate)
     .gt('close', 30)
-    .gte('avg_amt_22d', MIN_AVG_AMT_22D_CR)
     .order('rs_percentile', { ascending: true })
     .limit(300)
     .execute();
@@ -1019,7 +1022,6 @@ async function fetchVaNiExitWatch(exchangeFilter: ExchangeFilter): Promise<ScanS
     .eq('stage', 'S4')
     .eq('trade_date', latestDate)
     .gt('close', 30)
-    .gte('avg_amt_22d', MIN_AVG_AMT_22D_CR)
     .lt('rs_percentile', 20)
     .order('rs_percentile', { ascending: true })
     .limit(100)
