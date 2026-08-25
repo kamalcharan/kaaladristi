@@ -353,6 +353,26 @@ def check_scanner_contract(conn, run_date: date) -> list[Finding]:
                         'km_scan_results does not exist — every matview preset is dead',
                         subject='km_scan_results')]
 
+    # An UNPOPULATED matview is not a checker error — it is the loudest
+    # possible finding: every matview-backed scanner returns nothing.
+    # This is the state a migration leaves behind between CREATE ... WITH
+    # NO DATA and the REFRESH, so it is entirely possible in production if
+    # the refresh step is missed. Detect it explicitly; querying it would
+    # raise and get logged as a mere checker warning (observed 2026-08-24).
+    populated = _rows(conn, """
+        SELECT c.relispopulated FROM pg_class c
+        JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE c.relname = 'km_scan_results' AND n.nspname = 'public'
+    """)
+    if populated and not populated[0][0]:
+        return [Finding(
+            'contract_matview_unpopulated', 'invariant', 'critical',
+            'km_scan_results exists but has never been populated — every matview-backed '
+            'scanner is returning zero rows. Run: REFRESH MATERIALIZED VIEW km_scan_results; '
+            'then REFRESH MATERIALIZED VIEW km_scan_exclusion_counts;',
+            subject='km_scan_results', metric=0, expected=1,
+            detail={'remedy': 'REFRESH MATERIALIZED VIEW km_scan_results'})]
+
     # C1 — columns present and populated
     for preset, cols in MATVIEW_PRESET_COLUMNS.items():
         absent = [c for c in cols if c not in existing]

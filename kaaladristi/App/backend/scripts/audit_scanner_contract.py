@@ -53,6 +53,28 @@ def main():
     """)
     matview_cols = {r['c'] for r in cur.fetchall()}
 
+    # A matview that exists but was never refreshed makes every preset query
+    # below raise ("has not been populated"). That is not an audit crash — it
+    # is the loudest possible defect: every matview-backed scanner is empty.
+    # Migration 180 creates it WITH NO DATA, so this is the exact state the
+    # owner is in between running the migration and the REFRESH.
+    cur.execute("""
+        SELECT c.relispopulated FROM pg_class c
+        JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE c.relname='km_scan_results' AND n.nspname='public'
+    """)
+    pop = cur.fetchone()
+    if pop is None:
+        print('DEFECT: km_scan_results does not exist — run migration 180.')
+        sys.exit(1)
+    if not pop['relispopulated']:
+        print('DEFECT: km_scan_results exists but has never been populated —')
+        print('        every matview-backed scanner returns zero rows.')
+        print('        Run:  REFRESH MATERIALIZED VIEW km_scan_results;')
+        print('              REFRESH MATERIALIZED VIEW km_scan_exclusion_counts;')
+        print('        then re-run this audit.')
+        sys.exit(1)
+
     cur.execute("""
         SELECT p.id, p.universe, p.vani_rule, p.result_limit,
                (SELECT COUNT(*) FROM km_scan_results r WHERE r.preset_id=p.id) AS rows,
