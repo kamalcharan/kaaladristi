@@ -110,6 +110,72 @@ run, not per day), a liquidity gate, and a `nbars >= 252` gate.
 
 ---
 
+## 3a. Reverse-engineered: the owner's live weekly-breakout output
+
+The owner supplied a weekly-breakout export (2026-08-24, ~190 rows) and asked
+what it actually computes. Recovered exactly, verified against the DB:
+
+**`Breakout` = the PREVIOUS WEEK'S CLOSE.** Not a rolling high, not a 5-7 day
+high — a one-period lookback against the close.
+
+Evidence:
+
+- 20 of 20 sampled `Breakout` values equal the symbol's close on 2026-08-21
+  (the prior Friday). Only 4 of 20 coincidentally equal our stored 20-day
+  `breakout_level`.
+- Cross-checked against `km_equity_weekly` for `week_end = 2026-08-21`:
+  RATNAMANI 2354.40, SIEMENS 3920.00, MUTHOOTFIN 3022.00, ITC 269.40,
+  LTFOODS 427.60 — all exact matches to `weekly_close` (and NOT to
+  `weekly_high`, which is 2425.00 / 3988.50 / 3055.10 / 278.20 / 437.00).
+
+Therefore **`% from Breakout` = week-to-date return**, and the list is
+"every stock trading above last week's close, sorted by week-to-date gain".
+
+**`D%` is identical to `% from Breakout` in every row — this is a Monday
+artifact, NOT a bug.** 2026-08-24 was the first session of the week, so
+week-to-date == day change. They diverge Tue-Fri. Both mappings are correct:
+`d_pct` <- `pct_chng`, and the breakout columns are read straight from the row.
+
+**Universe filter recovered:** NSE, `mcap_cr >= ~14,000`. The smallest caps in
+the export are ANURAS 14,293 / APOLLO 14,312 / TI 14,318 / CEATLTD 14,424, with
+nothing below 14,000. Reproducing that gate returns **199 rows** against the
+export's ~190 — a match.
+
+### Compatibility verdict
+
+**Display layer: 100% compatible.** Every column in the export already exists
+in `km_equity_eod` — Score 5D/22D, Avg Amt Inv 5D/22D, RSI, EMA 20, D%, MCap,
+52W High, % Below 52W H, 5D%, 22D%, 66D%. Nothing new to compute.
+
+**Signal layer: much looser than ours.** A one-period close comparison is
+momentum ("up on the week"), not a breakout. It admits structurally weak names:
+ITC appears at +0.11% while sitting **-36.8% below its 52-week high**;
+HDFCBANK -28.6%; INFY -34.6%. Our 20-day `pct_from_breakout` correctly scores
+those as **-6.68 / -3.31 / -5.10** — i.e. not breaking out of anything.
+
+**Build cost: near zero.** Previous week's close is one `LAG` over
+`km_equity_weekly` (or the last daily close where `week_start` < current),
+joined to today's daily row. No new pipeline columns, no backfill.
+
+### Strictness ladder, measured on 2026-08-24 (NSE, close >= 50, mcap >= 14k Cr, universe 475)
+
+| Definition | Rows |
+|---|---|
+| Above previous week's **close** *(the export's rule)* | **199** |
+| Above previous week's **high** | 41 |
+| Above the **20-week high** | 44 |
+
+The export's rule returns 42% of the eligible universe. The two stricter rules
+return ~9% and are the ones that read as an actual breakout.
+
+**Recommendation:** ship the export's rule if it is what the owner wants, but
+name it for what it measures — *Week-to-Date Leaders* / *Above Last Week's
+Close* — and keep "breakout" for a rule with a real lookback. Both are cheap;
+they can ship side by side, and the `% from Breakout` header should read
+`% WTD` under the loose rule so the column is not mislabelled.
+
+---
+
 ## 4. Recommended shape — one screener, four depths
 
 The data supports **depth as a column, not as six tabs**:
