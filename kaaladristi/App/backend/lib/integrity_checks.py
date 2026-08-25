@@ -505,6 +505,25 @@ def check_scanner_contract(conn, run_date: date) -> list[Finding]:
             subject=missing, metric=0, expected=1,
             detail={'preset': missing}))
 
+    # C1b — the row mapper. A column can be present and populated in the
+    # matview and still render as a dash, because scanRowToScanStock decides
+    # what survives into the ScanStock the table reads. Migration 180's five
+    # columns sat exactly there for a day: matview populated, audit green,
+    # UI blank. The DB cannot see this; only the frontend source can.
+    try:
+        for preset, cols in sorted(scan_contract.mapper_gaps(db_meta).items()):
+            out.append(Finding(
+                f'contract_mapper_gap_{preset}', 'invariant', 'critical',
+                f'{preset}: the UI renders {", ".join(cols)} but the row mapper nulls or '
+                f'omits them — dashes regardless of what the matview holds',
+                subject=preset, metric=len(cols), expected=0,
+                detail={'preset': preset, 'unmapped': cols}))
+    except (OSError, ValueError) as e:
+        out.append(Finding(
+            'contract_mapper_unreadable', 'invariant', 'warning',
+            f'could not derive the mapper contract from the frontend source: {e}',
+            subject='scanRowToScanStock'))
+
     # C1 — columns present and populated
     db_meta = _db_preset_meta(conn)
 

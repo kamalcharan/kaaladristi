@@ -77,7 +77,8 @@ def _require(value, what: str):
 # ── 1. preset metadata ──────────────────────────────────────────────────
 def preset_meta(src: str | None = None) -> dict[str, dict]:
     """id -> {universe, limit, vani_rule} straight off SCAN_PRESETS."""
-    src = src or _read(SCAN_ENGINE)
+    if src is None:
+        src = _read(SCAN_ENGINE)
     block = _block(src, r'SCAN_PRESETS[^=\n]*=', '[', ']')
     out = {}
     for entry in re.finditer(r"\{\s*id:\s*'([^']+)'(.*?)\}\s*,?\s*(?=\n)", block, re.S):
@@ -117,7 +118,8 @@ def routing(src: str | None = None) -> dict[str, str]:
     wins, then the chosen fetcher's body decides the table. This is the check
     that "has rows in km_scan_results" could never make.
     """
-    src = src or _read(SCAN_ENGINE)
+    if src is None:
+        src = _read(SCAN_ENGINE)
     body = _block(src, r'export\s+async\s+function\s+executeScan\s*\(', '{', '}')
 
     wg = set(re.findall(r'^\s*(\w+):\s*\'(?:WAKING|ASCENDING|STIRRING)\'',
@@ -163,7 +165,8 @@ def matview_served(src: str | None = None) -> set[str]:
 # ── 3. columns the UI renders per preset ────────────────────────────────
 def preset_columns(src: str | None = None) -> dict[str, list[str]]:
     """preset -> column keys, from ScanTable's per-preset overrides."""
-    src = src or _read(SCAN_TABLE)
+    if src is None:
+        src = _read(SCAN_TABLE)
     block = _block(src, r'PRESET_COL_OVERRIDES\s*:[^=]*=', '{', '}')
     out = {}
     for m in re.finditer(r'(\w+):\s*\[(.*?)\]', block, re.S):
@@ -182,7 +185,8 @@ FIELD_AVAILABILITY_TS = os.path.join(_SRC, 'fieldAvailability.ts')
 # defect that started this work.
 def group_columns(src: str | None = None) -> dict[str, list[str]]:
     """category -> defaultCols, from FIELD_AVAILABILITY."""
-    src = src or _read(FIELD_AVAILABILITY_TS)
+    if src is None:
+        src = _read(FIELD_AVAILABILITY_TS)
     block = _block(src, r'FIELD_AVAILABILITY[^=]*=', '{', '}')
     out = {}
     for m in re.finditer(r'(\w+):\s*\{(.*?)\n  \}', block, re.S):
@@ -221,6 +225,63 @@ def columns_for(preset: str, meta: dict, overrides: dict, groups: dict,
     if not cat:
         cat = (meta.get(preset) or {}).get('category') or ''
     return groups.get(cat, _GROUP_FALLBACK)
+
+
+# ── 4. the matview row mapper ───────────────────────────────────────────
+# A column can be present and populated in km_scan_results and STILL render
+# as a dash, because scanRowToScanStock() decides what survives the trip from
+# the row to the ScanStock the table reads. Found live on 2026-08-25:
+# migration 180 added score_5d/score_22d to the matview, fetchFromScanMatview
+# selects *, and the mapper neither mapped them nor mentioned them — the UI
+# stayed blank while a DB-only audit said "populated". This function makes the
+# mapper part of the contract.
+def mapper_fields(mapper_name: str, src: str | None = None) -> dict[str, str]:
+    """field -> 'mapped' | 'null' for every field the named mapper returns."""
+    if src is None:
+        src = _read(SCAN_ENGINE)
+    body = _block(src, rf'function {re.escape(mapper_name)}\([^)]*\)[^{{]*', '{', '}')
+    out = {}
+    for m in re.finditer(r'^\s{4}(\w+):\s*(.+?),?\s*$', body, re.M):
+        field, expr = m.group(1), m.group(2).rstrip(',')
+        out[field] = 'null' if expr == 'null' else 'mapped'
+    return _require(out, f'{mapper_name} fields')
+
+
+def preset_mapper(src: str | None = None) -> dict[str, str]:
+    """preset -> the row-mapper its fetcher runs matview rows through.
+    Presets share fetchFromScanMatview/scanRowToScanStock unless their own
+    fetcher names a different *RowToScanStock (flower_pot_burst does)."""
+    if src is None:
+        src = _read(SCAN_ENGINE)
+    out = {}
+    for preset, kind in routing(src).items():
+        if kind != 'matview':
+            continue
+        # find the fetcher executeScan dispatches this preset to
+        body = _block(src, r'export\s+async\s+function\s+executeScan\s*\(', '{', '}')
+        m = re.search(rf"scanId\s*===\s*'{re.escape(preset)}'[^\n]*return\s+(\w+)", body)
+        fetcher = m.group(1) if m else 'fetchFromScanMatview'
+        fb = _fetcher_body(src, fetcher)
+        mm = re.search(r'(\w+RowToScanStock)', fb)
+        out[preset] = mm.group(1) if mm else 'scanRowToScanStock'
+    return _require(out, 'preset mappers')
+
+
+def mapper_gaps(db_meta: dict | None = None) -> dict[str, list[str]]:
+    """preset -> UI columns its OWN mapper nulls or omits, matview presets
+    only. These render as dashes no matter what the matview holds."""
+    src = _read(SCAN_ENGINE)
+    c = contract(db_meta)
+    mappers = preset_mapper(src)
+    fields_of = {name: mapper_fields(name, src) for name in set(mappers.values())}
+    gaps = {}
+    for preset, mapper in mappers.items():
+        fields = fields_of[mapper]
+        bad = [col for col in c['columns'].get(preset, [])
+               if col != 'symbol' and fields.get(col, 'absent') != 'mapped']
+        if bad:
+            gaps[preset] = bad
+    return gaps
 
 
 def contract(db_meta: dict | None = None) -> dict:

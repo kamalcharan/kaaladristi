@@ -1707,7 +1707,7 @@ function scanRowToScanStock(r: any): ScanStock {
     close: Number(r.close),
     open: null, high: null, low: null,
     pct_chng: num(r.pct_chng),
-    rsi_14: null,
+    rsi_14: num(r.rsi_14),
     magic_rs: num(r.magic_rs),
     magic_rs_zone: r.magic_rs_zone ?? null,
     flow_type: r.flow_type ?? null,
@@ -1727,13 +1727,13 @@ function scanRowToScanStock(r: any): ScanStock {
     delivery_pct: num(r.delivery_pct),
     delivery_surge_x: num(r.delivery_surge_x),
     avg_amt_22d: num(r.avg_amt_22d),
-    avg_amt_5d: null,
+    avg_amt_5d: num(r.avg_amt_5d),
     avg_amt_66d: null,
     w52_high: num(r.w52_high),
     sma_50: null,
     sma_200: null,
     w52_low: null,
-    supertrend_dir: null,
+    supertrend_dir: num(r.supertrend_dir),
     lifetime_high: null,
     stage: null,
     xAmt: num(r.xamt),
@@ -1748,6 +1748,12 @@ function scanRowToScanStock(r: any): ScanStock {
     rewardPct: num(r.reward_pct),
     pctBelow52wHigh: num(r.pct_below_52w_high),
     vaniOpportunity: truthy(r.vani_flag),
+    // Migration 180 columns. They were in the matview but not mapped here,
+    // so the UI showed dashes while the DB — and the audit, which read only
+    // the DB — said populated. A fix has to reach every layer the value
+    // crosses; the audit now checks this mapper too (lib/scan_contract.py).
+    score_5d: num(r.score_5d),
+    score_22d: num(r.score_22d),
     // Preset-specific (populated where applicable, null elsewhere)
     ret_5d:  num(r.ret_5d),
     ret_22d: num(r.ret_22d),

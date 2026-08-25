@@ -96,6 +96,14 @@ def main():
     # If the extraction breaks, it raises here rather than yielding an empty
     # contract that would make every scanner look defect-free.
     served_presets = matview_served_presets()
+
+    # Mapper gaps: matview-populated columns the frontend row mapper drops
+    # before the table sees them (the Score 5D/22D dash bug lived here, one
+    # layer past the DB — a DB-only audit called it fixed while the UI
+    # stayed blank).
+    from lib import scan_contract
+    for _p, _cols in sorted(scan_contract.mapper_gaps(_db_preset_meta(conn)).items()):
+        defects.append(f'{_p}: mapper drops {_cols} — dashes despite populated matview')
     required_cols = matview_preset_columns(matview_cols, _db_preset_meta(conn))
 
     print('Scanner contract completeness audit')
