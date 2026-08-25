@@ -168,9 +168,35 @@ found two things the hand-written migration had not:
 2. **`waking_giants`: 6 rows apparently below the floor** — a false positive,
    not a defect. WG enforces ADV >= Rs 1 Cr on a **combined-exchange** basis
    (`wg_adv` sums each ISIN twin's 22-session average), which is stricter than
-   and not comparable to the row-level NSE-only `avg_amt_22d`. The WG presets
-   are exempted from the row-level check with that reasoning recorded, so the
-   audit does not carry a permanent false positive.
+   and not comparable to the row-level NSE-only `avg_amt_22d`.
 
 Both are the point of the exercise: the audit is what makes "complete" a
 measured claim rather than an assertion.
+
+### Post-refresh run (2026-08-25) — the audit's own blind spots
+
+The first live run after the REFRESH still showed two liquidity defects, and
+both turned out to be the audit measuring the wrong column:
+
+- **`first_ascent`: 2 rows** (SHALBY 0.63 Cr NSE-only / **1.10 Cr combined**;
+  JITFINFRA 0.58 / **1.11**). Same combined-exchange ADV story as
+  `waking_giants` — the exemption prefix (`waking_giants`, `wg_`) simply did
+  not match the preset id `first_ascent`.
+- **`flower_pot_burst`: 40 rows** — i.e. *every* row. The FPB arm emits
+  `NULL::numeric AS avg_amt_22d` on purpose (its column set never renders it),
+  so `COALESCE(...,0)` scored the whole preset as illiquid. Joining the live
+  EOD row proved the floor applied at final selection was working: 0 of 40
+  genuinely below.
+
+The fix is **not** a wider exemption list. `measure_liquidity()` in
+`lib/integrity_checks.py` now scores each row on the yardstick that preset's
+own gate uses — combined-exchange ADV for the WG family, a live-EOD fallback
+where the arm emits no column — and both the nightly sweep and
+`audit_scanner_contract.py` call it, so they can never disagree. Rows with no
+measurable turnover are reported separately rather than folded into "below
+floor", which is what created the false positive in the first place.
+
+That turns two waivers into two verifications, and the verification earns its
+keep immediately: the post-fix minimums are 1.003 (FPB), 1.018 (power_sell),
+1.035 (waking_giants), 1.099 (first_ascent). The floor is binding by hundredths
+of a crore. An exemption would have hidden exactly that.

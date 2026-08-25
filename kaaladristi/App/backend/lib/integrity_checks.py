@@ -334,6 +334,59 @@ MATVIEW_PRESET_COLUMNS = {
 }
 MIN_AVG_AMT_22D_CR = 1.0   # owner decision 2026-08-24 — uniform, all presets
 
+# Presets whose own gate measures COMBINED-exchange ADV (wg_adv sums every ISIN
+# twin's 22-session average turnover) rather than the NSE-only avg_amt_22d
+# column. Checking them against the column understates their liquidity and logs
+# a permanent false positive: SHALBY reads 0.63 Cr on its NSE row and 1.10 Cr
+# combined (2026-08-25) — it passes the floor, the column just cannot see it.
+WG_ADV_PRESETS = ['waking_giants', 'first_ascent']
+
+# Effective liquidity per matview row, measured the way the preset's own gate
+# measures it. Two special cases, both verified rather than waived:
+#   * WG family      -> combined-exchange ADV, summed across ISIN twins.
+#   * arms that emit NULL for avg_amt_22d (flower_pot_burst does, by design —
+#     its column set never renders it) -> fall back to the live EOD row, so the
+#     floor applied upstream at final selection is CONFIRMED, not assumed.
+# A row with no measurable value at all is counted separately; folding it into
+# "below floor" would recreate the false positive this query exists to remove.
+_LIQUIDITY_SQL = """
+WITH latest AS (SELECT max(trade_date) AS d FROM km_equity_eod),
+row_amt AS (
+    SELECT r.preset_id,
+           CASE WHEN r.preset_id = ANY(%(wg)s) THEN (
+                    SELECT SUM(x.a)
+                    FROM km_equity_symbols tw
+                    JOIN LATERAL (
+                        SELECT AVG(v.value_cr) AS a FROM (
+                            SELECT e2.value_cr FROM km_equity_eod e2
+                            WHERE e2.equity_id = tw.id
+                              AND e2.trade_date <= (SELECT d FROM latest)
+                            ORDER BY e2.trade_date DESC LIMIT 22) v) x ON TRUE
+                    WHERE (s.isin IS NOT NULL AND tw.isin = s.isin) OR tw.id = s.id)
+                ELSE COALESCE(r.avg_amt_22d, e.avg_amt_22d)
+           END AS amt
+    FROM km_scan_results r
+    JOIN km_equity_symbols s ON s.id = r.equity_id
+    LEFT JOIN km_equity_eod e
+           ON e.equity_id = r.equity_id AND e.trade_date = (SELECT d FROM latest)
+)
+SELECT preset_id,
+       COUNT(*)                                              AS rows_n,
+       COUNT(*) FILTER (WHERE amt IS NOT NULL AND amt < %(floor)s) AS below_n,
+       COUNT(*) FILTER (WHERE amt IS NULL)                    AS unmeasured_n
+FROM row_amt
+GROUP BY preset_id
+"""
+
+
+def measure_liquidity(conn) -> dict:
+    """preset_id -> (rows, below_floor, unmeasured), each row scored on the
+    yardstick that preset's gate actually uses. Shared with
+    scripts/audit_scanner_contract.py so both report the same numbers."""
+    return {r[0]: (int(r[1]), int(r[2]), int(r[3]))
+            for r in _rows(conn, _LIQUIDITY_SQL,
+                           {'wg': WG_ADV_PRESETS, 'floor': MIN_AVG_AMT_22D_CR})}
+
 
 def check_scanner_contract(conn, run_date: date) -> list[Finding]:
     """Per matview preset: rendered columns exist and are populated, the
@@ -401,16 +454,15 @@ def check_scanner_contract(conn, run_date: date) -> list[Finding]:
                 detail={'preset': preset, 'all_null': dead, 'rows': int(total)}))
 
     # C2/C3/C4 — universe, liquidity, vani_rule, straight off the declared metadata
-    for preset, universe, vani_rule, rows_n, bse_n, illiquid_n, vani_n in _rows(conn, """
+    liq = measure_liquidity(conn)
+    for preset, universe, vani_rule, rows_n, bse_n, vani_n in _rows(conn, """
         SELECT p.id, p.universe, p.vani_rule,
                (SELECT COUNT(*) FROM km_scan_results r WHERE r.preset_id = p.id),
                (SELECT COUNT(*) FROM km_scan_results r WHERE r.preset_id = p.id AND r.exchange = 'BSE'),
-               (SELECT COUNT(*) FROM km_scan_results r WHERE r.preset_id = p.id
-                  AND COALESCE(r.avg_amt_22d, 0) < %s),
                (SELECT COUNT(*) FROM km_scan_results r WHERE r.preset_id = p.id AND r.vani_flag)
         FROM kd_scan_presets p
         WHERE p.is_active AND EXISTS (SELECT 1 FROM km_scan_results r WHERE r.preset_id = p.id)
-    """, (MIN_AVG_AMT_22D_CR,)):
+    """):
         if not rows_n:
             continue
         if universe == 'NSE_ONLY' and bse_n:
@@ -419,17 +471,21 @@ def check_scanner_contract(conn, run_date: date) -> list[Finding]:
                 f'{preset} is declared {universe} in kd_scan_presets but returned {bse_n} BSE rows',
                 subject=preset, metric=bse_n, expected=0,
                 detail={'preset': preset, 'declared': universe, 'bse_rows': int(bse_n)}))
-        # Waking Giants presets enforce ADV >= Rs 1 Cr on a COMBINED-exchange
-        # basis (wg_adv sums each ISIN twin's 22-session average), which is
-        # stricter than — and not comparable to — the row-level NSE-only
-        # avg_amt_22d column. Exempt, or they log a permanent false positive.
-        if illiquid_n and not preset.startswith(('waking_giants', 'wg_')):
+        _, below_n, unmeasured_n = liq.get(preset, (rows_n, 0, 0))
+        if below_n:
             out.append(Finding(
                 f'contract_liquidity_{preset}', 'invariant', 'warning',
-                f'{preset}: {illiquid_n} of {rows_n} rows trade under Rs {MIN_AVG_AMT_22D_CR} Cr/day '
+                f'{preset}: {below_n} of {rows_n} rows trade under Rs {MIN_AVG_AMT_22D_CR} Cr/day '
                 f'— below the platform liquidity floor',
-                subject=preset, metric=illiquid_n, expected=0,
-                detail={'preset': preset, 'below_floor': int(illiquid_n), 'rows': int(rows_n)}))
+                subject=preset, metric=below_n, expected=0,
+                detail={'preset': preset, 'below_floor': int(below_n), 'rows': int(rows_n)}))
+        if unmeasured_n:
+            out.append(Finding(
+                f'contract_liquidity_unmeasured_{preset}', 'invariant', 'warning',
+                f'{preset}: {unmeasured_n} of {rows_n} rows carry no turnover on the latest '
+                f'session — the liquidity floor cannot be verified for them',
+                subject=preset, metric=unmeasured_n, expected=0,
+                detail={'preset': preset, 'unmeasured': int(unmeasured_n), 'rows': int(rows_n)}))
         if vani_rule and vani_rule != 'always_true' and vani_n == 0:
             out.append(Finding(
                 f'contract_vani_dead_{preset}', 'staleness', 'warning',

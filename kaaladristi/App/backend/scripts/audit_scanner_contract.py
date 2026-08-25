@@ -31,7 +31,8 @@ import psycopg2.extras
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from lib.config import DATABASE_URL
-from lib.integrity_checks import MATVIEW_PRESET_COLUMNS, MIN_AVG_AMT_22D_CR
+from lib.integrity_checks import (MATVIEW_PRESET_COLUMNS, MIN_AVG_AMT_22D_CR,
+                                  measure_liquidity)
 
 
 def get_conn():
@@ -79,12 +80,15 @@ def main():
         SELECT p.id, p.universe, p.vani_rule, p.result_limit,
                (SELECT COUNT(*) FROM km_scan_results r WHERE r.preset_id=p.id) AS rows,
                (SELECT COUNT(*) FROM km_scan_results r WHERE r.preset_id=p.id AND r.exchange='BSE') AS bse,
-               (SELECT COUNT(*) FROM km_scan_results r WHERE r.preset_id=p.id
-                  AND COALESCE(r.avg_amt_22d,0) < %s) AS illiquid,
                (SELECT COUNT(*) FROM km_scan_results r WHERE r.preset_id=p.id AND r.vani_flag) AS vani
         FROM kd_scan_presets p WHERE p.is_active ORDER BY p.sort_order, p.id
-    """, (MIN_AVG_AMT_22D_CR,))
+    """)
     presets = cur.fetchall()
+
+    # Liquidity is measured per preset on ITS OWN yardstick — combined-exchange
+    # ADV for the WG family, live-EOD fallback for arms that emit NULL for
+    # avg_amt_22d. Shared with the nightly sweep so both report one number.
+    liq = measure_liquidity(conn)
 
     print('Scanner contract completeness audit')
     print('=' * 96)
@@ -123,13 +127,18 @@ def main():
             uni_v = f"BSE{p['bse']}" if bad else 'OK'
             if bad: defects.append(f"{pid}: declared NSE_ONLY but {p['bse']} BSE rows")
 
-        # 3. liquidity
+        # 3. liquidity — see measure_liquidity() for the per-preset yardstick
         liq_v = 'n/a'
-        # WG presets measure ADV combined-exchange (see integrity_checks.py) —
-        # not comparable to the row-level avg_amt_22d column.
-        if in_mv and not pid.startswith(('waking_giants', 'wg_')):
-            liq_v = f"LOW{p['illiquid']}" if p['illiquid'] else 'OK'
-            if p['illiquid']: defects.append(f"{pid}: {p['illiquid']} rows below Rs {MIN_AVG_AMT_22D_CR} Cr")
+        if in_mv:
+            _, below, unmeas = liq.get(pid, (rows, 0, 0))
+            if below:
+                liq_v = f'LOW{below}'
+                defects.append(f'{pid}: {below} rows below Rs {MIN_AVG_AMT_22D_CR} Cr')
+            elif unmeas:
+                liq_v = f'UNMEAS{unmeas}'
+                defects.append(f'{pid}: {unmeas} rows have no turnover on the latest session')
+            else:
+                liq_v = 'OK'
 
         # 4. vani
         vani_v = 'n/a'
