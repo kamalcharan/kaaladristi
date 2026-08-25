@@ -1,204 +1,188 @@
-# Price Action — Breakout / Breakdown × Daily / Weekly / Monthly (POA)
+# Price Action — Rolling-Window Breakout / Breakdown (POA)
 
-Scoping doc for expanding the **Price Action** category from one live preset
-(`breakout_surge`, daily) to a 2 × 3 matrix of six independent screeners.
+Scoping doc for expanding the **Price Action** category beyond the single live
+preset (`breakout_surge`).
 
-Owner direction (2026-08-25): breakout and breakdown, each on the daily,
-weekly and monthly clock. **Six separate screeners, not timeframe tabs** on one
-preset.
+Owner direction (2026-08-25), in two steps:
 
-Status: **not built** — this doc is the plan and the evidence behind it.
+1. Breakout and breakdown, on a daily / weekly / monthly clock.
+2. **Correction — the clocks are ROLLING DAY WINDOWS, not period-close bars.**
+   "Weekly" means a **5–7 day** breakout; "monthly" means a **22–25 day**
+   breakout. Computed on daily bars, refreshed **every day**.
 
----
-
-## 1. Target matrix
-
-| | Daily | Weekly | Monthly |
-|---|---|---|---|
-| **Breakout** | `breakout_surge` — **live today** | new | new |
-| **Breakdown** | new | new | new |
-
-Five new presets. One existing preset stays as-is.
-
-Current `price_action` category in `kd_scan_presets`: `breakout_surge`
-(active, limit 500), `flower_pot_burst` (active, limit 60), plus two inactive
-rows (`breakout_surge_daily`, `fresh_breakout`) retired by migration 152.
+Status: **not built.** This doc is the plan, and the measured evidence that
+changes part of it.
 
 ---
 
-## 2. What exists, what is missing
+## 1. The rolling reframe — why it is the better design
 
-The daily breakout runs on two pipeline-computed columns:
+The period-close reading (`km_equity_weekly` / `km_equity_monthly`) is the
+wrong instrument for this, and the rolling reframe removes three problems at
+once:
 
-```python
-# indicators/compute_engine.py:308-310
-breakout_level    = close.shift(1).rolling(20, min_periods=1).max().round(2)
-pct_from_breakout = ((close - breakout_level) / breakout_level * 100).round(2)
+| Problem with period-close bars | Under rolling windows |
+|---|---|
+| `week_end`/`month_end` hold each stock's OWN last traded day, so a naive `max(period_end)` filter silently drops **99 weekly rows (2.9%)** and **142 monthly (4.3%)**, skewed illiquid — a universe gap against the Settled Decision, same class as migration 179 | **Gone.** One row per symbol per trading day, keyed on `trade_date`. |
+| Refreshes only at period close — on 2026-08-25 the newest monthly bar is 2026-07-31, so a "monthly" screener shows July for 25 days | **Gone.** Every screener updates nightly. |
+| Needs 4 new columns on 2 extra tables + an extended weekly/monthly indicator chain | **Only `km_equity_eod`.** |
+
+Everything below therefore reads **`km_equity_eod` only**. The weekly/monthly
+tables stay as they are (they remain right for Waking Giants' multi-clock
+alignment and for weekly Volume Shockers — different features).
+
+The vocabulary also lines up with the house standard already on the Breakout
+Surge table: `score_5d`/`score_22d`, `ret_5d`/`ret_22d`,
+`avg_amt_5d`/`avg_amt_22d`. A 5D / 22D breakout is the same language.
+
+---
+
+## 2. ⚠ The windows are NESTED, not independent
+
+Mathematically, a 22-day window contains the 5-day window. **Any stock making a
+22-day high is necessarily also making a 5-day high.** So:
+
+```
+{5D breakout}  ⊃  {22D breakout}  ⊃  {66D breakout}  ⊃  {52W high}
 ```
 
-i.e. **close vs the prior 20-bar high of close**. Written nightly by
-`compute_rolling_metrics_for_date()` (pipeline step 6g), added in migration 112.
+These are not six independent screeners — they are **one signal at four
+depths**. Shipping them as separate tabs means the 5D list silently contains
+every row of the 22D list, and a user comparing them sees duplication rather
+than distinction.
 
-Live schema check (2026-08-25):
+Measured on 2026-08-24 (close ≥ ₹50, ≥26 bars, universe 4,905):
 
-| Column | `km_equity_eod` | `km_equity_weekly` | `km_equity_monthly` |
-|---|---|---|---|
-| `breakout_level` | ✅ | ❌ | ❌ |
-| `pct_from_breakout` | ✅ | ❌ | ❌ |
-| `breakdown_level` | ❌ | ❌ | ❌ |
-| `pct_from_breakdown` | ❌ | ❌ | ❌ |
-
-**The weekly/monthly infrastructure itself is built and populated** — this is
-not a "build the tables" job:
-
-- `km_equity_weekly`: 505,600 rows · 3,787 symbols · current to w/e 2026-08-21
-- `km_equity_monthly`: 114,825 rows · 3,609 symbols · current to 2026-07-31
-
-Both carry OHLCV, `total_value` (₹ Cr), weekly/monthly delivery
-(`deliv_value_cr`, `avg_deliv_pct`), `rvol`, RSI, sniper, RSS, MagicRS,
-`flow_type`, `accum_distrib`, 52w levels. Fill rates on the latest weekly bar:
-RSI 92%, sniper 93%, delivery 93%, flow 90%. (`magic_rs` 25% is expected, not a
-defect — weekly long MagicRS needs 145 weekly bars ≈ 2.8 years per symbol; see
-the migration-169 lesson.)
-
-So the whole job is: **6 columns × 3 tables, one compute step, five presets.**
-
----
-
-## 3. ⚠ Blocking defect — `period_end` is per-symbol, not canonical
-
-Same class as migration 179 (partial-month bars). **A screener written as
-`WHERE week_end = (SELECT max(week_end) ...)` silently drops part of the
-universe.**
-
-`week_end` / `month_end` carry **each stock's own last traded day in the
-period**, not the canonical period end. A stock that did not trade on Friday
-gets `week_end` = Thursday and forms its own group.
-
-Measured on the live DB:
-
-| Period | Canonical rows | Rows a naive max(period_end) filter MISSES | Distinct period_end values |
-|---|---|---|---|
-| Week of 2026-08-17 | 3,355 (Fri 08-21) | **99 (2.9%)** | 5 |
-| Month of 2026-07 | 3,165 (07-31) | **142 (4.3%)** | 17 |
-
-The dropped rows skew illiquid/small-cap — precisely the symbols the
-full-universe Settled Decision exists to protect.
-
-**`week_start` IS canonical** — all 3,454 rows of that week share
-`week_start = 2026-08-17`. So:
-
-- Weekly: group and filter on **`week_start`**, never `week_end`.
-- Monthly: no canonical `month_start` column — use
-  **`date_trunc('month', month_end)`**.
-
-This must be fixed in the fetchers *and* asserted in the contract audit, or
-the six new screeners ship with a built-in universe gap.
-
----
-
-## 4. Sizing — measured, not guessed
-
-Eligible = ≥21 bars of history, close ≥ ₹50, period turnover ≥ ₹1 Cr
-(weekly/monthly also `bar_count >= 4`).
-
-| Screener | Matches per period | Eligible universe |
+| Window | Breakouts | Breakdowns |
 |---|---|---|
-| Daily breakout (live) | ~500 (limit-capped) | ~4,900 |
-| Daily breakdown | **480–815** | ~4,900 |
-| Weekly breakout | **290–430** | ~1,880 |
-| Weekly breakdown | **63–128** | ~1,880 |
-| Monthly breakout | **218** (Jul) | ~1,780 |
-| Monthly breakdown | **63** (Jul) | ~1,780 |
+| 5D | 1,053 | 1,264 |
+| 7D | 875 | — |
+| 20D *(= today's `breakout_surge`)* | 565 | — |
+| 22D | 554 | 559 |
+| 25D | 527 | — |
 
-Daily and weekly breakout are large and need ranking + a limit (mirror
-`breakout_surge`: limit 500, ranked by `score_5d`). The breakdowns and the
-monthly pair are naturally sized.
-
-**Warm-up hazard:** the daily formula uses `min_periods=1`, so a stock with 3
-bars gets a "20-bar high" from 2 bars and trivially breaks out. Harmless-ish on
-daily (deep history); **material on monthly**, where only 53,825 of 114,825
-rows have ≥21 bars. Size the new columns by **bar count, not calendar window**,
-and gate the screeners on `nbars >= 21` — the migration-169 lesson applies
-directly.
+Note 20D / 22D / 25D differ by <7%. **The live `breakout_surge` already IS the
+"monthly" screener** in this framing — there is no separate 22–25 day screener
+to build, only a possible relabel.
 
 ---
 
-## 5. Cadence and staleness — a real UX decision
+## 3. ⚠ Measured edge — the shallow windows have none
 
-Weekly and monthly bars are written **only when the period closes**.
+Forward test, all breakout instances Jan 2025 – Jul 2026, close ≥ ₹50, ≥67 bars
+of history, green day, measured against the close 22 trading days later.
+Tiers are exclusive (each row counted at its deepest window only):
 
-- Weekly refreshes Friday. Mon–Thu the weekly screener shows *last* week.
-- Monthly refreshes at month end. Today (2026-08-25) the newest monthly bar is
-  **2026-07-31** — a monthly screener would show July for 25 days.
+| Tier | n | Fwd 22d | % up |
+|---|---|---|---|
+| No breakout (baseline) | 229,115 | +1.04% | 48.5% |
+| **5D high only** | 108,917 | +1.02% | **48.6%** |
+| **22D high** | 44,741 | +0.74% | **47.4%** |
+| **66D high** | 52,672 | +1.50% | **53.6%** |
 
-That is correct behaviour for period-close trading, but it must be **labelled**
-("Week ending 21 Aug", "Month ending 31 Jul") or it reads as stale data. Two
-options for the in-progress period:
+Read plainly: **a 5-day breakout has no forward edge, and a 22-day breakout is
+marginally worse than doing nothing.** Only when the breakout reaches back
+~3 months (66 bars) does a real tilt appear.
 
-- **A (recommended):** show the closed period, labelled. Simple, honest,
-  matches how weekly/monthly traders act.
-- **B:** synthesise a partial current-period bar. Richer, but partial bars are
-  exactly what migration 179 had to clean up — do not reintroduce them into the
-  stored tables; it would have to be computed at read time.
+That is not an argument against building the feature — a short-window breakout
+is a legitimate *observational* filter, and users ask for it. It IS an argument
+against presenting 5D and 22D as premium standalone screeners, and against any
+copy implying they predict anything.
+
+### The 52-week tier — looks spectacular, is contaminated
+
+A first pass showed the `close >= w52_high` tier at **+22.4% fwd22d, 69.7% up**
+(n=3,193). **Do not use that number.** Verification found:
+
+- Only **536 distinct symbols** across 3,193 events — ~6 events per symbol,
+  the same run counted on consecutive days.
+- **162 events (5%) show >100% forward returns**, max 221%.
+- The top outliers are **all one stock** — AHLWEST, Apr 2026, appearing 15+
+  times at an *identical* 221%: a circuit-locked illiquid name in a sustained
+  run, re-counted every day of it.
+
+`w52_high` is also computed with `min_periods=1`, so a recently-listed symbol
+gets a "52-week high" from a handful of bars — the migration-169 warm-up class.
+
+The directional tilt is probably real; **the magnitude is an artifact.** Before
+any 52W tier is quoted or shipped it needs event de-duplication (one event per
+run, not per day), a liquidity gate, and a `nbars >= 252` gate.
 
 ---
 
-## 6. Build plan
+## 4. Recommended shape — one screener, four depths
+
+The data supports **depth as a column, not as six tabs**:
+
+- **Breakout Watch** (daily, rolling) — every stock closing above a prior-N-day
+  high, with a **Breakout Depth** column showing the deepest window cleared:
+  `5D · 22D · 66D · 52W`. Sortable and filterable, default sort deepest-first.
+- **Breakdown Watch** (daily, rolling) — the mirror, `breakdown_level` = prior
+  N-day *minimum* of close, depth column `5D · 22D · 66D · 52W low`.
+
+This gives the user everything the 2×3 matrix would have, without the nesting
+duplication, in two presets instead of six — and the depth column is exactly
+the dimension the forward test says carries the information.
+
+**If the owner still prefers separate screeners**, the honest split is by
+depth, not by clock: `Breakout 5D` / `Breakout 22D` / `Breakout 66D+`, each
+filtered to its *exclusive* tier so the lists do not overlap. Same columns,
+same compute — purely a presentation choice.
+
+---
+
+## 5. What has to be built
 
 | # | Change | Scope |
 |---|---|---|
-| 1 | Add `breakdown_level` + `pct_from_breakdown` to `km_equity_eod` | migration + `compute_rolling_range()` |
-| 2 | Add all four breakout/breakdown columns to `km_equity_weekly` / `km_equity_monthly` | migration |
-| 3 | Extend the weekly/monthly indicator chain to compute them, **sized in bars** | `_indicator_chain.py` |
-| 4 | Backfill all three tables; clear `indicators_computed_at` first where the chain gates on it | one-shot script |
-| 5 | Five fetchers in `scanEngine.ts`, direct-query family, **keyed on `week_start` / `date_trunc(month)`** | frontend |
-| 6 | Five `kd_scan_presets` rows + `fieldAvailability` column sets | migration + frontend |
-| 7 | Period-key assertion in the contract audit (canonical-period coverage) | `lib/scan_contract.py` |
+| 1 | `breakout_level_5/22/66` + `breakdown_level_5/22/66` on `km_equity_eod` (plus `pct_from_*`) | migration |
+| 2 | Compute them in `compute_rolling_range()`, **sized in bars, `min_periods` = full window** | `indicators/compute_engine.py` |
+| 3 | Backfill history | one-shot script |
+| 4 | `breakout_depth` / `breakdown_depth` derived label | compute or fetcher |
+| 5 | Two direct-query fetchers + preset rows + `fieldAvailability` column sets | frontend + migration |
+| 6 | Warm-up gate (`nbars >= window`) asserted in the contract audit | `lib/scan_contract.py` |
 
-The direct-query family is the right home: these read `km_equity_*` directly,
-so they inherit every display column and avoid the matview column-contract
-class of bug entirely (the reason Breakout Surge looked healthy while the
-matview presets showed dashes — see `scanner-integrity-poa.md`).
+Existing `breakout_level` (20-bar) stays as-is so the live preset is untouched;
+the new columns are additive. Direct-query family, not the matview — it
+inherits every display column and avoids the column-contract bug class (see
+`scanner-integrity-poa.md`).
 
----
-
-## 7. Naming (SEBI — D39)
-
-No directional/advisory language. Breakout/breakdown describe price structure,
-which is observational and fine; the *framing* must stay descriptive.
-
-Proposed: **Breakout Surge** (daily, existing) · **Weekly Breakout** ·
-**Monthly Breakout** · **Breakdown Watch** (daily) · **Weekly Breakdown** ·
-**Monthly Breakdown**. Descriptions state the condition ("closing below the
-20-week low of close on a down week"), never an implication.
+`min_periods=1` on the current formula means a 3-bar stock gets a trivially
+cleared "20-day high". Harmless on deep daily history, **material for the 66D
+and 52W tiers** — gate on bar count, per the migration-169 lesson.
 
 ---
 
-## 8. Open decisions (owner)
+## 6. Naming (SEBI — D39)
 
-1. **Lookback per clock.** Keep 20 bars everywhere (20d / 20w ≈ 5 months /
-   20m ≈ 1.7 years)? Or use conventional levels per clock — e.g. 52-week high
-   for the weekly, 12-month for the monthly? 20-bar is consistent and cheap;
-   52-week is what most weekly traders actually watch.
-2. **Breakout on close vs on high.** Current formula uses the prior 20-bar high
-   **of close**. An intraday-high definition fires earlier and more often.
-   Changing it would alter the live daily preset — decide deliberately.
-3. **Breakdown ranking.** Daily produces ~600/day. Rank by weakest `score_5d`,
-   by depth below the level, or by delivery-backed conviction?
-4. **In-progress period** — Option A or B in §5.
-5. **Liquidity floor** — still removed platform-wide (migration 181). These six
+Breakout/breakdown describe structure and are fine; the framing must stay
+observational. Depth labels are neutral by construction (`5D`, `22D`, `66D`,
+`52W`). Descriptions state the condition — "closing above the highest close of
+the prior 22 sessions" — never an implication.
+
+---
+
+## 7. Open decisions (owner)
+
+1. **One screener with a depth column, or three exclusive-tier screeners?** (§4)
+2. **Which depths ship** — 5 / 22 / 66 / 52W as above, or add 7D and 132D?
+3. **Close vs intraday high.** Current formula uses the prior N-bar high **of
+   close**. An intraday-high definition fires earlier and more often; changing
+   it would alter the **live** daily preset, so decide deliberately.
+4. **Breakdown ranking** — daily breakdowns run 480–1,264/day. Rank by weakest
+   `score_5d`, by depth below the level, or by delivery-backed conviction?
+5. **Liquidity floor** — still removed platform-wide (migration 181). These
    inherit that; revisit as one decision, not per-preset.
 
 ---
 
-## 9. Verification before merge
+## 8. Verification before merge
 
-1. Canonical-period coverage: row count per screener equals the count computed
-   from `week_start` / `date_trunc(month)`, **not** from `max(period_end)` —
-   the §3 defect must be provably absent.
-2. `nbars >= 21` gate honoured: zero rows whose breakout level derives from
-   fewer than 21 bars.
-3. `python scripts/audit_scanner_contract.py` — all presets × 5 dimensions green.
-4. `python scripts/run_integrity_checks.py --dry-run` — zero new findings.
-5. Spot-check each screener's top 10 against the chart.
+1. Warm-up gate honoured — zero rows whose level derives from fewer bars than
+   its window.
+2. Nesting assertion — every 22D-tier row is also above its 5D level (proves
+   the tier logic is exclusive and correctly ordered).
+3. De-duplicated re-test of the 52W tier (one event per run + liquidity gate)
+   before any depth-tier performance claim reaches the UI.
+4. `python scripts/audit_scanner_contract.py` — all presets × 5 dimensions green.
+5. `python scripts/run_integrity_checks.py --dry-run` — zero new findings.
