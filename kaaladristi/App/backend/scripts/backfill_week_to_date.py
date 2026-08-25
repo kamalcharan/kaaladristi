@@ -73,9 +73,18 @@ WITH bars AS (
 ), scored AS (
     SELECT b.id,
            ROUND(p.prev_wk_close, 2) AS prev_week_close,
-           ROUND(
-               (b.close - p.prev_wk_close) / NULLIF(p.prev_wk_close, 0) * 100.0
-           , 2) AS pct_wtd
+           -- Representability guard, NOT a business threshold: pct_wtd is
+           -- NUMERIC(10,2), so |value| must stay under 1e8. Junk historical BSE
+           -- bars (20 rows, 10 symbols, OHLC all exactly 100000.0) sit next to
+           -- 0.01 closes in the same symbol and produce ratios of ~1e7, i.e.
+           -- ~999,999,900%. Those are not returns; store NULL rather than
+           -- overflow the UPDATE or rank garbage first in the screener.
+           CASE
+             WHEN p.prev_wk_close > 0
+              AND abs((b.close - p.prev_wk_close) / p.prev_wk_close * 100.0) < 100000000
+             THEN ROUND((b.close - p.prev_wk_close) / p.prev_wk_close * 100.0, 2)
+             ELSE NULL
+           END AS pct_wtd
     FROM bars b
     JOIN wk_prev p ON p.equity_id = b.equity_id AND p.wk_start = b.wk_start
     {date_filter}
@@ -121,34 +130,46 @@ def run_verify(date_arg):
     try:
         with conn.cursor() as cur:
             if date_arg:
-                cur.execute("""
-                    SELECT COUNT(*), COUNT(prev_week_close), COUNT(pct_wtd),
-                           COUNT(*) FILTER (WHERE pct_wtd > 0)
-                    FROM km_equity_eod WHERE trade_date = %s
-                """, [date_arg])
+                cur.execute(
+                    "SELECT COUNT(*), COUNT(prev_week_close), COUNT(pct_wtd), "
+                    "COUNT(*) FILTER (WHERE pct_wtd > 0) "
+                    "FROM km_equity_eod WHERE trade_date = %s",
+                    [date_arg],
+                )
                 total, pwc, pw, positive = cur.fetchone()
                 pct = (100.0 * pwc / total) if total else 0
                 print(f"[wtd] {date_arg}: {total} rows | prev_week_close {pwc} ({pct:.1f}%) "
                       f"| pct_wtd {pw} | pct_wtd>0 {positive}")
             else:
-                cur.execute("""
-                    SELECT COUNT(*), COUNT(prev_week_close) FROM km_equity_eod
-                """)
+                cur.execute("SELECT COUNT(*), COUNT(prev_week_close) FROM km_equity_eod")
                 total, filled = cur.fetchone()
                 pct = (100.0 * filled / total) if total else 0
                 print(f"[wtd] all history: {total} rows | prev_week_close {filled} ({pct:.1f}%)")
 
             # Invariant: the first bar of each symbol has no prior week, so a
             # 100% fill rate would mean the gap-safe LAG is wrong.
-            cur.execute("""
-                SELECT COUNT(*) FROM (
-                    SELECT DISTINCT ON (equity_id) equity_id, prev_week_close
-                    FROM km_equity_eod ORDER BY equity_id, trade_date
-                ) f WHERE f.prev_week_close IS NOT NULL
-            """)
+            cur.execute(
+                "SELECT COUNT(*) FROM ("
+                "  SELECT DISTINCT ON (equity_id) equity_id, prev_week_close"
+                "  FROM km_equity_eod ORDER BY equity_id, trade_date"
+                ") f WHERE f.prev_week_close IS NOT NULL"
+            )
             leaked = cur.fetchone()[0]
             print(f"[wtd] first-bar rows with a prev_week_close (must be 0): {leaked}"
                   f" {'OK' if leaked == 0 else '<-- DEFECT'}")
+
+            # Guard footprint: rows that HAVE a reference close but no pct_wtd,
+            # i.e. the reference was 0 or the ratio was not representable in
+            # NUMERIC(10,2). Those are junk source bars (BSE rows with OHLC all
+            # exactly 100000.0 sitting near 0.01 closes). Report the count
+            # rather than let the guard swallow them silently.
+            cur.execute(
+                "SELECT COUNT(*) FROM km_equity_eod "
+                "WHERE prev_week_close IS NOT NULL AND pct_wtd IS NULL"
+            )
+            skipped = cur.fetchone()[0]
+            print(f"[wtd] reference close present but pct_wtd unrepresentable: {skipped}"
+                  f" (junk source bars — expect a handful, not thousands)")
     finally:
         conn.close()
 

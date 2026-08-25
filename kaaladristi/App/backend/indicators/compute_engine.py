@@ -317,11 +317,16 @@ def compute_rolling_range(df: pd.DataFrame) -> dict:
     _wk             = df['trade_date'].dt.to_period('W-SUN')
     _last_by_week   = df.groupby(_wk)['close'].last()
     prev_week_close = _wk.map(_last_by_week.shift(1)).astype(float).round(2)
+    # The .where guards are representability, NOT business thresholds: pct_wtd
+    # is NUMERIC(10,2), so |value| must stay under 1e8 or the UPSERT raises
+    # NumericValueOutOfRange. Junk historical BSE bars (OHLC all exactly
+    # 100000.0) sitting near 0.01 closes in the same symbol yield ~1e9 %.
     pct_wtd = (
         ((close - prev_week_close) / prev_week_close * 100)
         .where(prev_week_close > 0)
         .round(2)
     )
+    pct_wtd = pct_wtd.where(pct_wtd.abs() < 1e8)
 
     # ── pct_below_52w_high ────────────────────────────────────────────────
     pct_below_52w_high = ((w52_high - close) / w52_high * 100).where(w52_high > 0).round(2)
