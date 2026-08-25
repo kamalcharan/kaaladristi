@@ -29,6 +29,8 @@ from dataclasses import dataclass, field
 from datetime import date, timedelta
 from typing import Any, Optional
 
+from . import scan_contract
+
 # ── Thresholds (calibration = edit here) ─────────────────────────────────
 UNMATCHED_WARN_PCT      = 5.0     # parsed-but-not-inserted share that warrants a warning
 UNMATCHED_CRIT_PCT      = 20.0    # ... and one that is an outright bug
@@ -323,15 +325,33 @@ def run_all(conn, run_date: date) -> list[Finding]:
 # down nowhere. These checks write it down and test it nightly.
 # See docs/claude/scanner-integrity-poa.md.
 
-MATVIEW_PRESET_COLUMNS = {
-    # preset -> columns the UI renders that MUST exist and be populated
-    'power_buy':            ['score_5d', 'score_22d', 'rsi_14', 'avg_amt_5d'],
-    'power_sell':           ['score_5d', 'score_22d', 'rsi_14', 'avg_amt_5d'],
-    'conviction_flow':      ['score_5d', 'score_22d', 'rsi_14', 'avg_amt_5d'],
-    'smart_money':          ['score_5d', 'score_22d', 'rsi_14', 'avg_amt_5d', 'supertrend_dir'],
-    'quiet_accumulation':   ['score_5d', 'score_22d', 'rsi_14', 'avg_amt_5d', 'supertrend_dir'],
-    'distribution_warning': ['score_5d', 'score_22d', 'rsi_14', 'avg_amt_5d', 'supertrend_dir'],
-}
+# DERIVED from the frontend at run time — see lib/scan_contract.py for why a
+# hand-maintained version of this dict is worthless (it is how the blank
+# Score 5D/22D bug passed the audit). Kept as a module-level name so callers
+# that imported the old constant keep working.
+def _db_preset_meta(conn) -> dict:
+    """kd_scan_presets rows — the source getPresetMeta() prefers at run time."""
+    return {r[0]: {'category': r[1], 'universe': r[2], 'vani_rule': r[3]}
+            for r in _rows(conn,
+                'SELECT id, category, universe, vani_rule FROM kd_scan_presets')}
+
+
+def matview_preset_columns(db_columns: set[str], db_meta: dict | None = None) -> dict[str, list[str]]:
+    """preset -> the UI's columns that are REAL data columns, so must exist and
+    be populated in km_scan_results. A rendered key that is not a data column
+    anywhere (UI-derived, e.g. dot_signal) is not the matview's job and is
+    excluded — but only because it was checked, not because it was assumed."""
+    contract = scan_contract.contract(db_meta)
+    served = {p for p, kind in contract['routing'].items() if kind == 'matview'}
+    out = {}
+    for preset in sorted(served):
+        cols = contract['columns'].get(preset)
+        if cols is None:
+            continue      # preset renders the default column set, not an override
+        out[preset] = [c for c in cols if c in db_columns]
+    return out
+
+
 MIN_AVG_AMT_22D_CR = 1.0   # owner decision 2026-08-24 — uniform, all presets
 
 # Presets whose own gate measures COMBINED-exchange ADV (wg_adv sums every ISIN
@@ -341,20 +361,13 @@ MIN_AVG_AMT_22D_CR = 1.0   # owner decision 2026-08-24 — uniform, all presets
 # combined (2026-08-25) — it passes the floor, the column just cannot see it.
 WG_ADV_PRESETS = ['waking_giants', 'first_ascent']
 
-# The preset ids the FRONTEND actually reads out of km_scan_results.
-# Source of truth: scanEngine.ts — MATVIEW_BUNDLE_PRESETS (the 6 bundles) plus
-# flower_pot_burst, which has its own fetcher against the same matview.
-#
-# This exists because "has rows in km_scan_results" is NOT the same thing as
-# "served from the matview", and conflating the two hid a real defect for a
-# whole migration cycle: executeScan() routes waking_giants to fetchWgJourneys
-# (km_wg_journeys, migration 177) BEFORE the matview branch is reached, so the
-# rows migration 180 computes for it are discarded on every refresh. Produce
-# and consume are separate sets; drift between them is the finding.
-MATVIEW_SERVED_PRESETS = frozenset({
-    'power_buy', 'power_sell', 'smart_money', 'quiet_accumulation',
-    'distribution_warning', 'conviction_flow', 'flower_pot_burst',
-})
+# Which presets the frontend reads from km_scan_results is DERIVED by walking
+# executeScan()'s branches in order and asking each chosen fetcher which table
+# it queries. Hand-listing it is what let waking_giants — served from
+# km_wg_journeys while still carrying 26 matview rows — read as healthy.
+def matview_served_presets() -> frozenset:
+    return frozenset(scan_contract.matview_served())
+
 
 # Effective liquidity per matview row, measured the way the preset's own gate
 # measures it. Two special cases, both verified rather than waived:
@@ -447,7 +460,8 @@ def check_scanner_contract(conn, run_date: date) -> list[Finding]:
     # is served from somewhere else entirely.
     produced = {r[0] for r in _rows(
         conn, 'SELECT DISTINCT preset_id FROM km_scan_results')}
-    for orphan in sorted(produced - MATVIEW_SERVED_PRESETS):
+    served = matview_served_presets()
+    for orphan in sorted(produced - served):
         n = _rows(conn, 'SELECT COUNT(*) FROM km_scan_results WHERE preset_id = %s',
                   (orphan,))[0][0]
         out.append(Finding(
@@ -456,7 +470,7 @@ def check_scanner_contract(conn, run_date: date) -> list[Finding]:
             f'frontend path reads them — the arm is dead weight or the preset lost its UI',
             subject=orphan, metric=int(n), expected=0,
             detail={'preset': orphan, 'rows': int(n)}))
-    for missing in sorted(MATVIEW_SERVED_PRESETS - produced):
+    for missing in sorted(served - produced):
         out.append(Finding(
             f'contract_arm_missing_{missing}', 'invariant', 'critical',
             f'{missing}: the frontend reads this preset from km_scan_results but the '
@@ -465,7 +479,28 @@ def check_scanner_contract(conn, run_date: date) -> list[Finding]:
             detail={'preset': missing}))
 
     # C1 — columns present and populated
-    for preset, cols in MATVIEW_PRESET_COLUMNS.items():
+    db_meta = _db_preset_meta(conn)
+
+    # C0b — the hardcoded SCAN_PRESETS array vs the live kd_scan_presets row.
+    # getPresetMeta() prefers the DB, so a disagreement means the code says one
+    # thing and the app does another. Found on 2026-08-25: power_sell is
+    # category '' in the TS and 'market' in the DB (which silently changes
+    # which columns the table renders), stage_2_watch is NSE_ONLY in the TS
+    # and NSE_BSE in the DB.
+    for preset, fields in scan_contract.contract(db_meta)['meta_drift'].items():
+        if not fields:
+            continue
+        detail = ', '.join(f'{k}: code={c!r} db={d!r}' for k, (c, d) in fields.items())
+        out.append(Finding(
+            f'contract_meta_drift_{preset}', 'invariant', 'warning',
+            f'{preset}: scanEngine.ts and kd_scan_presets disagree ({detail}). '
+            f'The DB wins at run time, so the code is misleading about what ships.',
+            subject=preset, metric=len(fields), expected=0,
+            detail={'preset': preset, 'drift': {k: {'code': c, 'db': d}
+                                                for k, (c, d) in fields.items()}}))
+
+    db_meta = _db_preset_meta(conn)
+    for preset, cols in matview_preset_columns(existing, db_meta).items():
         absent = [c for c in cols if c not in existing]
         if absent:
             out.append(Finding(

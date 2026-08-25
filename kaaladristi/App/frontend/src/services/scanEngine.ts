@@ -44,7 +44,7 @@ export const SCAN_PRESETS: ScanDefinition[] = [
   { id: 'volume_drive',         name: 'Volume Drive',          description: 'Stocks printing a volume-drive or accumulation bar — ranked by delivery conviction',                                limit: 60,  universe: 'NSE_BSE',  category: 'flow',          category_label: 'Flow',          category_color: '#3b82f6', category_sort: 3, is_default_tab: false, timeframe: 'daily', vani_rule: 'svd_delivery_conviction' },
   { id: 'flower_pot_burst',     name: 'Flower Pot Burst',      description: 'Stocks coiling in tight compression — dying volume, contracting range — plus the rare session when a coil releases with an explosive volume-and-range expansion',  limit: 60,  universe: 'NSE_ONLY', category: 'price_action',  category_label: 'Price Action',  category_color: '#f59e0b', category_sort: 1, is_default_tab: false, timeframe: 'daily', vani_rule: null },
   { id: 'stage_2_leaders',      name: 'Stage 2 Leaders',       description: 'Stocks in confirmed Weinstein Stage 2 — SMA200 rising, proper 52-week position',          limit: 500, universe: 'NSE_ONLY', category: 'stage_analysis', category_label: 'Stage Analysis', category_color: '#22c55e', category_sort: 2, is_default_tab: false, timeframe: 'daily', vani_rule: 'is_vani_s2' },
-  { id: 'stage_2_watch',        name: 'Stage 2 Watch',         description: 'Stocks approaching Stage 2 — MA stacking confirmed, SMA200 not yet rising. Watch for Stage 2 breakout.', limit: 100, universe: 'NSE_ONLY', category: 'stage_analysis', category_label: 'Stage Analysis', category_color: '#22c55e', category_sort: 2, is_default_tab: true, timeframe: 'daily', vani_rule: 'is_vani_s2' },
+  { id: 'stage_2_watch',        name: 'Stage 2 Watch',         description: 'Stocks approaching Stage 2 — MA stacking confirmed, SMA200 not yet rising. Watch for Stage 2 breakout.', limit: 100, universe: 'NSE_ONLY', category: 'stage_analysis', category_label: 'Stage Analysis', category_color: '#22c55e', category_sort: 2, is_default_tab: true, timeframe: 'daily', vani_rule: 'is_vani_smart' },
   { id: 'stage_4_leaders',      name: 'Stage 4 Leaders',       description: 'Confirmed downtrend — death cross, below both MAs',                                        limit: 200, universe: 'NSE_ONLY', category: 'stage_analysis', category_label: 'Stage Analysis', category_color: '#22c55e', category_sort: 2, is_default_tab: false, timeframe: 'daily', vani_rule: 'is_vani_weakness' },
   { id: 'stage_3_watch',        name: 'Stage 3 Watch',         description: 'Entering weakness — SMA50 converging toward SMA200',                                       limit: 100, universe: 'NSE_ONLY', category: 'stage_analysis', category_label: 'Stage Analysis', category_color: '#22c55e', category_sort: 2, is_default_tab: false, timeframe: 'daily', vani_rule: 'is_vani_weakness' },
   { id: 'vani_exit_watch',      name: 'VaNi Weakness Watch',   description: 'Highest conviction weakness — lowest RS, death cross confirmed',                            limit: 25,  universe: 'NSE_ONLY', category: 'stage_analysis', category_label: 'Stage Analysis', category_color: '#22c55e', category_sort: 2, is_default_tab: false, timeframe: 'daily', vani_rule: 'always_true' },
@@ -68,16 +68,18 @@ export function getPresetMeta(id: string): ScanDefinition | undefined {
   return _dbPresetMeta.get(id) ?? SCAN_PRESETS.find((p) => p.id === id);
 }
 
-// ── Liquidity floor (scanner-integrity audit, 2026-08-24) ────────────────
-// No preset in the platform had one. Full-universe coverage (a Settled
-// Decision) plus the removal of the old JS bundle's accidental
-// .limit(8000) truncation left every scan free to surface names trading
-// a lakh a day — Strength Confluence rank 3 was a Rs 2.46 stock at
-// Rs 0.01 Cr/day. conviction_flow was the one clean scan precisely
-// because its gate already carried avg_amt_22d > 1.5.
-// Owner decision: uniform Rs 1 Cr across all presets. The matview
-// presets enforce it in SQL (migration 180); the direct-query presets
-// enforce it here. See docs/claude/scanner-integrity-poa.md.
+// ── Liquidity floor — DEFINED, NOT APPLIED (2026-08-25) ──────────────────
+// The problem it was meant to solve is real: no preset had a floor, and
+// Strength Confluence rank 3 was a Rs 2.46 stock trading Rs 0.01 Cr/day.
+// conviction_flow was the one clean scan because its own gate already
+// carried avg_amt_22d > 1.5.
+//
+// A uniform Rs 1 Cr floor was applied to 8 direct fetchers and 6 matview
+// arms, then reverted (migration 181 removes the matview side) because the
+// cost was measured only afterwards, and it was large — see below. The
+// floor is the right idea at the wrong altitude: it belongs in each
+// scanner's own gate, sized to that scanner, not applied uniformly.
+//
 // Platform liquidity floor, in Rs Cr of 22-session average turnover.
 // NOT currently applied to the direct fetchers. It was added to 8 of them in
 // the 2026-08-25 scanner-integrity work and reverted the same day: measured

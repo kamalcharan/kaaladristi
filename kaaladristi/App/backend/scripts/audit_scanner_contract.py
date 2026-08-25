@@ -31,8 +31,9 @@ import psycopg2.extras
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from lib.config import DATABASE_URL
-from lib.integrity_checks import (MATVIEW_PRESET_COLUMNS, MIN_AVG_AMT_22D_CR,
-                                  MATVIEW_SERVED_PRESETS, measure_liquidity)
+from lib.integrity_checks import (MIN_AVG_AMT_22D_CR, measure_liquidity,
+                                  matview_preset_columns, matview_served_presets,
+                                  _db_preset_meta)
 
 
 def get_conn():
@@ -90,6 +91,12 @@ def main():
     # avg_amt_22d. Shared with the nightly sweep so both report one number.
     liq = measure_liquidity(conn)
 
+    # Both DERIVED from the frontend source at run time (lib/scan_contract.py).
+    # If the extraction breaks, it raises here rather than yielding an empty
+    # contract that would make every scanner look defect-free.
+    served_presets = matview_served_presets()
+    required_cols = matview_preset_columns(matview_cols, _db_preset_meta(conn))
+
     print('Scanner contract completeness audit')
     print('=' * 96)
     print(f"{'preset':22} {'src':8} {'cols':>6} {'universe':>9} {'liquidity':>10} {'vani':>6} {'limit':>6}")
@@ -102,7 +109,7 @@ def main():
         # merely that rows exist there. waking_giants/first_ascent have rows
         # and are served from km_wg_journeys; calling them matview-backed is
         # how their dead arms stayed invisible.
-        served = pid in MATVIEW_SERVED_PRESETS
+        served = pid in served_presets
         in_mv = served and rows > 0
         src = 'matview' if served else ('ORPHAN' if rows else 'direct')
         if rows and not served:
@@ -112,8 +119,8 @@ def main():
 
         # 1. columns
         cols_v = 'n/a'
-        if pid in MATVIEW_PRESET_COLUMNS:
-            need = MATVIEW_PRESET_COLUMNS[pid]
+        if pid in required_cols:
+            need = required_cols[pid]
             absent = [c for c in need if c not in matview_cols]
             if absent:
                 cols_v = f'MISS{len(absent)}'; defects.append(f'{pid}: columns absent {absent}')
