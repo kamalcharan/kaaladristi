@@ -1188,33 +1188,16 @@ function ScannerResults({ presetId }: { presetId: string }) {
             );
           })}
 
-          {/* Timeframe tabs — weekly/monthly on hold */}
-          <div style={{ marginLeft: 'auto', display: 'flex', gap: '2px', padding: '3px', background: 'var(--card)', border: '1px solid var(--border)', borderRadius: '8px' }}>
-            {(['daily', 'weekly', 'monthly'] as const).map((tf) => {
-              const isActiveTf = timeframe === tf;
-              const isDisabled = tf !== 'daily';
-              return (
-                <button
-                  key={tf}
-                  disabled={isDisabled}
-                  onClick={() => !isDisabled && navigate(`/scanner/${presetId}?timeframe=${tf}`)}
-                  style={{
-                    padding: '4px 10px', borderRadius: '6px', border: 'none',
-                    background: isActiveTf ? 'color-mix(in srgb, var(--text-primary) 6%, transparent)' : 'transparent',
-                    color: isActiveTf ? 'var(--text-primary)' : 'var(--text-faint)',
-                    fontSize: '11px', fontWeight: 500,
-                    fontFamily: 'var(--font-body)',
-                    cursor: isDisabled ? 'not-allowed' : 'pointer',
-                    opacity: isDisabled ? 0.4 : 1,
-                    transition: 'all 0.15s',
-                    textTransform: 'capitalize',
-                  }}
-                >
-                  {tf}
-                </button>
-              );
-            })}
-          </div>
+          {/* Timeframe tabs REMOVED (2026-08-26, owner). They were dead UI on
+              every preset: weekly and monthly were hard-disabled
+              (isDisabled = tf !== 'daily'), so the control only ever showed
+              "Daily" active beside two greyed buttons that could not be
+              clicked. The weekly/monthly CLOCKS now exist as their own presets
+              (Weekly/Monthly Movers and Decliners), which is what the tab strip
+              above is for — a timeframe switch on top of that would imply a
+              second, non-existent axis. The `timeframe` prop stays wired
+              (defaults to 'daily' from the URL) so useScan and the VaNi
+              publisher are untouched. */}
         </div>
       )}
 
