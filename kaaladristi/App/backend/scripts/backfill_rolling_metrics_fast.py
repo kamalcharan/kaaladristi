@@ -218,15 +218,27 @@ SET
     surge_22d           = s.s22d,
     score_5d            = s.sc5d,
     score_22d           = s.sc22d,
-    ret_5d              = s.ret5d,
-    ret_22d             = s.ret22d,
-    ret_66d             = s.ret66d,
+    -- Same representability guard, precautionary rather than corrective: these
+    -- divide by LAG(close, N), which junk 0.01 bars can make tiny. Max observed
+    -- magnitude across the known-bad symbols is 1.48e6 against the column's 1e8
+    -- ceiling, so this nulls nothing that exists today and simply removes a
+    -- latent UPSERT failure. NUMERIC(10,2), like pct_from_breakdown.
+    ret_5d              = CASE WHEN abs(s.ret5d)  < 100000000 THEN s.ret5d  ELSE NULL END,
+    ret_22d             = CASE WHEN abs(s.ret22d) < 100000000 THEN s.ret22d ELSE NULL END,
+    ret_66d             = CASE WHEN abs(s.ret66d) < 100000000 THEN s.ret66d ELSE NULL END,
     breakout_level      = s.bklevel,
     breakdown_level     = s.bdlevel,
-    pct_from_breakdown  = CASE WHEN s.bdlevel > 0
-                               THEN ROUND((s.close - s.bdlevel) / s.bdlevel * 100.0, 2)
-                               ELSE NULL END,
-    pct_from_breakout   = s.pct_from_bk,
+    -- Representability guard: the column is NUMERIC(10,2), so the absolute
+    -- value must stay under 1e8. bdlevel is the rolling MIN and therefore the
+    -- denominator that can go tiny -- junk BSE bars put a 0.01 close inside the
+    -- window while price is orders of magnitude higher, giving ratios past 1e9.
+    -- The breakout mirror needs no such guard: its denominator is a MAX.
+    pct_from_breakdown  = CASE
+                            WHEN s.bdlevel > 0
+                             AND abs((s.close - s.bdlevel) / s.bdlevel * 100.0) < 100000000
+                            THEN ROUND((s.close - s.bdlevel) / s.bdlevel * 100.0, 2)
+                            ELSE NULL END,
+    pct_from_breakout   = CASE WHEN abs(s.pct_from_bk) < 100000000 THEN s.pct_from_bk ELSE NULL END,
     pct_below_52w_high  = s.pct_b52,
     deliv_value_cr      = s.deliv_cr_bar
 FROM scored s

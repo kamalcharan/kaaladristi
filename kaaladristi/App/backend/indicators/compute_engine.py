@@ -320,6 +320,17 @@ def compute_rolling_range(df: pd.DataFrame) -> dict:
         .where(breakdown_level > 0)
         .round(2)
     )
+    # Representability guard — REQUIRED here in a way it is not for the breakout
+    # mirror. breakdown_level is the rolling MIN, so it is the DENOMINATOR that
+    # can go tiny; breakout_level is the MAX and never does. Junk historical BSE
+    # bars put a 0.01 close inside the window (scrip 514306, 2007-06-06) while
+    # price is orders of magnitude higher, yielding ratios past 1e9. The column
+    # is NUMERIC(10,2), so anything at or beyond 1e8 fails the UPSERT.
+    pct_from_breakdown = pct_from_breakdown.where(pct_from_breakdown.abs() < 1e8)
+    # Same guard on the breakout side for symmetry. It has never fired in
+    # practice (a MAX denominator is large by construction) but a symbol whose
+    # entire prior window sits at 0.01 would trip it.
+    pct_from_breakout = pct_from_breakout.where(pct_from_breakout.abs() < 1e8)
 
     # ── Week-to-date: reference = last close before this week's Monday ────
     # Buckets are Mon-Sun calendar weeks. shift(1) over the weeks PRESENT in
