@@ -12,6 +12,8 @@ Columns written:
   surge_22d, score_5d, score_22d
   ret_5d, ret_22d, ret_66d
   breakout_level, pct_from_breakout, pct_below_52w_high
+  breakdown_level, pct_from_breakdown
+  prev_week_close, pct_wtd, prev_month_close, pct_mtd
   deliv_value_cr
 
 Usage:
@@ -236,6 +238,13 @@ base AS (
                 ROWS BETWEEN 20 PRECEDING AND 1 PRECEDING
             )
         , 2) AS bklevel,
+        -- breakdown_level = rolling 20-bar LOW of prior close (mirror of bklevel)
+        ROUND(
+            MIN(close) OVER (
+                PARTITION BY equity_id ORDER BY trade_date
+                ROWS BETWEEN 20 PRECEDING AND 1 PRECEDING
+            )
+        , 2) AS bdlevel,
         -- deliv_value_cr = delivery value in Crores for this bar
         ROUND(
             (COALESCE(value_cr, 0) * COALESCE(delivery_pct, 0) / 100.0)::numeric
@@ -244,6 +253,7 @@ base AS (
 ), scored AS (
     SELECT
         id,
+        equity_id,
         trade_date,
         close,
         w52h, w52l, lth,
@@ -251,6 +261,7 @@ base AS (
         d30, p5d, p22d, p66d,
         ret5d, ret22d, ret66d,
         bklevel,
+        bdlevel,
         deliv_cr_bar,
         -- delivery_surge_x = avg_amt_5d / avg_amt_22d
         CASE WHEN amt22 > 0 THEN ROUND(amt5 / amt22, 4) ELSE NULL END AS surge_x,
@@ -273,8 +284,34 @@ base AS (
         -- pct_from_breakout = (close - breakout_level) / breakout_level * 100
         CASE WHEN bklevel > 0 THEN ROUND((close - bklevel) / bklevel * 100.0, 2) ELSE NULL END AS pct_from_bk,
         -- pct_below_52w_high = (w52h - close) / w52h * 100
-        CASE WHEN w52h > 0 THEN ROUND((w52h - close) / w52h * 100.0, 2) ELSE NULL END AS pct_b52
+        CASE WHEN w52h > 0 THEN ROUND((w52h - close) / w52h * 100.0, 2) ELSE NULL END AS pct_b52,
+        -- pct_from_breakdown, with the representability guard. bdlevel is a
+        -- rolling MIN and therefore the denominator that can collapse -- junk
+        -- BSE bars put a 0.01 close in the window while price is orders of
+        -- magnitude higher. The column is NUMERIC(10,2); anything at 1e8 or
+        -- beyond fails the UPDATE. The breakout mirror needs no guard: MAX.
+        CASE
+          WHEN bdlevel > 0
+           AND abs((close - bdlevel) / bdlevel * 100.0) < 100000000
+          THEN ROUND((close - bdlevel) / bdlevel * 100.0, 2)
+          ELSE NULL
+        END AS pct_from_bd
     FROM base
+)
+, prev_wk AS (
+    -- Last close STRICTLY BEFORE the Monday of the target date's week, per
+    -- symbol. Gap-safe by construction: a symbol that did not trade last week
+    -- picks up its last available close rather than dropping out.
+    SELECT DISTINCT ON (equity_id) equity_id, close AS ref_close
+    FROM km_equity_eod
+    WHERE trade_date < date_trunc('week', DATE %(target)s)
+    ORDER BY equity_id, trade_date DESC
+), prev_mo AS (
+    -- Same, for the 1st of the target date's month.
+    SELECT DISTINCT ON (equity_id) equity_id, close AS ref_close
+    FROM km_equity_eod
+    WHERE trade_date < date_trunc('month', DATE %(target)s)
+    ORDER BY equity_id, trade_date DESC
 )
 UPDATE km_equity_eod e
 SET
@@ -298,17 +335,39 @@ SET
     breakout_level      = s.bklevel,
     pct_from_breakout   = s.pct_from_bk,
     pct_below_52w_high  = s.pct_b52,
+    breakdown_level     = s.bdlevel,
+    pct_from_breakdown  = s.pct_from_bd,
+    prev_week_close     = ROUND(w.ref_close, 2),
+    pct_wtd             = CASE
+                            WHEN w.ref_close > 0
+                             AND abs((e.close - w.ref_close) / w.ref_close * 100.0) < 100000000
+                            THEN ROUND((e.close - w.ref_close) / w.ref_close * 100.0, 2)
+                            ELSE NULL END,
+    prev_month_close    = ROUND(m.ref_close, 2),
+    pct_mtd             = CASE
+                            WHEN m.ref_close > 0
+                             AND abs((e.close - m.ref_close) / m.ref_close * 100.0) < 100000000
+                            THEN ROUND((e.close - m.ref_close) / m.ref_close * 100.0, 2)
+                            ELSE NULL END,
     deliv_value_cr      = s.deliv_cr_bar
 FROM scored s
+-- Join the period references to `scored`, NOT to the UPDATE target `e`:
+-- PostgreSQL rejects a reference to the target table inside an outer-join ON
+-- clause in the FROM list ("invalid reference to FROM-clause entry"). `scored`
+-- carries equity_id for exactly this reason.
+LEFT JOIN prev_wk w ON w.equity_id = s.equity_id
+LEFT JOIN prev_mo m ON m.equity_id = s.equity_id
 WHERE e.id = s.id
-  AND s.trade_date = %s
+  AND s.trade_date = %(target)s
 """
+    # NAMED parameters throughout: the prev_wk / prev_mo CTEs each need the same
+    # target date, and psycopg2 forbids mixing %s with %(name)s in one statement.
     print(f"\n[update] Running window-function UPDATE for {target_date}...")
     print("  (scans full history — may take 30-90 seconds)")
     conn = get_conn()
     try:
         with conn.cursor() as cur:
-            cur.execute(sql, [target_date])
+            cur.execute(sql, {'target': target_date})
             updated = cur.rowcount
         conn.commit()
         print(f"  Updated {updated} rows.")
