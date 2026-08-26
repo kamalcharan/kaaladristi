@@ -58,6 +58,31 @@ const PRESET_COL_OVERRIDES: Partial<Record<string, string[]>> = {
     'mcap_cr', 'delivery_pct',
   ],
 
+  // The three breakdown screeners mirror their up-side siblings exactly, with
+  // the down-side pair swapped in. Same Score / delivery-value / rvol tail, so
+  // a reader moving between Breakout Surge and Breakdown Watch sees one grid.
+  breakdown_watch: [
+    'symbol', 'close', 'score_5d', 'score_22d', 'pct_chng',
+    'breakdown_level', 'pct_from_breakdown',
+    'avg_amt_5d', 'avg_amt_22d',
+    'rvol', 'rsi_14', 'magic_rs',
+    'mcap_cr', 'delivery_pct',
+  ],
+  weekly_decliners: [
+    'symbol', 'close', 'score_5d', 'score_22d', 'pct_chng',
+    'prev_week_close', 'pct_wtd',
+    'avg_amt_5d', 'avg_amt_22d',
+    'rvol', 'rsi_14', 'magic_rs',
+    'mcap_cr', 'delivery_pct',
+  ],
+  monthly_decliners: [
+    'symbol', 'close', 'score_5d', 'score_22d', 'pct_chng',
+    'prev_month_close', 'pct_mtd',
+    'avg_amt_5d', 'avg_amt_22d',
+    'rvol', 'rsi_14', 'magic_rs',
+    'mcap_cr', 'delivery_pct',
+  ],
+
   // Volume Drive selects ON the dot, so the dot leads — without it the grid
   // gives no clue why a row is present. Delivery follows because it is the
   // ranking key and the VaNi chip's threshold (dot_svd + deliv >= 50 measured

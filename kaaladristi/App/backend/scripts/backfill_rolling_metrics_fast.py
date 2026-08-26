@@ -19,6 +19,7 @@ Columns written (same as original):
   surge_22d, score_5d, score_22d
   ret_5d, ret_22d, ret_66d
   breakout_level, pct_from_breakout, pct_below_52w_high
+  breakdown_level, pct_from_breakdown
   deliv_value_cr
 
 Usage:
@@ -159,6 +160,13 @@ base AS (
                 ROWS BETWEEN 20 PRECEDING AND 1 PRECEDING
             )
         , 2) AS bklevel,
+        -- breakdown_level = rolling 20-bar LOW of prior close (mirror of bklevel)
+        ROUND(
+            MIN(close) OVER (
+                PARTITION BY equity_id ORDER BY trade_date
+                ROWS BETWEEN 20 PRECEDING AND 1 PRECEDING
+            )
+        , 2) AS bdlevel,
         -- delivery value in Crores for this bar
         ROUND(
             (COALESCE(value_cr, 0) * COALESCE(delivery_pct, 0) / 100.0)::numeric
@@ -173,6 +181,7 @@ base AS (
         amt5, amt22, amt66,
         d30, p5d, p22d, p66d,
         ret5d, ret22d, ret66d,
+        bdlevel,
         bklevel,
         deliv_cr_bar,
         CASE WHEN amt22 > 0 THEN ROUND(amt5  / amt22, 4) ELSE NULL END AS surge_x,
@@ -213,6 +222,10 @@ SET
     ret_22d             = s.ret22d,
     ret_66d             = s.ret66d,
     breakout_level      = s.bklevel,
+    breakdown_level     = s.bdlevel,
+    pct_from_breakdown  = CASE WHEN s.bdlevel > 0
+                               THEN ROUND((s.close - s.bdlevel) / s.bdlevel * 100.0, 2)
+                               ELSE NULL END,
     pct_from_breakout   = s.pct_from_bk,
     pct_below_52w_high  = s.pct_b52,
     deliv_value_cr      = s.deliv_cr_bar

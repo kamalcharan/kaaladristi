@@ -88,6 +88,8 @@ export interface LatestEodRow {
   breakout_level: number | null;
   prev_month_close: number | null;
   pct_mtd: number | null;
+  breakdown_level: number | null;
+  pct_from_breakdown: number | null;
 }
 
 /** The equity's master-table row — identity + exchange + industry. */
@@ -283,6 +285,21 @@ export function priorMaxFromEnd<T>(bars: T[], n: number, pick: (b: T) => number 
     const v = pick(bars[i]);
     if (v == null || !Number.isFinite(v)) continue;
     if (best == null || v > best) best = v;
+  }
+  return best;
+}
+
+/** Mirror of priorMaxFromEnd: the MINIMUM over the n bars before the last one.
+ *  Used by the breakdown-side adapters so the two families read identically. */
+export function priorMinFromEnd<T>(bars: T[], n: number, pick: (b: T) => number | null | undefined): number | null {
+  if (bars.length < n + 1) return null;
+  const start = bars.length - 1 - n;
+  const end = bars.length - 1;                // exclude the last bar
+  let best: number | null = null;
+  for (let i = start; i < end; i++) {
+    const v = pick(bars[i]);
+    if (v == null || !Number.isFinite(v)) continue;
+    if (best == null || v < best) best = v;
   }
   return best;
 }

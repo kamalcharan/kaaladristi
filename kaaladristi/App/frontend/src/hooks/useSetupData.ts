@@ -34,7 +34,7 @@ const WEEKLY_LOOKBACK_YEARS = 5;
 // missing days fall through to the closest prior-week stage).
 const WEEKLY_COLS = 'trade_date,open,high,low,close,volume,magic_rs,magic_rs_zone';
 const STAGE_COLS  = 'trade_date,stage';
-const LATEST_COLS = 'trade_date,close,pct_chng,pivot_pp,pivot_r1,pivot_r2,pivot_s1,pivot_s2,ema_20,sma_50,sma_150,w52_high,w52_low,stage,magic_rs,magic_rs_zone,rs_percentile,rvol,delivery_pct,accum_distrib,flow_type,rss_value,sniper_inst,delivery_surge_x,avg_amt_22d,volume_divergence_flag,sma_200,dot_svd,dot_sbd,dot_syd,prev_week_close,pct_wtd,breakout_level,prev_month_close,pct_mtd';
+const LATEST_COLS = 'trade_date,close,pct_chng,pivot_pp,pivot_r1,pivot_r2,pivot_s1,pivot_s2,ema_20,sma_50,sma_150,w52_high,w52_low,stage,magic_rs,magic_rs_zone,rs_percentile,rvol,delivery_pct,accum_distrib,flow_type,rss_value,sniper_inst,delivery_surge_x,avg_amt_22d,volume_divergence_flag,sma_200,dot_svd,dot_sbd,dot_syd,prev_week_close,pct_wtd,breakout_level,prev_month_close,pct_mtd,breakdown_level,pct_from_breakdown';
 const SYMBOL_COLS = 'id,symbol,company_name,exchange,industry,isin,mcap_cr';
 
 export interface UseSetupDataResult {

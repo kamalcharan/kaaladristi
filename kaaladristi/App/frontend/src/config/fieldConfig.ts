@@ -639,6 +639,20 @@ export const ALL_FIELDS: Record<string, FieldConfig> = {
     type: 'pct',
     width: 78,
   },
+  breakdown_level: {
+    key: 'breakdown_level',
+    label: 'Brk Dn Lvl',
+    tooltip: 'Breakdown level — the lowest close over the prior 20 bars. Price below this = trading under its 20-day floor. The mirror of Brk Lvl.',
+    type: 'price',
+    width: 88,
+  },
+  pct_from_breakdown: {
+    key: 'pct_from_breakdown',
+    label: '% Below',
+    tooltip: 'Percent of close versus the 20-day breakdown level. Negative means price has broken below the floor; the more negative, the deeper the break.',
+    type: 'pct',
+    width: 78,
+  },
   pct_from_breakout: {
     key: 'pct_from_breakout',
     label: '% Above',

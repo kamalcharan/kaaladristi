@@ -309,6 +309,18 @@ def compute_rolling_range(df: pd.DataFrame) -> dict:
     breakout_level    = close.shift(1).rolling(20, min_periods=1).max().round(2)
     pct_from_breakout = ((close - breakout_level) / breakout_level * 100).round(2)
 
+    # ── breakdown_level = rolling 20-bar LOW of the prior close ──────────
+    # Exact mirror of breakout_level. Negative pct_from_breakdown means price
+    # has broken below the 20-day floor. NOT the same as pct_from_breakout < 0,
+    # which merely says "not at a 20-day high" and is true of ~89 percent of the
+    # market on any given day.
+    breakdown_level    = close.shift(1).rolling(20, min_periods=1).min().round(2)
+    pct_from_breakdown = (
+        ((close - breakdown_level) / breakdown_level * 100)
+        .where(breakdown_level > 0)
+        .round(2)
+    )
+
     # ── Week-to-date: reference = last close before this week's Monday ────
     # Buckets are Mon-Sun calendar weeks. shift(1) over the weeks PRESENT in
     # this symbol's history yields "the last close strictly before this week",
@@ -370,6 +382,8 @@ def compute_rolling_range(df: pd.DataFrame) -> dict:
         'ret_66d':             ret_66d,
         'breakout_level':      breakout_level,
         'pct_from_breakout':   pct_from_breakout,
+        'breakdown_level':     breakdown_level,
+        'pct_from_breakdown':  pct_from_breakdown,
         'prev_week_close':     prev_week_close,
         'pct_wtd':             pct_wtd,
         'prev_month_close':    prev_month_close,
@@ -785,6 +799,7 @@ ROLLING_COLUMNS = [
     'deliv_value_cr',
     'prev_week_close', 'pct_wtd',
     'prev_month_close', 'pct_mtd',
+    'breakdown_level', 'pct_from_breakdown',
 ]
 
 
@@ -943,7 +958,9 @@ def _flush_rolling_batch(conn, batch: list):
           prev_week_close     = v.prev_week_close,
           pct_wtd             = v.pct_wtd,
           prev_month_close    = v.prev_month_close,
-          pct_mtd             = v.pct_mtd
+          pct_mtd             = v.pct_mtd,
+          breakdown_level     = v.breakdown_level,
+          pct_from_breakdown  = v.pct_from_breakdown
         FROM (VALUES %s) AS v(
           id, w52_high, w52_low, lifetime_high,
           d30_pct_chng, d365_pct_chng,
@@ -953,7 +970,8 @@ def _flush_rolling_batch(conn, batch: list):
           ret_5d, ret_22d, ret_66d,
           breakout_level, pct_from_breakout, pct_below_52w_high,
           deliv_value_cr, prev_week_close, pct_wtd,
-          prev_month_close, pct_mtd
+          prev_month_close, pct_mtd,
+          breakdown_level, pct_from_breakdown
         )
         WHERE e.id = v.id::int
     """
@@ -969,6 +987,7 @@ def _flush_rolling_batch(conn, batch: list):
             r['deliv_value_cr'],
             r['prev_week_close'], r['pct_wtd'],
             r['prev_month_close'], r['pct_mtd'],
+            r['breakdown_level'], r['pct_from_breakdown'],
         )
         for r in batch
     ]
