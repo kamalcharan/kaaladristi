@@ -33,10 +33,19 @@ const PRESET_COL_OVERRIDES: Partial<Record<string, string[]>> = {
   // "Breakout" column). D% follows because it is a DIFFERENT number from
   // % WTD on every day except Monday, and showing them side by side is what
   // makes the distinction legible.
+  // Weekly Movers deliberately MIRRORS the price_action group defaults so it
+  // reads as a sibling of Breakout Surge rather than a different product: same
+  // Close | Score 5D | Score 22D | 1D% lead ("Score is the real moat"), same
+  // delivery-value and rvol/rsi/magic_rs tail. The ONLY substitution is the
+  // breakout pair -> the week-to-date pair, which is what this preset selects
+  // on. MCap and Delivery are appended because they are the two the owner
+  // reads this list for.
   weekly_movers: [
-    'symbol', 'close', 'pct_wtd', 'prev_week_close', 'pct_chng',
-    'mcap_cr', 'delivery_pct', 'rsi_14', 'ret_5d', 'ret_22d',
-    'magic_rs', 'pct_below_52w_high',
+    'symbol', 'close', 'score_5d', 'score_22d', 'pct_chng',
+    'prev_week_close', 'pct_wtd',
+    'avg_amt_5d', 'avg_amt_22d',
+    'rvol', 'rsi_14', 'magic_rs',
+    'mcap_cr', 'delivery_pct',
   ],
 
   // Volume Drive selects ON the dot, so the dot leads — without it the grid

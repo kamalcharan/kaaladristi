@@ -284,6 +284,42 @@ def mapper_gaps(db_meta: dict | None = None) -> dict[str, list[str]]:
     return gaps
 
 
+FIELD_CONFIG_TS = os.path.join(_SRC, 'config', 'fieldConfig.ts')
+
+
+def field_config_keys(src: str | None = None) -> set[str]:
+    """Every column key ALL_FIELDS (fieldConfig.ts) actually defines."""
+    if src is None:
+        src = _read(FIELD_CONFIG_TS)
+    block = _block(src, r'ALL_FIELDS\s*:[^=]*=', '{', '}')
+    keys = set(re.findall(r'^\s{2}([a-zA-Z_][a-zA-Z0-9_]*):\s*\{', block, re.M))
+    return _require(keys, 'ALL_FIELDS')
+
+
+def unknown_columns(db_meta: dict | None = None) -> dict[str, list[str]]:
+    """preset -> column keys it asks ScanTable to render that ALL_FIELDS
+    (fieldConfig.ts) does NOT define. Such a column renders as nothing: no header, no cell, no error —
+    just dead width in the grid.
+
+    This layer was missing and it cost a shipped defect: weekly_movers listed
+    'pct_below_52w_high', which IS a real km_equity_eod column, so every
+    DB-facing check passed while the UI drew an empty column. The key
+    ALL_FIELDS defines is 'pctBelow52wHigh'. Column-key validity and DB-column
+    existence are different questions; the audit only asked the second.
+
+    Measured when added: zero unknown keys across every existing preset override
+    and every group defaultCols, so this fires on real drift, not on noise.
+    """
+    c = contract(db_meta)
+    known = field_config_keys()
+    out = {}
+    for preset, cols in c['columns'].items():
+        bad = [col for col in cols if col not in known]
+        if bad:
+            out[preset] = bad
+    return out
+
+
 def contract(db_meta: dict | None = None) -> dict:
     """The whole contract. Pass kd_scan_presets rows as `db_meta` so preset
     metadata resolves DB-first, the way getPresetMeta() does."""
