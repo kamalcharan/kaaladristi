@@ -86,6 +86,8 @@ export interface LatestEodRow {
   prev_week_close: number | null;
   pct_wtd: number | null;
   breakout_level: number | null;
+  prev_month_close: number | null;
+  pct_mtd: number | null;
 }
 
 /** The equity's master-table row — identity + exchange + industry. */

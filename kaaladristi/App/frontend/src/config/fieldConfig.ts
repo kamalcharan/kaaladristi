@@ -625,6 +625,20 @@ export const ALL_FIELDS: Record<string, FieldConfig> = {
     type: 'pct',
     width: 78,
   },
+  prev_month_close: {
+    key: 'prev_month_close',
+    label: 'Prev Mth Close',
+    tooltip: "Last month's closing price — the reference the month-to-date move is measured from. Gap-safe: for a stock that did not trade last month this is its last available close.",
+    type: 'price',
+    width: 100,
+  },
+  pct_mtd: {
+    key: 'pct_mtd',
+    label: '% MTD',
+    tooltip: 'Month-to-date change vs last month\u2019s close. Observational: it states how far this month has travelled, not where it is heading.',
+    type: 'pct',
+    width: 78,
+  },
   pct_from_breakout: {
     key: 'pct_from_breakout',
     label: '% Above',

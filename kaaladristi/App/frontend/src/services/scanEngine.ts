@@ -42,6 +42,7 @@ export const SCAN_PRESETS: ScanDefinition[] = [
   { id: 'conviction_flow',      name: 'Conviction Flow',       description: 'Stocks where 5-day delivery value is outpacing the 22-day norm',                          limit: 50,  universe: 'NSE_ONLY', category: 'flow',          category_label: 'Flow',          category_color: '#3b82f6', category_sort: 3, is_default_tab: true,  timeframe: 'daily', vani_rule: 'is_vani_surge_or_breakout' },
   { id: 'breakout_surge',       name: 'Breakout Surge',        description: 'NSE stocks closing above their 20-day high on a green day — ranked by Score 5D',        limit: 500, universe: 'NSE_ONLY', category: 'price_action',  category_label: 'Price Action',  category_color: '#f59e0b', category_sort: 1, is_default_tab: true,  timeframe: 'daily', vani_rule: 'is_vani_surge_or_breakout' },
   { id: 'weekly_movers',        name: 'Weekly Movers',         description: 'NSE stocks trading above last week\u2019s close \u2014 ranked by week-to-date gain', limit: 500, universe: 'NSE_ONLY', category: 'price_action',  category_label: 'Price Action',  category_color: '#f59e0b', category_sort: 1, is_default_tab: false, timeframe: 'daily', vani_rule: 'is_vani_surge_or_breakout' },
+  { id: 'monthly_movers',       name: 'Monthly Movers',        description: 'NSE stocks trading above last month\u2019s close \u2014 ranked by month-to-date gain', limit: 500, universe: 'NSE_ONLY', category: 'price_action',  category_label: 'Price Action',  category_color: '#f59e0b', category_sort: 1, is_default_tab: false, timeframe: 'daily', vani_rule: 'is_vani_surge_or_breakout' },
   { id: 'volume_drive',         name: 'Volume Drive',          description: 'Stocks printing a volume-drive or accumulation bar — ranked by delivery conviction',                                limit: 60,  universe: 'NSE_BSE',  category: 'flow',          category_label: 'Flow',          category_color: '#3b82f6', category_sort: 3, is_default_tab: false, timeframe: 'daily', vani_rule: 'svd_delivery_conviction' },
   { id: 'flower_pot_burst',     name: 'Flower Pot Burst',      description: 'Stocks coiling in tight compression — dying volume, contracting range — plus the rare session when a coil releases with an explosive volume-and-range expansion',  limit: 60,  universe: 'NSE_ONLY', category: 'price_action',  category_label: 'Price Action',  category_color: '#f59e0b', category_sort: 1, is_default_tab: false, timeframe: 'daily', vani_rule: null },
   { id: 'stage_2_leaders',      name: 'Stage 2 Leaders',       description: 'Stocks in confirmed Weinstein Stage 2 — SMA200 rising, proper 52-week position',          limit: 500, universe: 'NSE_ONLY', category: 'stage_analysis', category_label: 'Stage Analysis', category_color: '#22c55e', category_sort: 2, is_default_tab: false, timeframe: 'daily', vani_rule: 'is_vani_s2' },
@@ -357,15 +358,21 @@ async function fetchBreakoutSurge(exchangeFilter: ExchangeFilter): Promise<ScanS
   return results.slice(0, resultLimit);
 }
 
-/** Scan: Weekly Movers (WTD) — stocks trading above LAST WEEK'S CLOSE.
+/** Scan: Period Movers — stocks trading above the previous PERIOD'S CLOSE.
  *
- *  Reverse-engineered from the owner's weekly export (2026-08-24) and verified
- *  against it exactly: its "Breakout" column is the previous week's close and
- *  its "% from Breakout" is a week-to-date return, NOT a rolling-high breakout.
- *  See docs/claude/price-action-matrix-poa.md section 3a for the evidence.
+ *  Backs BOTH weekly_movers (week-to-date) and monthly_movers (month-to-date).
+ *  One implementation, parameterised on the reference/pct column pair, because
+ *  the two differ only in which precomputed columns they filter and rank on —
+ *  duplicating ~150 lines to change two identifiers is how the two drift.
  *
- *  prev_week_close / pct_wtd are DB-precomputed (migration 183) by
- *  compute_rolling_range(). That is what keeps this a DIRECT query: PostgREST
+ *  Both were reverse-engineered from the owner's own exports (2026-08-24) and
+ *  verified against them symbol for symbol: the "Breakout" column is the
+ *  previous week's / month's CLOSE and "% from Breakout" is a period-to-date
+ *  return, NOT a rolling-high breakout. See
+ *  docs/claude/price-action-matrix-poa.md sections 3a and 3b.
+ *
+ *  The reference columns are DB-precomputed (migrations 183 / 185) by
+ *  compute_rolling_range(). That is what keeps these DIRECT queries: PostgREST
  *  filters compare a column to a LITERAL only, so `close > prev_week_close`
  *  is unexpressible — precomputing collapses it to `pct_wtd > 0`, exactly as
  *  breakout_surge uses pct_from_breakout.
@@ -375,7 +382,11 @@ async function fetchBreakoutSurge(exchangeFilter: ExchangeFilter): Promise<ScanS
  *  doctrine as Breakout Surge, whose Rs 10,000 Cr gate became the MCap filter
  *  in the filter bar. Ranked by week-to-date gain, the screener's own metric.
  */
-async function fetchWeeklyMovers(exchangeFilter: ExchangeFilter): Promise<ScanStock[]> {
+async function fetchPeriodMovers(
+  presetId: 'weekly_movers' | 'monthly_movers',
+  pctCol: 'pct_wtd' | 'pct_mtd',
+  exchangeFilter: ExchangeFilter,
+): Promise<ScanStock[]> {
   const completedDates = await fetchRecentDates(1);
   const latestDate: string | null = completedDates[0] ?? null;
   if (!latestDate) return [];
@@ -393,12 +404,12 @@ async function fetchWeeklyMovers(exchangeFilter: ExchangeFilter): Promise<ScanSt
       'dot_svd', 'dot_sbd', 'dot_syd', 'stage',
       'score_5d', 'score_22d', 'ret_5d', 'ret_22d', 'ret_66d',
       'breakout_level', 'pct_from_breakout', 'pct_below_52w_high',
-      'prev_week_close', 'pct_wtd',
+      'prev_week_close', 'pct_wtd', 'prev_month_close', 'pct_mtd',
       'is_vani_surge', 'is_vani_breakout',
       'km_equity_symbols(id,symbol,company_name,exchange,industry,mcap_cr,isin)',
     ].join(','))
     .eq('trade_date', latestDate)
-    .gt('pct_wtd', 0)
+    .gt(pctCol, 0)
     .gte('close', 50)
     .limit(2000)
     .execute();
@@ -409,13 +420,13 @@ async function fetchWeeklyMovers(exchangeFilter: ExchangeFilter): Promise<ScanSt
   // populated" (house lesson: silent NULL columns). Probe one row to tell.
   if (eodRows.length === 0) {
     const { data: probe } = await from('km_equity_eod')
-      .select('pct_wtd')
+      .select(pctCol)
       .eq('trade_date', latestDate)
-      .gt('pct_wtd', -100000)
+      .gt(pctCol, -100000)
       .limit(1)
       .execute();
     if (!probe || probe.length === 0) {
-      console.warn(`[weekly_movers] pct_wtd is NULL for all rows on ${latestDate} — migration 183 not applied or backfill not run`);
+      console.warn(`[${presetId}] ${pctCol} is NULL for all rows on ${latestDate} — migration not applied or backfill not run`);
     }
     return [];
   }
@@ -423,7 +434,7 @@ async function fetchWeeklyMovers(exchangeFilter: ExchangeFilter): Promise<ScanSt
   // Declared universe FIRST, then ISIN-dedup, then the user's exchange filter.
   // The universe gate is what keeps a preset honest to kd_scan_presets; without
   // it NSE_ONLY leaks BSE-only symbols, which have no delivery data.
-  const declaredUniverse = getPresetMeta('weekly_movers')?.universe;
+  const declaredUniverse = getPresetMeta(presetId)?.universe;
   const isinMap = new Map<string, any>();
   for (const row of eodRows) {
     const sym = row.km_equity_symbols;
@@ -437,8 +448,8 @@ async function fetchWeeklyMovers(exchangeFilter: ExchangeFilter): Promise<ScanSt
     if (!existing || sym.exchange === 'NSE') isinMap.set(isin, row);
   }
 
-  const vaniRule = getPresetMeta('weekly_movers')?.vani_rule;
-  const resultLimit = getPresetMeta('weekly_movers')?.limit ?? 500;
+  const vaniRule = getPresetMeta(presetId)?.vani_rule;
+  const resultLimit = getPresetMeta(presetId)?.limit ?? 500;
 
   const results = Array.from(isinMap.values()).map((row): ScanStock => {
     const sym = row.km_equity_symbols;
@@ -503,15 +514,17 @@ async function fetchWeeklyMovers(exchangeFilter: ExchangeFilter): Promise<ScanSt
       d_pct:                row.pct_chng != null ? Math.round(Number(row.pct_chng) * 100) / 100 : null,
       breakout_level:       row.breakout_level    != null ? Number(row.breakout_level)    : null,
       pct_from_breakout:    row.pct_from_breakout != null ? Number(row.pct_from_breakout) : null,
-      prev_week_close:      row.prev_week_close != null ? Number(row.prev_week_close) : null,
-      pct_wtd:              row.pct_wtd         != null ? Number(row.pct_wtd)         : null,
+      prev_week_close:      row.prev_week_close  != null ? Number(row.prev_week_close)  : null,
+      pct_wtd:              row.pct_wtd          != null ? Number(row.pct_wtd)          : null,
+      prev_month_close:     row.prev_month_close != null ? Number(row.prev_month_close) : null,
+      pct_mtd:              row.pct_mtd          != null ? Number(row.pct_mtd)          : null,
     };
   });
 
-  // Week-to-date gain DESC, NULLS LAST
+  // Period-to-date gain DESC, NULLS LAST
   results.sort((a, b) => {
-    const aw = a.pct_wtd ?? null;
-    const bw = b.pct_wtd ?? null;
+    const aw = (pctCol === 'pct_wtd' ? a.pct_wtd : a.pct_mtd) ?? null;
+    const bw = (pctCol === 'pct_wtd' ? b.pct_wtd : b.pct_mtd) ?? null;
     if (aw == null && bw == null) return 0;
     if (aw == null) return 1;
     if (bw == null) return -1;
@@ -2062,7 +2075,8 @@ export async function executeScan(
   if (scanId === 'vani_exit_watch')      return fetchVaNiExitWatch(exchangeFilter);
   // breakout_surge_daily merged into breakout_surge (kept as alias for stale links)
   if (scanId === 'breakout_surge' || scanId === 'breakout_surge_daily') return fetchBreakoutSurge(exchangeFilter);
-  if (scanId === 'weekly_movers')        return fetchWeeklyMovers(exchangeFilter);
+  if (scanId === 'weekly_movers')        return fetchPeriodMovers('weekly_movers', 'pct_wtd', exchangeFilter);
+  if (scanId === 'monthly_movers')       return fetchPeriodMovers('monthly_movers', 'pct_mtd', exchangeFilter);
 
   // The 6 daily bundle presets read from km_scan_results (Phase 3). The old
   // client-side bundle path was deleted in the follow-up cleanup — a matview

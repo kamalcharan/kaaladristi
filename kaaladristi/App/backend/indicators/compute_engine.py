@@ -328,6 +328,19 @@ def compute_rolling_range(df: pd.DataFrame) -> dict:
     )
     pct_wtd = pct_wtd.where(pct_wtd.abs() < 1e8)
 
+    # ── Month-to-date: reference = last close before this month's 1st ─────
+    # Same construction as the weekly block, one bucket wider. shift(1) over
+    # the months PRESENT keeps it gap-safe for suspended symbols.
+    _mo              = df['trade_date'].dt.to_period('M')
+    _last_by_month   = df.groupby(_mo)['close'].last()
+    prev_month_close = _mo.map(_last_by_month.shift(1)).astype(float).round(2)
+    pct_mtd = (
+        ((close - prev_month_close) / prev_month_close * 100)
+        .where(prev_month_close > 0)
+        .round(2)
+    )
+    pct_mtd = pct_mtd.where(pct_mtd.abs() < 1e8)
+
     # ── pct_below_52w_high ────────────────────────────────────────────────
     pct_below_52w_high = ((w52_high - close) / w52_high * 100).where(w52_high > 0).round(2)
 
@@ -359,6 +372,8 @@ def compute_rolling_range(df: pd.DataFrame) -> dict:
         'pct_from_breakout':   pct_from_breakout,
         'prev_week_close':     prev_week_close,
         'pct_wtd':             pct_wtd,
+        'prev_month_close':    prev_month_close,
+        'pct_mtd':             pct_mtd,
         'pct_below_52w_high':  pct_below_52w_high,
         'deliv_value_cr':      deliv_value_cr,
     }
@@ -769,6 +784,7 @@ ROLLING_COLUMNS = [
     'breakout_level', 'pct_from_breakout', 'pct_below_52w_high',
     'deliv_value_cr',
     'prev_week_close', 'pct_wtd',
+    'prev_month_close', 'pct_mtd',
 ]
 
 
@@ -925,7 +941,9 @@ def _flush_rolling_batch(conn, batch: list):
           pct_below_52w_high  = v.pct_below_52w_high,
           deliv_value_cr      = v.deliv_value_cr,
           prev_week_close     = v.prev_week_close,
-          pct_wtd             = v.pct_wtd
+          pct_wtd             = v.pct_wtd,
+          prev_month_close    = v.prev_month_close,
+          pct_mtd             = v.pct_mtd
         FROM (VALUES %s) AS v(
           id, w52_high, w52_low, lifetime_high,
           d30_pct_chng, d365_pct_chng,
@@ -934,7 +952,8 @@ def _flush_rolling_batch(conn, batch: list):
           surge_22d, score_5d, score_22d,
           ret_5d, ret_22d, ret_66d,
           breakout_level, pct_from_breakout, pct_below_52w_high,
-          deliv_value_cr, prev_week_close, pct_wtd
+          deliv_value_cr, prev_week_close, pct_wtd,
+          prev_month_close, pct_mtd
         )
         WHERE e.id = v.id::int
     """
@@ -949,6 +968,7 @@ def _flush_rolling_batch(conn, batch: list):
             r['breakout_level'], r['pct_from_breakout'], r['pct_below_52w_high'],
             r['deliv_value_cr'],
             r['prev_week_close'], r['pct_wtd'],
+            r['prev_month_close'], r['pct_mtd'],
         )
         for r in batch
     ]

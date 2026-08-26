@@ -558,6 +558,9 @@ export interface ScanStock {
   // Weekly Movers (WTD) computed fields (migration 183; null for other scans)
   prev_week_close?: number | null;
   pct_wtd?: number | null;
+  // Monthly Movers (MTD) computed fields (migration 185)
+  prev_month_close?: number | null;
+  pct_mtd?: number | null;
   // Breakout Surge Daily — DB score/pct columns (migration 111)
   score_5d?: number | null;
   score_22d?: number | null;

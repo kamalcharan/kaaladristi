@@ -23,6 +23,7 @@ import { stage3WatchAdapter, stage4LeadersAdapter, vaniExitWatchAdapter } from '
 import { flowerPotBurstAdapter } from './flowerPot';
 import { wakingGiantsAdapter, wgAscentAdapter, wgStirringAdapter } from './wakingGiants';
 import { weeklyMoversAdapter } from './weeklyMovers';
+import { monthlyMoversAdapter } from './monthlyMovers';
 
 SETUP_ADAPTERS['stage_2_leaders']      = stage2LeadersAdapter;
 SETUP_ADAPTERS['breakout_surge']       = breakoutSurgeAdapter;
@@ -40,6 +41,7 @@ SETUP_ADAPTERS['vani_exit_watch']      = vaniExitWatchAdapter;
 SETUP_ADAPTERS['flower_pot_burst']     = flowerPotBurstAdapter;
 SETUP_ADAPTERS['waking_giants']        = wakingGiantsAdapter;
 SETUP_ADAPTERS['weekly_movers']         = weeklyMoversAdapter;
+SETUP_ADAPTERS['monthly_movers']        = monthlyMoversAdapter;
 SETUP_ADAPTERS['wg_ascent']            = wgAscentAdapter;
 SETUP_ADAPTERS['wg_stirring']          = wgStirringAdapter;
 
