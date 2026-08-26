@@ -54,10 +54,17 @@ STATEMENT_TIMEOUT_MS = 60 * 60 * 1000
 def get_conn():
     if not DATABASE_URL:
         raise RuntimeError('DATABASE_URL / DB_PRIMARY not set in .env')
+    # keepalives so a dropped socket ERRORS instead of hanging forever, and a
+    # bounded work_mem so one batch cannot push the backend into the OOM killer.
     return psycopg2.connect(
         DATABASE_URL,
         connect_timeout=30,
-        options=f"-c statement_timeout={STATEMENT_TIMEOUT_MS}",
+        keepalives=1,
+        keepalives_idle=30,
+        keepalives_interval=10,
+        keepalives_count=5,
+        options=(f"-c statement_timeout={STATEMENT_TIMEOUT_MS} "
+                 f"-c work_mem=64MB"),
     )
 
 
@@ -72,8 +79,15 @@ WITH eod AS (
     -- value_cr is true Crores on both exchanges (normalised in parser.py), so the
     -- delivery-value formula needs no exchange-aware rescaling and no join.
     -- Run only against data already rescaled by the value_cr backfill migration.
+    --
+    -- SCOPED BY SYMBOL BATCH, not by date. Every window below is
+    -- PARTITION BY equity_id, so a batch of symbols carries its own COMPLETE
+    -- history and no window changes meaning -- including lifetime_high, which is
+    -- an expanding max, and w52_high, which reaches back 252 bars. Date-chunking
+    -- would silently corrupt exactly those two.
     SELECT e.*
     FROM km_equity_eod e
+    WHERE e.equity_id = ANY(%s)
 ),
 base AS (
     SELECT
@@ -263,40 +277,59 @@ def build_sql(from_date: str | None, to_date: str | None):
         date_filter = ""   # full history
 
     sql = _SQL_TEMPLATE.replace("{date_filter}", date_filter)
-    return sql, params
+    return sql, params   # caller prepends the equity_id batch
 
 
-def run_update(from_date: str | None, to_date: str | None):
-    sql, params = build_sql(from_date, to_date)
+def run_update(from_date: str | None, to_date: str | None, batch_size: int = 250):
+    """Symbol-batched window UPDATE.
+
+    The original single-pass statement sorted all ~16.5M rows and swept every
+    window in one transaction. On the live VPS that backend was OOM-KILLED
+    ("server closed the connection unexpectedly", postmaster uptime unaffected,
+    zero rows written). Batching by SYMBOL keeps each statement small while
+    leaving every window mathematically identical, because all of them are
+    PARTITION BY equity_id.
+    """
+    sql, date_params = build_sql(from_date, to_date)
 
     range_desc = "full history"
     if from_date and to_date:
-        range_desc = f"{from_date} → {to_date}"
+        range_desc = f"{from_date} -> {to_date}"
     elif from_date:
-        range_desc = f"{from_date} → latest"
+        range_desc = f"{from_date} -> latest"
     elif to_date:
-        range_desc = f"earliest → {to_date}"
+        range_desc = f"earliest -> {to_date}"
 
-    print(f"\n[update] Single-pass window-function UPDATE — {range_desc}")
-    print("  PostgreSQL will sort all equity history once, then sweep all windows.")
-    print("  Expected: 10-30 min for full history, <2 min for a tight date range.")
-    print("  Progress not printed during the query — please wait...\n")
-
-    t0 = time.time()
     conn = get_conn()
     try:
         with conn.cursor() as cur:
-            cur.execute(sql, params)
-            updated = cur.rowcount
-        conn.commit()
-        elapsed = time.time() - t0
-        print(f"  Done in {elapsed:.0f}s — {updated:,} rows updated.")
+            cur.execute("SELECT DISTINCT equity_id FROM km_equity_eod ORDER BY equity_id")
+            ids = [r[0] for r in cur.fetchall()]
+        total_syms = len(ids)
+        batches = (total_syms + batch_size - 1) // batch_size
+        print(f"\n[update] Symbol-batched window UPDATE — {range_desc}")
+        print(f"  {total_syms:,} symbols in {batches} batches of {batch_size}.")
+        print(f"  Each batch carries each symbol's FULL history, so w52_high and")
+        print(f"  lifetime_high stay exact. Committed per batch.\n")
+
+        t0 = time.time()
+        updated = 0
+        for i in range(0, total_syms, batch_size):
+            chunk = ids[i:i + batch_size]
+            with conn.cursor() as cur:
+                cur.execute(sql, [chunk] + date_params)
+                n = cur.rowcount
+            conn.commit()
+            updated += n
+            done = min(i + batch_size, total_syms)
+            print(f"  [{done:>5}/{total_syms}] {n:>9,} rows   "
+                  f"(running {updated:>11,} · {time.time()-t0:.0f}s)", flush=True)
+
+        print(f"\n  Done in {time.time()-t0:.0f}s — {updated:,} rows updated.")
         return updated
-    except Exception as e:
-        conn.rollback()
-        raise
     finally:
         conn.close()
+
 
 
 def run_verify(target_date: str | None):
@@ -357,13 +390,15 @@ def main():
                         help="Single date (verify only)")
     parser.add_argument("--verify", action="store_true",
                         help="Only verify coverage — no update")
+    parser.add_argument("--batch-size", type=int, default=250,
+                        help="Symbols per batch (default 250; lower it if memory is tight)")
     args = parser.parse_args()
 
     if args.verify:
         run_verify(args.date or args.from_date)
         return
 
-    run_update(args.from_date, args.to_date)
+    run_update(args.from_date, args.to_date, args.batch_size)
 
     # Auto-verify after update using the to_date (or 'all') as sample
     run_verify(args.to_date or args.from_date)
