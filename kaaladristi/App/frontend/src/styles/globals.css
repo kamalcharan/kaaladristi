@@ -125,6 +125,16 @@
   --story-bigmoney: #f5a623;   --story-magicrs: #10b981;   --story-flow: #38bdf8;
   --story-stage: #a855f7;      --story-scan: #06b6d4;      --story-conviction: #eab308;
   --story-fpb: #fb923c;        --story-sector: #22c55e;    --story-rsbreakaway: #ec4899;
+  /* Story View — editorial cycle-band tints. Used ONLY by the
+     ScannerArrival chart to shade the three regime bands (bull /
+     bear / neutral) behind the candles. Kept as tokens so the
+     literal-ratchet check doesn't have to allowlist rgba() colors. */
+  --story-band-bull: rgba(120, 168, 132, 0.09);
+  --story-band-bear: rgba(200, 100, 84, 0.06);
+  --story-band-neut: rgba(158, 138, 82, 0.055);
+  --story-band-text-bull: rgba(140, 190, 152, 0.30);
+  --story-band-text-bear: rgba(210, 130, 115, 0.30);
+  --story-band-text-neut: rgba(201, 168, 76, 0.22);
 }
 
 /* Rule-tag identity hues. Referenced by var() from constants/ruleTagColors so

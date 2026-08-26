@@ -1,11 +1,16 @@
 /**
- * Scan Engine — 6 Preset Market Scans
- * ====================================
- * Takes broad market data and applies filter/rank logic per scan.
- * All computation in TypeScript — no backend RPC needed for MVP.
+ * Scan Engine — dispatcher for the /scan tabs and Workspace VaNi Highlights.
+ *
+ * The six matview-backed presets (power_buy, power_sell, smart_money,
+ * quiet_accumulation, distribution_warning, conviction_flow) read pre-ranked
+ * rows from km_scan_results (see fetchFromScanMatview + migration 170). Direct-
+ * query presets (Stage 2/3/4 family, Breakout Surge, Volume Drive, Vani Exit
+ * Watch) each query PostgREST for their own row set. Flower Pot Burst reads
+ * km_scan_results too, with a deeper on-demand fallback path for its own
+ * computation when the matview isn't populated.
  *
  * Vocabulary (KaalaDristi):
- *   "Smart Money"           — sniper_inst
+ *   "Smart Money"            — sniper_inst
  *   "Accumulation Signature" — SBD
  *   "Conditions Favorable"   — scan match
  */
@@ -17,7 +22,6 @@ import type {
   IndustryEodRow,
   EquitySymbolRow,
   EquityEodSnapshot,
-  VaniOpportunityConfig,
 } from '@/types';
 
 export type ScanTimeframe = 'daily' | 'weekly' | 'monthly';
@@ -29,21 +33,45 @@ const PIPELINE_URL = (import.meta.env.VITE_PIPELINE_API_URL as string) || '';
 // Minimal placeholder used only as React Query placeholderData during initial load.
 // universe, category, category_label, category_color, category_sort, timeframe
 // are NOT included here — they come from DB only via fetchScanPresets().
+// Category accent colours. These MIRROR kd_scan_presets.category_color and must
+// stay byte-identical to the DB values — the array below is the offline fallback
+// for fetchScanPresets(). Named here rather than repeated inline so the values
+// live in one place and the theme ratchet counts one literal per category
+// instead of one per preset (npm run check:theme, which runs inside the build).
+const CAT_PRICE_ACTION = '#f59e0b';
+const CAT_FLOW         = '#3b82f6';
+const CAT_MARKET       = '#8b5cf6';
+const CAT_STAGE        = '#22c55e';
+
 export const SCAN_PRESETS: ScanDefinition[] = [
-  { id: 'power_buy',            name: 'Strength Confluence',   description: 'Stocks where multiple positive conditions converge in leading or rotating-in industries', limit: 25,  universe: 'NSE_BSE',  category: 'flow',          category_label: 'Flow',          category_color: '#3b82f6', category_sort: 3, is_default_tab: false, timeframe: 'daily', vani_rule: 'is_vani_s2' },
+  { id: 'power_buy',            name: 'Strength Confluence',   description: 'Stocks where multiple positive conditions converge in leading or rotating-in industries', limit: 25,  universe: 'NSE_BSE',  category: 'flow',          category_label: 'Flow',          category_color: CAT_FLOW, category_sort: 3, is_default_tab: false, timeframe: 'daily', vani_rule: 'is_vani_s2' },
   { id: 'power_sell',           name: 'Weakness Confluence',   description: 'Stocks where multiple weakening conditions converge in lagging or rotating-out industries', limit: 25,  universe: 'NSE_BSE',  category: '',              category_label: '',              category_color: '',        category_sort: 99, is_default_tab: false, timeframe: 'daily', vani_rule: 'is_vani_distrib_and_weakness' },
-  { id: 'smart_money',          name: 'Smart Money Loading',   description: 'Industries with broad rising flow and growing institutional presence',                      limit: 25,  universe: 'NSE_ONLY', category: 'market',        category_label: 'Market',        category_color: '#8b5cf6', category_sort: 4, is_default_tab: true,  timeframe: 'daily', vani_rule: 'is_vani_smart' },
-  { id: 'quiet_accumulation',   name: 'Quiet Rising Flow',     description: 'Under-the-radar industries where smart money is quietly building positions',               limit: 25,  universe: 'NSE_ONLY', category: 'market',        category_label: 'Market',        category_color: '#8b5cf6', category_sort: 4, is_default_tab: false, timeframe: 'daily', vani_rule: 'is_vani_s2' },
-  { id: 'distribution_warning', name: 'Falling Flow Warnings', description: 'Previously strong stocks showing signs of institutional exit',                             limit: 25,  universe: 'NSE_BSE',  category: 'market',        category_label: 'Market',        category_color: '#8b5cf6', category_sort: 4, is_default_tab: false, timeframe: 'daily', vani_rule: 'is_vani_distrib_and_weakness' },
-  { id: 'conviction_flow',      name: 'Conviction Flow',       description: 'Stocks where 5-day delivery value is outpacing the 22-day norm',                          limit: 50,  universe: 'NSE_ONLY', category: 'flow',          category_label: 'Flow',          category_color: '#3b82f6', category_sort: 3, is_default_tab: true,  timeframe: 'daily', vani_rule: 'is_vani_surge_or_breakout' },
-  { id: 'breakout_surge',       name: 'Breakout Surge',        description: 'NSE stocks closing above their 20-day high on a green day — ranked by Score 5D',        limit: 500, universe: 'NSE_ONLY', category: 'price_action',  category_label: 'Price Action',  category_color: '#f59e0b', category_sort: 1, is_default_tab: true,  timeframe: 'daily', vani_rule: 'is_vani_surge_or_breakout' },
-  { id: 'volume_drive',         name: 'Volume Drive',          description: 'Stocks printing a volume-drive or accumulation bar — ranked by delivery conviction',                                limit: 60,  universe: 'NSE_BSE',  category: 'flow',          category_label: 'Flow',          category_color: '#3b82f6', category_sort: 3, is_default_tab: false, timeframe: 'daily', vani_rule: 'svd_delivery_conviction' },
-  { id: 'flower_pot_burst',     name: 'Flower Pot Burst',      description: 'Stocks coiling in tight compression — dying volume, contracting range — plus the rare session when a coil releases with an explosive volume-and-range expansion',  limit: 60,  universe: 'NSE_ONLY', category: 'price_action',  category_label: 'Price Action',  category_color: '#f59e0b', category_sort: 1, is_default_tab: false, timeframe: 'daily', vani_rule: null },
-  { id: 'stage_2_leaders',      name: 'Stage 2 Leaders',       description: 'Stocks in confirmed Weinstein Stage 2 — SMA200 rising, proper 52-week position',          limit: 500, universe: 'NSE_ONLY', category: 'stage_analysis', category_label: 'Stage Analysis', category_color: '#22c55e', category_sort: 2, is_default_tab: false, timeframe: 'daily', vani_rule: 'is_vani_s2' },
-  { id: 'stage_2_watch',        name: 'Stage 2 Watch',         description: 'Stocks approaching Stage 2 — MA stacking confirmed, SMA200 not yet rising. Watch for Stage 2 breakout.', limit: 100, universe: 'NSE_ONLY', category: 'stage_analysis', category_label: 'Stage Analysis', category_color: '#22c55e', category_sort: 2, is_default_tab: true, timeframe: 'daily', vani_rule: 'is_vani_s2' },
-  { id: 'stage_4_leaders',      name: 'Stage 4 Leaders',       description: 'Confirmed downtrend — death cross, below both MAs',                                        limit: 200, universe: 'NSE_ONLY', category: 'stage_analysis', category_label: 'Stage Analysis', category_color: '#22c55e', category_sort: 2, is_default_tab: false, timeframe: 'daily', vani_rule: 'is_vani_weakness' },
-  { id: 'stage_3_watch',        name: 'Stage 3 Watch',         description: 'Entering weakness — SMA50 converging toward SMA200',                                       limit: 100, universe: 'NSE_ONLY', category: 'stage_analysis', category_label: 'Stage Analysis', category_color: '#22c55e', category_sort: 2, is_default_tab: false, timeframe: 'daily', vani_rule: 'is_vani_weakness' },
-  { id: 'vani_exit_watch',      name: 'VaNi Weakness Watch',   description: 'Highest conviction weakness — lowest RS, death cross confirmed',                            limit: 25,  universe: 'NSE_ONLY', category: 'stage_analysis', category_label: 'Stage Analysis', category_color: '#22c55e', category_sort: 2, is_default_tab: false, timeframe: 'daily', vani_rule: 'always_true' },
+  { id: 'smart_money',          name: 'Smart Money Loading',   description: 'Industries with broad rising flow and growing institutional presence',                      limit: 25,  universe: 'NSE_ONLY', category: 'market',        category_label: 'Market',        category_color: CAT_MARKET, category_sort: 4, is_default_tab: true,  timeframe: 'daily', vani_rule: 'is_vani_smart' },
+  { id: 'quiet_accumulation',   name: 'Quiet Rising Flow',     description: 'Under-the-radar industries where smart money is quietly building positions',               limit: 25,  universe: 'NSE_ONLY', category: 'market',        category_label: 'Market',        category_color: CAT_MARKET, category_sort: 4, is_default_tab: false, timeframe: 'daily', vani_rule: 'is_vani_s2' },
+  { id: 'distribution_warning', name: 'Falling Flow Warnings', description: 'Previously strong stocks showing signs of institutional exit',                             limit: 25,  universe: 'NSE_BSE',  category: 'market',        category_label: 'Market',        category_color: CAT_MARKET, category_sort: 4, is_default_tab: false, timeframe: 'daily', vani_rule: 'is_vani_distrib_and_weakness' },
+  { id: 'conviction_flow',      name: 'Conviction Flow',       description: 'Stocks where 5-day delivery value is outpacing the 22-day norm',                          limit: 50,  universe: 'NSE_ONLY', category: 'flow',          category_label: 'Flow',          category_color: CAT_FLOW, category_sort: 3, is_default_tab: true,  timeframe: 'daily', vani_rule: 'is_vani_surge_or_breakout' },
+  { id: 'breakout_surge',       name: 'Breakout Surge',        description: 'NSE stocks closing above their 20-day high on a green day — ranked by Score 5D',        limit: 500, universe: 'NSE_ONLY', category: 'price_action',  category_label: 'Price Action',  category_color: CAT_PRICE_ACTION, category_sort: 1, is_default_tab: true,  timeframe: 'daily', vani_rule: 'is_vani_surge_or_breakout' },
+  { id: 'weekly_movers',        name: 'Weekly Movers',         description: 'NSE stocks trading above last week\u2019s close \u2014 ranked by week-to-date gain', limit: 500, universe: 'NSE_ONLY', category: 'price_action',  category_label: 'Price Action',  category_color: CAT_PRICE_ACTION, category_sort: 1, is_default_tab: false, timeframe: 'daily', vani_rule: 'is_vani_surge_or_breakout' },
+  { id: 'monthly_movers',       name: 'Monthly Movers',        description: 'NSE stocks trading above last month\u2019s close \u2014 ranked by month-to-date gain', limit: 500, universe: 'NSE_ONLY', category: 'price_action',  category_label: 'Price Action',  category_color: CAT_PRICE_ACTION, category_sort: 1, is_default_tab: false, timeframe: 'daily', vani_rule: 'is_vani_surge_or_breakout' },
+  // ID stays 'breakdown_watch' on purpose (migration 189): IDs are addresses
+  // — ?setup= URLs, the adapter registry key, PRESET_COL_OVERRIDES — and the
+  // display name is the only thing the owner reads. Renaming the ID to match
+  // would break shared links for nothing.
+  { id: 'breakdown_watch',      name: 'Breakdown Surge',       description: 'NSE stocks closing below their 20-day low on a red day \u2014 ranked by depth below the level', limit: 500, universe: 'NSE_ONLY', category: 'price_action',  category_label: 'Price Action',  category_color: CAT_PRICE_ACTION, category_sort: 1, is_default_tab: false, timeframe: 'daily', vani_rule: 'is_vani_weakness' },
+  { id: 'weekly_decliners',     name: 'Weekly Decliners',      description: 'NSE stocks trading below last week\u2019s close \u2014 ranked by week-to-date loss', limit: 500, universe: 'NSE_ONLY', category: 'price_action',  category_label: 'Price Action',  category_color: CAT_PRICE_ACTION, category_sort: 1, is_default_tab: false, timeframe: 'daily', vani_rule: 'is_vani_weakness' },
+  { id: 'monthly_decliners',    name: 'Monthly Decliners',     description: 'NSE stocks trading below last month\u2019s close \u2014 ranked by month-to-date loss', limit: 500, universe: 'NSE_ONLY', category: 'price_action',  category_label: 'Price Action',  category_color: CAT_PRICE_ACTION, category_sort: 1, is_default_tab: false, timeframe: 'daily', vani_rule: 'is_vani_weakness' },
+  { id: 'volume_drive',         name: 'Volume Drive',          description: 'Stocks printing a volume-drive or accumulation bar — ranked by delivery conviction',                                limit: 60,  universe: 'NSE_BSE',  category: 'flow',          category_label: 'Flow',          category_color: CAT_FLOW, category_sort: 3, is_default_tab: false, timeframe: 'daily', vani_rule: 'svd_delivery_conviction' },
+  { id: 'flower_pot_burst',     name: 'Flower Pot Burst',      description: 'Stocks coiling in tight compression — dying volume, contracting range — plus the rare session when a coil releases with an explosive volume-and-range expansion',  limit: 60,  universe: 'NSE_ONLY', category: 'price_action',  category_label: 'Price Action',  category_color: CAT_PRICE_ACTION, category_sort: 1, is_default_tab: false, timeframe: 'daily', vani_rule: null },
+  { id: 'stage_2_leaders',      name: 'Stage 2 Leaders',       description: 'Stocks in confirmed Weinstein Stage 2 — SMA200 rising, proper 52-week position',          limit: 500, universe: 'NSE_ONLY', category: 'stage_analysis', category_label: 'Stage Analysis', category_color: CAT_STAGE, category_sort: 2, is_default_tab: false, timeframe: 'daily', vani_rule: 'is_vani_s2' },
+  { id: 'stage_2_watch',        name: 'Stage 2 Watch',         description: 'Stocks approaching Stage 2 — MA stacking confirmed, SMA200 not yet rising. Watch for Stage 2 breakout.', limit: 100, universe: 'NSE_ONLY', category: 'stage_analysis', category_label: 'Stage Analysis', category_color: CAT_STAGE, category_sort: 2, is_default_tab: true, timeframe: 'daily', vani_rule: 'is_vani_smart' },
+  { id: 'stage_4_leaders',      name: 'Stage 4 Leaders',       description: 'Confirmed downtrend — death cross, below both MAs',                                        limit: 200, universe: 'NSE_ONLY', category: 'stage_analysis', category_label: 'Stage Analysis', category_color: CAT_STAGE, category_sort: 2, is_default_tab: false, timeframe: 'daily', vani_rule: 'is_vani_weakness' },
+  { id: 'stage_3_watch',        name: 'Stage 3 Watch',         description: 'Entering weakness — SMA50 converging toward SMA200',                                       limit: 100, universe: 'NSE_ONLY', category: 'stage_analysis', category_label: 'Stage Analysis', category_color: CAT_STAGE, category_sort: 2, is_default_tab: false, timeframe: 'daily', vani_rule: 'is_vani_weakness' },
+  { id: 'vani_exit_watch',      name: 'VaNi Weakness Watch',   description: 'Highest conviction weakness — lowest RS, death cross confirmed',                            limit: 25,  universe: 'NSE_ONLY', category: 'stage_analysis', category_label: 'Stage Analysis', category_color: CAT_STAGE, category_sort: 2, is_default_tab: false, timeframe: 'daily', vani_rule: 'always_true' },
+  // Placeholder rows only — real metadata (incl. category color) comes from
+  // kd_scan_presets (migration 177); empty color keeps the literal ratchet flat.
+  { id: 'waking_giants',        name: 'Waking Giants',         description: 'Stocks breaking out of a multi-year hibernation at the Golden Line — the first sessions of a structural transition', limit: 60, universe: 'NSE_ONLY', category: 'discovery', category_label: 'Discovery', category_color: '', category_sort: 5, is_default_tab: false, timeframe: 'daily', vani_rule: null },
+  { id: 'wg_ascent',            name: 'Ascent',                description: 'Confirmed multi-year journeys in progress — aligned across the daily, weekly and monthly clocks',                     limit: 60, universe: 'NSE_ONLY', category: 'discovery', category_label: 'Discovery', category_color: '', category_sort: 5, is_default_tab: false, timeframe: 'daily', vani_rule: null },
+  { id: 'wg_stirring',          name: 'Stirring',              description: 'Quiet delivery-backed building inside a multi-year hibernation — no breakout yet',                                    limit: 40, universe: 'NSE_ONLY', category: 'discovery', category_label: 'Discovery', category_color: '', category_sort: 5, is_default_tab: false, timeframe: 'daily', vani_rule: null },
 ];
 
 // ── Preset metadata — DB is the source of truth ────────────────
@@ -59,128 +87,30 @@ export function getPresetMeta(id: string): ScanDefinition | undefined {
   return _dbPresetMeta.get(id) ?? SCAN_PRESETS.find((p) => p.id === id);
 }
 
-// ── Data Loading ───────────────────────────────────────────────
+// ── Liquidity floor — DEFINED, NOT APPLIED (2026-08-25) ──────────────────
+// The problem it was meant to solve is real: no preset had a floor, and
+// Strength Confluence rank 3 was a Rs 2.46 stock trading Rs 0.01 Cr/day.
+// conviction_flow was the one clean scan because its own gate already
+// carried avg_amt_22d > 1.5.
+//
+// A uniform Rs 1 Cr floor was applied to 8 direct fetchers and 6 matview
+// arms, then reverted (migration 181 removes the matview side) because the
+// cost was measured only afterwards, and it was large — see below. The
+// floor is the right idea at the wrong altitude: it belongs in each
+// scanner's own gate, sized to that scanner, not applied uniformly.
+//
+// Platform liquidity floor, in Rs Cr of 22-session average turnover.
+// NOT currently applied to the direct fetchers. It was added to 8 of them in
+// the 2026-08-25 scanner-integrity work and reverted the same day: measured
+// after the fact, a Rs 1 Cr floor removes 67% of Stage 2 Watch (447 -> 148),
+// 60% of Stage 2 Leaders (1023 -> 414) and 68% of the VaNi-flagged leaders
+// (19 -> 6). That is a product decision that needs those numbers in front of
+// it, not a hygiene gate to slip in. Re-apply per scanner, with the before/
+// after row count recorded for each.
+const MIN_AVG_AMT_22D_CR = 1.0;
 
-interface OppConfig {
-  ema_atr_band: number;
-  reward_min_atr_multiple: number;
-  magic_rs_zones: string[];
-  flow_types: string[];
-  rvol_min: number;
-}
+// ── Utilities ─────────────────────────────────────────────────
 
-const DEFAULT_OPP_CONFIG: OppConfig = {
-  ema_atr_band: 2.5,  // raised from 1.0 — catches trending stocks up to 2.5×ATR above EMA20
-  reward_min_atr_multiple: 0.0,
-  magic_rs_zones: ['Strong Bull', 'Mild Bull'],
-  flow_types: ['FRESH_LONGS', 'SHORT_COVERING'],
-  rvol_min: 0.3,  // lowered — volume scale discontinuity bug suppresses rvol artificially
-};
-
-interface IndexReturn {
-  ret_5d: number | null;
-  ret_22d: number | null;
-  ret_66d: number | null;
-}
-
-// Canonical magic_rs_zone bands the pipeline actually emits (migration 069),
-// ordered bullish→bearish: Strong Bull > Mild Bull > Neutral Bull >
-// Neutral Bear > Mild Bear > Strong Bear. Plain 'Neutral' is a legacy value
-// kept in the DB CHECK constraint but no longer written — retained here so
-// historical rows still validate. This set MUST match the zone keys in
-// constants/signalScale.ts (ZONE_LABELS). Previously this listed only 5 bands
-// and omitted Neutral Bull/Neutral Bear, which blanked ~47% of the universe to
-// null (their real zone was discarded on every scan).
-const VALID_ZONES = new Set([
-  'Strong Bull', 'Mild Bull', 'Neutral Bull',
-  'Neutral', 'Neutral Bear', 'Mild Bear', 'Strong Bear',
-]);
-
-interface ScanDataBundle {
-  industries: IndustryEodRow[];
-  industriesHistory: Map<string, IndustryEodRow[]>; // industry → rows by date desc
-  symbols: Map<number, EquitySymbolRow>;
-  latestEod: Map<number, EquityEodSnapshot>;
-  eodHistory: Map<number, EquityEodSnapshot[]>; // equity_id → rows by date desc
-  latestDate: string | null;
-  oppConfigMap: Map<string, OppConfig>; // presetId → config
-  nifty50Returns: IndexReturn | null;
-  nifty500Returns: IndexReturn | null;
-  timeframe: ScanTimeframe;
-}
-
-const _bundleCache = new Map<ScanTimeframe, { data: ScanDataBundle; fetchedAt: number }>();
-const CACHE_TTL = 3 * 60 * 1000; // 3 min
-
-// Last successfully-confirmed indicator-complete date per timeframe. Used to
-// fail CLOSED (reuse the last known-good bound) when a resolver query itself
-// errors — the alternative (treat "unknown" as "no bound") is exactly the
-// shape of the mid-pipeline blackout bug: an unbounded query during the
-// ingest window picks up indicator-incomplete rows as "latest".
-const _lastConfirmedDate = new Map<ScanTimeframe, string>();
-
-/** Resolve the latest date with a populated indicator column — the signal
- *  that a row is post-compute, not just post-ingest. On any query failure,
- *  falls back to the last confirmed value for this timeframe (never to
- *  "no bound"). Shared by the daily and weekly/monthly resolvers. */
-async function resolveConfirmedLatestDate(
-  table: string, dateCol: string, tf: ScanTimeframe,
-): Promise<string | null> {
-  try {
-    const { data, error } = await from(table)
-      .select(dateCol)
-      .notNull('ema_20')
-      .order(dateCol, { ascending: false })
-      .limit(1)
-      .execute();
-    if (!error) {
-      const d = (data as Record<string, string>[] | null)?.[0]?.[dateCol] ?? null;
-      if (d) {
-        _lastConfirmedDate.set(tf, d);
-        return d;
-      }
-    }
-  } catch {
-    /* fall through to last-known-good below */
-  }
-  return _lastConfirmedDate.get(tf) ?? null;
-}
-let _buildScanStockDebugCount = 0;
-
-// Session-level config cache — presetId → OppConfig, fetched once per page load.
-let _oppConfigCache: Map<string, OppConfig> | null = null;
-
-async function fetchOpportunityConfig(): Promise<Map<string, OppConfig>> {
-  if (_oppConfigCache) return _oppConfigCache;
-  const map = new Map<string, OppConfig>();
-  try {
-    const res = await fetch(`${PIPELINE_URL}/api/vani-opportunity/config`);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const configs = (await res.json()) as VaniOpportunityConfig[];
-    console.log('[scanEngine] raw API configs:', configs.map(c => ({ name: c.config_name, presets: c.applies_to_presets })));
-    for (const cfg of configs) {
-      const p = cfg.parameters;
-      const opp: OppConfig = {
-        ema_atr_band: Number(p.atr_multiplier),
-        reward_min_atr_multiple: Number(p.min_reward_atr_multiple),
-        magic_rs_zones: Array.isArray(p.rs_zones) ? p.rs_zones : DEFAULT_OPP_CONFIG.magic_rs_zones,
-        flow_types: Array.isArray(p.flow_types) ? p.flow_types : DEFAULT_OPP_CONFIG.flow_types,
-        rvol_min: Number(p.min_rvol),
-      };
-      for (const presetId of cfg.applies_to_presets) {
-        map.set(presetId, opp);
-      }
-    }
-    console.log('[scanEngine] oppConfig map keys:', [...map.keys()]);
-  } catch (e) {
-    console.warn('[scanEngine] config fetch failed, using defaults:', e);
-    for (const preset of SCAN_PRESETS) {
-      map.set(preset.id, { ...DEFAULT_OPP_CONFIG });
-    }
-  }
-  _oppConfigCache = map;
-  return map;
-}
 
 // 3b: Fetch trading dates from km_trading_calendar — exchange-aware, exact count
 //
@@ -211,596 +141,6 @@ async function fetchRecentDates(limit: number): Promise<string[]> {
   return rows.map((r) => r.trade_date).sort((a, b) => b.localeCompare(a));
 }
 
-async function loadDailyBundle(): Promise<ScanDataBundle> {
-  const cached = _bundleCache.get('daily');
-  if (cached && Date.now() - cached.fetchedAt < CACHE_TTL) return cached.data;
-
-  // 45 calendar days ≈ 30 sessions. Deepest history consumer is 23 sessions
-  // (fresh_breakout's 20-day-high walk + xAmt's 22-day value window) — returns
-  // and breakout levels come from DB columns now. Was 115 days when ret_66d
-  // was computed client-side; this cut is ~60% of the scanner page's payload.
-  const eodCutoff = new Date(Date.now() - 45 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-  const industryCutoff = new Date(Date.now() - 20 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-  const last10days = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-
-  // Phase 1: fetch active symbols first — needed to filter EOD to active stocks only.
-  // km_equity_eod contains ~8,000 NSE+BSE stocks; without the filter the 175k LIMIT
-  // yields only ~22 rows per stock, making history.length > 66 always fail.
-  const symbolRes = await from('km_equity_symbols')
-    .select('id,symbol,company_name,industry,exchange,isin,is_active,mcap_cr')
-    .is('is_active', 'true')
-    .limit(8000)
-    .execute();
-
-  const activeIds = (symbolRes.data ?? []).map((s: any) => s.id as number);
-
-  // Phase 1b: resolve the latest INDICATOR-complete trading date.
-  //
-  // ⚠ History: this used GROUP BY + HAVING — but PostgREST has no `having`
-  // param, so the request 400'd, the catch returned null, and the bundle ran
-  // with NO upper date bound. During the daily pipeline run, freshly-ingested
-  // rows (prices present, ema_20 still null) became each stock's latest bar,
-  // buildScanStock dropped every ema_20-null row, and ALL bundle scans went
-  // dark for the ingest→indicators window (~the whole run). Root cause of
-  // "scanners show nothing while the pipeline is running".
-  //
-  // The gate must be indicator completion, not row count: prices landing is
-  // not "data ready". compute_all_pending_indicators writes ema_20 in one
-  // transaction per date, so the newest date with any non-null ema_20 flips
-  // atomically at commit — a single cheap, version-proof query. On ANY
-  // resolver failure (not just the specific 400 above) this now fails
-  // CLOSED to the last confirmed date rather than falling through unbounded.
-  const confirmedLatestDate = await resolveConfirmedLatestDate('km_equity_eod', 'trade_date', 'daily');
-
-  // Phase 2: fetch everything else in parallel.
-  // EOD is chunked into batches of 400 IDs to stay within nginx's 8k URL limit.
-  // Upper-bound each chunk with confirmedLatestDate to exclude any partially-ingested rows.
-  const EOD_COLS = 'equity_id,trade_date,open,high,low,close,prev_close,pct_chng,volume,value_cr,rvol,tvol,rsi_14,magic_rs,magic_rs_zone,flow_type,accum_distrib,sniper_inst,sniper_hot,rss_value,rss_spread,sma_150,volume_divergence_flag,ema_20,atr_14,delivery_pct,delivery_qty,avg_amt_5d,avg_amt_22d,delivery_surge_x,w52_high,sma_50,sma_200,w52_low,supertrend_dir,lifetime_high,is_vani_surge,is_vani_breakout,is_vani_distrib,is_vani_weakness,is_vani_smart,is_vani_s2,is_vani_oversold,stage,score_5d,score_22d,pct_5d,pct_22d,pct_66d,avg_amt_66d,surge_22d,ret_5d,ret_22d,ret_66d,breakout_level,pct_from_breakout,pct_below_52w_high,deliv_value_cr';
-  console.log('[loadDailyBundle] EOD_COLS select:', EOD_COLS);
-  const CHUNK = 400;
-  const idChunks: number[][] = [];
-  for (let i = 0; i < activeIds.length; i += CHUNK) idChunks.push(activeIds.slice(i, i + CHUNK));
-
-  const [industryRes, ...rest] = await Promise.all([
-    from('km_industry_eod')
-      .select('*')
-      .gte('trade_date', industryCutoff)
-      .order('trade_date', { ascending: false })
-      .limit(1000)
-      .execute(),
-
-    ...idChunks.map((chunk) => {
-      let q = from('km_equity_eod')
-        .select(EOD_COLS)
-        .in('equity_id', chunk)
-        .gte('trade_date', eodCutoff)
-        .order('trade_date', { ascending: false })
-        .limit(50000);
-      if (confirmedLatestDate) q = (q as any).lte('trade_date', confirmedLatestDate);
-      return (q as any).execute();
-    }),
-
-    from('km_index_symbols').select('id,name').execute(),
-
-    from('km_index_eod')
-      .select('index_id,trade_date,ret_5d,ret_22d,ret_66d')
-      .gte('trade_date', last10days)
-      .order('trade_date', { ascending: false })
-      .limit(200)
-      .execute(),
-
-    fetchOpportunityConfig(),
-  ]);
-
-  // Unpack: last 3 items are idxSymbolRes, idxEodRes, oppConfigMap
-  const idxSymbolRes   = rest[rest.length - 3] as { data: any };
-  const idxEodRes      = rest[rest.length - 2] as { data: any };
-  const oppConfigMap   = rest[rest.length - 1] as Awaited<ReturnType<typeof fetchOpportunityConfig>>;
-  const eodChunkRes    = rest.slice(0, rest.length - 3) as Array<{ data: any }>;
-  const eodRes         = { data: eodChunkRes.flatMap((r) => r.data ?? []) };
-
-  // latestDate is ONLY ever the indicator-confirmed date (or the last known-
-  // good one on a transient resolver failure) — never a max-of-loaded-chunks
-  // fallback. That fallback used to be the silent unbounded-date bug's twin:
-  // on a genuinely fresh cold start with a failed resolver AND no prior
-  // confirmed date, we now show the safe "no data" state below instead of
-  // guessing from possibly indicator-incomplete chunk heads.
-  const allEodRows = (eodRes.data ?? []) as EquityEodSnapshot[];
-  const latestDate: string | null = confirmedLatestDate;
-
-  if (!latestDate) {
-    return {
-      industries: [],
-      industriesHistory: new Map(),
-      symbols: new Map(),
-      latestEod: new Map(),
-      eodHistory: new Map(),
-      latestDate: null,
-      oppConfigMap: new Map(),
-      nifty50Returns: null,
-      nifty500Returns: null,
-      timeframe: 'daily',
-    };
-  }
-
-  // Process industries
-  const allIndustryRows = (industryRes.data ?? []) as IndustryEodRow[];
-  const industries = allIndustryRows.filter((r) => r.trade_date === latestDate);
-  const industriesHistory = new Map<string, IndustryEodRow[]>();
-  for (const r of allIndustryRows) {
-    const arr = industriesHistory.get(r.industry) ?? [];
-    arr.push(r);
-    industriesHistory.set(r.industry, arr);
-  }
-
-  // Process symbols
-  const symbols = new Map<number, EquitySymbolRow>();
-  for (const s of (symbolRes.data ?? []) as EquitySymbolRow[]) {
-    symbols.set(s.id, s);
-  }
-
-  // Process EOD
-  const latestEod = new Map<number, EquityEodSnapshot>();
-  const eodHistory = new Map<number, EquityEodSnapshot[]>();
-  for (const r of allEodRows) {
-    const arr = eodHistory.get(r.equity_id) ?? [];
-    arr.push(r);
-    eodHistory.set(r.equity_id, arr);
-    if (r.trade_date === latestDate && !latestEod.has(r.equity_id)) {
-      latestEod.set(r.equity_id, r);
-    }
-  }
-
-  // Build index returns
-  const idxSymbols = (idxSymbolRes.data ?? []) as { id: number; name: string }[];
-  const nifty50Id = idxSymbols.find((s) => s.name === 'NIFTY 50')?.id ?? null;
-  const nifty500Id = idxSymbols.find((s) => s.name === 'NIFTY 500')?.id ?? null;
-
-  const idxEodLatest = new Map<number, IndexReturn>();
-  for (const row of (idxEodRes.data ?? []) as Array<{ index_id: number; trade_date: string; ret_5d: number | null; ret_22d: number | null; ret_66d: number | null }>) {
-    if (!idxEodLatest.has(row.index_id)) {
-      idxEodLatest.set(row.index_id, { ret_5d: row.ret_5d ?? null, ret_22d: row.ret_22d ?? null, ret_66d: row.ret_66d ?? null });
-    }
-  }
-
-  const nifty50Returns = nifty50Id != null ? (idxEodLatest.get(nifty50Id) ?? null) : null;
-  const nifty500Returns = nifty500Id != null ? (idxEodLatest.get(nifty500Id) ?? null) : null;
-
-  const bundle: ScanDataBundle = {
-    industries,
-    industriesHistory,
-    symbols,
-    latestEod,
-    eodHistory,
-    latestDate,
-    oppConfigMap,
-    nifty50Returns,
-    nifty500Returns,
-    timeframe: 'daily',
-  };
-
-  _bundleCache.set('daily', { data: bundle, fetchedAt: Date.now() });
-  return bundle;
-}
-
-async function loadWeeklyOrMonthlyBundle(tf: 'weekly' | 'monthly'): Promise<ScanDataBundle> {
-  const cached = _bundleCache.get(tf);
-  if (cached && Date.now() - cached.fetchedAt < CACHE_TTL) return cached.data;
-
-  const table = tf === 'weekly' ? 'km_equity_weekly' : 'km_equity_monthly';
-  const periodCol = tf === 'weekly' ? 'week_start' : 'month_start';
-  const cutoffDays = tf === 'weekly' ? 510 : 2200;
-  const cutoff = new Date(Date.now() - cutoffDays * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-  const last10days = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-  const industryCutoff = new Date(Date.now() - 20 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-
-  // Indicator-complete period gate — same fix as the daily bundle. The
-  // weekly/monthly aggregators upsert raw OHLCV for a period first, and only
-  // run the indicator chain (ema_20 etc.) afterward, so without this gate a
-  // Friday-evening or month-end backfill window would surface a period whose
-  // ema_20 is still null as "latest", and every ema_20-null row gets dropped
-  // downstream — the same blackout the daily bundle had, on this table.
-  const confirmedLatestPeriod = await resolveConfirmedLatestDate(table, periodCol, tf);
-
-  const [industryRes, symbolRes, periodRes, idxSymbolRes, idxEodRes, oppConfigMap] = await Promise.all([
-    from('km_industry_eod')
-      .select('*')
-      .gte('trade_date', industryCutoff)
-      .order('trade_date', { ascending: false })
-      .limit(1000)
-      .execute(),
-
-    from('km_equity_symbols')
-      .select('id,symbol,company_name,industry,exchange,isin,is_active,mcap_cr')
-      .is('is_active', 'true')
-      .limit(8000)
-      .execute(),
-
-    (() => {
-      let q = from(table)
-        .select([
-          'equity_id', periodCol, 'trade_date',
-          'open', 'high', 'low', 'close', 'volume', 'total_value',
-          'rvol', 'tvol', 'rsi_14', 'magic_rs', 'magic_rs_zone',
-          'flow_type', 'accum_distrib', 'sniper_inst', 'sniper_hot',
-          'volume_divergence_flag', 'ema_20', 'atr_14',
-          'avg_deliv_pct', 'deliv_qty', 'w52_high', 'w52_low',
-          'deliv_value_cr',
-        ].join(','))
-        .gte(periodCol, cutoff)
-        .order(periodCol, { ascending: false })
-        .limit(110000);
-      if (confirmedLatestPeriod) q = (q as any).lte(periodCol, confirmedLatestPeriod);
-      return (q as any).execute();
-    })(),
-
-    from('km_index_symbols').select('id,name').execute(),
-
-    from('km_index_eod')
-      .select('index_id,trade_date,ret_5d,ret_22d,ret_66d')
-      .gte('trade_date', last10days)
-      .order('trade_date', { ascending: false })
-      .limit(200)
-      .execute(),
-
-    fetchOpportunityConfig(),
-  ]);
-
-  const allPeriodRows = (periodRes.data ?? []) as any[];
-  // latestDate is the CONFIRMED (indicator-complete) period, never just
-  // "whatever sorted first" — the query above is already bounded by it, but
-  // pin it explicitly rather than re-deriving from the (possibly empty on a
-  // no-op period) result rows.
-  const latestDate: string | null = confirmedLatestPeriod;
-
-  if (!latestDate) {
-    return {
-      industries: [], industriesHistory: new Map(),
-      symbols: new Map(), latestEod: new Map(), eodHistory: new Map(),
-      latestDate: null, oppConfigMap: new Map(),
-      nifty50Returns: null, nifty500Returns: null, timeframe: tf,
-    };
-  }
-
-  // Map period rows to EquityEodSnapshot-shaped objects
-  const mappedRows = allPeriodRows.map((r: any): EquityEodSnapshot => ({
-    equity_id: r.equity_id,
-    trade_date: r[periodCol],       // week_start or month_start — used as period ID
-    open: r.open,
-    high: r.high,
-    low: r.low,
-    close: r.close,
-    prev_close: null,
-    pct_chng: null,
-    volume: r.volume ?? null,
-    value_cr: r.total_value ?? null, // remap total_value → value_cr
-    rvol: r.rvol ?? null,
-    tvol: r.tvol ?? null,
-    rsi_14: r.rsi_14 ?? null,
-    magic_rs: r.magic_rs ?? null,
-    magic_rs_zone: r.magic_rs_zone ?? null,
-    flow_type: r.flow_type ?? null,
-    accum_distrib: r.accum_distrib ?? null,
-    sniper_inst: r.sniper_inst ?? null,
-    sniper_hot: r.sniper_hot ?? null,
-    rss_value: null,
-    rss_spread: null,
-    sma_150: null,
-    volume_divergence_flag: r.volume_divergence_flag ?? null,
-    ema_20: r.ema_20 ?? null,
-    atr_14: r.atr_14 ?? null,
-    delivery_pct: r.avg_deliv_pct ?? null, // remap
-    delivery_qty: r.deliv_qty ?? null,     // remap
-    w52_high: r.w52_high ?? null,
-    sma_50: null,
-    sma_200: null,
-    w52_low: null,
-    supertrend_dir: null,
-    lifetime_high: null,
-  }));
-
-  // Build industry data
-  const allIndustryRows = (industryRes.data ?? []) as IndustryEodRow[];
-  const latestIndustryDate = allIndustryRows.length > 0 ? allIndustryRows[0].trade_date : null;
-  const industries = latestIndustryDate ? allIndustryRows.filter((r) => r.trade_date === latestIndustryDate) : [];
-  const industriesHistory = new Map<string, IndustryEodRow[]>();
-  for (const r of allIndustryRows) {
-    const arr = industriesHistory.get(r.industry) ?? [];
-    arr.push(r);
-    industriesHistory.set(r.industry, arr);
-  }
-
-  // Build symbols map
-  const symbols = new Map<number, EquitySymbolRow>();
-  for (const s of (symbolRes.data ?? []) as EquitySymbolRow[]) {
-    symbols.set(s.id, s);
-  }
-
-  // Build eodHistory and latestEod
-  const latestEod = new Map<number, EquityEodSnapshot>();
-  const eodHistory = new Map<number, EquityEodSnapshot[]>();
-  for (const r of mappedRows) {
-    const arr = eodHistory.get(r.equity_id) ?? [];
-    arr.push(r);
-    eodHistory.set(r.equity_id, arr);
-    if (r.trade_date === latestDate && !latestEod.has(r.equity_id)) {
-      latestEod.set(r.equity_id, r);
-    }
-  }
-
-  // Build index returns
-  const idxSymbols = (idxSymbolRes.data ?? []) as { id: number; name: string }[];
-  const nifty50Id = idxSymbols.find((s) => s.name === 'NIFTY 50')?.id ?? null;
-  const nifty500Id = idxSymbols.find((s) => s.name === 'NIFTY 500')?.id ?? null;
-  const idxEodLatest = new Map<number, IndexReturn>();
-  for (const row of (idxEodRes.data ?? []) as Array<{ index_id: number; ret_5d: number | null; ret_22d: number | null; ret_66d: number | null }>) {
-    if (!idxEodLatest.has(row.index_id)) {
-      idxEodLatest.set(row.index_id, { ret_5d: row.ret_5d ?? null, ret_22d: row.ret_22d ?? null, ret_66d: row.ret_66d ?? null });
-    }
-  }
-  const nifty50Returns = nifty50Id != null ? (idxEodLatest.get(nifty50Id) ?? null) : null;
-  const nifty500Returns = nifty500Id != null ? (idxEodLatest.get(nifty500Id) ?? null) : null;
-
-  const bundle: ScanDataBundle = {
-    industries, industriesHistory, symbols, latestEod, eodHistory,
-    latestDate, oppConfigMap, nifty50Returns, nifty500Returns, timeframe: tf,
-  };
-
-  _bundleCache.set(tf, { data: bundle, fetchedAt: Date.now() });
-  return bundle;
-}
-
-async function loadScanData(tf: ScanTimeframe = 'daily'): Promise<ScanDataBundle> {
-  if (tf === 'weekly' || tf === 'monthly') return loadWeeklyOrMonthlyBundle(tf);
-  return loadDailyBundle();
-}
-
-// ── 3c: VaNi Opportunity evaluation ───────────────────────────
-
-let _oppDiagCount = 0;
-
-function evaluateOpportunity(stock: Omit<ScanStock, 'vaniOpportunity'>, config: OppConfig): boolean {
-  if (!stock.ema_20 || !stock.atr_14 || stock.atr_14 <= 0) return false;
-  const isBearish = config.flow_types.some(f => f === 'FRESH_SHORTS' || f === 'LONG_LIQUIDATION');
-  const withinBand =
-    stock.close >= stock.ema_20 - config.ema_atr_band * stock.atr_14 &&
-    stock.close <= stock.ema_20 + config.ema_atr_band * stock.atr_14;
-  // Bullish: upside runway to the top of the band (ema20 + band×atr14)
-  // Bearish: downside runway to the bottom of the band (ema20 - band×atr14)
-  const runway = isBearish
-    ? stock.close - (stock.ema_20 - config.ema_atr_band * stock.atr_14)
-    : (stock.ema_20 + config.ema_atr_band * stock.atr_14) - stock.close;
-  const hasReward = runway > config.reward_min_atr_multiple * stock.atr_14;
-  const zoneOk = config.magic_rs_zones.includes(stock.magic_rs_zone ?? '');
-  // LOW_VOLUME is an artifact of the volume scale discontinuity bug (CLAUDE.md § Known Issues).
-  // It is computed from artificially suppressed rvol — treat as neutral for bullish configs.
-  const flowOk = stock.flow_type === 'LOW_VOLUME' && !isBearish
-    ? true
-    : config.flow_types.includes(stock.flow_type ?? '');
-  const rvolOk = (stock.rvol ?? 0) >= config.rvol_min;
-  const result = withinBand && hasReward && zoneOk && flowOk && rvolOk;
-  if (!isBearish && !result && _oppDiagCount < 5) {
-    _oppDiagCount++;
-    console.log(`[scanEngine] VaNi miss (${stock.symbol}): band=${withinBand} reward=${hasReward} zone=${zoneOk}(${stock.magic_rs_zone}) flow=${flowOk}(${stock.flow_type}) rvol=${rvolOk}(${stock.rvol?.toFixed(2)}) ema=${stock.ema_20?.toFixed(1)} atr=${stock.atr_14?.toFixed(1)}`);
-  }
-  return result;
-}
-
-// ── Helper: DOT detection in history ───────────────────────────
-// Per-stock lookback copy of the canonical DOT logic.
-// Source of truth: visualPulseEngine.ts computeDots()
-// SQL copy:        km_migration_033_industry_eod.sql dot_signals CTE
-// If you change a threshold, update all three locations.
-
-function hasDotInHistory(
-  history: EquityEodSnapshot[],
-  dotType: 'svd' | 'sbd' | 'syd',
-  lookback: number,
-): boolean {
-  const bars = history.slice(0, lookback + 1); // already sorted desc
-  for (let i = 0; i < bars.length - 1 && i < lookback; i++) {
-    const bar = bars[i];
-    const prev = bars[i + 1];
-    if (!bar || !prev) continue;
-
-    const range = bar.high - bar.low;
-    if (range <= 0) continue;
-    const bodyRatio = Math.abs(bar.close - bar.open) / range;
-
-    if (dotType === 'svd') {
-      if (
-        (bar.rvol ?? 0) > 10 &&
-        bar.close > (bar.high + bar.low) / 2 &&
-        prev.close > 0 && bar.close > prev.close * 1.02 &&
-        bodyRatio >= 0.5 &&
-        bar.close > bar.open
-      ) return true;
-    } else if (dotType === 'sbd') {
-      if (
-        (bar.rvol ?? 0) >= 3 && (bar.rvol ?? 0) < 10 &&
-        bar.close > bar.open &&
-        bar.close > bar.high - range / 3 &&
-        bodyRatio >= 0.45
-      ) return true;
-    } else if (dotType === 'syd') {
-      if (
-        bar.close < prev.close &&
-        (bar.rvol ?? 0) >= 2 &&
-        bar.close < bar.low + range / 3
-      ) return true;
-    }
-  }
-  return false;
-}
-
-// ── Helper: Industry classifications ───────────────────────────
-
-function getIndustryClassifications(bundle: ScanDataBundle) {
-  const total = bundle.industries.length;
-  const topQuartileCutoff = Math.ceil(total / 4);
-  const bottomQuartileCutoff = total - topQuartileCutoff;
-
-  // Compare with ~5 days ago for rotation detection
-  const rotatingIn = new Set<string>();
-  const rotatingOut = new Set<string>();
-  const leading = new Set<string>();
-  const lagging = new Set<string>();
-
-  for (const ind of bundle.industries) {
-    const history = bundle.industriesHistory.get(ind.industry) ?? [];
-    const oldRow = history.length > 4 ? history[Math.min(4, history.length - 1)] : null;
-    const rankChange = oldRow ? oldRow.industry_rank - ind.industry_rank : 0;
-
-    if (rankChange >= 5) rotatingIn.add(ind.industry);
-    if (rankChange <= -5) rotatingOut.add(ind.industry);
-    if (ind.industry_rank <= topQuartileCutoff) leading.add(ind.industry);
-    if (ind.industry_rank > bottomQuartileCutoff) lagging.add(ind.industry);
-  }
-
-  return { rotatingIn, rotatingOut, leading, lagging, topQuartileCutoff };
-}
-
-// ── Build ScanStock from equity data ───────────────────────────
-
-function buildScanStock(
-  equityId: number,
-  bundle: ScanDataBundle,
-  presetId: string | null = null,
-): ScanStock | null {
-  const eod = bundle.latestEod.get(equityId);
-  const sym = bundle.symbols.get(equityId);
-  if (!eod || !sym) return null;
-
-  // Stocks without a computed EMA20 have insufficient history (< 20 bars).
-  // ema_20 = 0 does not occur in the DB — the SQL formula never writes 0.
-  if (eod.ema_20 == null) return null;
-
-  // Guard: treat unrecognised zone values as null
-  if (eod.magic_rs_zone && !VALID_ZONES.has(eod.magic_rs_zone)) {
-    (eod as any).magic_rs_zone = null;
-  }
-
-  const history = bundle.eodHistory.get(equityId) ?? [];
-
-  // 3c: Computed financial fields
-  const ema20 = eod.ema_20 ?? null;
-  const atr14 = eod.atr_14 ?? null;
-  const reward = (ema20 && atr14) ? (ema20 + atr14) - eod.close : null;
-  const rewardPct = (ema20 && atr14 && atr14 > 0) ? ((ema20 + atr14) - eod.close) / atr14 : null;
-  const pctBelow52wHigh = eod.pct_below_52w_high != null ? Number(eod.pct_below_52w_high) : null;
-
-  const magicRsTrend: (boolean | null)[] = history.slice(0, 5).map((h, i) =>
-    h.magic_rs != null && (history[i + 1]?.magic_rs ?? null) != null
-      ? h.magic_rs > history[i + 1].magic_rs!
-      : null,
-  );
-
-  // xAmt: avg(value_cr, 5D) / avg(value_cr, 22D)
-  const valW5  = history.slice(0, Math.min(history.length, 5)).filter((h) => h.value_cr != null);
-  const valW22 = history.slice(0, Math.min(history.length, 22)).filter((h) => h.value_cr != null);
-  const avgVal5  = valW5.length  > 0 ? valW5.reduce((s, h) => s + h.value_cr!, 0) / valW5.length   : null;
-  const avgVal22 = valW22.length > 0 ? valW22.reduce((s, h) => s + h.value_cr!, 0) / valW22.length  : null;
-  const xAmt = avgVal5 != null && avgVal22 != null && avgVal22 > 0 ? avgVal5 / avgVal22 : null;
-
-  // REL fields vs NIFTY 50 and NIFTY 500 — returns come from the DB columns
-  // (migration 111), not a client-side history walk. This is what lets the
-  // bundle window shrink to ~23 sessions (the old 67-bar walk forced 115
-  // calendar days of EOD download for every scanner visit).
-  const stockRet5  = eod.ret_5d  != null ? Number(eod.ret_5d)  : null;
-  const stockRet22 = eod.ret_22d != null ? Number(eod.ret_22d) : null;
-  const stockRet66 = eod.ret_66d != null ? Number(eod.ret_66d) : null;
-
-  const n50  = bundle.nifty50Returns;
-  const n500 = bundle.nifty500Returns;
-
-  const rel_5d_n50   = stockRet5  != null && n50?.ret_5d   != null ? stockRet5  - n50.ret_5d   : null;
-  const rel_22d_n50  = stockRet22 != null && n50?.ret_22d  != null ? stockRet22 - n50.ret_22d  : null;
-  const rel_66d_n50  = stockRet66 != null && n50?.ret_66d  != null ? stockRet66 - n50.ret_66d  : null;
-  const rel_5d_n500  = stockRet5  != null && n500?.ret_5d  != null ? stockRet5  - n500.ret_5d  : null;
-  const rel_22d_n500 = stockRet22 != null && n500?.ret_22d != null ? stockRet22 - n500.ret_22d : null;
-  const rel_66d_n500 = stockRet66 != null && n500?.ret_66d != null ? stockRet66 - n500.ret_66d : null;
-
-  const partial: Omit<ScanStock, 'vaniOpportunity'> = {
-    equity_id: equityId,
-    symbol: sym.symbol,
-    company_name: sym.company_name,
-    industry: sym.industry,
-    exchange: sym.exchange ?? null,
-    trade_date: eod.trade_date,
-    close: eod.close,
-    pct_chng: eod.pct_chng,
-    rsi_14: eod.rsi_14,
-    magic_rs: eod.magic_rs,
-    magic_rs_zone: eod.magic_rs_zone,
-    flow_type: eod.flow_type,
-    rvol: eod.rvol,
-    sniper_inst: eod.sniper_inst,
-    sniper_hot: eod.sniper_hot ?? null,
-    accum_distrib: eod.accum_distrib,
-    rss_value: eod.rss_value,
-    rss_spread: eod.rss_spread,
-    sma_150: eod.sma_150,
-    volume_divergence_flag: eod.volume_divergence_flag,
-    has_recent_svd: hasDotInHistory(history, 'svd', 5),
-    has_recent_sbd: hasDotInHistory(history, 'sbd', 5),
-    has_recent_syd: hasDotInHistory(history, 'syd', 5),
-    ema_20: ema20,
-    atr_14: atr14,
-    delivery_pct: eod.delivery_pct ?? null,
-    w52_high: eod.w52_high ?? null,
-    sma_50: eod.sma_50 ?? null,
-    sma_200: eod.sma_200 ?? null,
-    w52_low: eod.w52_low ?? null,
-    supertrend_dir: eod.supertrend_dir ?? null,
-    lifetime_high: eod.lifetime_high ?? null,
-    stage: eod.stage ?? null,
-    open: eod.open ?? null,
-    high: eod.high ?? null,
-    low: eod.low ?? null,
-    mcap_cr: sym.mcap_cr ?? null,
-    avg_amt_5d:       eod.avg_amt_5d       != null ? Number(eod.avg_amt_5d)       : null,
-    avg_amt_22d:      eod.avg_amt_22d      != null ? Number(eod.avg_amt_22d)      : null,
-    avg_amt_66d:      eod.avg_amt_66d      != null ? Number(eod.avg_amt_66d)      : null,
-    delivery_surge_x: eod.delivery_surge_x != null ? Number(eod.delivery_surge_x) : null,
-    surge_22d:        eod.surge_22d        != null ? Number(eod.surge_22d)        : null,
-    score_5d:    eod.score_5d    != null ? Number(eod.score_5d)    : null,
-    score_22d:   eod.score_22d   != null ? Number(eod.score_22d)   : null,
-    pct_5d:      eod.pct_5d      != null ? Number(eod.pct_5d)      : null,
-    pct_22d:     eod.pct_22d     != null ? Number(eod.pct_22d)     : null,
-    pct_66d:     eod.pct_66d     != null ? Number(eod.pct_66d)     : null,
-    ret_5d:           eod.ret_5d           != null ? Number(eod.ret_5d)           : null,
-    ret_22d:          eod.ret_22d          != null ? Number(eod.ret_22d)          : null,
-    ret_66d:          eod.ret_66d          != null ? Number(eod.ret_66d)          : null,
-    breakout_level:   eod.breakout_level   != null ? Number(eod.breakout_level)   : null,
-    pct_from_breakout: eod.pct_from_breakout != null ? Number(eod.pct_from_breakout) : null,
-    deliv_value_cr:   eod.deliv_value_cr   != null ? Number(eod.deliv_value_cr)   : null,
-    xAmt: xAmt != null ? Math.round(xAmt * 1000) / 1000 : null,
-    rel_5d_n50:   rel_5d_n50   != null ? Math.round(rel_5d_n50   * 100) / 100 : null,
-    rel_22d_n50:  rel_22d_n50  != null ? Math.round(rel_22d_n50  * 100) / 100 : null,
-    rel_66d_n50:  rel_66d_n50  != null ? Math.round(rel_66d_n50  * 100) / 100 : null,
-    rel_5d_n500:  rel_5d_n500  != null ? Math.round(rel_5d_n500  * 100) / 100 : null,
-    rel_22d_n500: rel_22d_n500 != null ? Math.round(rel_22d_n500 * 100) / 100 : null,
-    rel_66d_n500: rel_66d_n500 != null ? Math.round(rel_66d_n500 * 100) / 100 : null,
-    magicRsTrend,
-    reward,
-    rewardPct,
-    pctBelow52wHigh,
-  };
-
-  // One VaNi standard (owner 2026-07-06: "VaNi highlight is not configured
-  // for all the scanners"): the preset's vani_rule decides the highlight,
-  // same as the stage/breakout scans. The old ATR/EMA-band config was a
-  // BULLISH-only gate — on bearish scans (Weakness Confluence, Distribution
-  // Warnings) it could never fire, so they showed zero highlights forever.
-  // The config path survives only as a fallback for presets with no rule.
-  const vaniRule = presetId ? getPresetMeta(presetId)?.vani_rule : null;
-  const presetCfg = presetId ? (bundle.oppConfigMap.get(presetId) ?? null) : null;
-  const vaniOpportunity = vaniRule
-    ? computeVaniOpportunity(eod as VaniRow, vaniRule)
-    : presetCfg ? evaluateOpportunity(partial, presetCfg) : false;
-  return { ...partial, vaniOpportunity };
-}
-
 // ── VaNi Opportunity Rule — data-driven ────────────────────────
 /*
  * VANI OPPORTUNITY RULE TYPES (data-driven via kd_scan_presets.vani_rule)
@@ -820,11 +160,8 @@ function buildScanStock(
  * Flags computed by: backfill_vani_flags.py (step 6j, daily)
  * Exception: is_vani_s2 computed by backfill_stage_classification.py (step 6h)
  *
- * NOTE: bundle-based scan functions (scanPowerBuy etc.) derive vaniOpportunity
- * through buildScanStock → evaluateOpportunity (ATR/EMA band config).
- * Migrating those to computeVaniOpportunity requires adding is_vani_* columns
- * to the bundle EOD SELECT — deferred to a future sprint.
- * Direct-query fetch functions (fetchStage2Leaders etc.) use computeVaniOpportunity.
+ * All active scans use computeVaniOpportunity or read vani_flag from
+ * km_scan_results (which is `is_vani_*` per preset — see migration 170).
  */
 
 // row shape accepted by computeVaniOpportunity — DB row or computed stock fields
@@ -883,278 +220,10 @@ function computeVaniOpportunity(row: VaniRow, vaniRule: string | null | undefine
   }
 }
 
-// ── Scan Implementations ───────────────────────────────────────
-
-// FILTER LOGIC NOTE:
-// accum_distrib captures classical Wyckoff accumulation (price below
-// Golden Line + 3x volume + bullish momentum). This signal is naturally
-// rare — typically 1-5% of stocks meet it on any given day.
-//
-// The OR clause captures the broader bullish confluence pattern that
-// traders also recognize as strength building: above Golden Line,
-// strong/mild bull RS zone, bullish flow type, elevated volume.
-//
-// Both paths surface stocks worth attention; the strict path is high
-// conviction, the confluence path is broader signal.
-
-/** Scan 1: Strength Confluence */
-function scanPowerBuy(bundle: ScanDataBundle): ScanStock[] {
-  const { rotatingIn, leading } = getIndustryClassifications(bundle);
-  const eligible = new Set([...rotatingIn, ...leading]);
-
-  const results: ScanStock[] = [];
-  for (const [id] of bundle.latestEod) {
-    const stock = buildScanStock(id, bundle, 'power_buy');
-    if (!stock || !stock.industry) continue;
-
-    // Industry gate (unchanged)
-    if (!eligible.has(stock.industry)) continue;
-
-    // Path 1: Strict Wyckoff accumulation (rare, high conviction)
-    const wyckoffAccumulation = stock.accum_distrib === 'ACCUMULATION';
-
-    // Path 2: Broader bullish confluence (common, also valid)
-    const bullishConfluence =
-      stock.sma_150 != null && stock.close > stock.sma_150 &&
-      ['Strong Bull', 'Mild Bull'].includes(stock.magic_rs_zone ?? '') &&
-      ['FRESH_LONGS', 'SHORT_COVERING'].includes(stock.flow_type ?? '') &&
-      (stock.rvol ?? 0) > 1.5;
-
-    if (!wyckoffAccumulation && !bullishConfluence) continue;
-    results.push(stock);
-  }
-
-  return results
-    .sort((a, b) => (b.magic_rs ?? 0) - (a.magic_rs ?? 0))
-    .slice(0, 25);
-}
-
-// FILTER LOGIC NOTE (mirror of Strength Confluence):
-// accum_distrib = 'DISTRIBUTION' captures classical Wyckoff distribution.
-// The OR clause captures broader bearish confluence: below Golden Line,
-// strong/mild bear RS zone, bearish flow type, elevated volume.
-
-/** Scan 2: Weakness Confluence */
-function scanPowerSell(bundle: ScanDataBundle): ScanStock[] {
-  const { rotatingOut, lagging } = getIndustryClassifications(bundle);
-  const eligible = new Set([...rotatingOut, ...lagging]);
-
-  const results: ScanStock[] = [];
-  for (const [id] of bundle.latestEod) {
-    const stock = buildScanStock(id, bundle, 'power_sell');
-    if (!stock || !stock.industry) continue;
-
-    // Industry gate (unchanged)
-    if (!eligible.has(stock.industry)) continue;
-
-    // Path 1: Strict Wyckoff distribution (rare, high conviction)
-    const wyckoffDistribution = stock.accum_distrib === 'DISTRIBUTION';
-
-    // Path 2: Broader bearish confluence (common, also valid)
-    const bearishConfluence =
-      stock.sma_150 != null && stock.close < stock.sma_150 &&
-      ['Strong Bear', 'Mild Bear'].includes(stock.magic_rs_zone ?? '') &&
-      ['FRESH_SHORTS', 'LONG_LIQUIDATION'].includes(stock.flow_type ?? '') &&
-      (stock.rvol ?? 0) > 1.5;
-
-    if (!wyckoffDistribution && !bearishConfluence) continue;
-    results.push(stock);
-  }
-
-  return results
-    .sort((a, b) => (a.magic_rs ?? 0) - (b.magic_rs ?? 0))
-    .slice(0, 25);
-}
-
-/** Scan 3: Smart Money Loading */
-function scanSmartMoney(bundle: ScanDataBundle): ScanStock[] {
-  // Industry gate — where accumulation is concentrated today.
-  //
-  // pct_accumulation is the share of an industry's stocks showing accumulation.
-  // Empirically its distribution is low-skewed: on a typical day the median
-  // industry sits ~15% and even the single most-accumulating one rarely clears
-  // 50-67%. The old absolute `> 60` gate therefore fired for 0-1 industries,
-  // leaving Smart Money chronically empty. We keep the absolute bar (so genuinely
-  // broad-accumulation industries always qualify) but OR it with a relative
-  // top-decile cutoff, so the scan reliably reflects the strongest-accumulating
-  // corner of the market instead of blanking. delivery_pct at the stock level
-  // keeps the list grounded in real delivery-based buying.
-  const ranked = bundle.industries
-    .filter((i) => (i.pct_accumulation ?? 0) > 0)
-    .sort((a, b) => (b.pct_accumulation ?? 0) - (a.pct_accumulation ?? 0));
-  const decileCount = Math.max(5, Math.ceil(ranked.length / 10));
-  const accumulatingIndustries = new Set<string>();
-  ranked.forEach((ind, i) => {
-    if ((ind.pct_accumulation ?? 0) > 55 || i < decileCount) {
-      accumulatingIndustries.add(ind.industry);
-    }
-  });
-
-  const results: ScanStock[] = [];
-  for (const [id] of bundle.latestEod) {
-    const stock = buildScanStock(id, bundle, 'smart_money');
-    if (!stock || !stock.industry) continue;
-    if (!stock.symbol || !/^[A-Z]/.test(stock.symbol)) continue;
-    if (!accumulatingIndustries.has(stock.industry)) continue;
-
-    if ((stock.delivery_pct ?? 0) <= 60) continue;
-
-    // rss_value must be positive (guards degenerate rows; RSS is RSI-derived 0-100)
-    if ((stock.rss_value ?? 0) <= 0) continue;
-
-    results.push(stock);
-  }
-
-  return results
-    .sort((a, b) => (b.delivery_pct ?? 0) - (a.delivery_pct ?? 0))
-    .slice(0, 25);
-}
-
-// Scan 4 "Fresh Breakouts" retired 2026-07-13 (B1): it was a near-duplicate of
-// Breakout Surge (both "closed above a breakout level"), with two extras —
-// a leading-industry gate and rvol>2. Breakout Surge is the robust superset
-// (DB-precomputed breakout levels, full universe, conviction-ranked by Score
-// 5D), and its sector scoping is available via the ScanFilterBar `industries`
-// filter + the rvol column. The kd_scan_presets row is deactivated in
-// migration 152; this handler + preset are removed so a stale DB row can't
-// dispatch to a missing function.
-
-/** Scan 5: Quiet Accumulation (contrarian) */
-function scanQuietAccumulation(bundle: ScanDataBundle): ScanStock[] {
-  const { topQuartileCutoff } = getIndustryClassifications(bundle);
-
-  // Industries NOT in top quartile with rising pct_accumulation
-  const eligibleIndustries = new Map<string, number>();
-  for (const ind of bundle.industries) {
-    if (ind.industry_rank <= topQuartileCutoff) continue;
-
-    const history = bundle.industriesHistory.get(ind.industry) ?? [];
-    const accNow = ind.pct_accumulation ?? 0;
-    const acc5 = history.length > 4 ? (history[4]?.pct_accumulation ?? 0) : 0;
-    const accChange = accNow - acc5;
-    if (accChange <= 0) continue;
-
-    eligibleIndustries.set(ind.industry, accChange);
-  }
-
-  const results: ScanStock[] = [];
-  for (const [id] of bundle.latestEod) {
-    const stock = buildScanStock(id, bundle, 'quiet_accumulation');
-    if (!stock || !stock.industry) continue;
-    if (!eligibleIndustries.has(stock.industry)) continue;
-    if (stock.accum_distrib !== 'ACCUMULATION') continue;
-
-    // sniper_inst trending up
-    const history = bundle.eodHistory.get(id) ?? [];
-    const sniperNow = history[0]?.sniper_inst ?? 0;
-    const sniper5 = history.length > 4 ? (history[4]?.sniper_inst ?? 0) : 0;
-    if (sniperNow <= sniper5) continue;
-
-    const accChange = eligibleIndustries.get(stock.industry) ?? 0;
-    results.push({ ...stock, _sortScore: accChange } as ScanStock & { _sortScore: number });
-  }
-
-  return results
-    .sort((a, b) => ((b as any)._sortScore ?? 0) - ((a as any)._sortScore ?? 0))
-    .slice(0, 25);
-}
-
-/** Scan 6: Distribution Warnings */
-function scanDistributionWarning(bundle: ScanDataBundle): ScanStock[] {
-  const results: ScanStock[] = [];
-
-  for (const [id] of bundle.latestEod) {
-    const stock = buildScanStock(id, bundle, 'distribution_warning');
-    if (!stock) continue;
-
-    // Current zone is a degraded-from-Strong-Bull middle band: everything
-    // between Strong Bull and Strong Bear. Must include the two neutral bands
-    // (Neutral Bull / Neutral Bear) — a stock decaying out of Strong Bull lands
-    // there first, so omitting them (the old list only had phantom 'Neutral',
-    // which the pipeline never emits) hid this scanner's most natural candidates.
-    const zone = stock.magic_rs_zone;
-    if (!zone || zone === 'Strong Bull' || zone === 'Strong Bear') continue;
-    if (!['Mild Bull', 'Neutral Bull', 'Neutral', 'Neutral Bear', 'Mild Bear'].includes(zone)) continue;
-
-    // Was in Strong Bull 10 days ago
-    const history = bundle.eodHistory.get(id) ?? [];
-    const bar10 = history.length > 9 ? history[9] : null;
-    if (!bar10 || bar10.magic_rs_zone !== 'Strong Bull') continue;
-
-    // Has SYD in last 5 bars OR volume_div_down
-    if (!stock.has_recent_syd && stock.volume_divergence_flag !== 'VOLUME_DIV_DOWN') continue;
-
-    // Score: rank_drop * abs(magic_rs_change)
-    const magicRsNow = stock.magic_rs ?? 0;
-    const magicRs10 = bar10.magic_rs ?? 0;
-    const magicRsChange = Math.abs(magicRsNow - magicRs10);
-
-    // Get industry rank drop
-    const sym = bundle.symbols.get(id);
-    const indNow = sym?.industry ? bundle.industries.find((i) => i.industry === sym.industry) : null;
-    const indHistory = sym?.industry ? bundle.industriesHistory.get(sym.industry) ?? [] : [];
-    const ind10 = indHistory.length > 9 ? indHistory[9] : null;
-    const rankDrop = indNow && ind10 ? ind10.industry_rank - indNow.industry_rank : 0;
-
-    const score = Math.abs(rankDrop) * magicRsChange;
-    results.push({ ...stock, _sortScore: score } as ScanStock & { _sortScore: number });
-  }
-
-  return results
-    .sort((a, b) => ((b as any)._sortScore ?? 0) - ((a as any)._sortScore ?? 0))
-    .slice(0, 25);
-}
-
-/** Minimum 22-day average delivery value, in true Crores. See the gate below. */
-const CONVICTION_MIN_AVG_AMT_22D = 1.5;
-
-/** Scan 7: Conviction Flow */
-function scanConvictionFlow(bundle: ScanDataBundle): ScanStock[] {
-  const results: ScanStock[] = [];
-
-  for (const [id] of bundle.latestEod) {
-    const eod = bundle.latestEod.get(id);
-    if (!eod || eod.ema_20 == null || eod.ema_20 <= 0) continue;
-
-    const history = bundle.eodHistory.get(id) ?? [];
-    if (history.length < 5) continue;
-
-    const d_pct = ((eod.close - eod.ema_20) / eod.ema_20) * 100;
-    if (d_pct < -8 || d_pct > 8) continue;
-
-    const stock = buildScanStock(id, bundle);
-    if (!stock) continue;
-
-    // Filter gates use client-side computed delivery scores (value_cr × delivery_pct/100)
-    // CONVICTION_MIN_AVG_AMT_22D is a delivery-value floor in true Crores.
-    // Until migration 167 this column was 100x understated for NSE (and ~1e7x for
-    // BSE, which is why no BSE stock ever cleared it), so the literal 1.5 here
-    // behaved as a ~150 Cr large-cap-only gate. On the corrected scale 1.5 means
-    // what the comment always claimed — Rs 1.5 Cr — so this now admits the
-    // small/mid caps it was always meant to. Retune here if that reads too loose.
-    if ((stock.avg_amt_22d ?? 0) <= CONVICTION_MIN_AVG_AMT_22D) continue;
-    if ((stock.delivery_surge_x ?? 0) <= 1.5) continue;
-
-    // Price returns over N trading days (history sorted desc: [0]=today, [N]=N days ago)
-    const ret_5d  = history.length >  5 ? ((eod.close - history[5].close)  / history[5].close)  * 100 : null;
-    const ret_22d = history.length > 22 ? ((eod.close - history[22].close) / history[22].close) * 100 : null;
-    const ret_66d = history.length > 66 ? ((eod.close - history[66].close) / history[66].close) * 100 : null;
-
-    results.push({
-      ...stock,
-      vaniOpportunity: computeVaniOpportunity(eod, getPresetMeta('conviction_flow')?.vani_rule),
-      deliv_value_cr: Math.round((eod.value_cr ?? 0) * ((eod.delivery_pct ?? 0) / 100) * 100) / 100,
-      d_pct:          Math.round(d_pct * 100) / 100,
-      ret_5d:  ret_5d  != null ? Math.round(ret_5d  * 100) / 100 : null,
-      ret_22d: ret_22d != null ? Math.round(ret_22d * 100) / 100 : null,
-      ret_66d: ret_66d != null ? Math.round(ret_66d * 100) / 100 : null,
-    });
-  }
-
-  return results
-    .sort((a, b) => (b.delivery_surge_x ?? 0) - (a.delivery_surge_x ?? 0))
-    .slice(0, 50);
-}
+// ── Direct-query scans (Path B) ────────────────────────────────
+// Bundle scans (power_buy .. conviction_flow) were deleted after Phase 3
+// repointed them onto km_scan_results (see fetchFromScanMatview below).
+// The scans below query PostgREST directly and never touched the bundle.
 
 /** Scan 8: Breakout Surge — merged scan (owner decision 2026-07-06: the old
  *  bundle-based Breakout Surge and the standalone Breakout Surge Daily were
@@ -1302,6 +371,352 @@ async function fetchBreakoutSurge(exchangeFilter: ExchangeFilter): Promise<ScanS
     if (as5 == null) return 1;
     if (bs5 == null) return -1;
     return bs5 - as5;
+  });
+  return results.slice(0, resultLimit);
+}
+
+/** Scan: Breakdown Surge — the exact mirror of Breakout Surge.
+ *  (preset ID remains breakdown_watch — see migration 189.)
+ *
+ *  Definition: close BELOW the 20-day breakdown level on a red day, close >= 50.
+ *  breakdown_level / pct_from_breakdown are DB-precomputed (migration 187) as
+ *  the rolling 20-bar MINIMUM of the prior close — where breakout_level is the
+ *  MAXIMUM. Same direct-query family, same precompute trick: PostgREST compares
+ *  a column to a LITERAL only, so the filter collapses to `pct_from_breakdown < 0`.
+ *
+ *  Why this needed its own column rather than reusing pct_from_breakout < 0:
+ *  that asks a different and useless question. On 2026-08-25, 2,242 of 2,517
+ *  eligible NSE rows (89 percent) sat below their 20-day HIGH — which is true of
+ *  nearly the whole market on any day. Below the 20-day LOW returns 248 rows.
+ *
+ *  Ranked by depth below the level (most broken first), which is this preset's
+ *  own metric — the mirror of Breakout Surge ranking by Score 5D is not
+ *  meaningful here, since a conviction score does not describe a breakdown.
+ */
+async function fetchBreakdownWatch(exchangeFilter: ExchangeFilter): Promise<ScanStock[]> {
+  const completedDates = await fetchRecentDates(1);
+  const latestDate: string | null = completedDates[0] ?? null;
+  if (!latestDate) return [];
+
+  const { data: rows } = await from('km_equity_eod')
+    .select([
+      'equity_id', 'trade_date', 'close', 'open', 'high', 'low',
+      'pct_chng', 'magic_rs', 'magic_rs_zone', 'rss_value', 'rss_spread',
+      'rsi_14', 'rvol', 'flow_type', 'supertrend_dir',
+      'sma_50', 'sma_150', 'sma_200', 'ema_20', 'atr_14',
+      'w52_high', 'w52_low', 'lifetime_high',
+      'avg_amt_5d', 'avg_amt_22d', 'avg_amt_66d', 'delivery_surge_x',
+      'sniper_inst', 'sniper_hot', 'accum_distrib',
+      'volume_divergence_flag', 'delivery_pct', 'deliv_value_cr',
+      'dot_svd', 'dot_sbd', 'dot_syd', 'stage',
+      'score_5d', 'score_22d', 'ret_5d', 'ret_22d', 'ret_66d',
+      'breakout_level', 'pct_from_breakout', 'pct_below_52w_high',
+      'breakdown_level', 'pct_from_breakdown',
+      'prev_week_close', 'pct_wtd', 'prev_month_close', 'pct_mtd',
+      'is_vani_surge', 'is_vani_breakout',
+      'km_equity_symbols(id,symbol,company_name,exchange,industry,mcap_cr,isin)',
+    ].join(','))
+    .eq('trade_date', latestDate)
+    .lt('pct_chng', 0)
+    .gte('close', 50)
+    .lt('pct_from_breakdown', 0)
+    .limit(2000)
+    .execute();
+
+  const eodRows = (rows ?? []) as any[];
+
+  // Zero rows is ambiguous: "no breakdowns today" vs "pct_from_breakdown never
+  // populated" (house lesson: silent NULL columns). Probe one row to tell.
+  if (eodRows.length === 0) {
+    const { data: probe } = await from('km_equity_eod')
+      .select('pct_from_breakdown')
+      .eq('trade_date', latestDate)
+      .gt('pct_from_breakdown', -1000000)
+      .limit(1)
+      .execute();
+    if (!probe || probe.length === 0) {
+      console.warn(`[breakdown_watch] pct_from_breakdown is NULL for all rows on ${latestDate} — migration 187 not applied or rolling backfill not re-run`);
+    }
+    return [];
+  }
+
+  const declaredUniverse = getPresetMeta('breakdown_watch')?.universe;
+  const isinMap = new Map<string, any>();
+  for (const row of eodRows) {
+    const sym = row.km_equity_symbols;
+    if (!sym) continue;
+    if (!passesUniverse(sym.exchange, declaredUniverse)) continue;
+    if (exchangeFilter === 'NSE' && sym.exchange !== 'NSE') continue;
+    if (exchangeFilter === 'BSE' && sym.exchange !== 'BSE') continue;
+    const isin = sym.isin;
+    if (!isin) { isinMap.set(`noisin:${row.equity_id}`, row); continue; }
+    const existing = isinMap.get(isin);
+    if (!existing || sym.exchange === 'NSE') isinMap.set(isin, row);
+  }
+
+  const vaniRule = getPresetMeta('breakdown_watch')?.vani_rule;
+  const resultLimit = getPresetMeta('breakdown_watch')?.limit ?? 500;
+
+  const results = Array.from(isinMap.values()).map((row): ScanStock => {
+    const sym = row.km_equity_symbols;
+    const ema20 = row.ema_20 ?? null;
+    const atr14 = row.atr_14 ?? null;
+    return {
+      equity_id: row.equity_id,
+      symbol: sym?.symbol ?? String(row.equity_id),
+      company_name: sym?.company_name ?? null,
+      industry: sym?.industry ?? null,
+      exchange: sym?.exchange ?? null,
+      mcap_cr: sym?.mcap_cr ?? null,
+      trade_date: row.trade_date,
+      close: row.close,
+      open: row.open ?? null,
+      high: row.high ?? null,
+      low: row.low ?? null,
+      pct_chng: row.pct_chng ?? null,
+      magic_rs: row.magic_rs ?? null,
+      magic_rs_zone: row.magic_rs_zone ?? null,
+      rss_value: row.rss_value ?? null,
+      rss_spread: row.rss_spread ?? null,
+      rsi_14: row.rsi_14 ?? null,
+      rvol: row.rvol ?? null,
+      flow_type: row.flow_type ?? null,
+      supertrend_dir: row.supertrend_dir ?? null,
+      sma_50: row.sma_50 ?? null,
+      sma_150: row.sma_150 ?? null,
+      sma_200: row.sma_200 ?? null,
+      ema_20: ema20,
+      atr_14: atr14,
+      w52_high: row.w52_high ?? null,
+      w52_low: row.w52_low ?? null,
+      lifetime_high: row.lifetime_high ?? null,
+      avg_amt_5d: row.avg_amt_5d ?? null,
+      avg_amt_22d: row.avg_amt_22d ?? null,
+      avg_amt_66d: row.avg_amt_66d ?? null,
+      delivery_surge_x: row.delivery_surge_x ?? null,
+      sniper_inst: row.sniper_inst ?? null,
+      sniper_hot: row.sniper_hot ?? null,
+      accum_distrib: row.accum_distrib ?? null,
+      volume_divergence_flag: row.volume_divergence_flag ?? null,
+      delivery_pct: row.delivery_pct ?? null,
+      deliv_value_cr: row.deliv_value_cr ?? null,
+      has_recent_svd: !!row.dot_svd,
+      has_recent_sbd: !!row.dot_sbd,
+      has_recent_syd: !!row.dot_syd,
+      pctBelow52wHigh: row.pct_below_52w_high ?? null,
+      reward: ema20 && atr14 ? (ema20 + atr14) - row.close : null,
+      rewardPct: ema20 && atr14 && atr14 > 0 ? ((ema20 + atr14) - row.close) / atr14 : null,
+      magicRsTrend: [],
+      score_5d: row.score_5d != null ? Number(row.score_5d) : null,
+      score_22d: row.score_22d != null ? Number(row.score_22d) : null,
+      ret_5d: row.ret_5d ?? null,
+      ret_22d: row.ret_22d ?? null,
+      ret_66d: row.ret_66d ?? null,
+      xAmt: null,
+      rel_5d_n50: null, rel_22d_n50: null, rel_66d_n50: null,
+      rel_5d_n500: null, rel_22d_n500: null, rel_66d_n500: null,
+      vaniOpportunity: computeVaniOpportunity(row, vaniRule),
+      stage: row.stage ?? null,
+      d_pct: row.pct_chng != null ? Math.round(Number(row.pct_chng) * 100) / 100 : null,
+      breakout_level: row.breakout_level != null ? Number(row.breakout_level) : null,
+      pct_from_breakout: row.pct_from_breakout != null ? Number(row.pct_from_breakout) : null,
+      breakdown_level: row.breakdown_level != null ? Number(row.breakdown_level) : null,
+      pct_from_breakdown: row.pct_from_breakdown != null ? Number(row.pct_from_breakdown) : null,
+      prev_week_close: row.prev_week_close != null ? Number(row.prev_week_close) : null,
+      pct_wtd: row.pct_wtd != null ? Number(row.pct_wtd) : null,
+      prev_month_close: row.prev_month_close != null ? Number(row.prev_month_close) : null,
+      pct_mtd: row.pct_mtd != null ? Number(row.pct_mtd) : null,
+    };
+  });
+
+  // Deepest break first (most negative), NULLS LAST.
+  results.sort((a, b) => {
+    const ab = a.pct_from_breakdown ?? null;
+    const bb = b.pct_from_breakdown ?? null;
+    if (ab == null && bb == null) return 0;
+    if (ab == null) return 1;
+    if (bb == null) return -1;
+    return ab - bb;
+  });
+  return results.slice(0, resultLimit);
+}
+
+/** Scan: Period Movers — stocks trading above the previous PERIOD'S CLOSE.
+ *
+ *  Backs BOTH weekly_movers (week-to-date) and monthly_movers (month-to-date).
+ *  One implementation, parameterised on the reference/pct column pair, because
+ *  the two differ only in which precomputed columns they filter and rank on —
+ *  duplicating ~150 lines to change two identifiers is how the two drift.
+ *
+ *  Both were reverse-engineered from the owner's own exports (2026-08-24) and
+ *  verified against them symbol for symbol: the "Breakout" column is the
+ *  previous week's / month's CLOSE and "% from Breakout" is a period-to-date
+ *  return, NOT a rolling-high breakout. See
+ *  docs/claude/price-action-matrix-poa.md sections 3a and 3b.
+ *
+ *  The reference columns are DB-precomputed (migrations 183 / 185) by
+ *  compute_rolling_range(). That is what keeps these DIRECT queries: PostgREST
+ *  filters compare a column to a LITERAL only, so `close > prev_week_close`
+ *  is unexpressible — precomputing collapses it to `pct_wtd > 0`, exactly as
+ *  breakout_surge uses pct_from_breakout.
+ *
+ *  Universe: full active NSE, close >= 50 (penny filter). The export's
+ *  Rs 14,000 Cr large-cap gate is deliberately NOT baked in — same owner
+ *  doctrine as Breakout Surge, whose Rs 10,000 Cr gate became the MCap filter
+ *  in the filter bar. Ranked by week-to-date gain, the screener's own metric.
+ */
+async function fetchPeriodMovers(
+  presetId: 'weekly_movers' | 'monthly_movers' | 'weekly_decliners' | 'monthly_decliners',
+  pctCol: 'pct_wtd' | 'pct_mtd',
+  direction: 'up' | 'down',
+  exchangeFilter: ExchangeFilter,
+): Promise<ScanStock[]> {
+  const completedDates = await fetchRecentDates(1);
+  const latestDate: string | null = completedDates[0] ?? null;
+  if (!latestDate) return [];
+
+  const base = from('km_equity_eod')
+    .select([
+      'equity_id', 'trade_date', 'close', 'open', 'high', 'low',
+      'pct_chng', 'magic_rs', 'magic_rs_zone', 'rss_value', 'rss_spread',
+      'rsi_14', 'rvol', 'flow_type', 'supertrend_dir',
+      'sma_50', 'sma_150', 'sma_200', 'ema_20', 'atr_14',
+      'w52_high', 'w52_low', 'lifetime_high',
+      'avg_amt_5d', 'avg_amt_22d', 'avg_amt_66d', 'delivery_surge_x',
+      'sniper_inst', 'sniper_hot', 'accum_distrib',
+      'volume_divergence_flag', 'delivery_pct', 'deliv_value_cr',
+      'dot_svd', 'dot_sbd', 'dot_syd', 'stage',
+      'score_5d', 'score_22d', 'ret_5d', 'ret_22d', 'ret_66d',
+      'breakout_level', 'pct_from_breakout', 'pct_below_52w_high',
+      'breakdown_level', 'pct_from_breakdown',
+      'prev_week_close', 'pct_wtd', 'prev_month_close', 'pct_mtd',
+      'is_vani_surge', 'is_vani_breakout',
+      'km_equity_symbols(id,symbol,company_name,exchange,industry,mcap_cr,isin)',
+    ].join(','))
+    .eq('trade_date', latestDate)
+    .gte('close', 50);
+  const { data: rows } = await (direction === 'up' ? base.gt(pctCol, 0) : base.lt(pctCol, 0))
+    .limit(2000)
+    .execute();
+
+  const eodRows = (rows ?? []) as any[];
+
+  // Zero results is ambiguous: "nothing up on the week" vs "pct_wtd never
+  // populated" (house lesson: silent NULL columns). Probe one row to tell.
+  if (eodRows.length === 0) {
+    const { data: probe } = await from('km_equity_eod')
+      .select(pctCol)
+      .eq('trade_date', latestDate)
+      .gt(pctCol, -1000000)
+      .limit(1)
+      .execute();
+    if (!probe || probe.length === 0) {
+      console.warn(`[${presetId}] ${pctCol} is NULL for all rows on ${latestDate} — migration not applied or backfill not run`);
+    }
+    return [];
+  }
+
+  // Declared universe FIRST, then ISIN-dedup, then the user's exchange filter.
+  // The universe gate is what keeps a preset honest to kd_scan_presets; without
+  // it NSE_ONLY leaks BSE-only symbols, which have no delivery data.
+  const declaredUniverse = getPresetMeta(presetId)?.universe;
+  const isinMap = new Map<string, any>();
+  for (const row of eodRows) {
+    const sym = row.km_equity_symbols;
+    if (!sym) continue;
+    if (!passesUniverse(sym.exchange, declaredUniverse)) continue;
+    if (exchangeFilter === 'NSE' && sym.exchange !== 'NSE') continue;
+    if (exchangeFilter === 'BSE' && sym.exchange !== 'BSE') continue;
+    const isin = sym.isin;
+    if (!isin) { isinMap.set(`noisin:${row.equity_id}`, row); continue; }
+    const existing = isinMap.get(isin);
+    if (!existing || sym.exchange === 'NSE') isinMap.set(isin, row);
+  }
+
+  const vaniRule = getPresetMeta(presetId)?.vani_rule;
+  const resultLimit = getPresetMeta(presetId)?.limit ?? 500;
+
+  const results = Array.from(isinMap.values()).map((row): ScanStock => {
+    const sym = row.km_equity_symbols;
+    const ema20 = row.ema_20 ?? null;
+    const atr14 = row.atr_14 ?? null;
+    return {
+      equity_id:            row.equity_id,
+      symbol:               sym?.symbol ?? String(row.equity_id),
+      company_name:         sym?.company_name ?? null,
+      industry:             sym?.industry ?? null,
+      exchange:             sym?.exchange ?? null,
+      mcap_cr:              sym?.mcap_cr ?? null,
+      trade_date:           row.trade_date,
+      close:                row.close,
+      open:                 row.open ?? null,
+      high:                 row.high ?? null,
+      low:                  row.low ?? null,
+      pct_chng:             row.pct_chng ?? null,
+      magic_rs:             row.magic_rs ?? null,
+      magic_rs_zone:        row.magic_rs_zone ?? null,
+      rss_value:            row.rss_value ?? null,
+      rss_spread:           row.rss_spread ?? null,
+      rsi_14:               row.rsi_14 ?? null,
+      rvol:                 row.rvol ?? null,
+      flow_type:            row.flow_type ?? null,
+      supertrend_dir:       row.supertrend_dir ?? null,
+      sma_50:               row.sma_50 ?? null,
+      sma_150:              row.sma_150 ?? null,
+      sma_200:              row.sma_200 ?? null,
+      ema_20:               ema20,
+      atr_14:               atr14,
+      w52_high:             row.w52_high ?? null,
+      w52_low:              row.w52_low ?? null,
+      lifetime_high:        row.lifetime_high ?? null,
+      avg_amt_5d:           row.avg_amt_5d ?? null,
+      avg_amt_22d:          row.avg_amt_22d ?? null,
+      avg_amt_66d:          row.avg_amt_66d ?? null,
+      delivery_surge_x:     row.delivery_surge_x ?? null,
+      sniper_inst:          row.sniper_inst ?? null,
+      sniper_hot:           row.sniper_hot ?? null,
+      accum_distrib:        row.accum_distrib ?? null,
+      volume_divergence_flag: row.volume_divergence_flag ?? null,
+      delivery_pct:         row.delivery_pct ?? null,
+      deliv_value_cr:       row.deliv_value_cr ?? null,
+      has_recent_svd:       !!row.dot_svd,
+      has_recent_sbd:       !!row.dot_sbd,
+      has_recent_syd:       !!row.dot_syd,
+      pctBelow52wHigh:      row.pct_below_52w_high ?? null,
+      reward:               ema20 && atr14 ? (ema20 + atr14) - row.close : null,
+      rewardPct:            ema20 && atr14 && atr14 > 0 ? ((ema20 + atr14) - row.close) / atr14 : null,
+      magicRsTrend:         [],
+      score_5d:             row.score_5d  != null ? Number(row.score_5d)  : null,
+      score_22d:            row.score_22d != null ? Number(row.score_22d) : null,
+      ret_5d:               row.ret_5d  ?? null,
+      ret_22d:              row.ret_22d ?? null,
+      ret_66d:              row.ret_66d ?? null,
+      xAmt:                 null,
+      rel_5d_n50:           null, rel_22d_n50:  null, rel_66d_n50:  null,
+      rel_5d_n500:          null, rel_22d_n500: null, rel_66d_n500: null,
+      vaniOpportunity:      computeVaniOpportunity(row, vaniRule),
+      stage:                row.stage ?? null,
+      d_pct:                row.pct_chng != null ? Math.round(Number(row.pct_chng) * 100) / 100 : null,
+      breakout_level:       row.breakout_level    != null ? Number(row.breakout_level)    : null,
+      pct_from_breakout:    row.pct_from_breakout != null ? Number(row.pct_from_breakout) : null,
+      prev_week_close:      row.prev_week_close  != null ? Number(row.prev_week_close)  : null,
+      pct_wtd:              row.pct_wtd          != null ? Number(row.pct_wtd)          : null,
+      prev_month_close:     row.prev_month_close != null ? Number(row.prev_month_close) : null,
+      pct_mtd:              row.pct_mtd          != null ? Number(row.pct_mtd)          : null,
+      breakdown_level:      row.breakdown_level    != null ? Number(row.breakdown_level)    : null,
+      pct_from_breakdown:   row.pct_from_breakdown != null ? Number(row.pct_from_breakdown) : null,
+    };
+  });
+
+  // Period-to-date move, strongest first in the preset's own direction.
+  // 'up'   -> largest gain first;  'down' -> largest LOSS first (ascending).
+  results.sort((a, b) => {
+    const aw = (pctCol === 'pct_wtd' ? a.pct_wtd : a.pct_mtd) ?? null;
+    const bw = (pctCol === 'pct_wtd' ? b.pct_wtd : b.pct_mtd) ?? null;
+    if (aw == null && bw == null) return 0;
+    if (aw == null) return 1;
+    if (bw == null) return -1;
+    return direction === 'up' ? bw - aw : aw - bw;
   });
   return results.slice(0, resultLimit);
 }
@@ -1621,7 +1036,10 @@ async function fetchStage2Watch(exchangeFilter: ExchangeFilter): Promise<ScanSto
       'sniper_inst', 'sniper_hot', 'accum_distrib',
       'volume_divergence_flag', 'delivery_pct',
       'dot_svd', 'dot_sbd', 'dot_syd',
-      'stage', 'rs_percentile', 'chartink_score', 'is_vani_s2',
+      // is_vani_smart is this preset's vani_rule (migration 182). A rule the
+      // SELECT does not fetch reads as undefined and the chip stays dark, so
+      // the rule change is only half the fix — the column has to come with it.
+      'stage', 'rs_percentile', 'chartink_score', 'is_vani_s2', 'is_vani_smart',
       'score_5d', 'score_22d',
       'km_equity_symbols(id,symbol,company_name,exchange,industry,mcap_cr,isin)',
     ].join(','))
@@ -1702,6 +1120,7 @@ async function fetchStage2Watch(exchangeFilter: ExchangeFilter): Promise<ScanSto
       sma200_rising: row.sma200_rising ?? null,
       chartink_score: row.chartink_score ?? null,
       is_vani_s2: row.is_vani_s2 ?? null,
+      is_vani_smart: row.is_vani_smart ?? null,
     };
   });
 }
@@ -2061,21 +1480,26 @@ async function fetchVaNiExitWatch(exchangeFilter: ExchangeFilter): Promise<ScanS
 
 // ── Public API ─────────────────────────────────────────────────
 
-const SCAN_FUNCTIONS: Record<string, (bundle: ScanDataBundle) => ScanStock[]> = {
-  power_buy: scanPowerBuy,
-  power_sell: scanPowerSell,
-  smart_money: scanSmartMoney,
-  quiet_accumulation: scanQuietAccumulation,
-  distribution_warning: scanDistributionWarning,
-  conviction_flow: scanConvictionFlow,
-  // stage_2_leaders handled separately in executeScan via fetchStage2Leaders()
-};
-
 /**
  * Build a Set of equity_ids that are the NSE-preferred representative per ISIN.
  * For dual-listed stocks this picks the NSE row; for NSE-only or BSE-only it picks whichever exists.
  * Used by scan functions to avoid processing BSE numeric-code duplicates.
  */
+/** Does a symbol's exchange satisfy a preset's DECLARED universe?
+ *
+ *  buildNsePreferredIds() only DEDUPES dual-listed ISINs (NSE preferred); it
+ *  does not exclude BSE-ONLY symbols, so a preset declared NSE_ONLY still
+ *  returns them. Measured on 2026-08-25 after ISIN dedup: 139 of 500 rows
+ *  (28%) on weekly_movers were BSE-only, and BSE carries NO delivery data, so
+ *  the Delivery column rendered blank for every one of them.
+ */
+export function passesUniverse(exchange: string | null | undefined,
+                               universe: string | null | undefined): boolean {
+  if (universe === 'NSE_ONLY') return exchange === 'NSE';
+  if (universe === 'BSE_ONLY') return exchange === 'BSE';
+  return true;   // NSE_BSE / unset — no restriction
+}
+
 export function buildNsePreferredIds(symbols: Map<number, EquitySymbolRow>): Set<number> {
   const isinToId = new Map<string, { id: number; exchange: string }>();
   for (const [id, sym] of symbols) {
@@ -2508,6 +1932,321 @@ async function fetchFlowerPotBurstClientSide(exchangeFilter: ExchangeFilter): Pr
   return out.slice(0, lim);
 }
 
+// ── km_scan_results matview: the 6 bundle presets ─────────────────────────
+//
+// Migration 170 refreshed km_scan_results so its rows are what these six scans
+// return. Daily reads pull the ranked rows directly (one ~150-row query per
+// preset); the client-side JS scans + their EOD bundle were deleted in the
+// follow-up cleanup, so a matview outage now surfaces as an explicit error
+// rather than a silent slow-path downgrade.
+//
+// Weekly / monthly timeframes aren't in the matview yet — those return empty
+// until km_scan_results grows a weekly/monthly variant.
+const MATVIEW_BUNDLE_PRESETS: ReadonlySet<string> = new Set([
+  'power_buy',
+  'power_sell',
+  'smart_money',
+  'quiet_accumulation',
+  'distribution_warning',
+  'conviction_flow',
+]);
+
+// Waking Giants v4 (migration 177) — the three journey-state presets read the
+// km_wg_journeys state table (the km_fpb_active pattern on a multi-year
+// clock), NOT the scan matview. Map: preset id → journey state.
+const WG_JOURNEY_PRESETS: Record<string, string> = {
+  waking_giants: 'WAKING',
+  wg_ascent: 'ASCENDING',
+  wg_stirring: 'STIRRING',
+};
+
+// A wake is shown on the Waking tab only while fresh — the formation window
+// where the breakout is still an observation about NOW.
+const WAKING_FRESH_DAYS = 90;
+
+/** Map a km_wg_journeys row to a ScanStock (display fields are stamped
+ *  denormalized on the row by compute_wg_journeys.py). */
+function wgJourneyRowToScanStock(r: any): ScanStock {
+  const num = (v: any) => (v == null ? null : Number(v));
+  const truthy = (v: any) => v === true || v === 't' || v === 'true' || v === 1;
+  return {
+    equity_id: r.equity_id,
+    symbol: r.symbol ?? String(r.equity_id),
+    company_name: r.company_name ?? null,
+    industry: r.industry ?? null,
+    exchange: r.exchange ?? null,
+    mcap_cr: num(r.mcap_cr),
+    trade_date: r.trade_date,
+    close: Number(r.close ?? 0),
+    open: null, high: null, low: null,
+    pct_chng: num(r.pct_chng),
+    rsi_14: null,
+    magic_rs: num(r.magic_rs),
+    magic_rs_zone: r.magic_rs_zone ?? null,
+    flow_type: null, rvol: null, sniper_inst: null, sniper_hot: null,
+    accum_distrib: null, rss_value: null, rss_spread: null,
+    sma_150: null, volume_divergence_flag: null,
+    has_recent_svd: false, has_recent_sbd: false, has_recent_syd: false,
+    ema_20: null, atr_14: null,
+    delivery_pct: num(r.delivery_pct),
+    w52_high: null, sma_50: null, sma_200: null, w52_low: null,
+    supertrend_dir: null, lifetime_high: null, stage: null,
+    xAmt: null,
+    rel_5d_n50: null, rel_22d_n50: null, rel_66d_n50: null,
+    rel_5d_n500: null, rel_22d_n500: null, rel_66d_n500: null,
+    magicRsTrend: [], reward: null, rewardPct: null, pctBelow52wHigh: null,
+    vaniOpportunity: false,
+    avg_amt_5d: null, avg_amt_22d: null, avg_amt_66d: null,
+    // journey fields
+    wg_phase: r.state ?? null,
+    gl_acc_days: num(r.stir_days),
+    listing_age_years: num(r.listing_age_years),
+    pct_from_3y_high: num(r.pct_from_base_high),
+    days_since_3y_high: null,
+    drawdown_3y_pct: null,
+    base_years: num(r.base_years),
+    align_score: num(r.align_score),
+    journey_age_days: num(r.journey_age_days),
+    wg_resting: truthy(r.resting),
+    wake_date: r.wake_date ?? null,
+    gl_dist_pct: num(r.gl_dist_pct),
+  };
+}
+
+/** One journey-state tab = one indexed read of km_wg_journeys. */
+async function fetchWgJourneys(presetId: string, exchangeFilter: ExchangeFilter): Promise<ScanStock[]> {
+  if (exchangeFilter === 'BSE') return [];
+  const state = WG_JOURNEY_PRESETS[presetId];
+  // QueryBuilder.order() appends the direction itself — pass the bare column.
+  const orderCol =
+    state === 'WAKING'    ? 'wake_date' :      // freshest wakes first
+    state === 'ASCENDING' ? 'align_score' :    // strongest alignment first
+                            'stir_days';       // strongest quiet building first
+  const lim = getPresetMeta(presetId)?.limit ?? 60;
+  let q = from('km_wg_journeys')
+    .select('*')
+    .is('is_current', 'true')
+    .eq('state', state);
+  if (state === 'WAKING') {
+    // The Waking tab is an OPPORTUNITY feed, not a history lesson (owner
+    // 2026-08-24: a breakout from years ago is no opportunity now). Only
+    // wakes still in their formation window are shown; older unconfirmed
+    // journeys stay in the table but off the tab.
+    const cutoff = new Date(Date.now() - WAKING_FRESH_DAYS * 24 * 60 * 60 * 1000)
+      .toISOString().slice(0, 10);
+    q = q.gte('wake_date', cutoff);
+  }
+  const { data, error } = await q
+    .order(orderCol, { ascending: false, nullsFirst: false })
+    .limit(lim)
+    .execute();
+  if (error || !Array.isArray(data)) {
+    throw new Error(`km_wg_journeys unavailable for ${presetId} — run migration 177 + compute_wg_journeys.py`);
+  }
+  return (data as any[]).map(wgJourneyRowToScanStock);
+}
+
+/** Counts for the three journey tabs (landing page). */
+async function fetchWgJourneyCounts(): Promise<Record<string, number>> {
+  const counts: Record<string, number> = { waking_giants: 0, wg_ascent: 0, wg_stirring: 0 };
+  try {
+    const { data, error } = await from('km_wg_journeys')
+      .select('state,wake_date')
+      .is('is_current', 'true')
+      .limit(3000)
+      .execute();
+    if (error || !Array.isArray(data)) return counts;
+    const cutoff = new Date(Date.now() - WAKING_FRESH_DAYS * 24 * 60 * 60 * 1000)
+      .toISOString().slice(0, 10);
+    for (const r of data as any[]) {
+      if (r.state === 'WAKING') {
+        if (r.wake_date && r.wake_date >= cutoff) counts.waking_giants += 1;
+      } else if (r.state === 'ASCENDING') counts.wg_ascent += 1;
+      else if (r.state === 'STIRRING') counts.wg_stirring += 1;
+    }
+  } catch { /* table not deployed yet — zeros */ }
+  return counts;
+}
+
+/** Map a km_scan_results row (one of the 6 bundle presets) to a ScanStock.
+ *  Mirrors fpbRowToScanStock's shape; fields the matview does not carry for
+ *  these presets stay null (they were null under the JS path too). */
+function scanRowToScanStock(r: any): ScanStock {
+  const num = (v: any) => (v == null ? null : Number(v));
+  const truthy = (v: any) => v === true || v === 't' || v === 'true' || v === 1;
+  const trendArr: Array<number | null> = Array.isArray(r.magic_rs_trend) ? r.magic_rs_trend : [];
+  const magicRsTrend: (boolean | null)[] = trendArr.map((v) => (v == null ? null : v === 1));
+  return {
+    equity_id: r.equity_id,
+    symbol: r.symbol ?? String(r.equity_id),
+    company_name: r.company_name ?? null,
+    industry: r.industry ?? null,
+    exchange: r.exchange ?? null,
+    mcap_cr: num(r.mcap_cr),
+    trade_date: r.trade_date,
+    close: Number(r.close),
+    open: null, high: null, low: null,
+    pct_chng: num(r.pct_chng),
+    rsi_14: num(r.rsi_14),
+    magic_rs: num(r.magic_rs),
+    magic_rs_zone: r.magic_rs_zone ?? null,
+    flow_type: r.flow_type ?? null,
+    rvol: num(r.rvol),
+    sniper_inst: num(r.sniper_inst),
+    sniper_hot: null,
+    accum_distrib: r.accum_distrib ?? null,
+    rss_value: num(r.rss_value),
+    rss_spread: null,
+    sma_150: num(r.sma_150),
+    volume_divergence_flag: r.volume_divergence_flag ?? null,
+    has_recent_svd: truthy(r.has_recent_svd),
+    has_recent_sbd: truthy(r.has_recent_sbd),
+    has_recent_syd: truthy(r.has_recent_syd),
+    ema_20: num(r.ema_20),
+    atr_14: num(r.atr_14),
+    delivery_pct: num(r.delivery_pct),
+    delivery_surge_x: num(r.delivery_surge_x),
+    avg_amt_22d: num(r.avg_amt_22d),
+    avg_amt_5d: num(r.avg_amt_5d),
+    avg_amt_66d: null,
+    w52_high: num(r.w52_high),
+    sma_50: null,
+    sma_200: null,
+    w52_low: null,
+    supertrend_dir: num(r.supertrend_dir),
+    lifetime_high: null,
+    stage: null,
+    xAmt: num(r.xamt),
+    rel_5d_n50:   num(r.rel_5d_n50),
+    rel_22d_n50:  num(r.rel_22d_n50),
+    rel_66d_n50:  num(r.rel_66d_n50),
+    rel_5d_n500:  num(r.rel_5d_n500),
+    rel_22d_n500: num(r.rel_22d_n500),
+    rel_66d_n500: num(r.rel_66d_n500),
+    magicRsTrend,
+    reward:    num(r.reward),
+    rewardPct: num(r.reward_pct),
+    pctBelow52wHigh: num(r.pct_below_52w_high),
+    vaniOpportunity: truthy(r.vani_flag),
+    // Migration 180 columns. They were in the matview but not mapped here,
+    // so the UI showed dashes while the DB — and the audit, which read only
+    // the DB — said populated. A fix has to reach every layer the value
+    // crosses; the audit now checks this mapper too (lib/scan_contract.py).
+    score_5d: num(r.score_5d),
+    score_22d: num(r.score_22d),
+    // Preset-specific (populated where applicable, null elsewhere)
+    ret_5d:  num(r.ret_5d),
+    ret_22d: num(r.ret_22d),
+    ret_66d: num(r.ret_66d),
+    d_pct:   num(r.d_pct),
+    deliv_value_cr: num(r.deliv_value_cr),
+    // Waking Giants / First Ascent (migration 175; null for other presets)
+    wg_phase: r.wg_phase ?? null,
+    gl_acc_days: num(r.gl_acc_days),
+    listing_age_years: num(r.listing_age_years),
+    pct_from_3y_high: num(r.pct_from_3y_high),
+    days_since_3y_high: num(r.days_since_3y_high),
+    drawdown_3y_pct: num(r.drawdown_3y_pct),
+  };
+}
+
+/** Combined-mode dedup on raw matview rows (isin+exchange+vani_flag are on the row).
+ *  Same policy as deduplicateByIsin: prefer vaniOpportunity, then NSE. */
+function dedupeMatviewRowsByIsin(rows: any[]): any[] {
+  const seen = new Map<string, any>();
+  for (const r of rows) {
+    const isin = r.isin;
+    if (!isin) continue;
+    const existing = seen.get(isin);
+    if (!existing) {
+      seen.set(isin, r);
+      continue;
+    }
+    const rVani = r.vani_flag === true;
+    const eVani = existing.vani_flag === true;
+    const rWins = (rVani && !eVani)
+      || (rVani === eVani && r.exchange === 'NSE' && existing.exchange !== 'NSE');
+    if (rWins) seen.set(isin, r);
+  }
+  return [...seen.values()];
+}
+
+/** Matview-first fetch for the 6 bundle presets. Returns null on any failure
+ *  so the caller can fall back to the JS bundle path. */
+async function fetchFromScanMatview(
+  presetId: string,
+  exchangeFilter: ExchangeFilter,
+): Promise<ScanStock[] | null> {
+  try {
+    const { data, error } = await from('km_scan_results')
+      .select('*')
+      .eq('preset_id', presetId)
+      .order('rank', { ascending: true })
+      .limit(500)
+      .execute();
+    if (error || !Array.isArray(data)) {
+      console.warn(`[scan] ${presetId}: matview unavailable, using bundle fallback`, error);
+      return null;
+    }
+    let rows = data as any[];
+    if (exchangeFilter === 'combined') {
+      rows = dedupeMatviewRowsByIsin(rows);
+    } else {
+      rows = rows.filter((r) => r.exchange === exchangeFilter);
+    }
+    return rows.map(scanRowToScanStock);
+  } catch (e) {
+    console.warn(`[scan] ${presetId}: matview read failed, using bundle fallback`, e);
+    return null;
+  }
+}
+
+/** One-query per-preset counts across all 6 bundle presets. Returns null on
+ *  failure so getAllScanCounts falls back to bundle iteration. */
+async function fetchAllScanCountsFromMatview(
+  exchangeFilter: ExchangeFilter,
+): Promise<{ counts: Record<string, number>; latestDate: string | null } | null> {
+  try {
+    const { data, error } = await from('km_scan_results')
+      .select('preset_id,exchange,isin,vani_flag,trade_date')
+      .in('preset_id', [...MATVIEW_BUNDLE_PRESETS])
+      .limit(2000)
+      .execute();
+    if (error || !Array.isArray(data)) {
+      console.warn('[scan] matview counts unavailable, using bundle fallback', error);
+      return null;
+    }
+    const rows = data as any[];
+    const perPreset = new Map<string, any[]>();
+    for (const r of rows) {
+      const arr = perPreset.get(r.preset_id) ?? [];
+      arr.push(r);
+      perPreset.set(r.preset_id, arr);
+    }
+    const counts: Record<string, number> = {};
+    let latestDate: string | null = null;
+    for (const [presetId, presetRows] of perPreset) {
+      const filtered = exchangeFilter === 'combined'
+        ? dedupeMatviewRowsByIsin(presetRows)
+        : presetRows.filter((r) => r.exchange === exchangeFilter);
+      counts[presetId] = filtered.length;
+      const d = presetRows[0]?.trade_date as string | undefined;
+      if (d && (!latestDate || d > latestDate)) latestDate = d;
+    }
+    // Presets with zero matview rows still need a 0 entry so the landing UI
+    // doesn't read them as "unknown".
+    for (const id of MATVIEW_BUNDLE_PRESETS) {
+      if (!(id in counts)) counts[id] = 0;
+    }
+    // Journey-tab counts ride along (separate table, graceful zeros pre-177).
+    Object.assign(counts, await fetchWgJourneyCounts());
+    return { counts, latestDate };
+  } catch (e) {
+    console.warn('[scan] matview counts read failed, using bundle fallback', e);
+    return null;
+  }
+}
+
 export async function executeScan(
   scanId: string,
   exchangeFilter: ExchangeFilter = 'combined',
@@ -2524,20 +2263,28 @@ export async function executeScan(
   if (scanId === 'vani_exit_watch')      return fetchVaNiExitWatch(exchangeFilter);
   // breakout_surge_daily merged into breakout_surge (kept as alias for stale links)
   if (scanId === 'breakout_surge' || scanId === 'breakout_surge_daily') return fetchBreakoutSurge(exchangeFilter);
+  if (scanId === 'weekly_movers')        return fetchPeriodMovers('weekly_movers', 'pct_wtd', 'up', exchangeFilter);
+  if (scanId === 'monthly_movers')       return fetchPeriodMovers('monthly_movers', 'pct_mtd', 'up', exchangeFilter);
+  if (scanId === 'weekly_decliners')     return fetchPeriodMovers('weekly_decliners', 'pct_wtd', 'down', exchangeFilter);
+  if (scanId === 'monthly_decliners')    return fetchPeriodMovers('monthly_decliners', 'pct_mtd', 'down', exchangeFilter);
+  if (scanId === 'breakdown_watch')      return fetchBreakdownWatch(exchangeFilter);
 
-  const fn = SCAN_FUNCTIONS[scanId];
-  if (!fn) throw new Error(`Unknown scan: ${scanId}`);
+  // The 6 daily bundle presets read from km_scan_results (Phase 3). The old
+  // client-side bundle path was deleted in the follow-up cleanup — a matview
+  // failure now surfaces to React Query as an explicit error instead of
+  // silently downgrading, so an ops issue (nightly refresh failed, migration
+  // rolled back) is visible on the scan page rather than hidden by a slow
+  // parallel compute.
+  // Waking Giants v4 journey tabs — km_wg_journeys reads (migration 177).
+  if (scanId in WG_JOURNEY_PRESETS) return fetchWgJourneys(scanId, exchangeFilter);
 
-  const bundle = await loadScanData(timeframe);
-  let results = fn(bundle);
-
-  if (exchangeFilter === 'combined') {
-    results = deduplicateByIsin(results, bundle.symbols);
-  } else {
-    results = results.filter((s) => s.exchange === exchangeFilter);
+  if (timeframe === 'daily' && MATVIEW_BUNDLE_PRESETS.has(scanId)) {
+    const matview = await fetchFromScanMatview(scanId, exchangeFilter);
+    if (matview) return matview;
+    throw new Error(`Scan matview unavailable for ${scanId} — check pipeline scan_refresh step`);
   }
 
-  return results;
+  throw new Error(`Unknown scan: ${scanId}`);
 }
 
 // ── VaNi Highlights board (Workspace · Discovery) ──────────────
@@ -2588,11 +2335,9 @@ export async function fetchVaniHighlights(): Promise<VaniHighlights> {
     return { strength: [], caution: [], strengthTotal: 0, cautionTotal: 0, asOf: null };
   }
 
-  // Prime the shared bundle once — firing all bundle-based scans in parallel
-  // before the cache is warm would trigger concurrent full-market downloads.
-  await executeScan(sources[0].id);
-  const bundle = await loadScanData('daily');  // cache hit — just for latestDate
-
+  // All bundle-preset scans read from km_scan_results now (Phase 3), so firing
+  // them in parallel no longer triggers concurrent full-market downloads —
+  // each is a single ~150-row matview query.
   const settled = await Promise.allSettled(
     sources.map((src) => executeScan(src.id)),
   );
@@ -2635,20 +2380,30 @@ export async function fetchVaniHighlights(): Promise<VaniHighlights> {
     (a, b) => b.scans.length - a.scans.length || (a.rs_percentile ?? 101) - (b.rs_percentile ?? 101),
   );
 
+  // asOf: any fulfilled result carries the matview's trade_date; take the
+  // first available. All scans share the same latest date so which one we
+  // read from doesn't matter.
+  let asOf: string | null = null;
+  for (const res of settled) {
+    if (res.status === 'fulfilled' && res.value[0]?.trade_date) {
+      asOf = res.value[0].trade_date;
+      break;
+    }
+  }
+
   return {
     strength,
     caution,
     strengthTotal: strength.length,
     cautionTotal: caution.length,
-    asOf: bundle.latestDate,
+    asOf,
   };
 }
 
-/** Invalidate scan data cache (call after data refresh) */
+/** Invalidate scan data cache (call after data refresh). No-op now that the
+ *  scan engine holds no in-memory bundles — React Query owns the cache. */
 export function invalidateScanCache(): void {
-  _bundleCache.clear();
-  _oppConfigCache = null;
-  _oppDiagCount = 0;
+  /* intentionally empty — see docstring */
 }
 
 /** Fetch scan preset definitions from the DB (via pipeline API). */
@@ -2703,23 +2458,22 @@ export interface ScanCountsResult {
   latestDate: string | null;
 }
 
-/** Return result counts for all 9 scans — uses shared cached data */
+/** Return result counts for the 6 bundle scans — matview-first, one query. */
 export async function getAllScanCounts(
   exchangeFilter: ExchangeFilter = 'combined',
   timeframe: ScanTimeframe = 'daily',
 ): Promise<ScanCountsResult> {
-  const bundle = await loadScanData(timeframe);
-  const counts: Record<string, number> = {};
-  for (const [id, fn] of Object.entries(SCAN_FUNCTIONS)) {
-    let results = fn(bundle);
-    if (exchangeFilter === 'combined') {
-      results = deduplicateByIsin(results, bundle.symbols);
-    } else {
-      results = results.filter((s) => s.exchange === exchangeFilter);
-    }
-    counts[id] = results.length;
+  // Daily reads use the matview (one small aggregate query for all 6 presets).
+  // A matview failure surfaces as an error rather than a silent fallback so
+  // ops sees a broken landing page instead of a slow one that hides the issue.
+  // Weekly / monthly counts aren't in the matview yet — return empty until
+  // that timeframe lands in km_scan_results.
+  if (timeframe === 'daily') {
+    const mv = await fetchAllScanCountsFromMatview(exchangeFilter);
+    if (mv) return mv;
+    throw new Error('Scan matview counts unavailable — check pipeline scan_refresh step');
   }
-  return { counts, latestDate: bundle.latestDate };
+  return { counts: {}, latestDate: null };
 }
 
 // ── Manipulation Watch ────────────────────────────────────────
@@ -2743,6 +2497,7 @@ export interface ManipulationWatchResult {
 }
 
 // Separate cache for manipulation watch (wider date range than scanner)
+const CACHE_TTL = 3 * 60 * 1000; // 3 min
 let _mwCache: { data: ManipulationWatchBundle; fetchedAt: number; lookback: number } | null = null;
 
 interface ManipulationWatchBundle {

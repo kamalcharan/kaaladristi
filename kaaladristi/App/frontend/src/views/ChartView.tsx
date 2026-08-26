@@ -11,6 +11,7 @@ import VerdictHero from '@/components/domain/StockCockpit/VerdictHero';
 import ThesisTab from '@/components/domain/StockCockpit/ThesisTab';
 import type { ThesisBar } from '@/services/thesis';
 import StoryMode from '@/components/domain/StockCockpit/StoryMode';
+import ScannerArrivalView from '@/components/domain/StockCockpit/ScannerArrival/ScannerArrivalView';
 import { buildStoryEvents, KIND_COLORS, type StoryEvent } from '@/services/storyEvents';
 import { fetchSectorSeries } from '@/services/sectorSeries';
 import DeliveryVsTraded from '@/components/domain/StockCockpit/DeliveryVsTraded';
@@ -38,6 +39,8 @@ import type { TimeRange } from '@/types';
 import { useVisualPulse } from '@/hooks/useVisualPulse';
 import { useEquityVisualPulse } from '@/hooks/useEquityVisualPulse';
 import { useScanPresence } from '@/hooks/useScanPresence';
+import { useSetupData } from '@/hooks/useSetupData';
+import { getSetupAdapter } from '@/services/thesis/setupAdapter';
 import { useIndexBreadth, useConstituentDetails } from '@/hooks/useSectorRotation';
 import { useIndexConstituents } from '@/hooks/useMasterData';
 import { computeMoveQuality } from '@/services/moveQuality';
@@ -144,11 +147,19 @@ function buildSmNarrative(snap: PulseSnapshot): string {
  */
 export default function ChartView() {
   const { type, id } = useParams<{ type: string; id: string }>();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const [range, setRange] = useState<TimeRange>('1Y');
   const [tf, setTf] = useState<EquityTimeframe>('daily');
   const [isFull, setIsFull] = useState(false);
+  // Escape always exits fullscreen — the toolbar ✕ can scroll out of view
+  // inside the fullscreen card, leaving no visible way out.
+  useEffect(() => {
+    if (!isFull) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setIsFull(false); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [isFull]);
   const [selectedStyle] = useState<TradingStyle>('Balanced');
   // Timeline scrubber (the Player, pulled in from Pulse). null = pin to latest bar.
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
@@ -201,6 +212,29 @@ export default function ChartView() {
   const [dvTab, setDvTab] = useState<'analysis' | 'chart' | 'thesis'>(
     tabParam === 'thesis' ? 'thesis' : tabParam === 'chart' ? 'chart' : 'analysis',
   );
+  // Scanner arrival — when the URL carries ?setup=<preset> the user came
+  // from a scanner (e.g. Stage 2 Leaders). We land on Chart & Replay tab
+  // and default the mode to Story View (static annotated setup). Story Play
+  // (existing animated replay) is the other mode of the segmented toggle.
+  // See: docs/claude/scanner-story-page-poa.md
+  const setupParam = searchParams.get('setup');
+  const [storyMode, setStoryMode] = useState<'view' | 'play'>(setupParam ? 'view' : 'play');
+  // If landing with ?setup= but no explicit ?tab=, land on Chart & Replay so
+  // the Story View / Story Play toggle is where the user sees it.
+  // Arriving with ?setup= ALWAYS lands on Chart & Replay, whatever ?tab=
+  // says — old bookmarks carry tab=thesis from when the story view lived
+  // there. One-shot (ref-guarded) so the user can still switch tabs
+  // afterwards without being yanked back.
+  const setupTabForcedRef = useRef(false);
+  useEffect(() => {
+    if (setupParam && !setupTabForcedRef.current) {
+      setupTabForcedRef.current = true;
+      if (dvTab !== 'chart') setDvTab('chart');
+    }
+  }, [setupParam, dvTab]);
+  // User controls the timeframe — no forced snapping. Story View's cycle
+  // bands + editorial layer come from setupData (weekly-computed) and
+  // render via the overlay regardless of the chart's active tf.
   const [membershipOpen, setMembershipOpen] = useState(false);
   // Add-position from the chart hero (equity only). Switches to the Thesis tab
   // and pops its "I hold this" form.
@@ -211,9 +245,10 @@ export default function ChartView() {
   const isIndex = type === 'index';
   const isEquity = type === 'equity';
 
-  // ── Chart data (full history for TradingChart) ──
-  // dateKey: the main chart page is commonly left open through a session —
-  // same fix as hooks/useScan.ts, so a day change refetches automatically.
+  // ── Chart data (full history for TradingChart) — declared BEFORE the
+  // story block because the stage-based story fallback reads the latest
+  // bar's stage. dateKey: the page is commonly left open through a
+  // session; a day change refetches automatically (same as useScan.ts).
   const { latestDataDate: chartDateKey } = usePipelineStatus();
   const { data: rows = [], isLoading, isError, error, refetch } = useQuery({
     queryKey: ['chart', type, numId, range, tf, chartDateKey ?? 'unknown'],
@@ -229,10 +264,115 @@ export default function ChartView() {
     enabled: !!numId && (isIndex || isEquity),
   });
 
+  // Scan presence — which presets currently contain this stock. Moved up
+  // from the pulse block because the story layer derives from it on
+  // direct navigation (no ?setup= in the URL).
+  const scanPresence = useScanPresence(isEquity ? numId : null);
+
+  // The story lenses available for this stock: every matched preset that
+  // has a registered setup adapter. Order comes from useScanPresence
+  // (✦ VaNi-highlight scans first — the strongest presence leads).
+  const storyChoices = useMemo(
+    () => (isEquity ? scanPresence.matchedScans.filter((m) => getSetupAdapter(m.id)) : []),
+    [isEquity, scanPresence.matchedScans],
+  );
+
+  // Stage-based fallback lens — a story ALWAYS shows for an equity, even
+  // while scan presence is still computing or when the stock is in no
+  // scan today: the latest bar's Weinstein stage picks the structural
+  // read that fits (weekly/monthly rows carry no stage → generic watch).
+  const latestStage = isEquity && rows.length > 0
+    ? ((rows[rows.length - 1] as { stage?: string | null }).stage ?? null)
+    : null;
+  const stageFallback = !isEquity || rows.length === 0 ? null
+    : latestStage === 'S2'                                    ? 'stage_2_leaders'
+    : latestStage === 'S2_CANDIDATE'                          ? 'stage_2_watch'
+    : latestStage === 'S3'                                    ? 'stage_3_watch'
+    : latestStage === 'S4'                                    ? 'stage_4_leaders'
+    : latestStage === 'S1' || latestStage === 'S1_CANDIDATE'  ? 'quiet_accumulation'
+    : 'stage_2_watch';
+
+  // Direct navigation (no ?setup=) still gets a story: the top
+  // adapter-backed presence match, else the stage fallback. An explicit
+  // ?setup= always wins (deep links).
+  const effectiveSetup = setupParam ?? storyChoices[0]?.id ?? stageFallback;
+
+  // Default the toggle to Story View whenever a story exists — but only
+  // until the user touches the toggle themselves.
+  const storyModeTouchedRef = useRef(false);
+  useEffect(() => {
+    if (!storyModeTouchedRef.current) setStoryMode(effectiveSetup ? 'view' : 'play');
+  }, [effectiveSetup]);
+
+  // Fetch setup annotations once at ChartView level so BOTH branches of the
+  // toggle can render them: Story View's SVG chart AND Story Play's
+  // TradingChart. React Query dedupes by (equityId, setupKey) so the second
+  // consumer inside ScannerArrivalView costs nothing.
+  const setupDataForPlay = useSetupData(
+    isEquity && effectiveSetup ? numId : null,
+    isEquity && effectiveSetup ? effectiveSetup : null,
+  );
+  const setupLevelsForPlay = useMemo(() => {
+    if (!setupDataForPlay.data) return [];
+    return setupDataForPlay.data.chartAnnotations.horizontalLines.map((l) => ({
+      price: l.price, label: l.label, tone: l.tone,
+    }));
+  }, [setupDataForPlay.data]);
+  const setupEntriesForPlay = useMemo(() => {
+    if (!setupDataForPlay.data) return [];
+    // All entries render as thin dotted price lines. Native axis labels
+    // stay off (AnnotationOverlay renders editorial callout pills).
+    const out: Array<{ price: number; label: string; persona: 'lt' | 'swing'; n: number; axisLabel?: boolean }> = [];
+    for (const e of setupDataForPlay.data.personas.ltInvestor) {
+      if (e.price == null || !Number.isFinite(e.price)) continue;
+      out.push({ price: e.price, label: e.label, persona: 'lt', n: e.entryNo, axisLabel: false });
+    }
+    for (const e of setupDataForPlay.data.personas.swingTrader) {
+      if (e.price == null || !Number.isFinite(e.price)) continue;
+      out.push({ price: e.price, label: e.label, persona: 'swing', n: e.entryNo, axisLabel: false });
+    }
+    return out;
+  }, [setupDataForPlay.data]);
+
+  /** Editorial overlay bundle for TradingChart — the SAME data both
+   *  Story View and Story Play chart use. Adding a new preset or a new
+   *  overlay layer only touches this one derivation.
+   *
+   *  bigMoney and storyPins are computed later once the underlying
+   *  daily-event arrays exist in scope; those layers are added to this
+   *  bundle in setupOverlayFull below. */
+  const setupOverlayCore = useMemo(() => {
+    if (!setupDataForPlay.data) return undefined;
+    const d = setupDataForPlay.data;
+    const cycleBands = d.chartAnnotations.cycleLabels.map((c) => ({
+      from: c.from, to: c.to, label: c.label, tone: c.tone,
+    }));
+    const short = (label: string) => ({
+      'Structural breakout zone': 'Breakout',
+      'Structural pivot zone':    'Pivot / EMA',
+      'Continuation zone':        'Continuation',
+      'Break-of-pivot zone':      'Break of R1',
+      'Mid-range zone':           'Mid-range',
+      'Support-test zone':        'Support test',
+    } as Record<string, string>)[label] ?? label;
+    const callouts: Array<{ persona: 'lt' | 'swing'; n: number; price: number; labelShort: string }> = [];
+    for (const e of d.personas.ltInvestor) {
+      if (e.price != null && Number.isFinite(e.price)) {
+        callouts.push({ persona: 'lt', n: e.entryNo, price: e.price, labelShort: short(e.label) });
+      }
+    }
+    for (const e of d.personas.swingTrader) {
+      if (e.price != null && Number.isFinite(e.price)) {
+        callouts.push({ persona: 'swing', n: e.entryNo, price: e.price, labelShort: short(e.label) });
+      }
+    }
+    return { cycleBands, callouts };
+  }, [setupDataForPlay.data]);
+
   // ── Visual Pulse data — index uses useVisualPulse, equity uses useEquityVisualPulse ──
   const indexPulse = useVisualPulse(isIndex ? numId : null);
   const equityPulse = useEquityVisualPulse(isEquity ? numId : null);
-  const scanPresence = useScanPresence(isEquity ? numId : null);
+  // (scanPresence is declared earlier — the story layer derives from it.)
 
   // Index breadth — the cockpit's 4th verdict pillar for indices (% of
   // constituents participating). Equities read Liquidity instead.
@@ -408,6 +548,63 @@ export default function ChartView() {
     () => ((isEquity || isIndex) && tf === 'daily' ? buildStoryEvents(rows, bigMoneyDates, sectorByDate) : []),
     [isEquity, isIndex, tf, rows, bigMoneyDates, sectorByDate],
   );
+
+  /** Full editorial overlay bundle passed to TradingChart. Combines the
+   *  setup-derived layers (cycle bands + callouts, from setupOverlayCore)
+   *  with the daily-event layers (Big Money badges + storyEvent pins).
+   *  Same object drives Story View and Story Play — the toggle only
+   *  controls what sits BELOW the chart, never what's on it. */
+  const setupOverlayFull = useMemo(() => {
+    if (!setupOverlayCore) return undefined;
+    // Anchor each callout at the LAST bar whose range touched the zone
+    // price — the reference-deck grammar (breakout callout points at the
+    // breakout bar, support-test callout at the last test). Falls back
+    // to the last bar when price never touched the zone in view.
+    const anchorFor = (price: number): string | undefined => {
+      for (let i = rows.length - 1; i >= 0; i--) {
+        const r = rows[i];
+        if (r.low <= price && price <= r.high) return r.trade_date;
+      }
+      return rows[rows.length - 1]?.trade_date;
+    };
+    const callouts = setupOverlayCore.callouts.map((c) => ({
+      ...c,
+      anchorDate: anchorFor(c.price),
+    }));
+    const bigMoney = bigMoneyChartLines.map((b) => ({
+      trade_date: b.trade_date,
+      price: b.price,
+      amountCr: Number(b.label.match(/([0-9.]+)/)?.[1] ?? 0),
+      count: 1,
+    }));
+    // Promote the top story beats to slim on-chart callout boxes — the
+    // narrative moments the reference decks annotate. Highest-priority
+    // events win, capped so the chart doesn't drown; the rest stay as
+    // dots. Story Play animates through the SAME events one at a time.
+    const promotedDates = new Set(
+      [...storyEvents]
+        .sort((a, b) => b.priority - a.priority || b.barIndex - a.barIndex)
+        .slice(0, 5)
+        .map((e) => `${e.date}|${e.kind}`),
+    );
+    const storyPins: Array<{
+      trade_date: string;
+      kind: 'flow' | 'conviction' | 'stage' | 'magic_rs' | 'big_money' | 'rs_breakaway' | 'fpb' | 'scan' | 'sector';
+      title: string;
+      tone: 'bull' | 'bear' | 'neutral';
+      price: number;
+      promote?: boolean;
+    }> = storyEvents.map((e) => ({
+      trade_date: e.date,
+      kind: e.kind,
+      title: e.title,
+      tone: e.tone,
+      // storyEvents don't carry price; use the bar's close on that date
+      price: rows.find((r) => r.trade_date === e.date)?.close ?? 0,
+      promote: promotedDates.has(`${e.date}|${e.kind}`),
+    })).filter((p) => p.price > 0);
+    return { ...setupOverlayCore, callouts, levels: setupLevelsForPlay, bigMoney, storyPins };
+  }, [setupOverlayCore, setupLevelsForPlay, bigMoneyChartLines, storyEvents, rows]);
   // Latest Clean Breakaway/Breakdown within the rotation's plotted window —
   // storyEvents is indexed against `rows`, rotationPoints against `pulseBars`;
   // join by date (same pattern used for the story/playhead bridge below).
@@ -465,6 +662,17 @@ export default function ChartView() {
         className={cn('glass-card rounded-2xl p-3', isFull && 'fixed inset-2 z-[300] overflow-auto')}
         style={isFull ? { background: 'var(--kd-bg, #0b0f17)' } : undefined}
       >
+        {/* Always-visible exit in fullscreen — the toolbar ✕ can scroll
+            out of view; this one is pinned to the viewport corner. */}
+        {isFull && (
+          <button
+            onClick={() => setIsFull(false)}
+            title="Exit fullscreen (Esc)"
+            className="fixed top-5 right-6 z-[320] px-3 py-1.5 rounded-lg text-xs font-bold border border-kd-border bg-kd-elevated text-[var(--text-primary)] hover:border-[var(--accent)] transition-colors shadow-lg"
+          >
+            ✕ Exit
+          </button>
+        )}
         {!isLoading && !isError && rows.length > 0 && (
           <div className="flex flex-wrap items-center gap-1 mb-3 px-1">
             <div className="flex items-center gap-0.5 mr-2 p-0.5 rounded-lg border border-kd-border bg-kd-elevated">
@@ -551,6 +759,9 @@ export default function ChartView() {
               overlays={frameworkOverlays}
               astroBands={astroBands}
               bigMoneyEvents={bigMoneyChartLines}
+              setupLevels={setupLevelsForPlay}
+              setupEntries={setupEntriesForPlay}
+              overlay={setupOverlayFull}
               benchmarkIndexId={isIndex && id ? Number(id) : null}
               benchmarkName={isIndex ? name : null}
               storyBubble={storyBubble}
@@ -1008,8 +1219,64 @@ export default function ChartView() {
         {/* ═══ RESERVED CHAPTERS (Study reorg 2026-07-12) — #study-fundamentals,
             #study-events — render nothing until their data pipelines land. ═══ */}
 
-        {/* ═══ CHART & REPLAY TAB — SHARED (equity + index), rendered once ═══ */}
-        {dvTab === 'chart' && replayTab}
+        {/* ═══ CHART & REPLAY TAB — SHARED (equity + index) ═══
+            When ?setup=<preset> is present, a segmented Story View / Story Play
+            toggle is shown at the top. Story View = static annotated setup
+            (ScannerArrivalView); Story Play = existing animated replay chart.
+            See: docs/claude/scanner-story-page-poa.md */}
+        {dvTab === 'chart' && (
+          <>
+            {isEquity && effectiveSetup && (
+              <div className="flex items-center gap-3 flex-wrap mb-2">
+                <StoryModeToggle
+                  mode={storyMode}
+                  onChange={(m) => { storyModeTouchedRef.current = true; setStoryMode(m); }}
+                />
+                {/* Lens picker — on direct navigation the story derives from
+                    scan presence; when several presets match, the user picks
+                    the lens. Clicking writes ?setup= so the choice deep-links. */}
+                {storyChoices.length > 1 && (
+                  <div className="flex items-center gap-1 flex-wrap">
+                    <span className="text-[9px] font-bold uppercase tracking-widest text-muted mr-1">Lens</span>
+                    {storyChoices.map((c) => (
+                      <button
+                        key={c.id}
+                        onClick={() => setSearchParams((prev) => { prev.set('setup', c.id); return prev; }, { replace: true })}
+                        className={cn(
+                          'px-2.5 py-1 rounded-full text-[10px] font-medium border transition-colors',
+                          c.id === effectiveSetup
+                            ? 'border-[var(--accent)] text-[var(--accent)] bg-[var(--accent-glow)]'
+                            : 'border-kd-border text-[var(--text-secondary)] hover:border-[var(--accent)]',
+                        )}
+                      >
+                        {c.vani ? '✦ ' : ''}{c.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {!setupParam && storyChoices.length > 0 && (
+                  <span className="text-[10px] text-muted font-mono">
+                    story from scan presence
+                  </span>
+                )}
+                {!setupParam && storyChoices.length === 0 && (
+                  <span className="text-[10px] text-muted font-mono">
+                    {scanPresence.isLoading ? 'structural story · checking scans…' : 'structural story · not in a scan today'}
+                  </span>
+                )}
+              </div>
+            )}
+            {/* Chart + right-column indicators are ALWAYS the same TradingChart
+                (via replayTab) — Story View and Story Play differ only in what
+                sits BELOW: editorial sidebar cards vs the replay scrubber. */}
+            {replayTab}
+            {isEquity && effectiveSetup && storyMode === 'view' && (
+              <div className="mt-4">
+                <ScannerArrivalView equityId={numId} setupKey={effectiveSetup} />
+              </div>
+            )}
+          </>
+        )}
 
         {/* ═══ THESIS TAB — equity only (Phase 2a). The verification cockpit:
             adapts to position / watchlist / cold. Deep-linked via ?tab=thesis. ═══ */}
@@ -1056,6 +1323,36 @@ export default function ChartView() {
 }
 
 // ── Helpers ─────────────────────────────────────────────────────
+
+/** Segmented toggle for the Chart & Replay tab when the user arrives
+ *  from a scanner (?setup=<preset>). Story View = static annotated setup;
+ *  Story Play = animated timeline replay. Same tab, two lenses on the same
+ *  story arc. See: docs/claude/scanner-story-page-poa.md */
+function StoryModeToggle({ mode, onChange }: { mode: 'view' | 'play'; onChange: (m: 'view' | 'play') => void }) {
+  const btn = (m: 'view' | 'play', label: string, hint: string) => {
+    const active = mode === m;
+    return (
+      <button
+        key={m}
+        onClick={() => onChange(m)}
+        title={hint}
+        className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+          active
+            ? 'bg-[var(--accent-glow)] text-[var(--accent)] border border-[var(--accent)]'
+            : 'text-muted hover:text-[var(--text-primary)] border border-transparent'
+        }`}
+      >
+        {label}
+      </button>
+    );
+  };
+  return (
+    <div className="inline-flex items-center gap-1 p-1 mb-3 rounded-lg border border-kd-border bg-kd-elevated/30">
+      {btn('view', '☰ Story View', 'Static annotated setup — key levels, entry zones, what confirms')}
+      {btn('play', '▷ Story Play', 'Animated replay — watch price × signals unfold over time')}
+    </div>
+  );
+}
 
 /** Chapter label — small-caps eyebrow + fading hairline (Study reorg). */
 function SectionLabel({ children }: { children: React.ReactNode }) {

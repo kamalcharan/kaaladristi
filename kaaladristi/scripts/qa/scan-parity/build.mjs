@@ -10,7 +10,7 @@
  */
 
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import path from 'node:path';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -18,8 +18,11 @@ const repoRoot = path.resolve(here, '../../..');
 
 // The frontend's own esbuild (Vite dependency) — ESM ignores NODE_PATH, so
 // import it by path rather than requiring a package.json in this directory.
+// pathToFileURL converts the OS path into a file:// URL — required on Windows
+// where a bare `D:\...` reads as a `d:` URL scheme and Node rejects it
+// (ERR_UNSUPPORTED_ESM_URL_SCHEME). No-op on Linux/Mac.
 const { build } = await import(
-  path.join(repoRoot, 'App/frontend/node_modules/esbuild/lib/main.js')
+  pathToFileURL(path.join(repoRoot, 'App/frontend/node_modules/esbuild/lib/main.js')).href
 );
 const src = path.join(repoRoot, 'App/frontend/src/services/scanEngine.ts');
 const scratch = path.join(here, '.build');
@@ -34,7 +37,11 @@ export { SCAN_FUNCTIONS as __SCAN_FUNCTIONS, loadScanData as __loadScanData,
 const copyPath = path.join(scratch, 'scanEngine.parity.ts');
 writeFileSync(copyPath, readFileSync(src, 'utf8') + EXPORT_BLOCK);
 
-const shimPath = path.join(here, 'postgrest-shim.mjs');
+// Same Windows-URL rule at RUNTIME: esbuild writes this path into the bundle
+// as an `external: true` import specifier. When Node executes the bundle it
+// would trip the same ERR_UNSUPPORTED_ESM_URL_SCHEME on `D:\...`. Emit a
+// file:// URL so Node's ESM loader accepts it on every platform.
+const shimPath = pathToFileURL(path.join(here, 'postgrest-shim.mjs')).href;
 
 await build({
   entryPoints: [copyPath],

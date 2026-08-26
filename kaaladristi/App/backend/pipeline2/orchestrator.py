@@ -36,6 +36,12 @@ DAILY_STEPS: list[tuple[str, Optional[str]]] = [
     ('index_eod_download',    None),
     ('nse_eod_download',      'NSE'),
     ('bse_eod_download',      'BSE'),
+    # Enrich any newly-registered symbols with industry/company_name/is_fno
+    # before compute steps read them. Bhavcopy carries no industry column,
+    # so without this step every new listing lands untagged and drops out of
+    # every industry-aware view. Capped per run so a large backlog can't
+    # stall the nightly job; the backlog drains over multiple runs.
+    ('symbol_enrichment',     None),
     ('index_indicators',      None),
     ('nse_equity_indicators', 'NSE'),
     ('bse_equity_indicators', 'BSE'),
@@ -60,7 +66,10 @@ DAILY_STEPS: list[tuple[str, Optional[str]]] = [
     ('industry_composites',   None),
     ('market_breadth',        None),
     ('breadth_roc',           None),
-    ('scan_refresh',          None),   # LAST — matview reads all equity/industry compute above
+    ('dots',                  None),   # SVD/SBD/SYD — Volume Drive selects on these; must precede scan_refresh
+    ('scan_refresh',          None),   # matview reads all equity/industry compute above
+    ('wg_journeys',           None),   # journey state reads final daily zones + weekly/monthly aggregates
+    ('integrity_checks',      None),   # LAST — sweeps every other step's outcome + the day's data
 ]
 
 

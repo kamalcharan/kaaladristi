@@ -19,6 +19,7 @@ Columns written (same as original):
   surge_22d, score_5d, score_22d
   ret_5d, ret_22d, ret_66d
   breakout_level, pct_from_breakout, pct_below_52w_high
+  breakdown_level, pct_from_breakdown
   deliv_value_cr
 
 Usage:
@@ -53,10 +54,17 @@ STATEMENT_TIMEOUT_MS = 60 * 60 * 1000
 def get_conn():
     if not DATABASE_URL:
         raise RuntimeError('DATABASE_URL / DB_PRIMARY not set in .env')
+    # keepalives so a dropped socket ERRORS instead of hanging forever, and a
+    # bounded work_mem so one batch cannot push the backend into the OOM killer.
     return psycopg2.connect(
         DATABASE_URL,
         connect_timeout=30,
-        options=f"-c statement_timeout={STATEMENT_TIMEOUT_MS}",
+        keepalives=1,
+        keepalives_idle=30,
+        keepalives_interval=10,
+        keepalives_count=5,
+        options=(f"-c statement_timeout={STATEMENT_TIMEOUT_MS} "
+                 f"-c work_mem=64MB"),
     )
 
 
@@ -71,8 +79,15 @@ WITH eod AS (
     -- value_cr is true Crores on both exchanges (normalised in parser.py), so the
     -- delivery-value formula needs no exchange-aware rescaling and no join.
     -- Run only against data already rescaled by the value_cr backfill migration.
+    --
+    -- SCOPED BY SYMBOL BATCH, not by date. Every window below is
+    -- PARTITION BY equity_id, so a batch of symbols carries its own COMPLETE
+    -- history and no window changes meaning -- including lifetime_high, which is
+    -- an expanding max, and w52_high, which reaches back 252 bars. Date-chunking
+    -- would silently corrupt exactly those two.
     SELECT e.*
     FROM km_equity_eod e
+    WHERE e.equity_id = ANY(%s)
 ),
 base AS (
     SELECT
@@ -159,6 +174,13 @@ base AS (
                 ROWS BETWEEN 20 PRECEDING AND 1 PRECEDING
             )
         , 2) AS bklevel,
+        -- breakdown_level = rolling 20-bar LOW of prior close (mirror of bklevel)
+        ROUND(
+            MIN(close) OVER (
+                PARTITION BY equity_id ORDER BY trade_date
+                ROWS BETWEEN 20 PRECEDING AND 1 PRECEDING
+            )
+        , 2) AS bdlevel,
         -- delivery value in Crores for this bar
         ROUND(
             (COALESCE(value_cr, 0) * COALESCE(delivery_pct, 0) / 100.0)::numeric
@@ -173,6 +195,7 @@ base AS (
         amt5, amt22, amt66,
         d30, p5d, p22d, p66d,
         ret5d, ret22d, ret66d,
+        bdlevel,
         bklevel,
         deliv_cr_bar,
         CASE WHEN amt22 > 0 THEN ROUND(amt5  / amt22, 4) ELSE NULL END AS surge_x,
@@ -209,11 +232,27 @@ SET
     surge_22d           = s.s22d,
     score_5d            = s.sc5d,
     score_22d           = s.sc22d,
-    ret_5d              = s.ret5d,
-    ret_22d             = s.ret22d,
-    ret_66d             = s.ret66d,
+    -- Same representability guard, precautionary rather than corrective: these
+    -- divide by LAG(close, N), which junk 0.01 bars can make tiny. Max observed
+    -- magnitude across the known-bad symbols is 1.48e6 against the column's 1e8
+    -- ceiling, so this nulls nothing that exists today and simply removes a
+    -- latent UPSERT failure. NUMERIC(10,2), like pct_from_breakdown.
+    ret_5d              = CASE WHEN abs(s.ret5d)  < 100000000 THEN s.ret5d  ELSE NULL END,
+    ret_22d             = CASE WHEN abs(s.ret22d) < 100000000 THEN s.ret22d ELSE NULL END,
+    ret_66d             = CASE WHEN abs(s.ret66d) < 100000000 THEN s.ret66d ELSE NULL END,
     breakout_level      = s.bklevel,
-    pct_from_breakout   = s.pct_from_bk,
+    breakdown_level     = s.bdlevel,
+    -- Representability guard: the column is NUMERIC(10,2), so the absolute
+    -- value must stay under 1e8. bdlevel is the rolling MIN and therefore the
+    -- denominator that can go tiny -- junk BSE bars put a 0.01 close inside the
+    -- window while price is orders of magnitude higher, giving ratios past 1e9.
+    -- The breakout mirror needs no such guard: its denominator is a MAX.
+    pct_from_breakdown  = CASE
+                            WHEN s.bdlevel > 0
+                             AND abs((s.close - s.bdlevel) / s.bdlevel * 100.0) < 100000000
+                            THEN ROUND((s.close - s.bdlevel) / s.bdlevel * 100.0, 2)
+                            ELSE NULL END,
+    pct_from_breakout   = CASE WHEN abs(s.pct_from_bk) < 100000000 THEN s.pct_from_bk ELSE NULL END,
     pct_below_52w_high  = s.pct_b52,
     deliv_value_cr      = s.deliv_cr_bar
 FROM scored s
@@ -238,40 +277,59 @@ def build_sql(from_date: str | None, to_date: str | None):
         date_filter = ""   # full history
 
     sql = _SQL_TEMPLATE.replace("{date_filter}", date_filter)
-    return sql, params
+    return sql, params   # caller prepends the equity_id batch
 
 
-def run_update(from_date: str | None, to_date: str | None):
-    sql, params = build_sql(from_date, to_date)
+def run_update(from_date: str | None, to_date: str | None, batch_size: int = 250):
+    """Symbol-batched window UPDATE.
+
+    The original single-pass statement sorted all ~16.5M rows and swept every
+    window in one transaction. On the live VPS that backend was OOM-KILLED
+    ("server closed the connection unexpectedly", postmaster uptime unaffected,
+    zero rows written). Batching by SYMBOL keeps each statement small while
+    leaving every window mathematically identical, because all of them are
+    PARTITION BY equity_id.
+    """
+    sql, date_params = build_sql(from_date, to_date)
 
     range_desc = "full history"
     if from_date and to_date:
-        range_desc = f"{from_date} → {to_date}"
+        range_desc = f"{from_date} -> {to_date}"
     elif from_date:
-        range_desc = f"{from_date} → latest"
+        range_desc = f"{from_date} -> latest"
     elif to_date:
-        range_desc = f"earliest → {to_date}"
+        range_desc = f"earliest -> {to_date}"
 
-    print(f"\n[update] Single-pass window-function UPDATE — {range_desc}")
-    print("  PostgreSQL will sort all equity history once, then sweep all windows.")
-    print("  Expected: 10-30 min for full history, <2 min for a tight date range.")
-    print("  Progress not printed during the query — please wait...\n")
-
-    t0 = time.time()
     conn = get_conn()
     try:
         with conn.cursor() as cur:
-            cur.execute(sql, params)
-            updated = cur.rowcount
-        conn.commit()
-        elapsed = time.time() - t0
-        print(f"  Done in {elapsed:.0f}s — {updated:,} rows updated.")
+            cur.execute("SELECT DISTINCT equity_id FROM km_equity_eod ORDER BY equity_id")
+            ids = [r[0] for r in cur.fetchall()]
+        total_syms = len(ids)
+        batches = (total_syms + batch_size - 1) // batch_size
+        print(f"\n[update] Symbol-batched window UPDATE — {range_desc}")
+        print(f"  {total_syms:,} symbols in {batches} batches of {batch_size}.")
+        print(f"  Each batch carries each symbol's FULL history, so w52_high and")
+        print(f"  lifetime_high stay exact. Committed per batch.\n")
+
+        t0 = time.time()
+        updated = 0
+        for i in range(0, total_syms, batch_size):
+            chunk = ids[i:i + batch_size]
+            with conn.cursor() as cur:
+                cur.execute(sql, [chunk] + date_params)
+                n = cur.rowcount
+            conn.commit()
+            updated += n
+            done = min(i + batch_size, total_syms)
+            print(f"  [{done:>5}/{total_syms}] {n:>9,} rows   "
+                  f"(running {updated:>11,} · {time.time()-t0:.0f}s)", flush=True)
+
+        print(f"\n  Done in {time.time()-t0:.0f}s — {updated:,} rows updated.")
         return updated
-    except Exception as e:
-        conn.rollback()
-        raise
     finally:
         conn.close()
+
 
 
 def run_verify(target_date: str | None):
@@ -332,13 +390,15 @@ def main():
                         help="Single date (verify only)")
     parser.add_argument("--verify", action="store_true",
                         help="Only verify coverage — no update")
+    parser.add_argument("--batch-size", type=int, default=250,
+                        help="Symbols per batch (default 250; lower it if memory is tight)")
     args = parser.parse_args()
 
     if args.verify:
         run_verify(args.date or args.from_date)
         return
 
-    run_update(args.from_date, args.to_date)
+    run_update(args.from_date, args.to_date, args.batch_size)
 
     # Auto-verify after update using the to_date (or 'all') as sample
     run_verify(args.to_date or args.from_date)

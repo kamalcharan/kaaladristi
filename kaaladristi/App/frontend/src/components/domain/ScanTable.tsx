@@ -28,6 +28,61 @@ const PRESET_COL_OVERRIDES: Partial<Record<string, string[]>> = {
     'delivery_pct', 'rvol', 'magic_rs',
   ],
 
+  // Weekly Movers selects on pct_wtd, so the week-to-date pair leads: the
+  // gain, then the reference close it is measured from (the export's
+  // "Breakout" column). D% follows because it is a DIFFERENT number from
+  // % WTD on every day except Monday, and showing them side by side is what
+  // makes the distinction legible.
+  // Weekly Movers deliberately MIRRORS the price_action group defaults so it
+  // reads as a sibling of Breakout Surge rather than a different product: same
+  // Close | Score 5D | Score 22D | 1D% lead ("Score is the real moat"), same
+  // delivery-value and rvol/rsi/magic_rs tail. The ONLY substitution is the
+  // breakout pair -> the week-to-date pair, which is what this preset selects
+  // on. MCap and Delivery are appended because they are the two the owner
+  // reads this list for.
+  weekly_movers: [
+    'symbol', 'close', 'score_5d', 'score_22d', 'pct_chng',
+    'prev_week_close', 'pct_wtd',
+    'avg_amt_5d', 'avg_amt_22d',
+    'rvol', 'rsi_14', 'magic_rs',
+    'mcap_cr', 'delivery_pct',
+  ],
+
+  // Monthly Movers is the weekly override with the month pair swapped in, so
+  // the two read as one family and against Breakout Surge's group surface.
+  monthly_movers: [
+    'symbol', 'close', 'score_5d', 'score_22d', 'pct_chng',
+    'prev_month_close', 'pct_mtd',
+    'avg_amt_5d', 'avg_amt_22d',
+    'rvol', 'rsi_14', 'magic_rs',
+    'mcap_cr', 'delivery_pct',
+  ],
+
+  // The three breakdown screeners mirror their up-side siblings exactly, with
+  // the down-side pair swapped in. Same Score / delivery-value / rvol tail, so
+  // a reader moving between Breakout Surge and Breakdown Surge sees one grid.
+  breakdown_watch: [
+    'symbol', 'close', 'score_5d', 'score_22d', 'pct_chng',
+    'breakdown_level', 'pct_from_breakdown',
+    'avg_amt_5d', 'avg_amt_22d',
+    'rvol', 'rsi_14', 'magic_rs',
+    'mcap_cr', 'delivery_pct',
+  ],
+  weekly_decliners: [
+    'symbol', 'close', 'score_5d', 'score_22d', 'pct_chng',
+    'prev_week_close', 'pct_wtd',
+    'avg_amt_5d', 'avg_amt_22d',
+    'rvol', 'rsi_14', 'magic_rs',
+    'mcap_cr', 'delivery_pct',
+  ],
+  monthly_decliners: [
+    'symbol', 'close', 'score_5d', 'score_22d', 'pct_chng',
+    'prev_month_close', 'pct_mtd',
+    'avg_amt_5d', 'avg_amt_22d',
+    'rvol', 'rsi_14', 'magic_rs',
+    'mcap_cr', 'delivery_pct',
+  ],
+
   // Volume Drive selects ON the dot, so the dot leads — without it the grid
   // gives no clue why a row is present. Delivery follows because it is the
   // ranking key and the VaNi chip's threshold (dot_svd + deliv >= 50 measured
@@ -35,6 +90,23 @@ const PRESET_COL_OVERRIDES: Partial<Record<string, string[]>> = {
   volume_drive: [
     'symbol', 'dot_signal', 'delivery_pct', 'close', 'pct_chng',
     'rvol', 'delivery_surge_x', 'ret_5d', 'magic_rs', 'rsi_14', 'flow_type',
+  ],
+
+  // Waking Giants v4 journey tabs — the journey dimensions lead. base_years =
+  // "Slept", align_score = the 0-6 timeframe alignment, pct_from_3y_high
+  // carries % vs the hibernation ceiling on these presets.
+  waking_giants: [
+    'symbol', 'close', 'pct_chng', 'base_years', 'journey_age_days', 'align_score',
+    'gl_dist_pct', 'pct_from_3y_high', 'listing_age_years',
+    'delivery_pct', 'magic_rs', 'mcap_cr',
+  ],
+  wg_ascent: [
+    'symbol', 'close', 'pct_chng', 'align_score', 'journey_age_days', 'wg_resting',
+    'base_years', 'gl_dist_pct', 'listing_age_years', 'magic_rs', 'mcap_cr',
+  ],
+  wg_stirring: [
+    'symbol', 'close', 'pct_chng', 'gl_acc_days', 'base_years',
+    'pct_from_3y_high', 'listing_age_years', 'delivery_pct', 'magic_rs', 'mcap_cr',
   ],
 }
 
@@ -56,6 +128,10 @@ const DEFAULT_SORT: Record<string, { key: string; dir: 'asc' | 'desc' }> = {
   // next-day move, so it would sort the list by a feature with no predictive
   // value.
   volume_drive:     { key: 'delivery_pct',      dir: 'desc' },
+  // v4 journey tabs — match each fetcher's engine ranking.
+  waking_giants:    { key: 'base_years',        dir: 'desc' },
+  wg_ascent:        { key: 'align_score',       dir: 'desc' },
+  wg_stirring:      { key: 'gl_acc_days',       dir: 'desc' },
 }
 
 function getDefaultSort(presetId: string) {

@@ -464,6 +464,12 @@ export interface IndustryEodRow {
   bse_as_of_date: string | null;
   nse_stock_count: number | null;
   bse_stock_count: number | null;
+  // migration 171 — Industry Rotation Phase 1: return-momentum clock shown
+  // alongside the avg_magic_rs structural clock. Ranking still uses
+  // avg_magic_rs; these are surfaced-only pending the Phase 2 basis decision.
+  avg_ret_5d: number | null;
+  avg_ret_22d: number | null;
+  avg_ret_66d: number | null;
 }
 
 export type RotationCategory = 'rotating_in' | 'leading' | 'rotating_out';
@@ -549,6 +555,15 @@ export interface ScanStock {
   // Breakout Surge computed fields (null for all other scans)
   breakout_level?: number | null;
   pct_from_breakout?: number | null;
+  // Weekly Movers (WTD) computed fields (migration 183; null for other scans)
+  prev_week_close?: number | null;
+  pct_wtd?: number | null;
+  // Monthly Movers (MTD) computed fields (migration 185)
+  prev_month_close?: number | null;
+  pct_mtd?: number | null;
+  // Breakdown Surge computed fields (migration 187)
+  breakdown_level?: number | null;
+  pct_from_breakdown?: number | null;
   // Breakout Surge Daily — DB score/pct columns (migration 111)
   score_5d?: number | null;
   score_22d?: number | null;
@@ -580,6 +595,20 @@ export interface ScanStock {
   fpb_atr_compression?: number | null;      // ATR15 / ATR60
   fpb_vol_death?: number | null;            // vol5 / vol22
   fpb_setup_days?: number | null;           // compressed days in the last 22 sessions
+  // Waking Giants / First Ascent fields (migration 174; null for all other scans)
+  wg_phase?: 'WAKING' | 'STIRRING' | 'DORMANT' | 'ASCENDING' | 'HIBERNATING' | null;
+  gl_acc_days?: number | null;              // quiet delivery-backed sessions of last 60
+  listing_age_years?: number | null;        // years since NSE listing
+  pct_from_3y_high?: number | null;         // cliff-adjusted distance from 3-yr high (today)
+  days_since_3y_high?: number | null;       // calendar days since the 3-yr high
+  drawdown_3y_pct?: number | null;          // deepest close AFTER the 3-yr high vs that high
+  // Waking Giants v4 journey fields (km_wg_journeys, migration 177)
+  base_years?: number | null;               // length of the hibernation broken/being watched
+  align_score?: number | null;              // MagicRS alignment 0-6 (daily 1 / weekly 2 / monthly 3)
+  journey_age_days?: number | null;         // days since the wake event
+  wg_resting?: boolean | null;              // weekly close below the Golden Line (journey alive)
+  wake_date?: string | null;                // daily breakout date
+  gl_dist_pct?: number | null;              // close vs the Golden Line (SMA150), %
 }
 
 export interface ScanDefinition {

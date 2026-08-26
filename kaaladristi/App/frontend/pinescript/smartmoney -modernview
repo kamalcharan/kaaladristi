@@ -1,0 +1,2845 @@
+// @version=6
+// ╔════════════════════════════════════════════════════════════════════════════╗
+// ║  Smart Money Concept, Modern View (SMCMV)                                  ║
+// ║  Institutional Volume Flow Analysis with VWMA Matrix                       ║
+// ║  Detects Buyer/Seller Entry Points & Market Range Conditions               ║
+// ╚════════════════════════════════════════════════════════════════════════════╝
+import TradingView/ta/10 as tvta
+
+indicator("Smart Money Concept, Modern View",
+     shorttitle="SMCMV",
+     overlay=true,
+     max_bars_back=500,
+     max_boxes_count=500,
+     max_lines_count=500,
+     max_labels_count=500)
+
+//──────────────────────────────────────────────────────────────────────────────
+// 1. INPUTS
+//──────────────────────────────────────────────────────────────────────────────
+grp_mod   = "Volume Model"
+volModel  = input.string("Geometry (Candle-Range Split)", "Calculation Method", options = ["Geometry (Candle-Range Split)", "Intrabar (Precise)"], group=grp_mod)
+intrabarTF= input.timeframe("1", "Intrabar LTF", group=grp_mod)
+
+grp_per   = "Periods"
+modeSelect= input.string("Macro", "Lookback Mode", options = ["Micro", "Macro"], group=grp_per)
+
+grp_dir   = "Direction Filter"
+dir_in = input.float(
+     1.5, "Direction Trigger Angle (deg)",
+     step=0.1, group=grp_dir,
+     tooltip="Sets how strong the move must be to switch direction.\nAngle > +Trigger => BULL, Angle < -Trigger => BEAR.\nNote: This is NOT trade entry/exit; it only sets the dashboard direction state.")
+
+dir_out = input.float(
+     0.7, "Neutral Reset Angle (deg)",
+     step=0.1, group=grp_dir,
+     tooltip="Sets how small the move must be to return to NEUTRAL.\nIf |Angle| < Reset => NEUTRAL.\nIf Reset <= |Angle| <= Trigger => keep the last direction (prevents flickering).")
+
+//──────────────────────────────────────────────────────────────────────────────
+// TESTING FILTER (Proximity / Touch)
+//──────────────────────────────────────────────────────────────────────────────
+grp_test = "Testing Filter"
+
+test_dist_pct_in = input.float(
+     0.25, "Level Proximity (%)",
+     minval=0.0, step=0.05, group=grp_test,
+     tooltip="Defines what 'testing a level' means. Price must come within this % of the ACTIVE MA/Zone level. Lower = stricter."
+)
+
+require_wick_touch_in = input.bool(
+     true, "Require Wick Touch",
+     group=grp_test,
+     tooltip="If ON: resistance test requires High to reach within the proximity band; support test requires Low to reach within the band. If OFF: uses Close distance only."
+)
+
+grp_db    = "Matrix Dashboard"
+show_db   = input.bool(true, "Show Dashboard", group=grp_db)
+pos_db    = input.string("Top Right", "Position", options=["Top Right", "Bottom Right", "Bottom Left", "Top Left"], group=grp_db)
+size_db   = input.string("Normal", "Size", options=["Tiny", "Small", "Normal", "Large"], group=grp_db)
+
+//──────────────────────────────────────────────────────────────────────────────
+// 2. VOLUME ENGINE
+//──────────────────────────────────────────────────────────────────────────────
+f_vol_engine(_model, _ltf) =>
+    float buyVol = na, float sellVol = na, float totVol = na, float delta = na, bool valid = false
+    if _model == "Intrabar (Precise)"
+        [u, d, dl] = tvta.requestUpAndDownVolume(_ltf)
+        buyVol := math.abs(u), sellVol := math.abs(d)
+        totVol := buyVol + sellVol, delta := dl, valid := not na(totVol)
+    else
+        rng = high - low
+        if rng == 0
+            buyVol := volume * 0.5, sellVol := volume * 0.5
+        else
+            buyVol := volume * ((close - low) / rng)
+            sellVol := volume * ((high - close) / rng)
+        buyVol := math.max(0.0, math.min(volume, buyVol))
+        sellVol := math.max(0.0, math.min(volume, sellVol))
+        totVol := volume, delta := buyVol - sellVol, valid := true
+    [buyVol, sellVol, totVol, delta, valid]
+
+[volB, volS, volT, volD, volOk] = f_vol_engine(volModel, intrabarTF)
+
+var int _ibStreak = 0
+_ibStreak := volOk ? math.min(500, nz(_ibStreak[1]) + 1) : 0
+
+//──────────────────────────────────────────────────────────────────────────────
+// 3. UI HELPERS
+//──────────────────────────────────────────────────────────────────────────────
+f_getPos(_p) => _p == "Top Right" ? position.top_right : _p == "Bottom Right" ? position.bottom_right : _p == "Bottom Left" ? position.bottom_left : position.top_left
+f_getSize(_s) => _s == "Tiny" ? size.tiny : _s == "Small" ? size.small : _s == "Normal" ? size.normal : size.large
+f_fmtNum(_v) => 
+    v = math.abs(_v)
+    v >= 1000000 ? str.tostring(_v/1000000, "#.##")+"M" : v >= 1000 ? str.tostring(_v/1000, "#.##")+"K" : str.tostring(_v, "#")
+
+f_arrow(_rad) =>
+    deg = _rad * 180.0 / math.pi
+    deg > 5 ? "↗" : deg < -5 ? "↘" : "→"
+
+f_colZ(_z) => 
+    az = math.abs(_z)
+    base = _z >= 0 ? color.teal : color.maroon
+    az > 2.0 ? color.new(base, 20) : az > 1.0 ? color.new(base, 50) : color.new(color.gray, 80)
+
+f_txtZ(_z) =>
+    math.abs(_z) > 1.0 ? color.white : color.new(color.white, 30)
+
+//──────────────────────────────────────────────────────────────────────────────
+// 3.5 CORE CALCULATION ENGINE (HELPER FUNCTIONS & TYPES)
+//──────────────────────────────────────────────────────────────────────────────
+
+// A. Math Helpers
+
+// Safe division (avoid division by zero)
+f_safe_div(_num, _den) => _den == 0 ? na : _num / _den
+
+// Weighted VWMA using custom weights (safe)
+f_wvwma(_src, _w, _len) =>
+    float den = math.sum(_w, _len)
+    float num = math.sum(_src * _w, _len)
+    (na(den) or den == 0) ? na : (num / den)
+
+// Dual VWMA with robust fallbacks (prevents NA/NaN)
+f_dvwma(_src, _vb, _vs, _len) =>
+    float vw_b = f_wvwma(_src, _vb, _len)
+    float vw_s = f_wvwma(_src, _vs, _len)
+
+    // total-weight fallback (uses vb+vs)
+    float vw_t = f_wvwma(_src, _vb + _vs, _len)
+
+    // last-resort fallback (TradingView built-in VWMA on chart volume)
+    float vw_r = ta.vwma(_src, _len)
+
+    float out = na
+    if not na(vw_b) and not na(vw_s)
+        out := (vw_b + vw_s) / 2
+    else if not na(vw_b)
+        out := vw_b
+    else if not na(vw_s)
+        out := vw_s
+    else if not na(vw_t)
+        out := vw_t
+    else
+        out := vw_r
+
+    out
+
+
+// Calculate angle based on changes (Output in Degrees) - NORMALIZED FIX
+// Note: Now uses Percentage Change scaled by 10,000 to make angles consistent across Price Scales (BTC vs EURUSD).
+// Clamp + Snap helpers (keeps angles always in [-90, +90] and stable at 0.1°)
+f_clamp(_x, _lo, _hi) =>
+    math.max(_lo, math.min(_hi, _x))
+
+f_snap(_x, _step) =>
+    math.round(_x / _step) * _step
+
+// Angle in degrees (normalized slope) - hard-limited to [-90..+90]
+f_calc_angle(_src) =>
+    float _denom  = nz(_src[1], _src)
+    float _change = ta.change(_src)
+
+    // normalized slope (same logic you had)
+    float _slope  = _denom != 0 ? (_change / math.abs(_denom)) * 10000.0 : 0.0
+
+    // raw angle
+    float _deg    = math.atan(_slope) * 180.0 / math.pi
+
+    // force safe range + stable rounding
+    float _safe   = f_clamp(_deg, -90.0, 90.0)
+    f_snap(_safe, 0.1)
+
+
+  
+// Calculate Standard Z-Score
+// Formula: (Value - Mean) / Standard Deviation
+f_calc_zscore(_src, _len) =>
+    _mean = ta.sma(_src, _len)
+    _std  = ta.stdev(_src, _len)
+    _z    = (_src - _mean) / (_std == 0 ? 1 : _std) // Avoid division by zero
+    _z
+
+// ══════════════════════════════════════════════════════════════════════════════
+// GRANULAR SCORING HELPER FUNCTIONS (v2.0)
+// These functions convert raw values to smooth, gradient-based scores.
+// ══════════════════════════════════════════════════════════════════════════════
+
+// Clamp value to range [0, max]
+f_score_clamp(_val, _max) =>
+    math.max(0.0, math.min(_max, _val))
+
+// Linear interpolation score: maps value from [lo, hi] to [0, max_score]
+f_score_linear(_val, _lo, _hi, _max_score) =>
+    _val <= _lo ? 0.0 : _val >= _hi ? _max_score : ((_val - _lo) / (_hi - _lo)) * _max_score
+
+// Ratio-based score for Volume Power (k_ratio)
+// 0.5x=0, 1.0x=5, 2.0x=8, 3.0x+=10
+f_score_k_ratio(_ratio) =>
+    _ratio <= 0.5 ? 0.0 :
+     _ratio <= 1.0 ? f_score_linear(_ratio, 0.5, 1.0, 5.0) :
+     _ratio <= 2.0 ? 5.0 + f_score_linear(_ratio, 1.0, 2.0, 3.0) :
+     _ratio <= 3.0 ? 8.0 + f_score_linear(_ratio, 2.0, 3.0, 2.0) :
+     10.0
+
+// Z-Score based score for Volume Spike
+// 0σ=0, 1σ=4, 2σ=6, 3σ+=8
+f_score_zscore(_z, _max_score) =>
+    _az = math.abs(_z)
+    _az <= 0.5 ? 0.0 :
+     _az <= 1.0 ? f_score_linear(_az, 0.5, 1.0, _max_score * 0.5) :
+     _az <= 2.0 ? (_max_score * 0.5) + f_score_linear(_az, 1.0, 2.0, _max_score * 0.25) :
+     _az <= 3.0 ? (_max_score * 0.75) + f_score_linear(_az, 2.0, 3.0, _max_score * 0.25) :
+     _max_score
+
+// Break intensity score: ratio of attacker vs defender
+// 0.5x=0, 1.0x=5, 1.5x=8, 2.0x+=10
+f_score_break_ratio(_ratio) =>
+    _ratio <= 0.5 ? 0.0 :
+     _ratio <= 1.0 ? f_score_linear(_ratio, 0.5, 1.0, 5.0) :
+     _ratio <= 1.5 ? 5.0 + f_score_linear(_ratio, 1.0, 1.5, 3.0) :
+     _ratio <= 2.0 ? 8.0 + f_score_linear(_ratio, 1.5, 2.0, 2.0) :
+     10.0
+
+// Pressure imbalance score (attacking side %)
+// 50%=0, 60%=3, 70%=5, 80%+=7
+f_score_pressure(_pct) =>
+    _pct <= 50.0 ? 0.0 :
+     _pct <= 60.0 ? f_score_linear(_pct, 50.0, 60.0, 3.0) :
+     _pct <= 70.0 ? 3.0 + f_score_linear(_pct, 60.0, 70.0, 2.0) :
+     _pct <= 80.0 ? 5.0 + f_score_linear(_pct, 70.0, 80.0, 2.0) :
+     7.0
+
+// Impact angle score: higher angle = more direct impact
+// 0°=1, 45°=4, 90°=7
+f_score_impact_angle(_ang) =>
+    _ang <= 0.0 ? 1.0 :
+     _ang <= 45.0 ? 1.0 + f_score_linear(_ang, 0.0, 45.0, 3.0) :
+     _ang <= 90.0 ? 4.0 + f_score_linear(_ang, 45.0, 90.0, 3.0) :
+     7.0
+
+// Alignment score: boolean with optional intensity boost
+f_score_align(_is_aligned, _intensity, _max_score) =>
+    _is_aligned ? math.min(_max_score, _max_score * 0.6 + math.abs(_intensity) * 0.1) : 0.0
+
+// Stack depth score: 0-10 depth maps to 0-5 score
+f_score_stack(_depth, _max_depth) =>
+    _max_depth <= 0 ? 0.0 : (_depth / _max_depth) * 5.0
+
+// Confluence score: ally percentage maps to 0-5
+f_score_confluence(_pct) =>
+    _pct <= 0.0 ? 0.0 : _pct >= 100.0 ? 5.0 : (_pct / 100.0) * 5.0
+
+// Trend alignment score: count of 3 possible alignments (VAN/MID/GEN)
+f_score_trend_align(_count) =>
+    _count <= 0 ? 0.0 : _count == 1 ? 1.5 : _count == 2 ? 3.5 : 5.0
+
+// Grade converter: score to letter grade
+f_score_to_grade(_score) =>
+    _score >= 90 ? "A+" :
+     _score >= 80 ? "A"  :
+     _score >= 70 ? "B+" :
+     _score >= 60 ? "B"  :
+     _score >= 50 ? "C+" :
+     _score >= 40 ? "C"  :
+     _score >= 30 ? "D"  :
+     "F"
+
+// B. Data Structures (Types)
+// ==============================================================================
+
+// [TYPE] TraderEntity: Represents the "Now" / The Trader's Immediate Reality
+// Holds the 6 distinct dimensions of the current market moment (The Vector).
+type TraderEntity
+    float price_now      // 1. Position (Current Close)
+    float vol_total      // 2. Mass/Size (Total Volume)
+    float vol_buy        // 3. Internal Composition (Buy Volume)
+    float vol_sell       // 4. Internal Composition (Sell Volume)
+    float vol_delta      // 5. Electrical Charge (Volume Delta)
+    float vector_angle   // 6. Orientation (Price Action Angle)
+
+// [TYPE] RadarScan: The "Eyes" of the Trader
+// Holds the immediate tactical data: Where are the walls? Where is the floor?
+type RadarScan
+    int   wires_above      // Count of VWMAs above (Resistances)
+    int   wires_below      // Count of VWMAs below (Supports)
+    float dist_ceil        // Distance to closest VWMA above (Infinity if none)
+    int   idx_ceil         // Target ID (Index 0-9) of the Ceiling
+    float dist_floor       // Distance to closest VWMA below (Infinity if none)
+    int   idx_floor        // Target ID (Index 0-9) of the Floor
+
+// [TYPE] InteractionResult: The Verdict of the Interrogation (Layer 1)
+// Stores the deep analysis of the Trader vs The Matrix Line collision.
+// v2.0: Extended with granular 5-layer scoring system (100 points total).
+type InteractionResult
+    // ══════════════════════════════════════════════════════════════════════
+    // LAYER 1: VOLUME QUALITY (Max 25 points)
+    // ══════════════════════════════════════════════════════════════════════
+    float k_ratio              // Mass Ratio (Trader Vol / Line Avg Vol)
+    bool  k_pass               // Is Mass dominant? (Ratio > 1.0) [Legacy]
+    float k_ratio_score        // Granular: 0-10 based on ratio strength
+    float k_spike_z            // Volume Z-Score (spike intensity)
+    float k_spike_score        // Granular: 0-8 based on Z-Score
+    float k_trend_score        // Granular: 0-7 based on volume trend alignment
+    float layer1_score         // SUBTOTAL: Volume Quality (0-25)
+
+    // ══════════════════════════════════════════════════════════════════════
+    // LAYER 2: BATTLE STRUCTURE (Max 25 points)
+    // ══════════════════════════════════════════════════════════════════════
+    bool  s_break_guard        // Did we break the opposing guard? [Legacy]
+    float s_break_ratio        // Break intensity ratio (attacker / defender)
+    float s_break_score        // Granular: 0-10 based on break intensity
+    bool  s_dom_internal       // Are we stronger than line's own nature? [Legacy]
+    float s_dom_ratio          // Dominance ratio (attacker / line avg attacker)
+    float s_dom_score          // Granular: 0-8 based on dominance ratio
+    float s_pressure_pct       // Pressure imbalance (attacking side %)
+    float s_pressure_score     // Granular: 0-7 based on imbalance
+    float layer2_score         // SUBTOTAL: Battle Structure (0-25)
+
+    // ══════════════════════════════════════════════════════════════════════
+    // LAYER 3: FLOW & ENERGY (Max 20 points)
+    // ══════════════════════════════════════════════════════════════════════
+    bool  e_flow_align         // Is Delta aligned with Line Accumulation? [Legacy]
+    float e_flow_score         // Granular: 0-8 based on alignment strength
+    float e_shock_z            // Delta intensity Z-Score [Legacy]
+    float e_delta_accel        // Delta acceleration (ACC Δ ANG from PeriodStats)
+    float e_delta_accel_score  // Granular: 0-6 based on acceleration
+    float e_flow_momentum      // Flow momentum (ACC TOT ANG from PeriodStats)
+    float e_momentum_score     // Granular: 0-6 based on momentum
+    float layer3_score         // SUBTOTAL: Flow & Energy (0-20)
+
+    // ══════════════════════════════════════════════════════════════════════
+    // LAYER 4: GEOMETRY (Max 15 points)
+    // ══════════════════════════════════════════════════════════════════════
+    float g_impact_ang         // Relative impact angle (Abs Diff) [Legacy]
+    float g_impact_score       // Granular: 0-7 based on angle directness
+    bool  g_vec_align          // Is accumulation vector aligned with Trader? [Legacy]
+    float g_vec_score          // Granular: 0-5 based on alignment
+    float g_price_z            // Price Z-Score (statistical position)
+    float g_price_z_score      // Granular: 0-3 based on extreme position
+    float layer4_score         // SUBTOTAL: Geometry (0-15)
+
+    // ══════════════════════════════════════════════════════════════════════
+    // LAYER 5: ARMY STRUCTURE (Max 15 points) — Passed from HierarchyStatus
+    // ══════════════════════════════════════════════════════════════════════
+    float a_stack_score        // Granular: 0-5 based on MA stack depth
+    float a_confluence_score   // Granular: 0-5 based on ally percentage
+    float a_trend_score        // Granular: 0-5 based on trend alignment count
+    float layer5_score         // SUBTOTAL: Army Structure (0-15)
+
+    // ══════════════════════════════════════════════════════════════════════
+    // FINAL VERDICT
+    // ══════════════════════════════════════════════════════════════════════
+    float total_score          // GRAND TOTAL: 0-100 (sum of all 5 layers)
+    string grade               // Letter grade: A+, A, B+, B, C+, C, D, F
+
+// [TYPE] HierarchyStatus: The State of the Army (Layer 2)
+// Evaluates the Macro Environment: Order, Conquest, and Alliances.
+type HierarchyStatus
+    // 1. Formation (Orderliness)
+    bool  is_perfect_stack     // Is the array perfectly sorted? (e.g. 7 < 13 < 23...)
+    int   stack_depth          // How deep represents the perfect stack? (0-10)
+
+    // 2. Conquest (Mastery Check)
+    bool  m_van_win            // Vanguard Victory: 7 crossed 13?
+    bool  m_mid_win            // Mid-Field Victory: 13 crossed 23?
+    bool  m_gen_win            // General Victory: 23 crossed 97 (Trend Change)?
+
+    // 3. Alliances (Support)
+    int   ally_count           // Number of lines acting as "Wind in the Sails"
+    float ally_power           // Strength of support (0.0 to 100.0)
+
+// [TYPE] ZoneStatus: The Terrain Scan (Layer 3)
+// Evaluates the static battlefields (High Volume Nodes/Boxes).
+type ZoneStatus
+    bool  in_zone
+    float dist_res
+    bool  has_res
+    float dist_supp
+    bool  has_supp
+    float zone_strength
+
+    // NEW: exact boundary levels used for distance (the real drawn line levels)
+    float res_lvl      // nearest resistance boundary level (Zone bottom when above price, or Zone top if INSIDE)
+    float supp_lvl     // nearest support boundary level (Zone top when below price, or Zone bottom if INSIDE)
+
+    // NEW: period-index (0..9) of the selected zone source (maps to period_data_array / dvwma array)
+    int   res_i
+    int   supp_i
+
+    // NEW: zone type per side (so dashboard knows BUY/SELL/BOTH for RES vs SUPP)
+    int   res_kind
+    int   res_age
+    int   supp_kind
+    int   supp_age
+
+    float z_top
+
+    float z_bot
+    float z_vb
+    float z_vs
+    int   z_kind   // 1=BUY, -1=SELL, 0=BOTH
+    int   z_age    // bars ago
+    int   z_i      // period-index 0..9
+
+
+// [TYPE] PeriodStats: Represents the "History" / The Matrix Context
+// This structure holds the "DNA" of a specific timeframe (e.g., Period 7)
+type PeriodStats
+    // 1. Price Data
+    float p_dvwma
+    float p_angle
+    float p_zscore
+    
+    // 2. Volume Data (Total)
+    float v_tot_sma
+    float v_tot_z
+    float v_tot_ang
+    
+    // 3. Buy/Sell Volume Data
+    float v_buy_sma
+    float v_buy_z
+    float v_sell_sma
+    float v_sell_z
+    
+    // 4. Accumulation (Flow) Data - "Life Flow"
+    float acc_tot      // Accumulated Total Volume in Period
+    float acc_tot_ang  // Angle of Total Accumulation curve
+    float acc_buy      // Accumulated Buy Volume
+    float acc_buy_ang  // Angle of Buy Accumulation curve
+    float acc_sell     // Accumulated Sell Volume
+    float acc_sell_ang // Angle of Sell Accumulation curve
+    float acc_delta    // Accumulated Delta (Flow)
+    float acc_d_ang    // Angle of Delta Accumulation curve
+
+// C. The "Processor Brain" Function
+// This function calculates ALL metrics for a given period and returns a populated "PeriodStats" object.
+f_compute_period_stats(_p, _src_price, _src_vb, _src_vs, _src_vt, _src_vd) =>
+    // 1. Price Dynamics
+    // Calculate VWMA, its Angle, and the Z-Score of price relative to this period
+    float _p_dvwma   = f_dvwma(_src_price, _src_vb, _src_vs, _p)
+    float _p_ang     = f_calc_angle(_p_dvwma)
+    float _p_z       = f_calc_zscore(_src_price, _p)
+
+    // 2. Volume Dynamics (Total)
+    // Calculate average volume, Z-Score of volume (spike detection), and trend of volume
+    float _v_sma   = ta.sma(_src_vt, _p)
+    float _v_z     = f_calc_zscore(_src_vt, _p)
+    float _v_ang   = f_calc_angle(_v_sma)
+
+    // 3. Buy/Sell Volume Specifics
+    // Analyzing the specific strength of buyers vs sellers
+    float _vb_sma  = ta.sma(_src_vb, _p)
+    float _vb_z    = f_calc_zscore(_src_vb, _p)
+    float _vs_sma  = ta.sma(_src_vs, _p)
+    float _vs_z    = f_calc_zscore(_src_vs, _p)
+
+    // 4. Accumulation & Flow (The "Life" of the period)
+    // We calculate the rolling Sum of volumes over the period to see the total activity mass.
+    // Then we calculate the Angle of this Sum to see if activity is accelerating or decelerating.
+    
+    // Total Accumulation
+    float _acc_t      = math.sum(_src_vt, _p)
+    float _acc_t_ang  = f_calc_angle(_acc_t)
+    
+    // Buy Accumulation
+    float _acc_b      = math.sum(_src_vb, _p)
+    float _acc_b_ang  = f_calc_angle(_acc_b)
+    
+    // Sell Accumulation
+    float _acc_s      = math.sum(_src_vs, _p)
+    float _acc_s_ang  = f_calc_angle(_acc_s)
+    
+    // Delta Accumulation (Net Flow)
+    float _acc_d      = math.sum(_src_vd, _p)
+    float _acc_d_ang  = f_calc_angle(_acc_d)
+
+    // Return the populated Object
+    PeriodStats.new(_p_dvwma, _p_ang, _p_z, _v_sma, _v_z, _v_ang, _vb_sma, _vb_z, _vs_sma, _vs_z, _acc_t, _acc_t_ang, _acc_b, _acc_b_ang, _acc_s, _acc_s_ang, _acc_d, _acc_d_ang)
+
+// D. The "Matrix Radar" Scanner
+// Scans the environment (VWMAs) relative to the Trader (Price) in the "Now"
+f_scan_environment(_price, _matrix_arr) =>
+    int   _w_ab = 0
+    int   _w_be = 0
+    float _min_dist_up = 1000000.0  // Init with huge number
+    int   _idx_up      = -1         // Init Target Index (No Target)
+    float _min_dist_dn = 1000000.0  // Init with huge number
+    int   _idx_dn      = -1         // Init Target Index (No Target)
+
+    // Loop through all 10 Matrix Layers
+    for i = 0 to 9
+        float _level = array.get(_matrix_arr, i)
+        if not na(_level)
+            float _dist = _level - _price
+            
+            if _dist > 0  // Level is Above (Resistance)
+                _w_ab += 1
+                if _dist < _min_dist_up
+                    _min_dist_up := _dist
+                    _idx_up      := i   // [TARGET LOCK] Capture the Index
+
+            else if _dist < 0  // Level is Below (Support)
+                _w_be += 1
+                // _dist is negative here, we want absolute distance
+                if math.abs(_dist) < _min_dist_dn
+                    _min_dist_dn := math.abs(_dist)
+                    _idx_dn      := i   // [TARGET LOCK] Capture the Index
+
+            else  // _dist == 0  => PRICE IS EXACTLY ON LEVEL (TOUCH)
+                // Count as both sides to avoid bias, lock both distances to 0
+                _w_ab += 1
+                _w_be += 1
+                if 0 < _min_dist_up
+                    _min_dist_up := 0
+                    _idx_up      := i
+                if 0 < _min_dist_dn
+                    _min_dist_dn := 0
+                    _idx_dn      := i
+    
+    // Safety check if no lines found
+    if _min_dist_up == 1000000.0 
+        _min_dist_up := na
+        _idx_up      := -1
+    if _min_dist_dn == 1000000.0 
+        _min_dist_dn := na
+        _idx_dn      := -1
+        
+    RadarScan.new(_w_ab, _w_be, _min_dist_up, _idx_up, _min_dist_dn, _idx_dn)
+
+// E. The "Interrogator" (Layer 1 Analysis)
+// Deeply analyzes the interaction between the Trader (Vector) and the Target Line (Field).
+// v2.0: Full 5-layer granular scoring system (100 points max).
+f_interrogate_layer1(_t, _p, _is_resistance) =>
+    // _t: TraderEntity (Now)
+    // _p: PeriodStats (History of the Line)
+    // _is_resistance: True if attacking a Ceiling, False if attacking a Floor
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // LAYER 1: VOLUME QUALITY (Max 25 points)
+    // ═══════════════════════════════════════════════════════════════════════
+    
+    // 1A. Mass Ratio (0-10 points)
+    float _avg_vol = _p.v_tot_sma == 0 ? 1.0 : _p.v_tot_sma
+    float _k_rat   = _t.vol_total / _avg_vol
+    bool  _k_pass  = _k_rat > 1.0
+    float _k_ratio_score = f_score_k_ratio(_k_rat)
+    
+    // 1B. Volume Spike Z-Score (0-8 points)
+    float _k_spike_z = _p.v_tot_z
+    float _k_spike_score = f_score_zscore(_k_spike_z, 8.0)
+    
+    // 1C. Volume Trend Alignment (0-7 points)
+    // Is volume trend (v_tot_ang) aligned with price direction?
+    bool _vol_trend_aligned = _is_resistance ? (_p.v_tot_ang > 0) : (_p.v_tot_ang < 0)
+    float _k_trend_score = _vol_trend_aligned ? f_score_clamp(math.abs(_p.v_tot_ang) * 0.7, 7.0) : 0.0
+    
+    float _layer1 = f_score_clamp(_k_ratio_score + _k_spike_score + _k_trend_score, 25.0)
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // LAYER 2: BATTLE STRUCTURE (Max 25 points)
+    // ═══════════════════════════════════════════════════════════════════════
+    
+    // 2A. Guard Break (0-10 points)
+    float _attacker_vol = _is_resistance ? _t.vol_buy : _t.vol_sell
+    float _defender_avg = _is_resistance ? _p.v_sell_sma : _p.v_buy_sma
+    _defender_avg := _defender_avg == 0 ? 1.0 : _defender_avg
+    float _s_break_ratio = _attacker_vol / _defender_avg
+    bool  _s_break = _s_break_ratio > 1.0
+    float _s_break_score = f_score_break_ratio(_s_break_ratio)
+    
+    // 2B. Internal Dominance (0-8 points)
+    float _own_side_avg = _is_resistance ? _p.v_buy_sma : _p.v_sell_sma
+    _own_side_avg := _own_side_avg == 0 ? 1.0 : _own_side_avg
+    float _s_dom_ratio = _attacker_vol / _own_side_avg
+    bool  _s_dom = _s_dom_ratio > 1.0
+    float _s_dom_score = f_score_clamp(f_score_linear(_s_dom_ratio, 0.5, 2.0, 8.0), 8.0)
+    
+    // 2C. Pressure Imbalance (0-7 points)
+    float _s_pressure_pct = _t.vol_total > 0 ? (_attacker_vol / _t.vol_total) * 100.0 : 50.0
+    float _s_pressure_score = f_score_pressure(_s_pressure_pct)
+    
+    float _layer2 = f_score_clamp(_s_break_score + _s_dom_score + _s_pressure_score, 25.0)
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // LAYER 3: FLOW & ENERGY (Max 20 points)
+    // ═══════════════════════════════════════════════════════════════════════
+    
+    // 3A. Delta Alignment (0-8 points)
+    bool _e_align = math.sign(_t.vol_delta) == math.sign(_p.acc_delta)
+    float _delta_strength = math.abs(_t.vol_delta) / math.max(1.0, _t.vol_total) * 100.0
+    float _e_flow_score = _e_align ? f_score_clamp(4.0 + _delta_strength * 0.04, 8.0) : 0.0
+    
+    // 3B. Delta Acceleration (0-6 points)
+    float _e_delta_accel = _p.acc_d_ang
+    bool _accel_aligned = _is_resistance ? (_e_delta_accel > 0) : (_e_delta_accel < 0)
+    float _e_delta_accel_score = _accel_aligned ? f_score_clamp(math.abs(_e_delta_accel) * 0.6, 6.0) : 0.0
+    
+    // 3C. Flow Momentum (0-6 points)
+    float _e_flow_momentum = _p.acc_tot_ang
+    bool _momentum_aligned = _is_resistance ? (_e_flow_momentum > 0) : (_e_flow_momentum < 0)
+    float _e_momentum_score = _momentum_aligned ? f_score_clamp(math.abs(_e_flow_momentum) * 0.6, 6.0) : 0.0
+    
+    float _e_shock_z = _p.v_tot_z  // Keep for legacy display
+    
+    float _layer3 = f_score_clamp(_e_flow_score + _e_delta_accel_score + _e_momentum_score, 20.0)
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // LAYER 4: GEOMETRY (Max 15 points)
+    // ═══════════════════════════════════════════════════════════════════════
+    
+    // 4A. Impact Angle (0-7 points)
+    float _diff  = math.abs(_t.vector_angle - _p.p_angle)
+    float _g_imp = math.min(_diff, 180.0 - _diff)
+    float _g_impact_score = f_score_impact_angle(_g_imp)
+    
+    // 4B. Vector Alignment (0-5 points)
+    bool _g_aln = math.sign(_t.vector_angle) == math.sign(_p.acc_tot_ang)
+    float _g_vec_score = _g_aln ? f_score_clamp(3.0 + math.abs(_p.acc_tot_ang) * 0.2, 5.0) : 0.0
+    
+    // 4C. Price Z-Score Position (0-3 points)
+    float _g_price_z = _p.p_zscore
+    // Extreme positions (|Z| > 1.5) in the "right" direction get bonus
+    bool _price_extreme_ok = _is_resistance ? (_g_price_z > 1.0) : (_g_price_z < -1.0)
+    float _g_price_z_score = _price_extreme_ok ? f_score_clamp(math.abs(_g_price_z) * 1.0, 3.0) : 0.0
+    
+    float _layer4 = f_score_clamp(_g_impact_score + _g_vec_score + _g_price_z_score, 15.0)
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // LAYER 5: ARMY STRUCTURE (Max 15 points) — Placeholder (filled by caller)
+    // ═══════════════════════════════════════════════════════════════════════
+    // These scores are computed from HierarchyStatus and injected after creation.
+    float _a_stack_score      = 0.0
+    float _a_confluence_score = 0.0
+    float _a_trend_score      = 0.0
+    float _layer5             = 0.0
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // FINAL SCORE & GRADE
+    // ═══════════════════════════════════════════════════════════════════════
+    float _total = _layer1 + _layer2 + _layer3 + _layer4 + _layer5
+    string _grade = f_score_to_grade(_total)
+
+    InteractionResult.new(
+         _k_rat, _k_pass, _k_ratio_score, _k_spike_z, _k_spike_score, _k_trend_score, _layer1,
+         _s_break, _s_break_ratio, _s_break_score, _s_dom, _s_dom_ratio, _s_dom_score, _s_pressure_pct, _s_pressure_score, _layer2,
+         _e_align, _e_flow_score, _e_shock_z, _e_delta_accel, _e_delta_accel_score, _e_flow_momentum, _e_momentum_score, _layer3,
+         _g_imp, _g_impact_score, _g_aln, _g_vec_score, _g_price_z, _g_price_z_score, _layer4,
+         _a_stack_score, _a_confluence_score, _a_trend_score, _layer5,
+         _total, _grade)
+
+
+// E2. The "Zone Interrogator" (Layer 1 Analysis for HVN/Zones)
+// Same output type (InteractionResult) but assumes a horizontal boundary (0° line angle).
+// v2.0: Full 5-layer granular scoring system (100 points max).
+f_interrogate_zone_layer1(_t, _p, _is_resistance) =>
+    // Zone-specific: line angle is 0° (horizontal boundary)
+    float _zone_line_ang = 0.0
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // LAYER 1: VOLUME QUALITY (Max 25 points)
+    // ═══════════════════════════════════════════════════════════════════════
+    float _avg_vol = _p.v_tot_sma == 0 ? 1.0 : _p.v_tot_sma
+    float _k_rat   = _t.vol_total / _avg_vol
+    bool  _k_pass  = _k_rat > 1.0
+    float _k_ratio_score = f_score_k_ratio(_k_rat)
+    
+    // For zones, use the defending side's Z-score
+    float _k_spike_z = _is_resistance ? _p.v_sell_z : _p.v_buy_z
+    float _k_spike_score = f_score_zscore(_k_spike_z, 8.0)
+    
+    // Volume trend alignment (zone = horizontal, so just check overall trend)
+    bool _vol_trend_aligned = _is_resistance ? (_p.v_tot_ang > 0) : (_p.v_tot_ang < 0)
+    float _k_trend_score = _vol_trend_aligned ? f_score_clamp(math.abs(_p.v_tot_ang) * 0.7, 7.0) : 0.0
+    
+    float _layer1 = f_score_clamp(_k_ratio_score + _k_spike_score + _k_trend_score, 25.0)
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // LAYER 2: BATTLE STRUCTURE (Max 25 points)
+    // ═══════════════════════════════════════════════════════════════════════
+    float _attacker_vol = _is_resistance ? _t.vol_buy : _t.vol_sell
+    float _defender_avg = _is_resistance ? _p.v_sell_sma : _p.v_buy_sma
+    _defender_avg := _defender_avg == 0 ? 1.0 : _defender_avg
+    float _s_break_ratio = _attacker_vol / _defender_avg
+    bool  _s_break = _s_break_ratio > 1.0
+    float _s_break_score = f_score_break_ratio(_s_break_ratio)
+    
+    float _own_side_avg = _is_resistance ? _p.v_buy_sma : _p.v_sell_sma
+    _own_side_avg := _own_side_avg == 0 ? 1.0 : _own_side_avg
+    float _s_dom_ratio = _attacker_vol / _own_side_avg
+    bool  _s_dom = _s_dom_ratio > 1.0
+    float _s_dom_score = f_score_clamp(f_score_linear(_s_dom_ratio, 0.5, 2.0, 8.0), 8.0)
+    
+    float _s_pressure_pct = _t.vol_total > 0 ? (_attacker_vol / _t.vol_total) * 100.0 : 50.0
+    float _s_pressure_score = f_score_pressure(_s_pressure_pct)
+    
+    float _layer2 = f_score_clamp(_s_break_score + _s_dom_score + _s_pressure_score, 25.0)
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // LAYER 3: FLOW & ENERGY (Max 20 points)
+    // ═══════════════════════════════════════════════════════════════════════
+    bool _e_align = math.sign(_t.vol_delta) == math.sign(_p.acc_delta)
+    float _delta_strength = math.abs(_t.vol_delta) / math.max(1.0, _t.vol_total) * 100.0
+    float _e_flow_score = _e_align ? f_score_clamp(4.0 + _delta_strength * 0.04, 8.0) : 0.0
+    
+    float _e_delta_accel = _p.acc_d_ang
+    bool _accel_aligned = _is_resistance ? (_e_delta_accel > 0) : (_e_delta_accel < 0)
+    float _e_delta_accel_score = _accel_aligned ? f_score_clamp(math.abs(_e_delta_accel) * 0.6, 6.0) : 0.0
+    
+    float _e_flow_momentum = _p.acc_tot_ang
+    bool _momentum_aligned = _is_resistance ? (_e_flow_momentum > 0) : (_e_flow_momentum < 0)
+    float _e_momentum_score = _momentum_aligned ? f_score_clamp(math.abs(_e_flow_momentum) * 0.6, 6.0) : 0.0
+    
+    float _e_shock_z = _is_resistance ? _p.v_sell_z : _p.v_buy_z
+    
+    float _layer3 = f_score_clamp(_e_flow_score + _e_delta_accel_score + _e_momentum_score, 20.0)
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // LAYER 4: GEOMETRY (Max 15 points)
+    // ═══════════════════════════════════════════════════════════════════════
+    float _g_imp = math.abs(_t.vector_angle - _zone_line_ang)
+    float _g_impact_score = f_score_impact_angle(_g_imp)
+    
+    bool _g_aln = math.sign(_t.vector_angle) == math.sign(_p.acc_tot_ang)
+    float _g_vec_score = _g_aln ? f_score_clamp(3.0 + math.abs(_p.acc_tot_ang) * 0.2, 5.0) : 0.0
+    
+    float _g_price_z = _p.p_zscore
+    bool _price_extreme_ok = _is_resistance ? (_g_price_z > 1.0) : (_g_price_z < -1.0)
+    float _g_price_z_score = _price_extreme_ok ? f_score_clamp(math.abs(_g_price_z) * 1.0, 3.0) : 0.0
+    
+    float _layer4 = f_score_clamp(_g_impact_score + _g_vec_score + _g_price_z_score, 15.0)
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // LAYER 5: ARMY STRUCTURE (Max 15 points) — Placeholder
+    // ═══════════════════════════════════════════════════════════════════════
+    float _a_stack_score      = 0.0
+    float _a_confluence_score = 0.0
+    float _a_trend_score      = 0.0
+    float _layer5             = 0.0
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // FINAL SCORE & GRADE
+    // ═══════════════════════════════════════════════════════════════════════
+    float _total = _layer1 + _layer2 + _layer3 + _layer4 + _layer5
+    string _grade = f_score_to_grade(_total)
+
+    InteractionResult.new(
+         _k_rat, _k_pass, _k_ratio_score, _k_spike_z, _k_spike_score, _k_trend_score, _layer1,
+         _s_break, _s_break_ratio, _s_break_score, _s_dom, _s_dom_ratio, _s_dom_score, _s_pressure_pct, _s_pressure_score, _layer2,
+         _e_align, _e_flow_score, _e_shock_z, _e_delta_accel, _e_delta_accel_score, _e_flow_momentum, _e_momentum_score, _layer3,
+         _g_imp, _g_impact_score, _g_aln, _g_vec_score, _g_price_z, _g_price_z_score, _layer4,
+         _a_stack_score, _a_confluence_score, _a_trend_score, _layer5,
+         _total, _grade)
+
+
+// F. The "Hierarchy Engine" (Layer 2 Analysis)
+// Evaluates the Matrix Formation behind the Trader.
+f_check_hierarchy(_t, _p_arr, _eff_dir) =>
+    // _t: TraderEntity (Now)
+    // _p_arr: Full Array of PeriodStats (The Matrix History)
+    // _eff_dir: Effective direction with hysteresis (eff_dir)
+
+    // A. Identify Intent (Direction based on eff_dir - hysteresis)
+    int _dir = _eff_dir
+    bool _is_short = _dir == -1
+    bool _is_long  = _dir == 1
+
+
+    // B. Check Alliances (Iterate through all lines)
+    int _allies = 0
+    int _total_lines = array.size(_p_arr)
+    
+    for i = 0 to _total_lines - 1
+        PeriodStats _p = array.get(_p_arr, i)
+        bool _is_ally = false
+        
+        if _is_short
+            // To be a Bearish Ally: Must be ABOVE price AND Angling DOWN
+            if _p.p_dvwma > _t.price_now and _p.p_angle < 0
+                _is_ally := true
+        else if _is_long
+            // To be a Bullish Ally: Must be BELOW price AND Angling UP
+            if _p.p_dvwma < _t.price_now and _p.p_angle > 0
+                _is_ally := true
+        
+        if _is_ally
+            _allies += 1
+
+    float _ally_pow = (_allies / _total_lines) * 100.0
+
+    // C. Check Mastery (Key Battles)
+    // Index Mapping: 0=7, 1=13, 2=19, 3=23 ... 9=97
+    // We need at least index 3 (Period 23) to check basics.
+    bool _v_win = false // 7 vs 13
+    bool _m_win = false // 13 vs 23
+    bool _g_win = false // 23 vs 97 (Macro)
+
+    if _total_lines >= 2
+        PeriodStats p7  = array.get(_p_arr, 0)
+        PeriodStats p13 = array.get(_p_arr, 1)
+        if _is_short
+            _v_win := p7.p_dvwma < p13.p_dvwma
+        else if _is_long
+            _v_win := p7.p_dvwma > p13.p_dvwma
+            
+    if _total_lines >= 4 // Need index 3 (23)
+        PeriodStats p13 = array.get(_p_arr, 1)
+        PeriodStats p23 = array.get(_p_arr, 3)
+        if _is_short
+            _m_win := p13.p_dvwma < p23.p_dvwma
+        else if _is_long
+            _m_win := p13.p_dvwma > p23.p_dvwma
+
+    if _total_lines >= 10 // Need index 9 (97)
+        PeriodStats p23 = array.get(_p_arr, 3)
+        PeriodStats p97 = array.get(_p_arr, 9)
+        if _is_short
+            _g_win := p23.p_dvwma < p97.p_dvwma
+        else if _is_long
+            _g_win := p23.p_dvwma > p97.p_dvwma
+
+    // D. Check Perfect Stack (The Formation)
+    // Are lines ordered 0 < 1 < 2 < 3 ... ?
+    int _depth = 0
+    bool _stack_broken = false
+    if _total_lines > 1
+        for i = 0 to _total_lines - 2
+            if _stack_broken
+                break
+            
+            PeriodStats p_curr = array.get(_p_arr, i)
+            PeriodStats p_next = array.get(_p_arr, i+1)
+            
+            bool _order_ok = false
+            if _is_short
+                _order_ok := p_curr.p_dvwma < p_next.p_dvwma
+            else if _is_long
+                _order_ok := p_curr.p_dvwma > p_next.p_dvwma
+            
+            if _order_ok
+                _depth += 1
+            else
+                _stack_broken := true
+
+    bool _perf_stack = _depth == (_total_lines - 1)
+
+    HierarchyStatus.new(_perf_stack, _depth, _v_win, _m_win, _g_win, _allies, _ally_pow)
+
+// G. The "Zone Scanner" (Layer 3 Analysis)
+// Lo// Helper: period -> index (0..9)
+f_p2i(_p) =>
+    _p == 7  ? 0 : 
+     _p == 13 ? 1 : 
+     _p == 19 ? 2 : 
+     _p == 23 ? 3 : 
+     _p == 31 ? 4 : 
+     _p == 41 ? 5 : 
+     _p == 47 ? 6 : 
+     _p == 67 ? 7 : 
+     _p == 83 ? 8 : 
+     _p == 97 ? 9 : -1
+
+// G. The "Zone Scanner" (Layer 3 Analysis)
+// Locates the nearest Money Memory Nodes (High Volume Zones) relative to Trader.
+// NOTE: ta.highestbars() is precomputed OUTSIDE loops to avoid warnings.
+f_scan_zones(_t, _vb, _vs, _p_arr_int, _hb_buy_arr, _hb_sell_arr) =>
+
+    // selected zone details (final)
+    float _z_top  = na
+    float _z_bot  = na
+    float _z_vb   = na
+    float _z_vs   = na
+    int   _z_kind = na
+    int   _z_age  = na
+    int   _z_i    = -1
+
+    float _min_dist_res = 1000000.0
+    bool  _found_res    = false
+    float _s_res        = 0.0
+    float _res_lvl      = na
+    int   _res_i        = -1
+
+    float _min_dist_sup = 1000000.0
+    bool  _found_sup    = false
+    float _s_sup        = 0.0
+    float _sup_lvl      = na
+    int   _sup_i        = -1
+
+    bool  _in_zone      = false
+    float _in_vol       = 0.0
+    float _in_d_res     = na
+    float _in_d_sup     = na
+    float _in_top       = na
+    float _in_bot       = na
+    int   _in_i         = -1
+
+    // NEW: store selected candle details for dashboard
+    // NEW: store selected candle details for dashboard
+    float _res_top = na
+    float _res_bot = na
+    float _res_vb  = na
+    float _res_vs  = na
+
+    int _res_kind = na
+    int _res_age  = na
+
+    float _sup_top = na
+    float _sup_bot = na
+    float _sup_vb  = na
+    float _sup_vs  = na
+
+    int _sup_kind = na
+    int _sup_age  = na
+
+    float _in_vb = na
+    float _in_vs = na
+
+    int _in_kind = na
+    int _in_age  = na
+
+
+
+    int _p_count = array.size(_p_arr_int)
+
+    for i = 0 to _p_count - 1
+        int _p  = array.get(_p_arr_int, i)
+        int _pi = f_p2i(_p)
+
+        // 1) Max Buy Volume (PRECOMPUTED)
+        int _hb_idx = (_pi == -1) ? na : array.get(_hb_buy_arr, _pi)
+        if not na(_hb_idx)
+            int _idx_abs = math.abs(_hb_idx)
+            float _top = high[_idx_abs]
+            float _bot = low[_idx_abs]
+            float _vol = _vb[_idx_abs]
+            float _vb_c = _vb[_idx_abs]
+            float _vs_c = _vs[_idx_abs]
+
+            float _node = _vb_c + _vs_c   // TOTAL node volume (Buy+Sell)
+
+
+            int _hs_same = (_pi == -1) ? na : array.get(_hb_sell_arr, _pi)
+            bool _both = not na(_hs_same) and math.abs(_hs_same) == _idx_abs
+            int _kind = _both ? 0 : 1          // 0=BOTH, 1=BUY EXT
+            int _age  = _idx_abs               // bars ago
+
+            if _t.price_now < _bot
+                float _d = _bot - _t.price_now
+                if _d < _min_dist_res
+                    _min_dist_res := _d
+                    _found_res    := true
+                    _s_res        :=_node
+                    _res_lvl      := _bot     // resistance boundary = bottom (nearest edge)
+                    _res_i        := _pi
+                    _res_top  := _top
+                    _res_bot  := _bot
+                    _res_vb   := _vb_c
+                    _res_vs   := _vs_c
+                    _res_kind := _kind
+                    _res_age  := _age
+
+            else if _t.price_now > _top
+                float _d = _t.price_now - _top
+                if _d < _min_dist_sup
+                    _min_dist_sup := _d
+                    _found_sup    := true
+                    _s_sup        :=_node
+                    _sup_lvl      := _top     // support boundary = top (nearest edge)
+                    _sup_i        := _pi
+                    _sup_top  := _top
+                    _sup_bot  := _bot
+                    _sup_vb   := _vb_c
+                    _sup_vs   := _vs_c
+                    _sup_kind := _kind
+                    _sup_age  := _age
+
+            else
+                _in_zone := true
+                float _d_top = _top - _t.price_now
+                float _d_bot = _t.price_now - _bot
+
+                bool take_inside = na(_in_age) or (_age < _in_age) or (_age == _in_age and _node > _in_vol)
+
+                if take_inside
+                    _in_vol   := _node
+                    _in_d_res := _d_top
+                    _in_d_sup := _d_bot
+                    _in_top   := _top
+                    _in_bot   := _bot
+                    _in_i     := _pi
+                    _in_vb    := _vb_c
+                    _in_vs    := _vs_c
+                    _in_kind  := _kind
+                    _in_age   := _age
+
+        // 2) Max Sell Volume (PRECOMPUTED)
+        int _hs_idx = (_pi == -1) ? na : array.get(_hb_sell_arr, _pi)
+        if not na(_hs_idx)
+            int _idx_abs = math.abs(_hs_idx)
+            float _top = high[_idx_abs]
+            float _bot = low[_idx_abs]
+            float _vol = _vs[_idx_abs]
+            float _vb_c = _vb[_idx_abs]
+            float _vs_c = _vs[_idx_abs]
+            float _node = _vb_c + _vs_c   // TOTAL node volume (Buy+Sell)
+            int _hb_same = (_pi == -1) ? na : array.get(_hb_buy_arr, _pi)
+            bool _both = not na(_hb_same) and math.abs(_hb_same) == _idx_abs
+            int _kind = _both ? 0 : -1         // 0=BOTH, -1=SELL EXT
+            int _age  = _idx_abs
+
+
+            if _t.price_now < _bot
+                float _d = _bot - _t.price_now
+                if _d < _min_dist_res
+                    _min_dist_res := _d
+                    _found_res    := true
+                    _s_res        :=_node
+                    _res_lvl      := _bot
+                    _res_i        := _pi
+                    _res_top  := _top
+                    _res_bot  := _bot
+                    _res_vb   := _vb_c
+                    _res_vs   := _vs_c
+                    _res_kind := _kind
+                    _res_age  := _age
+                    
+            else if _t.price_now > _top
+                float _d = _t.price_now - _top
+                if _d < _min_dist_sup
+                    _min_dist_sup := _d
+                    _found_sup    := true
+                    _s_sup        := _node
+                    _sup_lvl      := _top
+                    _sup_i        := _pi
+
+                    // NEW: keep full sup candidate details
+                    _sup_top  := _top
+                    _sup_bot  := _bot
+                    _sup_vb   := _vb_c
+                    _sup_vs   := _vs_c
+                    _sup_kind := _kind
+                    _sup_age  := _age
+
+            else
+                _in_zone := true
+                float _d_top = _top - _t.price_now
+                float _d_bot = _t.price_now - _bot
+
+                bool take_inside = na(_in_age) or (_age < _in_age) or (_age == _in_age and _node > _in_vol)
+
+                if take_inside
+                    _in_vol   := _node
+                    _in_d_res := _d_top
+                    _in_d_sup := _d_bot
+                    _in_top   := _top
+                    _in_bot   := _bot
+                    _in_i     := _pi
+
+                    _in_vb   := _vb_c
+                    _in_vs   := _vs_c
+                    _in_kind := _kind
+                    _in_age  := _age
+
+    float _dist_res = _in_zone ? _in_d_res : (_found_res ? _min_dist_res : na)
+    float _dist_sup = _in_zone ? _in_d_sup : (_found_sup ? _min_dist_sup : na)
+    bool  _has_res  = _in_zone ? true : _found_res
+    bool  _has_sup  = _in_zone ? true : _found_sup
+
+    // Final exact levels
+    float _final_res_lvl = _in_zone ? _in_top : (_found_res ? _res_lvl : na)
+    float _final_sup_lvl = _in_zone ? _in_bot : (_found_sup ? _sup_lvl : na)
+    int   _final_res_i   = _in_zone ? _in_i   : (_found_res ? _res_i  : -1)
+    int   _final_sup_i   = _in_zone ? _in_i   : (_found_sup ? _sup_i  : -1)
+
+    // Determine which strength to return
+    float _final_str = 0.0
+    if _in_zone
+        _final_str := _in_vol
+    else
+        if _found_res and _found_sup
+            _final_str := (_min_dist_res < _min_dist_sup) ? _s_res : _s_sup
+        else
+            _final_str := _found_res ? _s_res : (_found_sup ? _s_sup : 0.0)
+    
+    // ──────────────────────────────────────────────
+    // FINAL picked zone payload for dashboard (single zone)
+    // Priority: INSIDE > nearest of (RES/SUP)
+    // ──────────────────────────────────────────────
+    bool _pick_res = (not _in_zone) and _found_res and (not _found_sup or _min_dist_res <= _min_dist_sup)
+    bool _pick_sup = (not _in_zone) and _found_sup and (not _found_res or _min_dist_sup <  _min_dist_res)
+
+    if _in_zone
+        _z_top  := _in_top
+        _z_bot  := _in_bot
+        _z_vb   := _in_vb
+        _z_vs   := _in_vs
+        _z_kind := _in_kind
+        _z_age  := _in_age
+        _z_i    := _in_i
+    else if _pick_res
+        _z_top  := _res_top
+        _z_bot  := _res_bot
+        _z_vb   := _res_vb
+        _z_vs   := _res_vs
+        _z_kind := _res_kind
+        _z_age  := _res_age
+        _z_i    := _res_i
+    else if _pick_sup
+        _z_top  := _sup_top
+        _z_bot  := _sup_bot
+        _z_vb   := _sup_vb
+        _z_vs   := _sup_vs
+        _z_kind := _sup_kind
+        _z_age  := _sup_age
+        _z_i    := _sup_i
+
+    ZoneStatus.new(
+     _in_zone, _dist_res, _has_res, _dist_sup, _has_sup, _final_str,
+     _final_res_lvl, _final_sup_lvl, _final_res_i, _final_sup_i,
+     _res_kind, _res_age, _sup_kind, _sup_age,
+     _z_top, _z_bot, _z_vb, _z_vs, _z_kind, _z_age, _z_i)
+
+//──────────────────────────────────────────────────────────────────────────────
+// 3.6 EXECUTE CORE CALCULATIONS
+//──────────────────────────────────────────────────────────────────────────────
+
+// ─── A. CONSTRUCT THE TRADER ENTITY (THE "YOU" VECTOR) ───
+// Calculating the immediate attributes of the current candle.
+
+// 1. Calculate the Vector Angle (Orientation of the current price action)
+// FIX: Upgraded to VWMA(5) (Volume Weighted Moving Average) for Institutional Precision.
+// Logic: Price moves with LOW volume are treated as noise and ignored. 
+// Price moves with HIGH volume define the vector. This is the "Mass" behind the Move.
+float _entity_angle = f_calc_angle(ta.vwma(close, 5))
+
+// 2. Instantiate the Entity
+// We encapsulate the 6 dimensions of the "Now" into a single strict object.
+TraderEntity trader_self = TraderEntity.new(
+     close,         // Price (Position)
+     volT,          // Total Volume (Mass)
+     volB,          // Buy Volume (Force A)
+     volS,          // Sell Volume (Force B)
+     volD,          // Delta (Net Charge)
+     _entity_angle  // Angle (Direction)
+)
+
+// ───────────────────────────────────────────────────────────────
+// DIRECTION STATE (Hysteresis / Anti-Noise)
+// eff_dir:  +1 Bull, -1 Bear, 0 Neutral
+// ───────────────────────────────────────────────────────────────
+var int eff_dir = 0
+
+if trader_self.vector_angle > dir_in
+    eff_dir := 1
+else if trader_self.vector_angle < -dir_in
+    eff_dir := -1
+else
+    // In the gray zone, keep last direction unless truly neutral
+    if math.abs(trader_self.vector_angle) < dir_out
+        eff_dir := 0
+    else
+        eff_dir := nz(eff_dir[1], 0)
+
+// ─── B. CONSTRUCT THE MATRIX (PERIOD HISTORIES) ───
+
+// We create the master array to store our "Organisms"
+PeriodStats[] period_data_array = array.new<PeriodStats>()
+
+// 1. Calculate ALL Periods Explicitly
+// We MUST call the function separately for each period.
+// This ensures that each period has its own consistent history buffer (fixes the loop error).
+
+// Micro Periods (Always Calculated)
+ps_07 = f_compute_period_stats(7,  close, volB, volS, volT, volD)
+ps_13 = f_compute_period_stats(13, close, volB, volS, volT, volD)
+ps_19 = f_compute_period_stats(19, close, volB, volS, volT, volD)
+ps_23 = f_compute_period_stats(23, close, volB, volS, volT, volD)
+ps_31 = f_compute_period_stats(31, close, volB, volS, volT, volD)
+ps_41 = f_compute_period_stats(41, close, volB, volS, volT, volD)
+ps_47 = f_compute_period_stats(47, close, volB, volS, volT, volD)
+
+// Macro Periods (Always calculated to maintain series consistency, even if not shown)
+ps_67 = f_compute_period_stats(67, close, volB, volS, volT, volD)
+ps_83 = f_compute_period_stats(83, close, volB, volS, volT, volD)
+ps_97 = f_compute_period_stats(97, close, volB, volS, volT, volD)
+
+// 2. Push into the Master Array
+// We fill the array based on the logical order. 
+// Indices 0-6 are Micro. Indices 7-9 are Macro.
+
+array.push(period_data_array, ps_07)
+array.push(period_data_array, ps_13)
+array.push(period_data_array, ps_19)
+array.push(period_data_array, ps_23)
+array.push(period_data_array, ps_31)
+array.push(period_data_array, ps_41)
+array.push(period_data_array, ps_47)
+
+// Only push Macro periods if the user selected "Macro" mode
+if modeSelect == "Macro"
+    array.push(period_data_array, ps_67)
+    array.push(period_data_array, ps_83)
+    array.push(period_data_array, ps_97)
+
+// Now 'period_data_array' is fully populated and error-free.
+
+//──────────────────────────────────────────────────────────────────────────────
+// 4. VWMA SPECTRUM (UPDATED: CLEAN AXIS & ARRAY STORAGE)
+//──────────────────────────────────────────────────────────────────────────────
+grp_dvwma = "VWMA Spectrum Settings"
+show_dvwma_lines = input.bool(true, "Show VWMA Lines", group=grp_dvwma)
+show_dvwma_fill  = input.bool(true, "Show Spectrum Fill", group=grp_dvwma)
+dvwma_src = input.source(close, "Source", group=grp_dvwma)
+dvwma_col = input.color(#3F51B5, "Spectrum Base Color", group=grp_dvwma)  // Indigo Blue
+
+is_macro = modeSelect == "Macro"
+
+// Calculate Dual VWMA Ribbon (Buy-weighted VWMA + Sell-weighted VWMA) / 2
+// Calculate Dual VWMA Ribbon (Buy/Sell weighted average)
+s01 = f_dvwma(dvwma_src, volB, volS, 7)
+s02 = f_dvwma(dvwma_src, volB, volS, 13)
+s03 = f_dvwma(dvwma_src, volB, volS, 19)
+s04 = f_dvwma(dvwma_src, volB, volS, 23)
+s05 = f_dvwma(dvwma_src, volB, volS, 31)
+s06 = f_dvwma(dvwma_src, volB, volS, 41)
+s07 = f_dvwma(dvwma_src, volB, volS, 47)
+s08 = f_dvwma(dvwma_src, volB, volS, 67)
+s09 = f_dvwma(dvwma_src, volB, volS, 83)
+s10 = f_dvwma(dvwma_src, volB, volS, 97)
+
+
+// Store in Array (Re-constructed every tick for the Radar to see)
+// This creates the "Environment" for the Trader Entity
+float[] dvwma_val_array = array.from(s01, s02, s03, s04, s05, s06, s07, is_macro ? s08 : na, is_macro ? s09 : na, is_macro ? s10 : na)
+
+// ─── EXECUTE RADAR SCAN (TRADER EYES) ───
+// The Trader (trader_self.price_now) looks at the Matrix (dvwma_val_array) to understand position.
+RadarScan radar_view = f_scan_environment(trader_self.price_now, dvwma_val_array)
+
+// ─── EXECUTE INTERROGATION (LAYER 1) ───
+// If we have a target, we pull its file (PeriodStats) and interrogate it.
+
+InteractionResult res_ceil = na
+InteractionResult res_floor = na
+
+// 1. Interrogate Ceiling (Resistance)
+if radar_view.idx_ceil != -1
+    // Access the specific history of this line
+    PeriodStats _p_data_c = array.get(period_data_array, radar_view.idx_ceil)
+    // Run the interrogation (True = Resistance Mode)
+    res_ceil := f_interrogate_layer1(trader_self, _p_data_c, true)
+
+// 2. Interrogate Floor (Support)
+if radar_view.idx_floor != -1
+    // Access the specific history of this line
+    PeriodStats _p_data_f = array.get(period_data_array, radar_view.idx_floor)
+    // Run the interrogation (False = Support Mode)
+    res_floor := f_interrogate_layer1(trader_self, _p_data_f, false)
+
+// ─── EXECUTE HIERARCHY SCAN (LAYER 2) ───
+// The Trader checks the army behind them.
+HierarchyStatus army_status = f_check_hierarchy(trader_self, period_data_array, eff_dir)
+
+// ─── INJECT LAYER 5 SCORES INTO INTERACTION RESULTS ───
+// Calculate Layer 5 scores from HierarchyStatus and inject into InteractionResult
+int _total_lines = array.size(period_data_array)
+float _l5_stack      = f_score_stack(army_status.stack_depth, _total_lines - 1)
+float _l5_confluence = f_score_confluence(army_status.ally_power)
+int   _trend_count   = (army_status.m_van_win ? 1 : 0) + (army_status.m_mid_win ? 1 : 0) + (army_status.m_gen_win ? 1 : 0)
+float _l5_trend      = f_score_trend_align(_trend_count)
+float _l5_total      = f_score_clamp(_l5_stack + _l5_confluence + _l5_trend, 15.0)
+
+// Inject into Ceiling result
+if not na(res_ceil)
+    res_ceil.a_stack_score      := _l5_stack
+    res_ceil.a_confluence_score := _l5_confluence
+    res_ceil.a_trend_score      := _l5_trend
+    res_ceil.layer5_score       := _l5_total
+    res_ceil.total_score        := res_ceil.layer1_score + res_ceil.layer2_score + res_ceil.layer3_score + res_ceil.layer4_score + _l5_total
+    res_ceil.grade              := f_score_to_grade(res_ceil.total_score)
+
+// Inject into Floor result
+if not na(res_floor)
+    res_floor.a_stack_score      := _l5_stack
+    res_floor.a_confluence_score := _l5_confluence
+    res_floor.a_trend_score      := _l5_trend
+    res_floor.layer5_score       := _l5_total
+    res_floor.total_score        := res_floor.layer1_score + res_floor.layer2_score + res_floor.layer3_score + res_floor.layer4_score + _l5_total
+    res_floor.grade              := f_score_to_grade(res_floor.total_score)
+
+// ─── EXECUTE ZONE SCAN (LAYER 3) ───
+// The Trader checks the terrain (support/resistance boxes).
+// We construct the scan list based on user mode.
+int[] _scan_periods = array.from(7, 13, 19, 23, 31, 41, 47)
+if modeSelect == "Macro"
+    array.push(_scan_periods, 67)
+    array.push(_scan_periods, 83)
+    array.push(_scan_periods, 97)
+
+// PRECOMPUTE highestbars OUTSIDE loops (fixes warning)
+var int[] hb_buy_arr  = array.new_int(10, na)
+var int[] hb_sell_arr = array.new_int(10, na)
+
+// Buy highestbars (volB) — always computed for consistency
+array.set(hb_buy_arr, 0, ta.highestbars(volB, 7))
+array.set(hb_buy_arr, 1, ta.highestbars(volB, 13))
+array.set(hb_buy_arr, 2, ta.highestbars(volB, 19))
+array.set(hb_buy_arr, 3, ta.highestbars(volB, 23))
+array.set(hb_buy_arr, 4, ta.highestbars(volB, 31))
+array.set(hb_buy_arr, 5, ta.highestbars(volB, 41))
+array.set(hb_buy_arr, 6, ta.highestbars(volB, 47))
+array.set(hb_buy_arr, 7, ta.highestbars(volB, 67))
+array.set(hb_buy_arr, 8, ta.highestbars(volB, 83))
+array.set(hb_buy_arr, 9, ta.highestbars(volB, 97))
+
+// Sell highestbars (volS) — always computed for consistency
+array.set(hb_sell_arr, 0, ta.highestbars(volS, 7))
+array.set(hb_sell_arr, 1, ta.highestbars(volS, 13))
+array.set(hb_sell_arr, 2, ta.highestbars(volS, 19))
+array.set(hb_sell_arr, 3, ta.highestbars(volS, 23))
+array.set(hb_sell_arr, 4, ta.highestbars(volS, 31))
+array.set(hb_sell_arr, 5, ta.highestbars(volS, 41))
+array.set(hb_sell_arr, 6, ta.highestbars(volS, 47))
+array.set(hb_sell_arr, 7, ta.highestbars(volS, 67))
+array.set(hb_sell_arr, 8, ta.highestbars(volS, 83))
+array.set(hb_sell_arr, 9, ta.highestbars(volS, 97))
+
+ZoneStatus terrain_status = f_scan_zones(trader_self, volB, volS, _scan_periods, hb_buy_arr, hb_sell_arr)
+
+// Define Colors - ENHANCED SPECTRUM (More visible gradient)
+// Lines: From light (fast MA) to dark (slow MA)
+c_l_01 = show_dvwma_lines ? color.new(#64B5F6, 40) : na  // Light Blue (7)
+c_l_02 = show_dvwma_lines ? color.new(#42A5F5, 35) : na  // Blue (13)
+c_l_03 = show_dvwma_lines ? color.new(#2196F3, 30) : na  // Blue (19)
+c_l_04 = show_dvwma_lines ? color.new(#1E88E5, 25) : na  // Blue (23)
+c_l_05 = show_dvwma_lines ? color.new(#1976D2, 20) : na  // Dark Blue (31)
+c_l_06 = show_dvwma_lines ? color.new(#5E35B1, 20) : na  // Deep Purple (41)
+c_l_07 = show_dvwma_lines ? color.new(#7B1FA2, 15) : na  // Purple (47)
+c_l_08 = show_dvwma_lines ? color.new(#AD1457, 15) : na  // Pink (67)
+c_l_09 = show_dvwma_lines ? color.new(#C62828, 10) : na  // Red (83)
+c_l_10 = show_dvwma_lines ? color.new(#FF6F00, 5) : na   // Orange (97) - Most visible
+
+// Fills: Gradient between lines
+c_f_01 = show_dvwma_fill ? color.new(#64B5F6, 90) : na
+c_f_02 = show_dvwma_fill ? color.new(#42A5F5, 88) : na
+c_f_03 = show_dvwma_fill ? color.new(#2196F3, 86) : na
+c_f_04 = show_dvwma_fill ? color.new(#1E88E5, 84) : na
+c_f_05 = show_dvwma_fill ? color.new(#1976D2, 82) : na
+c_f_06 = show_dvwma_fill ? color.new(#5E35B1, 80) : na
+c_f_07 = show_dvwma_fill ? color.new(#7B1FA2, 78) : na
+c_f_08 = show_dvwma_fill ? color.new(#AD1457, 76) : na
+c_f_09 = show_dvwma_fill ? color.new(#C62828, 74) : na
+
+// PLOTS (Fixed: display=display.pane prevents axis clutter)
+p01 = plot(s01, "VWMA 07", color=c_l_01, linewidth=1, display=display.pane)
+p02 = plot(s02, "VWMA 13", color=c_l_02, linewidth=1, display=display.pane)
+p03 = plot(s03, "VWMA 19", color=c_l_03, linewidth=1, display=display.pane)
+p04 = plot(s04, "VWMA 23", color=c_l_04, linewidth=1, display=display.pane)
+p05 = plot(s05, "VWMA 31", color=c_l_05, linewidth=1, display=display.pane)
+p06 = plot(s06, "VWMA 41", color=c_l_06, linewidth=1, display=display.pane)
+p07 = plot(s07, "VWMA 47", color=c_l_07, linewidth=1, display=display.pane)
+p08 = plot(is_macro ? s08 : na, "VWMA 67", color=c_l_08, linewidth=1, display=display.pane)
+p09 = plot(is_macro ? s09 : na, "VWMA 83", color=c_l_09, linewidth=1, display=display.pane)
+p10 = plot(is_macro ? s10 : na, "VWMA 97", color=c_l_10, linewidth=1, display=display.pane)
+
+fill(p01, p02, c_f_01)
+fill(p02, p03, c_f_02)
+fill(p03, p04, c_f_03)
+fill(p04, p05, c_f_04)
+fill(p05, p06, c_f_05)
+fill(p06, p07, c_f_06)
+fill(p07, p08, is_macro ? c_f_07 : na)
+fill(p08, p09, is_macro ? c_f_08 : na)
+fill(p09, p10, is_macro ? c_f_09 : na)
+
+// ──────────────────────────────────────────────────────────────────────────────
+// ⚠️ GLOBAL CALCULATION: ACTIVE INTERACTION (BRIDGE BETWEEN SEC 4 & 7)
+// ──────────────────────────────────────────────────────────────────────────────
+// This block prepares the data calculated in Section 4 for use in Section 6 & 7.
+
+// 1. Define Helpers based on Global Objects
+// Direction flags based on eff_dir (hysteresis)
+bool is_bull_eff    = eff_dir == 1
+bool is_bear_eff    = eff_dir == -1
+bool is_neutral_eff = eff_dir == 0
+
+// Keep 'is_bull' for legacy dashboard cells (but DO NOT use it as "else=BEAR")
+bool is_bull    = is_bull_eff
+
+int  _g_idx_res = radar_view.idx_ceil
+int  _g_idx_sup = radar_view.idx_floor
+
+// 2) Zone fallback availability (exactly like Structure Radar intent)
+bool use_zone_res_g = (_g_idx_res == -1) and terrain_status.has_res
+bool use_zone_sup_g = (_g_idx_sup == -1) and terrain_status.has_supp
+
+// 3) Distances (MA first, then Zone fallback)
+float dist_up_g = _g_idx_res != -1 ? radar_view.dist_ceil  : (use_zone_res_g ? terrain_status.dist_res  : na)
+float dist_dn_g = _g_idx_sup != -1 ? radar_view.dist_floor : (use_zone_sup_g ? terrain_status.dist_supp : na)
+
+// 4) Decide ACTIVE SIDE (match the “direction intent”)
+// Bull -> RES, Bear -> SUPP, Neutral -> closest existing side
+int act_side =
+     is_bull_eff ?  1 :
+     is_bear_eff ? -1 :
+     (not na(dist_up_g) and not na(dist_dn_g) ? (dist_up_g < dist_dn_g ? 1 : -1) :
+      not na(dist_up_g) ? 1 :
+      not na(dist_dn_g) ? -1 : 0)
+
+// 5) Decide ACTIVE KIND on that side (MA if exists, else Zone, else NONE)
+int act_kind = 0          // 0=NONE, 1=MA, 2=ZN
+int act_ma_idx = -1
+int act_zn_i   = -1
+
+if act_side == 1
+    if _g_idx_res != -1
+        act_kind  := 1
+        act_ma_idx:= _g_idx_res
+    else if use_zone_res_g
+        act_kind  := 2
+        act_zn_i  := terrain_status.res_i
+else if act_side == -1
+    if _g_idx_sup != -1
+        act_kind  := 1
+        act_ma_idx:= _g_idx_sup
+    else if use_zone_sup_g
+        act_kind  := 2
+        act_zn_i  := terrain_status.supp_i
+
+// 6) Global Flags used by Strategy & Dashboard
+bool has_act = act_kind != 0
+bool target_is_res = act_side == 1
+
+bool act_has_ma = act_kind == 1
+bool act_has_zn = act_kind == 2
+
+
+// 7) Resolve ACTIVE LEVEL / PERIOD / CONTEXT / RESULT
+int _fallback_i = math.min(3, array.size(period_data_array) - 1)
+
+PeriodStats act_p = na
+int   act_period  = na
+float act_lvl     = na
+InteractionResult act_res = na
+
+if has_act
+    if act_kind == 1
+        act_p      := array.get(period_data_array, act_ma_idx)
+        act_period := array.get(_scan_periods, act_ma_idx)
+        act_lvl    := array.get(dvwma_val_array, act_ma_idx)
+        act_res    := target_is_res ? res_ceil : res_floor
+    else
+        // Zone target
+        int _zi = act_zn_i != -1 ? act_zn_i : _fallback_i
+        act_p      := array.get(period_data_array, _zi)
+        act_period := array.get(_scan_periods, _zi)
+        act_lvl    := target_is_res ? terrain_status.res_lvl : terrain_status.supp_lvl
+        act_res    := f_interrogate_zone_layer1(trader_self, act_p, target_is_res)
+        
+        // Inject Layer 5 scores for Zone-based result
+        if not na(act_res)
+            act_res.a_stack_score      := _l5_stack
+            act_res.a_confluence_score := _l5_confluence
+            act_res.a_trend_score      := _l5_trend
+            act_res.layer5_score       := _l5_total
+            act_res.total_score        := act_res.layer1_score + act_res.layer2_score + act_res.layer3_score + act_res.layer4_score + _l5_total
+            act_res.grade              := f_score_to_grade(act_res.total_score)
+
+// ──────────────────────────────────────────────────────────────────────────────
+// TESTING FILTER (Proximity / Touch) — makes "Testing Supply/Demand" real
+// ──────────────────────────────────────────────────────────────────────────────
+float TEST_PCT = test_dist_pct_in / 100.0
+
+float act_dist_pct = (has_act and not na(act_lvl) and act_lvl != 0) ? (math.abs(close - act_lvl) / act_lvl * 100.0) : na
+
+bool testing_supply = false
+bool testing_demand = false
+
+if has_act and not na(act_lvl)
+    if target_is_res
+        bool near_close = not na(act_dist_pct) and (act_dist_pct <= test_dist_pct_in)
+        bool near_wick  = high >= act_lvl * (1.0 - TEST_PCT)
+        testing_supply := require_wick_touch_in ? near_wick : near_close
+    else
+        bool near_close = not na(act_dist_pct) and (act_dist_pct <= test_dist_pct_in)
+        bool near_wick  = low <= act_lvl * (1.0 + TEST_PCT)
+        testing_demand := require_wick_touch_in ? near_wick : near_close
+
+bool is_testing_level = testing_supply or testing_demand
+
+
+// ──────────────────────────────────────────────────────────────────────────────
+
+// ──────────────────────────────────────────────────────────────────────────────
+// 5. VISUALIZATION MODULE (LINES ONLY - ABSOLUTE TRUTH)
+// ──────────────────────────────────────────────────────────────────────────────
+// Logic: Identifies High Volume Nodes and draws precise Lines at High/Low.
+// No Boxes, No Fills, No flickering. Optimized for performance and Dashboard compatibility.
+
+// ─── A. VISUALIZATION SETTINGS ───
+grp_viz_mod = "Visualization Settings"
+
+show_viz    = input.bool(true, "Master Toggle: Show Matrix", group=grp_viz_mod)
+calc_mode   = input.string("Strict", "History Mode", options=["Strict", "Best Effort"], group=grp_viz_mod, tooltip="Strict: Hides levels if history < Period.\nBest Effort: Uses max of available history.")
+strict_strk = input.bool(true, "Strict Intrabar Streak", group=grp_viz_mod, tooltip="Intrabar only. If checked: requires continuous valid intrabar data.")
+
+c_buy_ln    = input.color(#2962FF, "Buy Level Color", group=grp_viz_mod)
+c_sell_ln   = input.color(#F44336, "Sell Level Color", group=grp_viz_mod)
+off_val     = input.int(13, "Line Extension", minval=0, maxval=500, group=grp_viz_mod)
+
+// ─── B. GLOBAL VARIABLES (CRITICAL FOR DASHBOARD) ───
+// These variables are required by Section 6. Do not remove.
+var int  viz_lastValidShift = na
+var bool viz_usingLastValid = false
+
+// Calculate shift globally to maintain series consistency (Fixes 'ta.barssince' warning)
+int shiftRaw = (volModel == "Intrabar (Precise)") ? ta.barssince(volOk) : 0
+int MAX_BACK = 500
+
+// Update global state variables on every bar (so Dashboard can read them)
+viz_lastValidShift := (na(shiftRaw) or shiftRaw > MAX_BACK) ? na : shiftRaw
+viz_usingLastValid := (volModel == "Intrabar (Precise)") and not na(viz_lastValidShift) and (viz_lastValidShift > 0)
+
+// ─── C. DRAWING ENGINE (LINES ONLY) ───
+var line[] viz_lines = array.new_line()
+
+// Helper to draw a level pair
+f_draw_level(_x1, _y, _x2, _col, _is_main) =>
+    // Main line is solid, secondary (bottom) is slightly transparent or different style if needed
+    _style = line.style_solid
+    _width = _is_main ? 1 : 1 
+    _color = _is_main ? _col : color.new(_col, 50)
+    line.new(_x1, _y, _x2, _y, xloc=xloc.bar_index, color=_color, style=_style, width=_width)
+
+if barstate.islast
+    // 1. Garbage Collection (Clear old lines to prevent flickering/ghosting)
+    int _sz = array.size(viz_lines)
+    if _sz > 0
+        for i = 0 to _sz - 1
+            line.delete(array.get(viz_lines, i))
+    array.clear(viz_lines)
+
+    // 2. Logic Execution
+    // Only run expensive loops if visualization is enabled and data is valid
+    if show_viz and not na(viz_lastValidShift)
+        // Define scan periods based on mode
+        int[] periods = modeSelect == "Micro" ? array.from(7, 13, 19, 23, 31, 41, 47) : array.from(7, 13, 19, 23, 31, 41, 47, 67, 83, 97)
+        int n_p = array.size(periods)
+        
+        int shift = viz_lastValidShift
+        int bars_avail = MAX_BACK - shift
+        
+        // Arrays to store Buy Levels for collision detection
+        var float[] drawn_buy_levels = array.new_float()
+        array.clear(drawn_buy_levels)
+
+        // Loop through each period to find the HVN (High Volume Node)
+        for i = 0 to n_p - 1
+            int P = array.get(periods, i)
+            
+            // Mode Logic
+            int Pscan = (calc_mode == "Best Effort") ? math.min(P, bars_avail) : P
+            bool h_ok = (calc_mode == "Best Effort") ? (Pscan > 0) : (bars_avail >= P)
+            
+            // Streak Logic
+            int streakEff = na(_ibStreak[shift]) ? 0 : _ibStreak[shift]
+            bool s_ok = (volModel != "Intrabar (Precise)") ? true : (calc_mode == "Best Effort" ? true : (not strict_strk ? true : streakEff >= P))
+
+            if h_ok and s_ok
+                // 1. Find Max Buy Vol
+                float max_vb = -1.0
+                int   idx_vb = -1
+                // 2. Find Max Sell Vol
+                float max_vs = -1.0
+                int   idx_vs = -1
+                
+                // Scan the history
+                for k = 0 to Pscan - 1
+                    int loc = shift + k
+                    if loc < 500 // Safety
+                        float _vb = volB[loc]
+                        float _vs = volS[loc]
+                        
+                        if not na(_vb) and _vb > max_vb
+                            max_vb := _vb
+                            idx_vb := loc
+                        
+                        if not na(_vs) and _vs > max_vs
+                            max_vs := _vs
+                            idx_vs := loc
+                
+                // DRAW BUY LEVELS (Blue Lines) & Store Coordinates
+                if idx_vb != -1
+                    int abs_idx_b = bar_index - idx_vb
+                    float h_b = high[idx_vb]
+                    float l_b = low[idx_vb]
+                    
+                    // Top Line
+                    array.push(viz_lines, f_draw_level(abs_idx_b, h_b, bar_index + off_val, c_buy_ln, true))
+                    array.push(drawn_buy_levels, h_b) // Store for collision check
+                    // Bottom Line
+                    array.push(viz_lines, f_draw_level(abs_idx_b, l_b, bar_index + off_val, c_buy_ln, false))
+                    array.push(drawn_buy_levels, l_b) // Store for collision check
+                    
+                // DRAW SELL LEVELS (Red Lines) with COLLISION CHECK
+                if idx_vs != -1
+                    int abs_idx_s = bar_index - idx_vs
+                    float h_s = high[idx_vs]
+                    float l_s = low[idx_vs]
+                    
+                    // Check Collision for High
+                    bool col_h = false
+                    if array.size(drawn_buy_levels) > 0
+                        for db = 0 to array.size(drawn_buy_levels) - 1
+                            if math.abs(h_s - array.get(drawn_buy_levels, db)) < syminfo.mintick * 2
+                                col_h := true
+                    
+                    // Draw High (Yellow if collision, Red if not)
+                    line l_h = f_draw_level(abs_idx_s, h_s, bar_index + off_val, col_h ? color.yellow : c_sell_ln, true)
+                    if col_h
+                        line.set_width(l_h, 2) // Make yellow line thicker
+                    array.push(viz_lines, l_h)
+
+                    // Check Collision for Low
+                    bool col_l = false
+                    if array.size(drawn_buy_levels) > 0
+                        for db = 0 to array.size(drawn_buy_levels) - 1
+                            if math.abs(l_s - array.get(drawn_buy_levels, db)) < syminfo.mintick * 2
+                                col_l := true
+
+                    // Draw Low (Yellow if collision, Red if not)
+                    line l_l = f_draw_level(abs_idx_s, l_s, bar_index + off_val, col_l ? color.yellow : c_sell_ln, false)
+                    if col_l
+                        line.set_width(l_l, 2) // Make yellow line thicker
+                    array.push(viz_lines, l_l) 
+
+
+//──────────────────────────────────────────────────────────────────────────────
+// 6. INSTITUTIONAL DATA TERMINAL (v8.0 - FULL COVERAGE DASHBOARD)
+//──────────────────────────────────────────────────────────────────────────────
+
+// 1) Terminal Configuration (28 rows: 0-27 index)
+var table db_pro = table.new(f_getPos(pos_db), 7, 28, border_width=1, frame_color=color.new(#101010, 20), frame_width=1, bgcolor=color.new(#0D1117, 5))
+
+// 2) Dynamic Color & Formatting Helpers
+f_c_grad(_val, _min, _max) =>
+    _val >= _max ? #00E676 : _val <= _min ? #FF1744 : #FFD600
+f_c_bool(_cond) => _cond ? #00E676 : #FF1744
+f_c_heat(_val) =>
+    math.abs(_val) > 2.0 ? #D500F9 : math.abs(_val) > 1.0 ? #FFD600 : color.white
+
+if show_db and barstate.islast
+
+    // ─── A) GLOBAL STYLES ───
+    d_size = f_getSize(size_db)
+
+    c_txt_h = color.new(#ECEFF1, 0)
+    c_txt_m = color.new(#B0BEC5, 10)
+    c_bg_h  = color.new(#263238, 10)
+    c_bg_d  = color.new(#0D1117, 40)
+    c_bg_sec= color.new(#37474F, 20)
+
+    // Clear all cells to avoid stale data
+    table.clear(db_pro, 0, 0, 6, 27)
+ 
+    // ─── B) CONTEXT & DERIVED ───
+    bool is_ib   = volModel == "Intrabar (Precise)"
+
+    int  shift_eff    = viz_lastValidShift
+    bool ib_ok_eff    = is_ib ? (na(shift_eff) ? volOk : volOk[shift_eff]) : false
+    int  ib_strk_eff  = is_ib ? (na(shift_eff) ? _ibStreak : _ibStreak[shift_eff]) : 0
+
+    float buy_pressure_pct  = trader_self.vol_total > 0 ? (trader_self.vol_buy  / trader_self.vol_total) * 100 : 0
+    float sell_pressure_pct = trader_self.vol_total > 0 ? (trader_self.vol_sell / trader_self.vol_total) * 100 : 0
+
+    // Structure distances
+    bool use_zone_res = (radar_view.idx_ceil == -1) and terrain_status.has_res
+    bool use_zone_sup = (radar_view.idx_floor == -1) and terrain_status.has_supp
+
+    int   idx_res  = radar_view.idx_ceil
+    int   idx_sup  = radar_view.idx_floor
+
+    string txt_res = idx_res != -1 ? "MA " + str.tostring(array.get(_scan_periods, idx_res)) : (use_zone_res ? "ZN RES" : "BLUE SKY")
+    string txt_sup = idx_sup != -1 ? "MA " + str.tostring(array.get(_scan_periods, idx_sup)) : (use_zone_sup ? "ZN SUPP" : "FREE FALL")
+    
+    string side_txt = is_testing_level ? (target_is_res ? "⚠ TESTING SUPPLY (ASK SIDE)" : "⚠ TESTING DEMAND (BID SIDE)") :
+                  (is_bull_eff ? "--- NO KEY INTERACTION ---" :
+                   is_bear_eff ? "--- NO KEY INTERACTION ---" :
+                                 "--- NEUTRAL / WAIT ---")
+                     
+
+    // ─── C) HEADER (Row 0) ───
+    table.merge_cells(db_pro, 0, 0, 6, 0)
+    table.cell(db_pro, 0, 0, "♦ INSTITUTIONAL MARKET MONITOR ♦", text_color=#2979FF, bgcolor=c_bg_h, text_size=d_size)
+
+    // ─── D) NOW VECTOR - Row 1 ───
+    table.cell(db_pro, 0, 1, "FLOW ANGLE", text_color=c_txt_m, bgcolor=c_bg_d, text_size=d_size, text_halign=text.align_left)
+    table.cell(db_pro, 1, 1, str.tostring(trader_self.vector_angle, "#.1") + "°", text_color=is_neutral_eff ? color.gray : f_c_grad(trader_self.vector_angle, -dir_in, dir_in), bgcolor=c_bg_d, text_size=d_size, text_halign=text.align_right)
+
+    table.cell(db_pro, 2, 1, "LTP", text_color=c_txt_m, bgcolor=c_bg_d, text_size=d_size, text_halign=text.align_left)
+    table.cell(db_pro, 3, 1, str.tostring(close, format.mintick), text_color=color.white, bgcolor=c_bg_d, text_size=d_size, text_halign=text.align_right)
+
+    table.cell(db_pro, 4, 1, "NET FLOW (Δ)", text_color=c_txt_m, bgcolor=c_bg_d, text_size=d_size, text_halign=text.align_left)
+    table.cell(db_pro, 5, 1, f_fmtNum(trader_self.vol_delta), text_color=f_c_bool(trader_self.vol_delta > 0), bgcolor=c_bg_d, text_size=d_size, text_halign=text.align_right)
+    table.cell(db_pro, 6, 1, trader_self.vol_delta > 0 ? "⚡+" : "⚡-", text_color=f_c_bool(trader_self.vol_delta > 0), bgcolor=c_bg_d, text_size=d_size)
+
+    // ─── Row 2 ───
+    table.cell(db_pro, 0, 2, "LIQUIDITY", text_color=c_txt_m, bgcolor=c_bg_d, text_size=d_size, text_halign=text.align_left)
+    table.cell(db_pro, 1, 2, f_fmtNum(trader_self.vol_total), text_color=color.white, bgcolor=c_bg_d, text_size=d_size, text_halign=text.align_right)
+
+    table.cell(db_pro, 2, 2, "BUY VOL", text_color=c_txt_m, bgcolor=c_bg_d, text_size=d_size, text_halign=text.align_left)
+    table.cell(db_pro, 3, 2, f_fmtNum(trader_self.vol_buy), text_color=#00E676, bgcolor=c_bg_d, text_size=d_size, text_halign=text.align_right)
+
+    table.cell(db_pro, 4, 2, "SELL VOL", text_color=c_txt_m, bgcolor=c_bg_d, text_size=d_size, text_halign=text.align_left)
+    table.cell(db_pro, 5, 2, f_fmtNum(trader_self.vol_sell), text_color=#FF1744, bgcolor=c_bg_d, text_size=d_size, text_halign=text.align_right)
+    table.cell(db_pro, 6, 2, buy_pressure_pct > sell_pressure_pct ? "▲" : "▼", text_color=buy_pressure_pct > sell_pressure_pct ? #00E676 : #FF1744, bgcolor=c_bg_d, text_size=d_size)
+
+    // ─── Row 3 ───
+    table.cell(db_pro, 0, 3, "BID PRES.", text_color=c_txt_m, bgcolor=c_bg_d, text_size=d_size, text_halign=text.align_left)
+    table.cell(db_pro, 1, 3, str.tostring(buy_pressure_pct, "#") + "%", text_color=#00E676, bgcolor=c_bg_d, text_size=d_size, text_halign=text.align_right)
+
+    table.cell(db_pro, 2, 3, "ASK PRES.", text_color=c_txt_m, bgcolor=c_bg_d, text_size=d_size, text_halign=text.align_left)
+    table.cell(db_pro, 3, 3, str.tostring(sell_pressure_pct, "#") + "%", text_color=#FF1744, bgcolor=c_bg_d, text_size=d_size, text_halign=text.align_right)
+
+    table.cell(db_pro, 4, 3, "DIRECTION", text_color=c_txt_m, bgcolor=c_bg_d, text_size=d_size, text_halign=text.align_left)
+    table.cell(db_pro, 5, 3, is_bull_eff ? "BULL" : is_bear_eff ? "BEAR" : "NEUT", text_color=is_neutral_eff ? color.gray : f_c_bool(is_bull_eff), bgcolor=c_bg_d, text_size=d_size, text_halign=text.align_right)
+    table.cell(db_pro, 6, 3, is_bull_eff ? "🐂" : is_bear_eff ? "🐻" : "⚪", text_color=is_neutral_eff ? color.gray : f_c_bool(is_bull_eff), bgcolor=c_bg_d, text_size=d_size)
+
+    // ─── E) DATA QUALITY - Row 4 Header ───
+    table.merge_cells(db_pro, 0, 4, 6, 4)
+    table.cell(db_pro, 0, 4, "── DATA QUALITY / CONFIG ──", text_color=c_txt_m, bgcolor=c_bg_sec, text_size=d_size)
+
+    // ─── Row 5 ───
+    table.cell(db_pro, 0, 5, "VOL MODEL", text_color=c_txt_m, bgcolor=c_bg_d, text_size=d_size, text_halign=text.align_left)
+    table.cell(db_pro, 1, 5, is_ib ? "INTRABAR" : "GEOMETRY", text_color=color.white, bgcolor=c_bg_d, text_size=d_size, text_halign=text.align_right)
+
+    table.cell(db_pro, 2, 5, "IB LTF", text_color=c_txt_m, bgcolor=c_bg_d, text_size=d_size, text_halign=text.align_left)
+    table.cell(db_pro, 3, 5, is_ib ? intrabarTF : "N/A", text_color=color.white, bgcolor=c_bg_d, text_size=d_size, text_halign=text.align_right)
+
+    table.cell(db_pro, 4, 5, "MODE", text_color=c_txt_m, bgcolor=c_bg_d, text_size=d_size, text_halign=text.align_left)
+    table.cell(db_pro, 5, 5, modeSelect, text_color=color.white, bgcolor=c_bg_d, text_size=d_size, text_halign=text.align_right)
+    table.cell(db_pro, 6, 5, is_macro ? "M" : "µ", text_color=color.white, bgcolor=c_bg_d, text_size=d_size)
+
+    // ─── Row 6 ───
+    table.cell(db_pro, 0, 6, "IB OK", text_color=c_txt_m, bgcolor=c_bg_d, text_size=d_size, text_halign=text.align_left)
+    table.cell(db_pro, 1, 6, is_ib ? (ib_ok_eff ? "OK" : "NO") : "N/A", text_color=is_ib ? f_c_bool(ib_ok_eff) : color.gray, bgcolor=c_bg_d, text_size=d_size, text_halign=text.align_right)
+
+    table.cell(db_pro, 2, 6, "IB STREAK", text_color=c_txt_m, bgcolor=c_bg_d, text_size=d_size, text_halign=text.align_left)
+    table.cell(db_pro, 3, 6, is_ib ? str.tostring(ib_strk_eff) : "N/A", text_color=color.white, bgcolor=c_bg_d, text_size=d_size, text_halign=text.align_right)
+
+    table.cell(db_pro, 4, 6, "LATENCY", text_color=c_txt_m, bgcolor=c_bg_d, text_size=d_size, text_halign=text.align_left)
+    table.cell(db_pro, 5, 6, na(viz_lastValidShift) ? "WAIT" : str.tostring(viz_lastValidShift) + " BAR", text_color=color.white, bgcolor=c_bg_d, text_size=d_size, text_halign=text.align_right)
+    table.cell(db_pro, 6, 6, viz_usingLastValid ? "↺" : "✓", text_color=viz_usingLastValid ? #FFD600 : #00E676, bgcolor=c_bg_d, text_size=d_size)
+
+    // ─── F) STRUCTURE RADAR - Row 7 Header ───
+    table.merge_cells(db_pro, 0, 7, 6, 7)
+    table.cell(db_pro, 0, 7, "── STRUCTURE RADAR ──", text_color=c_txt_m, bgcolor=c_bg_sec, text_size=d_size)
+
+    // ─── Row 8 (Only essential info) ───
+    table.cell(db_pro, 0, 8, "WIRES ▲/▼", text_color=c_txt_m, bgcolor=c_bg_d, text_size=d_size, text_halign=text.align_left)
+    table.cell(db_pro, 1, 8, str.tostring(radar_view.wires_above) + " / " + str.tostring(radar_view.wires_below), text_color=color.white, bgcolor=c_bg_d, text_size=d_size, text_halign=text.align_right)
+
+    table.cell(db_pro, 2, 8, "RES", text_color=c_txt_m, bgcolor=c_bg_d, text_size=d_size, text_halign=text.align_left)
+    table.cell(db_pro, 3, 8, txt_res, text_color=#FF5252, bgcolor=c_bg_d, text_size=d_size, text_halign=text.align_right)
+
+    table.cell(db_pro, 4, 8, "SUPP", text_color=c_txt_m, bgcolor=c_bg_d, text_size=d_size, text_halign=text.align_left)
+    table.cell(db_pro, 5, 8, txt_sup, text_color=#00E676, bgcolor=c_bg_d, text_size=d_size, text_halign=text.align_right)
+    table.cell(db_pro, 6, 8, "🧭", text_color=color.white, bgcolor=c_bg_d, text_size=d_size)
+
+    // ─── G) ACTIVE INTERACTION - Row 9 Header ───
+    table.merge_cells(db_pro, 0, 9, 6, 9)
+    table.cell(db_pro, 0, 9, side_txt, text_color=has_act ? color.white : c_txt_m, bgcolor=has_act ? (target_is_res ? color.new(#FF1744, 60) : color.new(#00E676, 60)) : c_bg_sec, text_size=d_size)
+
+    // ─── Row 10 ───
+    table.cell(db_pro, 0, 10, "TARGET", text_color=c_txt_m, bgcolor=c_bg_d, text_size=d_size, text_halign=text.align_left)
+    table.cell(db_pro, 1, 10, act_has_ma ? ("MA " + str.tostring(act_period)) : (act_has_zn ? (target_is_res ? "ZN RES" : "ZN SUPP") : "NONE"), text_color=color.white, bgcolor=c_bg_d, text_size=d_size, text_halign=text.align_right)
+
+    table.cell(db_pro, 2, 10, "TEST LEVEL", text_color=c_txt_m, bgcolor=c_bg_d, text_size=d_size, text_halign=text.align_left)
+    table.cell(db_pro, 3, 10, has_act ? str.tostring(act_lvl, format.mintick) : "—", text_color=color.white, bgcolor=c_bg_d, text_size=d_size, text_halign=text.align_right)
+
+    table.cell(db_pro, 4, 10, "SCORE", text_color=c_txt_m, bgcolor=c_bg_d, text_size=d_size, text_halign=text.align_left)
+    table.cell(db_pro, 5, 10, has_act ? (str.tostring(act_res.total_score, "#") + "% [" + act_res.grade + "]") : "--", text_color=has_act ? f_c_grad(act_res.total_score, 40, 70) : color.gray, bgcolor=c_bg_d, text_size=d_size, text_halign=text.align_right)
+    table.cell(db_pro, 6, 10, "🎯", text_color=has_act ? f_c_grad(act_res.total_score, 40, 70) : color.gray, bgcolor=c_bg_d, text_size=d_size)
+
+    // ─── Row 11 ───
+    table.cell(db_pro, 0, 11, "VOLUME POWER", text_color=c_txt_m, bgcolor=c_bg_d, text_size=d_size, text_halign=text.align_left)
+    table.cell(db_pro, 1, 11, has_act ? (str.tostring(act_res.k_ratio, "#.2") + "x") : "--", text_color=has_act ? f_c_bool(act_res.k_pass) : color.gray, bgcolor=c_bg_d, text_size=d_size, text_halign=text.align_right)
+
+    table.cell(db_pro, 2, 11, "BREAKOUT", text_color=c_txt_m, bgcolor=c_bg_d, text_size=d_size, text_halign=text.align_left)
+    table.cell(db_pro, 3, 11, has_act ? (act_res.s_break_guard ? "CONFIRMED" : "REJECTED") : "--", text_color=has_act ? f_c_bool(act_res.s_break_guard) : color.gray, bgcolor=c_bg_d, text_size=d_size, text_halign=text.align_right)
+
+    table.cell(db_pro, 4, 11, "DELTA DIR", text_color=c_txt_m, bgcolor=c_bg_d, text_size=d_size, text_halign=text.align_left)
+    table.cell(db_pro, 5, 11, has_act ? (act_res.e_flow_align ? "ALIGNED" : "CONFLICT") : "--", text_color=has_act ? f_c_bool(act_res.e_flow_align) : color.gray, bgcolor=c_bg_d, text_size=d_size, text_halign=text.align_right)
+    table.cell(db_pro, 6, 11, has_act ? (act_res.s_break_guard ? "✓" : "×") : "—", text_color=has_act ? f_c_bool(act_res.s_break_guard) : color.gray, bgcolor=c_bg_d, text_size=d_size)
+
+    // ─── H) SCORE BREAKDOWN - Row 12 Header ───
+    table.merge_cells(db_pro, 0, 12, 6, 12)
+    table.cell(db_pro, 0, 12, "── SCORE BREAKDOWN (5-LAYER) ──", text_color=c_txt_m, bgcolor=c_bg_sec, text_size=d_size)
+
+    // ─── Row 13: Layer 1, 2, 3 ───
+    table.cell(db_pro, 0, 13, "L1 VOLUME", text_color=c_txt_m, bgcolor=c_bg_d, text_size=d_size, tooltip="Volume Quality (Max 25)", text_halign=text.align_left)
+    table.cell(db_pro, 1, 13, has_act ? (str.tostring(act_res.layer1_score, "#.1") + "/25") : "--", text_color=has_act ? f_c_grad(act_res.layer1_score, 8, 18) : color.gray, bgcolor=c_bg_d, text_size=d_size, text_halign=text.align_right)
+
+    table.cell(db_pro, 2, 13, "L2 BATTLE", text_color=c_txt_m, bgcolor=c_bg_d, text_size=d_size, tooltip="Battle Structure (Max 25)", text_halign=text.align_left)
+    table.cell(db_pro, 3, 13, has_act ? (str.tostring(act_res.layer2_score, "#.1") + "/25") : "--", text_color=has_act ? f_c_grad(act_res.layer2_score, 8, 18) : color.gray, bgcolor=c_bg_d, text_size=d_size, text_halign=text.align_right)
+
+    table.cell(db_pro, 4, 13, "L3 FLOW", text_color=c_txt_m, bgcolor=c_bg_d, text_size=d_size, tooltip="Flow & Energy (Max 20)", text_halign=text.align_left)
+    table.cell(db_pro, 5, 13, has_act ? (str.tostring(act_res.layer3_score, "#.1") + "/20") : "--", text_color=has_act ? f_c_grad(act_res.layer3_score, 6, 14) : color.gray, bgcolor=c_bg_d, text_size=d_size, text_halign=text.align_right)
+    table.cell(db_pro, 6, 13, "📊", text_color=color.white, bgcolor=c_bg_d, text_size=d_size)
+
+    // ─── Row 14: Layer 4, 5, Total ───
+    table.cell(db_pro, 0, 14, "L4 GEOMETRY", text_color=c_txt_m, bgcolor=c_bg_d, text_size=d_size, tooltip="Geometry (Max 15)", text_halign=text.align_left)
+    table.cell(db_pro, 1, 14, has_act ? (str.tostring(act_res.layer4_score, "#.1") + "/15") : "--", text_color=has_act ? f_c_grad(act_res.layer4_score, 5, 11) : color.gray, bgcolor=c_bg_d, text_size=d_size, text_halign=text.align_right)
+
+    table.cell(db_pro, 2, 14, "L5 ARMY", text_color=c_txt_m, bgcolor=c_bg_d, text_size=d_size, tooltip="Army Structure (Max 15)", text_halign=text.align_left)
+    table.cell(db_pro, 3, 14, has_act ? (str.tostring(act_res.layer5_score, "#.1") + "/15") : "--", text_color=has_act ? f_c_grad(act_res.layer5_score, 5, 11) : color.gray, bgcolor=c_bg_d, text_size=d_size, text_halign=text.align_right)
+
+    table.cell(db_pro, 4, 14, "TOTAL", text_color=c_txt_m, bgcolor=c_bg_d, text_size=d_size, text_halign=text.align_left)
+    table.cell(db_pro, 5, 14, has_act ? (str.tostring(act_res.total_score, "#") + "/100") : "--", text_color=has_act ? f_c_grad(act_res.total_score, 40, 70) : color.gray, bgcolor=c_bg_d, text_size=d_size, text_halign=text.align_right)
+    table.cell(db_pro, 6, 14, has_act ? act_res.grade : "--", text_color=has_act ? f_c_grad(act_res.total_score, 40, 70) : color.gray, bgcolor=c_bg_d, text_size=d_size)
+
+    // ─── Row 15: L1 Sub-scores ───
+    table.cell(db_pro, 0, 15, "  ├ Mass", text_color=color.new(c_txt_m, 30), bgcolor=c_bg_d, text_size=d_size, text_halign=text.align_left)
+    table.cell(db_pro, 1, 15, has_act ? str.tostring(act_res.k_ratio_score, "#.1") : "--", text_color=color.new(color.white, 30), bgcolor=c_bg_d, text_size=d_size, text_halign=text.align_right)
+
+    table.cell(db_pro, 2, 15, "  ├ Spike", text_color=color.new(c_txt_m, 30), bgcolor=c_bg_d, text_size=d_size, text_halign=text.align_left)
+    table.cell(db_pro, 3, 15, has_act ? str.tostring(act_res.k_spike_score, "#.1") : "--", text_color=color.new(color.white, 30), bgcolor=c_bg_d, text_size=d_size, text_halign=text.align_right)
+
+    table.cell(db_pro, 4, 15, "  └ Trend", text_color=color.new(c_txt_m, 30), bgcolor=c_bg_d, text_size=d_size, text_halign=text.align_left)
+    table.cell(db_pro, 5, 15, has_act ? str.tostring(act_res.k_trend_score, "#.1") : "--", text_color=color.new(color.white, 30), bgcolor=c_bg_d, text_size=d_size, text_halign=text.align_right)
+    table.cell(db_pro, 6, 15, "L1", text_color=color.new(color.white, 50), bgcolor=c_bg_d, text_size=d_size)
+
+    // ─── Row 16: L2 Sub-scores ───
+    table.cell(db_pro, 0, 16, "  ├ Break", text_color=color.new(c_txt_m, 30), bgcolor=c_bg_d, text_size=d_size, text_halign=text.align_left)
+    table.cell(db_pro, 1, 16, has_act ? str.tostring(act_res.s_break_score, "#.1") : "--", text_color=color.new(color.white, 30), bgcolor=c_bg_d, text_size=d_size, text_halign=text.align_right)
+
+    table.cell(db_pro, 2, 16, "  ├ Dom", text_color=color.new(c_txt_m, 30), bgcolor=c_bg_d, text_size=d_size, text_halign=text.align_left)
+    table.cell(db_pro, 3, 16, has_act ? str.tostring(act_res.s_dom_score, "#.1") : "--", text_color=color.new(color.white, 30), bgcolor=c_bg_d, text_size=d_size, text_halign=text.align_right)
+
+    table.cell(db_pro, 4, 16, "  └ Pres", text_color=color.new(c_txt_m, 30), bgcolor=c_bg_d, text_size=d_size, text_halign=text.align_left)
+    table.cell(db_pro, 5, 16, has_act ? str.tostring(act_res.s_pressure_score, "#.1") : "--", text_color=color.new(color.white, 30), bgcolor=c_bg_d, text_size=d_size, text_halign=text.align_right)
+    table.cell(db_pro, 6, 16, "L2", text_color=color.new(color.white, 50), bgcolor=c_bg_d, text_size=d_size)
+
+    // ─── Row 17: L3 Sub-scores ───
+    table.cell(db_pro, 0, 17, "  ├ Delta", text_color=color.new(c_txt_m, 30), bgcolor=c_bg_d, text_size=d_size, text_halign=text.align_left)
+    table.cell(db_pro, 1, 17, has_act ? str.tostring(act_res.e_flow_score, "#.1") : "--", text_color=color.new(color.white, 30), bgcolor=c_bg_d, text_size=d_size, text_halign=text.align_right)
+
+    table.cell(db_pro, 2, 17, "  ├ Accel", text_color=color.new(c_txt_m, 30), bgcolor=c_bg_d, text_size=d_size, text_halign=text.align_left)
+    table.cell(db_pro, 3, 17, has_act ? str.tostring(act_res.e_delta_accel_score, "#.1") : "--", text_color=color.new(color.white, 30), bgcolor=c_bg_d, text_size=d_size, text_halign=text.align_right)
+
+    table.cell(db_pro, 4, 17, "  └ Mom", text_color=color.new(c_txt_m, 30), bgcolor=c_bg_d, text_size=d_size, text_halign=text.align_left)
+    table.cell(db_pro, 5, 17, has_act ? str.tostring(act_res.e_momentum_score, "#.1") : "--", text_color=color.new(color.white, 30), bgcolor=c_bg_d, text_size=d_size, text_halign=text.align_right)
+    table.cell(db_pro, 6, 17, "L3", text_color=color.new(color.white, 50), bgcolor=c_bg_d, text_size=d_size)
+
+    // ─── Row 18: L4 Sub-scores ───
+    table.cell(db_pro, 0, 18, "  ├ Impact", text_color=color.new(c_txt_m, 30), bgcolor=c_bg_d, text_size=d_size, text_halign=text.align_left)
+    table.cell(db_pro, 1, 18, has_act ? str.tostring(act_res.g_impact_score, "#.1") : "--", text_color=color.new(color.white, 30), bgcolor=c_bg_d, text_size=d_size, text_halign=text.align_right)
+
+    table.cell(db_pro, 2, 18, "  ├ Vec", text_color=color.new(c_txt_m, 30), bgcolor=c_bg_d, text_size=d_size, text_halign=text.align_left)
+    table.cell(db_pro, 3, 18, has_act ? str.tostring(act_res.g_vec_score, "#.1") : "--", text_color=color.new(color.white, 30), bgcolor=c_bg_d, text_size=d_size, text_halign=text.align_right)
+
+    table.cell(db_pro, 4, 18, "  └ PriceZ", text_color=color.new(c_txt_m, 30), bgcolor=c_bg_d, text_size=d_size, text_halign=text.align_left)
+    table.cell(db_pro, 5, 18, has_act ? str.tostring(act_res.g_price_z_score, "#.1") : "--", text_color=color.new(color.white, 30), bgcolor=c_bg_d, text_size=d_size, text_halign=text.align_right)
+    table.cell(db_pro, 6, 18, "L4", text_color=color.new(color.white, 50), bgcolor=c_bg_d, text_size=d_size)
+
+    // ─── Row 19: L5 Sub-scores (Army Structure) ───
+    table.cell(db_pro, 0, 19, "  ├ Stack", text_color=color.new(c_txt_m, 30), bgcolor=c_bg_d, text_size=d_size, text_halign=text.align_left)
+    table.cell(db_pro, 1, 19, has_act ? str.tostring(act_res.a_stack_score, "#.1") : "--", text_color=color.new(color.white, 30), bgcolor=c_bg_d, text_size=d_size, text_halign=text.align_right)
+
+    table.cell(db_pro, 2, 19, "  ├ Conf", text_color=color.new(c_txt_m, 30), bgcolor=c_bg_d, text_size=d_size, text_halign=text.align_left)
+    table.cell(db_pro, 3, 19, has_act ? str.tostring(act_res.a_confluence_score, "#.1") : "--", text_color=color.new(color.white, 30), bgcolor=c_bg_d, text_size=d_size, text_halign=text.align_right)
+
+    table.cell(db_pro, 4, 19, "  └ Trend", text_color=color.new(c_txt_m, 30), bgcolor=c_bg_d, text_size=d_size, text_halign=text.align_left)
+    table.cell(db_pro, 5, 19, has_act ? str.tostring(act_res.a_trend_score, "#.1") : "--", text_color=color.new(color.white, 30), bgcolor=c_bg_d, text_size=d_size, text_halign=text.align_right)
+    table.cell(db_pro, 6, 19, "L5", text_color=color.new(color.white, 50), bgcolor=c_bg_d, text_size=d_size)
+
+
+
+// ──────────────────────────────────────────────────────────────────────────────
+// INPUTS - SIGNAL DISPLAY SETTINGS
+// ──────────────────────────────────────────────────────────────────────────────
+string grp_signals = "Signal Display"
+
+bool show_signals_in = input.bool(
+     defval=true,
+     title="Show Entry Signals",
+     group=grp_signals,
+     tooltip="Display visual signals for Buyer/Seller entry points."
+)
+
+float signal_score_min_in = input.float(
+     defval=10.0,
+     title="Score Range: Minimum (%)",
+     minval=0.0, maxval=100.0, step=1.0,
+     group=grp_signals,
+     tooltip="Minimum TOTAL score required (lower bound of range)."
+)
+
+float signal_score_max_in = input.float(
+     defval=100.0,
+     title="Score Range: Maximum (%)",
+     minval=0.0, maxval=100.0, step=1.0,
+     group=grp_signals,
+     tooltip="Maximum TOTAL score threshold (upper bound of range)."
+)
+
+string label_size_in = input.string(
+     defval="Small",
+     title="Label Size",
+     options=["Tiny", "Small", "Normal", "Large"],
+     group=grp_signals,
+     tooltip="Font size for signal labels."
+)
+
+int label_offset_in = input.int(
+     defval=15,
+     title="Info Label Offset (bars)",
+     minval=5, maxval=50,
+     group=grp_signals,
+     tooltip="Horizontal offset for the info label from current bar."
+)
+
+string display_mode_in = input.string(
+     defval="Normal",
+     title="Label Display Mode",
+     options=["Minimal", "Normal", "Detailed"],
+     group=grp_signals,
+     tooltip="Minimal: Icon only (hover for details).\nNormal: Icon + Price.\nDetailed: Full info on chart."
+)
+
+// ─── VALIDATION SETTINGS ───
+string grp_validation = "Signal Validation"
+
+float lock_range_pct_in = input.float(
+     defval=0.5,
+     title="Lock Range (%)",
+     minval=0.1, maxval=5.0, step=0.1,
+     group=grp_validation,
+     tooltip="Price must stay within this % of lock price. If price exits against the signal, evaluation resets."
+)
+
+int validation_ticks_in = input.int(
+     defval=3,
+     title="Validation Ticks (bars)",
+     minval=1, maxval=20,
+     group=grp_validation,
+     tooltip="Number of consecutive bars the signal must hold before confirmation. Use this instead of time for historical accuracy."
+)
+
+int validation_seconds_in = input.int(
+     defval=5,
+     title="Validation Time (seconds)",
+     minval=1, maxval=60,
+     group=grp_validation,
+     tooltip="Minimum seconds before signal confirmation (Real-time only). For historical, ticks are used."
+)
+
+int hold_bars_min_in = input.int(
+     defval=5,
+     title="Minimum Hold Bars",
+     minval=1, maxval=50,
+     group=grp_validation,
+     tooltip="After confirmation, stay in position for at least this many bars before allowing exit."
+)
+
+string exit_mode_in = input.string(
+     defval="Reversal Only",
+     title="Exit Mode",
+     options=["Reversal Only", "Signal Loss", "Price Stop"],
+     group=grp_validation,
+     tooltip="Reversal Only: Exit only when opposite signal confirms.\nSignal Loss: Exit when conditions disappear (current behavior).\nPrice Stop: Exit when price hits stop level."
+)
+
+float stop_loss_pct_in = input.float(
+     defval=1.0,
+     title="Stop Loss (%)",
+     minval=0.1, maxval=10.0, step=0.1,
+     group=grp_validation,
+     tooltip="Exit if price moves against position by this %."
+)
+
+// ==============================================================================
+// SIGNAL DETECTION ENGINE (State Machine v2.0)
+// With Timer + Range Validation + Smart Reset Logic
+// ==============================================================================
+
+// ──────────────────────────────────────────────────────────────────────────────
+// CONSTANTS & HELPERS
+// ──────────────────────────────────────────────────────────────────────────────
+float SCORE_MIN = signal_score_min_in
+float SCORE_MAX = signal_score_max_in
+float LOCK_RANGE_PCT = lock_range_pct_in / 100.0
+
+int STATE_FLAT   = 0
+int STATE_BUYER  = 1
+int STATE_SELLER = -1
+
+// Validation status
+int VAL_NONE      = 0
+int VAL_PENDING   = 1
+int VAL_CONFIRMED = 2
+int VAL_RESET     = 3
+
+f_getLabelSize(_s) => 
+    _s == "Tiny" ? size.tiny : _s == "Small" ? size.small : _s == "Normal" ? size.normal : size.large
+
+label_sz = f_getLabelSize(label_size_in)
+
+// Display mode flags
+bool is_minimal  = display_mode_in == "Minimal"
+bool is_normal   = display_mode_in == "Normal"
+bool is_detailed = display_mode_in == "Detailed"
+
+// ──────────────────────────────────────────────────────────────────────────────
+// SCORE CALCULATION
+// ──────────────────────────────────────────────────────────────────────────────
+float current_score = is_testing_level and not na(act_res) ? act_res.total_score : 0.0
+bool score_in_range = not na(current_score) and (current_score >= SCORE_MIN) and (current_score <= SCORE_MAX)
+
+// ──────────────────────────────────────────────────────────────────────────────
+// RAW SIGNAL DETECTION (Before Validation)
+// ──────────────────────────────────────────────────────────────────────────────
+int raw_signal = STATE_FLAT
+
+if (eff_dir == 1) and testing_supply and score_in_range
+    raw_signal := STATE_BUYER
+else if (eff_dir == -1) and testing_demand and score_in_range
+    raw_signal := STATE_SELLER
+
+// ──────────────────────────────────────────────────────────────────────────────
+// STATE MACHINE WITH VALIDATION
+// ──────────────────────────────────────────────────────────────────────────────
+
+// Persistent state variables
+var int   confirmed_state   = STATE_FLAT
+var int   pending_state     = STATE_FLAT
+var int   validation_status = VAL_NONE
+
+// Lock tracking
+var float lock_price        = na
+var float lock_score        = na
+var int   lock_bar          = na
+var int   lock_time         = na
+
+// Previous lock (for strength comparison)
+var float prev_lock_price   = na
+var float prev_lock_score   = na
+
+// Validation counters
+var int   validation_ticks  = 0
+
+// Range boundaries (calculated from lock)
+var float range_upper       = na
+var float range_lower       = na
+
+// ──────────────────────────────────────────────────────────────────────────────
+// RANGE & TIME CALCULATIONS
+// ──────────────────────────────────────────────────────────────────────────────
+// Calculate time elapsed (real-time only, fallback to ticks for historical)
+int time_elapsed_ms = not na(lock_time) ? (timenow - lock_time) : 0
+int time_elapsed_sec = time_elapsed_ms / 1000
+
+// Check if enough time/ticks passed
+bool ticks_ok = validation_ticks >= validation_ticks_in
+bool time_ok = barstate.isrealtime ? (time_elapsed_sec >= validation_seconds_in) : true
+bool validation_time_passed = ticks_ok and time_ok
+
+// Price position relative to lock range
+string price_vs_range = "IN_RANGE"
+if not na(lock_price) and not na(range_upper) and not na(range_lower)
+    if close > range_upper
+        price_vs_range := "ABOVE"
+    else if close < range_lower
+        price_vs_range := "BELOW"
+
+// ──────────────────────────────────────────────────────────────────────────────
+// TRANSITION FLAGS
+// ──────────────────────────────────────────────────────────────────────────────
+bool is_new_buyer       = false
+bool is_new_seller      = false
+bool is_buyer_to_seller = false
+bool is_seller_to_buyer = false
+bool is_buyer_end       = false
+bool is_seller_end      = false
+bool is_buyer_stronger  = false
+bool is_seller_stronger = false
+bool is_reset           = false
+
+float strength_vs_prev  = na
+string strength_txt     = ""
+
+// ──────────────────────────────────────────────────────────────────────────────
+// MAIN STATE MACHINE LOGIC
+// ──────────────────────────────────────────────────────────────────────────────
+
+// Get previous confirmed state
+int prev_confirmed = nz(confirmed_state[1], STATE_FLAT)
+
+// ═══════════════════════════════════════════════════════════════════════════
+// CASE 1: Currently FLAT - Looking for new signal
+// ═══════════════════════════════════════════════════════════════════════════
+if confirmed_state == STATE_FLAT
+
+    if raw_signal == STATE_BUYER
+        // Start validation for BUYER
+        if validation_status == VAL_NONE or pending_state != STATE_BUYER
+            // First detection - initialize
+            pending_state := STATE_BUYER
+            validation_status := VAL_PENDING
+            lock_price := close
+            lock_score := current_score
+            lock_bar := bar_index
+            lock_time := timenow
+            range_upper := lock_price * (1.0 + LOCK_RANGE_PCT)
+            range_lower := lock_price * (1.0 - LOCK_RANGE_PCT)
+            validation_ticks := 1
+        else
+            // Continuing validation
+            // Check if price went against us (below range)
+            if price_vs_range == "BELOW"
+                // RESET - price went wrong direction
+                is_reset := true
+                validation_status := VAL_NONE
+                pending_state := STATE_FLAT
+                validation_ticks := 0
+            else
+                // Price OK (in range or above)
+                validation_ticks += 1
+                
+                // Update lock if price went higher (stronger)
+                if price_vs_range == "ABOVE"
+                    lock_price := close
+                    lock_score := current_score
+                    range_upper := lock_price * (1.0 + LOCK_RANGE_PCT)
+                    range_lower := lock_price * (1.0 - LOCK_RANGE_PCT)
+                
+                // Check if validation complete
+                if validation_time_passed
+                    // CONFIRMED BUYER
+                    is_new_buyer := true
+                    confirmed_state := STATE_BUYER
+                    validation_status := VAL_CONFIRMED
+                    
+                    // Calculate strength vs previous
+                    if not na(prev_lock_price) and prev_lock_price != 0
+                        strength_vs_prev := ((lock_price - prev_lock_price) / prev_lock_price) * 100.0
+                        strength_txt := strength_vs_prev > 0.1 ? "STRONGER ▲" : strength_vs_prev < -0.1 ? "WEAKER ▼" : "SAME ●"
+
+    else if raw_signal == STATE_SELLER
+        // Start validation for SELLER
+        if validation_status == VAL_NONE or pending_state != STATE_SELLER
+            // First detection - initialize
+            pending_state := STATE_SELLER
+            validation_status := VAL_PENDING
+            lock_price := close
+            lock_score := current_score
+            lock_bar := bar_index
+            lock_time := timenow
+            range_upper := lock_price * (1.0 + LOCK_RANGE_PCT)
+            range_lower := lock_price * (1.0 - LOCK_RANGE_PCT)
+            validation_ticks := 1
+        else
+            // Continuing validation
+            // Check if price went against us (above range)
+            if price_vs_range == "ABOVE"
+                // RESET - price went wrong direction
+                is_reset := true
+                validation_status := VAL_NONE
+                pending_state := STATE_FLAT
+                validation_ticks := 0
+            else
+                // Price OK (in range or below)
+                validation_ticks += 1
+                
+                // Update lock if price went lower (stronger)
+                if price_vs_range == "BELOW"
+                    lock_price := close
+                    lock_score := current_score
+                    range_upper := lock_price * (1.0 + LOCK_RANGE_PCT)
+                    range_lower := lock_price * (1.0 - LOCK_RANGE_PCT)
+                
+                // Check if validation complete
+                if validation_time_passed
+                    // CONFIRMED SELLER
+                    is_new_seller := true
+                    confirmed_state := STATE_SELLER
+                    validation_status := VAL_CONFIRMED
+                    
+                    // Calculate strength vs previous
+                    if not na(prev_lock_price) and prev_lock_price != 0
+                        strength_vs_prev := ((lock_price - prev_lock_price) / prev_lock_price) * 100.0
+                        strength_txt := strength_vs_prev < -0.1 ? "STRONGER ▼" : strength_vs_prev > 0.1 ? "WEAKER ▲" : "SAME ●"
+
+    else
+        // No signal - reset pending
+        if validation_status == VAL_PENDING
+            validation_status := VAL_NONE
+            pending_state := STATE_FLAT
+            validation_ticks := 0
+
+// ═══════════════════════════════════════════════════════════════════════════
+// CASE 2: Currently BUYER - Monitoring for continuation/exit/reversal
+// ═══════════════════════════════════════════════════════════════════════════
+else if confirmed_state == STATE_BUYER
+
+    if raw_signal == STATE_BUYER
+        // Still BUYER signal
+        validation_ticks += 1
+        
+        // Check if stronger (price above range)
+        if price_vs_range == "ABOVE"
+            is_buyer_stronger := true
+            prev_lock_price := lock_price
+            prev_lock_score := lock_score
+            lock_price := close
+            lock_score := current_score
+            lock_bar := bar_index
+            range_upper := lock_price * (1.0 + LOCK_RANGE_PCT)
+            range_lower := lock_price * (1.0 - LOCK_RANGE_PCT)
+            
+        // Check for RESET (price below range while still "buyer" signal)
+        else if price_vs_range == "BELOW"
+            // Price dropped significantly - reset to re-evaluate
+            is_reset := true
+            confirmed_state := STATE_FLAT
+            validation_status := VAL_NONE
+            pending_state := STATE_FLAT
+            validation_ticks := 0
+            
+    else if raw_signal == STATE_SELLER
+        // Potential REVERSAL - start validation
+        if validation_status != VAL_PENDING or pending_state != STATE_SELLER
+            pending_state := STATE_SELLER
+            validation_status := VAL_PENDING
+            prev_lock_price := lock_price
+            prev_lock_score := lock_score
+            lock_price := close
+            lock_score := current_score
+            lock_bar := bar_index
+            lock_time := timenow
+            range_upper := lock_price * (1.0 + LOCK_RANGE_PCT)
+            range_lower := lock_price * (1.0 - LOCK_RANGE_PCT)
+            validation_ticks := 1
+        else
+            // Check reversal validation
+            if price_vs_range == "ABOVE"
+                // Failed reversal - back to BUYER
+                validation_status := VAL_CONFIRMED
+                pending_state := STATE_FLAT
+                validation_ticks := 0
+            else
+                validation_ticks += 1
+                if price_vs_range == "BELOW"
+                    lock_price := close
+                    lock_score := current_score
+                    range_upper := lock_price * (1.0 + LOCK_RANGE_PCT)
+                    range_lower := lock_price * (1.0 - LOCK_RANGE_PCT)
+                
+                if validation_time_passed
+                    // CONFIRMED REVERSAL
+                    is_buyer_to_seller := true
+                    confirmed_state := STATE_SELLER
+                    validation_status := VAL_CONFIRMED
+                    strength_vs_prev := ((lock_price - prev_lock_price) / prev_lock_price) * 100.0
+        
+    else
+        // Signal conditions lost - check exit rules
+        int bars_since_confirm = bar_index - lock_bar
+        bool hold_period_passed = bars_since_confirm >= hold_bars_min_in
+        
+        // Calculate stop loss level
+        float stop_level = lock_price * (1.0 - stop_loss_pct_in / 100.0)
+        bool stop_hit = close < stop_level
+        
+        // Determine if we should exit
+        bool should_exit = false
+        
+        if exit_mode_in == "Signal Loss"
+            // Original behavior - exit when signal disappears
+            should_exit := hold_period_passed
+        else if exit_mode_in == "Price Stop"
+            // Exit only on stop loss
+            should_exit := stop_hit
+        else
+            // "Reversal Only" - don't exit here, wait for reversal
+            should_exit := false
+        
+        if should_exit
+            is_buyer_end := true
+            prev_lock_price := lock_price
+            prev_lock_score := lock_score
+            confirmed_state := STATE_FLAT
+            validation_status := VAL_NONE
+            pending_state := STATE_FLAT
+            validation_ticks := 0
+        // else: Stay in BUYER state, don't show FLAT
+
+// ═══════════════════════════════════════════════════════════════════════════
+// CASE 3: Currently SELLER - Monitoring for continuation/exit/reversal
+// ═══════════════════════════════════════════════════════════════════════════
+else if confirmed_state == STATE_SELLER
+
+    if raw_signal == STATE_SELLER
+        // Still SELLER signal
+        validation_ticks += 1
+        
+        // Check if stronger (price below range)
+        if price_vs_range == "BELOW"
+            is_seller_stronger := true
+            prev_lock_price := lock_price
+            prev_lock_score := lock_score
+            lock_price := close
+            lock_score := current_score
+            lock_bar := bar_index
+            range_upper := lock_price * (1.0 + LOCK_RANGE_PCT)
+            range_lower := lock_price * (1.0 - LOCK_RANGE_PCT)
+            
+        // Check for RESET (price above range while still "seller" signal)
+        else if price_vs_range == "ABOVE"
+            // Price rose significantly - reset to re-evaluate
+            is_reset := true
+            confirmed_state := STATE_FLAT
+            validation_status := VAL_NONE
+            pending_state := STATE_FLAT
+            validation_ticks := 0
+            
+    else if raw_signal == STATE_BUYER
+        // Potential REVERSAL - start validation
+        if validation_status != VAL_PENDING or pending_state != STATE_BUYER
+            pending_state := STATE_BUYER
+            validation_status := VAL_PENDING
+            prev_lock_price := lock_price
+            prev_lock_score := lock_score
+            lock_price := close
+            lock_score := current_score
+            lock_bar := bar_index
+            lock_time := timenow
+            range_upper := lock_price * (1.0 + LOCK_RANGE_PCT)
+            range_lower := lock_price * (1.0 - LOCK_RANGE_PCT)
+            validation_ticks := 1
+        else
+            // Check reversal validation
+            if price_vs_range == "BELOW"
+                // Failed reversal - back to SELLER
+                validation_status := VAL_CONFIRMED
+                pending_state := STATE_FLAT
+                validation_ticks := 0
+            else
+                validation_ticks += 1
+                if price_vs_range == "ABOVE"
+                    lock_price := close
+                    lock_score := current_score
+                    range_upper := lock_price * (1.0 + LOCK_RANGE_PCT)
+                    range_lower := lock_price * (1.0 - LOCK_RANGE_PCT)
+                
+                if validation_time_passed
+                    // CONFIRMED REVERSAL
+                    is_seller_to_buyer := true
+                    confirmed_state := STATE_BUYER
+                    validation_status := VAL_CONFIRMED
+                    strength_vs_prev := ((lock_price - prev_lock_price) / prev_lock_price) * 100.0
+        
+    else
+        // Signal conditions lost - check exit rules
+        int bars_since_confirm = bar_index - lock_bar
+        bool hold_period_passed = bars_since_confirm >= hold_bars_min_in
+        
+        // Calculate stop loss level
+        float stop_level = lock_price * (1.0 + stop_loss_pct_in / 100.0)
+        bool stop_hit = close > stop_level
+        
+        // Determine if we should exit
+        bool should_exit = false
+        
+        if exit_mode_in == "Signal Loss"
+            should_exit := hold_period_passed
+        else if exit_mode_in == "Price Stop"
+            should_exit := stop_hit
+        else
+            // "Reversal Only"
+            should_exit := false
+        
+        if should_exit
+            is_seller_end := true
+            prev_lock_price := lock_price
+            prev_lock_score := lock_score
+            confirmed_state := STATE_FLAT
+            validation_status := VAL_NONE
+            pending_state := STATE_FLAT
+            validation_ticks := 0
+
+// ──────────────────────────────────────────────────────────────────────────────
+// DISTANCE FROM LOCK PRICE
+// ──────────────────────────────────────────────────────────────────────────────
+float dist_from_lock_pct = not na(lock_price) and lock_price != 0 ? ((close - lock_price) / lock_price) * 100.0 : na
+float dist_from_lock_abs = not na(lock_price) ? (close - lock_price) : na
+
+string position_vs_lock = na(dist_from_lock_pct) ? "—" : 
+     dist_from_lock_pct > 0.1 ? "▲ ABOVE" : dist_from_lock_pct < -0.1 ? "▼ BELOW" : "● AT LOCK"
+
+// ──────────────────────────────────────────────────────────────────────────────
+// REALTIME CANDLE PREDICTION ENGINE
+// ──────────────────────────────────────────────────────────────────────────────
+var int   prediction_correct = 0
+var int   prediction_total   = 0
+var int   last_prediction    = 0
+
+float candle_body_pct = (close - open) / (high - low == 0 ? 1 : high - low) * 100
+float candle_upper_wick = high - math.max(open, close)
+float candle_lower_wick = math.min(open, close) - low
+
+float pred_score_buyer  = 0.0
+float pred_score_seller = 0.0
+
+if close > open
+    pred_score_buyer += 30.0 * math.min(1.0, math.abs(candle_body_pct) / 50.0)
+else if close < open
+    pred_score_seller += 30.0 * math.min(1.0, math.abs(candle_body_pct) / 50.0)
+
+if volD > 0
+    pred_score_buyer += 25.0 * math.min(1.0, volD / (volT == 0 ? 1 : volT))
+else
+    pred_score_seller += 25.0 * math.min(1.0, math.abs(volD) / (volT == 0 ? 1 : volT))
+
+float buy_pres = volT > 0 ? (volB / volT) * 100 : 50
+float sell_pres = 100 - buy_pres
+if buy_pres > 55
+    pred_score_buyer += 20.0 * ((buy_pres - 50) / 50)
+else if sell_pres > 55
+    pred_score_seller += 20.0 * ((sell_pres - 50) / 50)
+
+if candle_lower_wick > candle_upper_wick * 1.5
+    pred_score_buyer += 15.0
+else if candle_upper_wick > candle_lower_wick * 1.5
+    pred_score_seller += 15.0
+
+if close > s01
+    pred_score_buyer += 10.0
+else if close < s01
+    pred_score_seller += 10.0
+
+float pred_total = pred_score_buyer + pred_score_seller
+float prob_buyer  = pred_total > 0 ? (pred_score_buyer / pred_total) * 100 : 50
+float prob_seller = pred_total > 0 ? (pred_score_seller / pred_total) * 100 : 50
+
+int current_prediction = prob_buyer > 55 ? 1 : prob_seller > 55 ? -1 : 0
+string pred_winner = current_prediction == 1 ? "BUYERS" : current_prediction == -1 ? "SELLERS" : "NEUTRAL"
+float pred_confidence = math.max(prob_buyer, prob_seller)
+
+if barstate.isconfirmed and last_prediction != 0
+    prediction_total += 1
+    bool was_correct = (last_prediction == 1 and close > open) or (last_prediction == -1 and close < open)
+    if was_correct
+        prediction_correct += 1
+
+if barstate.isconfirmed
+    last_prediction := current_prediction
+
+float prediction_accuracy = prediction_total > 0 ? (prediction_correct / prediction_total) * 100 : 0
+
+// ──────────────────────────────────────────────────────────────────────────────
+// SMART LABEL POSITIONING ENGINE
+// ──────────────────────────────────────────────────────────────────────────────
+var float[] label_y_positions = array.new_float(20, na)
+var int[]   label_bar_indices = array.new_int(20, 0)
+var bool[]  label_is_above    = array.new_bool(20, true)
+
+float atr_val = ta.atr(14)
+float label_spacing = atr_val * 2.5
+
+f_get_safe_y(_bar, _base_y, _is_above, _spacing) =>
+    float safe_y = _base_y
+    int lookback = 5
+    
+    for i = 0 to math.min(19, array.size(label_bar_indices) - 1)
+        int stored_bar = array.get(label_bar_indices, i)
+        if (_bar - stored_bar) <= lookback and stored_bar > 0
+            float stored_y = array.get(label_y_positions, i)
+            if not na(stored_y)
+                float y_diff = math.abs(safe_y - stored_y)
+                if y_diff < _spacing
+                    if _is_above
+                        safe_y := stored_y + _spacing
+                    else
+                        safe_y := stored_y - _spacing
+    safe_y
+
+f_store_label_pos(_bar, _y, _is_above) =>
+    array.unshift(label_bar_indices, _bar)
+    array.unshift(label_y_positions, _y)
+    array.unshift(label_is_above, _is_above)
+    if array.size(label_bar_indices) > 20
+        array.pop(label_bar_indices)
+        array.pop(label_y_positions)
+        array.pop(label_is_above)
+
+// ──────────────────────────────────────────────────────────────────────────────
+// SIGNAL LABELS (With Tooltip for Clean Display)
+// ──────────────────────────────────────────────────────────────────────────────
+var line[] connector_lines = array.new_line()
+
+if show_signals_in and barstate.isconfirmed
+
+    if array.size(connector_lines) > 50
+        line old_line = array.shift(connector_lines)
+        line.delete(old_line)
+
+    string grade_txt = not na(act_res) ? act_res.grade : "—"
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // NEW BUYER ENTRY (CONFIRMED)
+    // ═══════════════════════════════════════════════════════════════════════
+    if is_new_buyer
+        float base_y = low - label_spacing
+        float safe_y = f_get_safe_y(bar_index, base_y, false, label_spacing)
+        
+        string tip = "🐂 BUYER ENTRY CONFIRMED\n━━━━━━━━━━━━━━━━━━━━\n"
+        tip += "Price: " + str.tostring(lock_price, format.mintick) + "\n"
+        tip += "Score: " + str.tostring(lock_score, "#.0") + "%\n"
+        tip += "Grade: " + grade_txt + "\n"
+        tip += "Validation: " + str.tostring(validation_ticks) + " ticks\n"
+        if strength_txt != ""
+            tip += "vs Prev: " + strength_txt + "\n"
+        tip += "━━━━━━━━━━━━━━━━━━━━\n"
+        tip += "Range: " + str.tostring(range_lower, format.mintick) + " - " + str.tostring(range_upper, format.mintick)
+        
+        string lbl = is_minimal ? "🐂" : 
+                     is_normal ? "🐂 " + str.tostring(lock_price, format.mintick) :
+                     "🐂 BUYER\n" + str.tostring(lock_price, format.mintick) + "\n" + str.tostring(lock_score, "#") + "% [" + grade_txt + "]"
+        
+        label.new(bar_index, safe_y, lbl, style=label.style_label_up, color=color.new(#00E676, 10), textcolor=color.white, size=label_sz, textalign=text.align_center, tooltip=tip)
+        
+        if not is_minimal and math.abs(safe_y - low) > label_spacing * 0.5
+            array.push(connector_lines, line.new(bar_index, low, bar_index, safe_y, color=color.new(#00E676, 50), style=line.style_dotted, width=1))
+        
+        f_store_label_pos(bar_index, safe_y, false)
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // NEW SELLER ENTRY (CONFIRMED)
+    // ═══════════════════════════════════════════════════════════════════════
+    if is_new_seller
+        float base_y = high + label_spacing
+        float safe_y = f_get_safe_y(bar_index, base_y, true, label_spacing)
+        
+        string tip = "🐻 SELLER ENTRY CONFIRMED\n━━━━━━━━━━━━━━━━━━━━\n"
+        tip += "Price: " + str.tostring(lock_price, format.mintick) + "\n"
+        tip += "Score: " + str.tostring(lock_score, "#.0") + "%\n"
+        tip += "Grade: " + grade_txt + "\n"
+        tip += "Validation: " + str.tostring(validation_ticks) + " ticks\n"
+        if strength_txt != ""
+            tip += "vs Prev: " + strength_txt + "\n"
+        tip += "━━━━━━━━━━━━━━━━━━━━\n"
+        tip += "Range: " + str.tostring(range_lower, format.mintick) + " - " + str.tostring(range_upper, format.mintick)
+        
+        string lbl = is_minimal ? "🐻" : 
+                     is_normal ? "🐻 " + str.tostring(lock_price, format.mintick) :
+                     "🐻 SELLER\n" + str.tostring(lock_price, format.mintick) + "\n" + str.tostring(lock_score, "#") + "% [" + grade_txt + "]"
+        
+        label.new(bar_index, safe_y, lbl, style=label.style_label_down, color=color.new(#FF1744, 10), textcolor=color.white, size=label_sz, textalign=text.align_center, tooltip=tip)
+        
+        if not is_minimal and math.abs(safe_y - high) > label_spacing * 0.5
+            array.push(connector_lines, line.new(bar_index, high, bar_index, safe_y, color=color.new(#FF1744, 50), style=line.style_dotted, width=1))
+        
+        f_store_label_pos(bar_index, safe_y, true)
+ 
+    // ═══════════════════════════════════════════════════════════════════════
+    // BUYER TO SELLER (REVERSAL) - Purple/Magenta for visibility
+    // ═══════════════════════════════════════════════════════════════════════
+    if is_buyer_to_seller
+        float base_y = high + label_spacing
+        float safe_y = f_get_safe_y(bar_index, base_y, true, label_spacing)
+        
+        string tip = "🔄 REVERSAL: BUYER → SELLER\n━━━━━━━━━━━━━━━━━━━━\n"
+        tip += "Prev Lock: " + str.tostring(prev_lock_price, format.mintick) + "\n"
+        tip += "New Price: " + str.tostring(lock_price, format.mintick) + "\n"
+        tip += "Score: " + str.tostring(lock_score, "#.0") + "%\n"
+        tip += "Change: " + str.tostring(strength_vs_prev, "#.2") + "%"
+        
+        // Use CYAN background + RED arrow icon for Buy→Sell
+        string lbl = is_minimal ? "🔻" : 
+                     is_normal ? "🔻 " + str.tostring(lock_price, format.mintick) :
+                     "🔻 REVERSAL\nBUY → SELL\n" + str.tostring(lock_price, format.mintick)
+        
+        label.new(bar_index, safe_y, lbl, style=label.style_label_down, color=color.new(#E040FB, 0), textcolor=color.white, size=label_sz, textalign=text.align_center, tooltip=tip)
+        
+        if not is_minimal and math.abs(safe_y - high) > label_spacing * 0.5
+            array.push(connector_lines, line.new(bar_index, high, bar_index, safe_y, color=color.new(#E040FB, 50), style=line.style_dotted, width=1))
+        
+        f_store_label_pos(bar_index, safe_y, true)
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // SELLER TO BUYER (REVERSAL)
+    // ═══════════════════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════════════
+    // SELLER TO BUYER (REVERSAL) - Cyan for visibility
+    // ═══════════════════════════════════════════════════════════════════════
+    if is_seller_to_buyer
+        float base_y = low - label_spacing
+        float safe_y = f_get_safe_y(bar_index, base_y, false, label_spacing)
+        
+        string tip = "🔄 REVERSAL: SELLER → BUYER\n━━━━━━━━━━━━━━━━━━━━\n"
+        tip += "Prev Lock: " + str.tostring(prev_lock_price, format.mintick) + "\n"
+        tip += "New Price: " + str.tostring(lock_price, format.mintick) + "\n"
+        tip += "Score: " + str.tostring(lock_score, "#.0") + "%\n"
+        tip += "Change: " + str.tostring(strength_vs_prev, "#.2") + "%"
+        
+        // Use CYAN background + GREEN arrow icon for Sell→Buy
+        string lbl = is_minimal ? "🔺" : 
+                     is_normal ? "🔺 " + str.tostring(lock_price, format.mintick) :
+                     "🔺 REVERSAL\nSELL → BUY\n" + str.tostring(lock_price, format.mintick)
+        
+        label.new(bar_index, safe_y, lbl, style=label.style_label_up, color=color.new(#00BCD4, 0), textcolor=color.white, size=label_sz, textalign=text.align_center, tooltip=tip)
+        
+        if not is_minimal and math.abs(safe_y - low) > label_spacing * 0.5
+            array.push(connector_lines, line.new(bar_index, low, bar_index, safe_y, color=color.new(#00BCD4, 50), style=line.style_dotted, width=1))
+        
+        f_store_label_pos(bar_index, safe_y, false)
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // BUYER END (→ FLAT)
+    // ═══════════════════════════════════════════════════════════════════════
+    if is_buyer_end
+        float base_y = low - label_spacing * 0.5
+        float safe_y = f_get_safe_y(bar_index, base_y, false, label_spacing)
+        
+        string tip = "⏹ BUYER EXIT\n━━━━━━━━━━━━━━━━━━━━\nSignal lost → RANGE/FLAT"
+        
+        string lbl = is_minimal ? "⏹" : is_normal ? "⏹ FLAT" : "⏹ EXIT\n→ FLAT"
+        
+        label.new(bar_index, safe_y, lbl, style=label.style_label_up, color=color.new(#9E9E9E, 20), textcolor=color.white, size=label_sz, textalign=text.align_center, tooltip=tip)
+        f_store_label_pos(bar_index, safe_y, false)
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // SELLER END (→ FLAT)
+    // ═══════════════════════════════════════════════════════════════════════
+    if is_seller_end
+        float base_y = high + label_spacing * 0.5
+        float safe_y = f_get_safe_y(bar_index, base_y, true, label_spacing)
+        
+        string tip = "⏹ SELLER EXIT\n━━━━━━━━━━━━━━━━━━━━\nSignal lost → RANGE/FLAT"
+        
+        string lbl = is_minimal ? "⏹" : is_normal ? "⏹ FLAT" : "⏹ EXIT\n→ FLAT"
+        
+        label.new(bar_index, safe_y, lbl, style=label.style_label_down, color=color.new(#9E9E9E, 20), textcolor=color.white, size=label_sz, textalign=text.align_center, tooltip=tip)
+        f_store_label_pos(bar_index, safe_y, true)
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // BUYER STRONGER (Lock Updated)
+    // ═══════════════════════════════════════════════════════════════════════
+    if is_buyer_stronger
+        float base_y = low - label_spacing * 0.3
+        float safe_y = f_get_safe_y(bar_index, base_y, false, label_spacing * 0.5)
+        
+        string tip = "🐂⬆ BUYER STRONGER\n━━━━━━━━━━━━━━━━━━━━\nLock updated to: " + str.tostring(lock_price, format.mintick)
+        
+        if not is_minimal
+            label.new(bar_index, safe_y, "⬆", style=label.style_label_up, color=color.new(#00E676, 40), textcolor=color.white, size=size.tiny, tooltip=tip)
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // SELLER STRONGER (Lock Updated)
+    // ═══════════════════════════════════════════════════════════════════════
+    if is_seller_stronger
+        float base_y = high + label_spacing * 0.3
+        float safe_y = f_get_safe_y(bar_index, base_y, true, label_spacing * 0.5)
+        
+        string tip = "🐻⬇ SELLER STRONGER\n━━━━━━━━━━━━━━━━━━━━\nLock updated to: " + str.tostring(lock_price, format.mintick)
+        
+        if not is_minimal
+            label.new(bar_index, safe_y, "⬇", style=label.style_label_down, color=color.new(#FF1744, 40), textcolor=color.white, size=size.tiny, tooltip=tip)
+
+// ──────────────────────────────────────────────────────────────────────────────
+// LOCK PRICE LINE + RANGE BAND
+// ──────────────────────────────────────────────────────────────────────────────
+var line lock_line = na
+var line range_upper_line = na
+var line range_lower_line = na
+
+if barstate.islast
+    if not na(lock_line)
+        line.delete(lock_line)
+    if not na(range_upper_line)
+        line.delete(range_upper_line)
+    if not na(range_lower_line)
+        line.delete(range_lower_line)
+    
+    if not na(lock_price) and (confirmed_state != STATE_FLAT or validation_status == VAL_PENDING)
+        color lock_col = confirmed_state == STATE_BUYER ? #00E676 : 
+                         confirmed_state == STATE_SELLER ? #FF1744 : 
+                         pending_state == STATE_BUYER ? color.new(#00E676, 50) :
+                         pending_state == STATE_SELLER ? color.new(#FF1744, 50) : #9E9E9E
+        
+        int line_start = not na(lock_bar) ? lock_bar : bar_index - 10
+        
+        lock_line := line.new(line_start, lock_price, bar_index + label_offset_in, lock_price, color=lock_col, style=line.style_dashed, width=2)
+        
+        // Range band (lighter)
+        if not na(range_upper) and not na(range_lower)
+            range_upper_line := line.new(line_start, range_upper, bar_index + label_offset_in, range_upper, color=color.new(lock_col, 70), style=line.style_dotted, width=1)
+            range_lower_line := line.new(line_start, range_lower, bar_index + label_offset_in, range_lower, color=color.new(lock_col, 70), style=line.style_dotted, width=1)
+
+// ──────────────────────────────────────────────────────────────────────────────
+// INFO LABEL (Right Side Panel)
+// ──────────────────────────────────────────────────────────────────────────────
+var label info_label = na
+
+if barstate.islast
+    if not na(info_label)
+        label.delete(info_label)
+    
+    // Status determination
+    string status_icon = confirmed_state == STATE_BUYER ? "🐂" : 
+                         confirmed_state == STATE_SELLER ? "🐻" : 
+                         validation_status == VAL_PENDING ? "⏳" : "⏸"
+    
+    string status_text = confirmed_state == STATE_BUYER ? "BUYERS ACTIVE" : 
+                         confirmed_state == STATE_SELLER ? "SELLERS ACTIVE" : 
+                         validation_status == VAL_PENDING ? "VALIDATING..." : "RANGE / FLAT"
+    
+    color info_col = confirmed_state == STATE_BUYER ? color.new(#00E676, 15) : 
+                     confirmed_state == STATE_SELLER ? color.new(#FF1744, 15) : 
+                     validation_status == VAL_PENDING ? color.new(#FFD600, 25) :
+                     color.new(#9E9E9E, 25)
+    
+    string info_txt = status_icon + " " + status_text + "\n"
+    info_txt += "════════════════════\n"
+    
+    // Lock info (if active)
+    if not na(lock_price) and (confirmed_state != STATE_FLAT or validation_status == VAL_PENDING)
+        info_txt += "Lock: " + str.tostring(lock_price, format.mintick) + "\n"
+        info_txt += "Range: ±" + str.tostring(lock_range_pct_in, "#.1") + "%\n"
+        info_txt += "────────────────────\n"
+        info_txt += "Distance: " + str.tostring(dist_from_lock_pct, "#.2") + "%\n"
+        info_txt += "Position: " + position_vs_lock + "\n"
+        info_txt += "vs Range: " + price_vs_range + "\n"
+        info_txt += "────────────────────\n"
+    
+    // Validation status
+    if validation_status == VAL_PENDING
+        string pending_type = pending_state == STATE_BUYER ? "BUYER" : "SELLER"
+        info_txt += "⏳ Pending: " + pending_type + "\n"
+        info_txt += "Ticks: " + str.tostring(validation_ticks) + "/" + str.tostring(validation_ticks_in) + "\n"
+        if barstate.isrealtime
+            info_txt += "Time: " + str.tostring(time_elapsed_sec) + "/" + str.tostring(validation_seconds_in) + "s\n"
+        info_txt += "────────────────────\n"
+    
+    info_txt += "Score: " + str.tostring(current_score, "#.0") + "% " + (score_in_range ? "✓" : "✗") + "\n"
+    info_txt += "════════════════════\n"
+    
+    // Prediction
+    info_txt += "📊 " + pred_winner + " " + str.tostring(pred_confidence, "#") + "%\n"
+    info_txt += "🎯 " + str.tostring(prediction_accuracy, "#.1") + "% (" + str.tostring(prediction_correct) + "/" + str.tostring(prediction_total) + ")\n"
+    info_txt += "════════════════════\n"
+    
+    // Looking for
+    string looking = confirmed_state == STATE_BUYER ? "🔍 Exit/Reversal" :
+                     confirmed_state == STATE_SELLER ? "🔍 Exit/Reversal" :
+                     validation_status == VAL_PENDING ? "🔍 Confirmation" :
+                     "🔍 New Signal"
+    info_txt += looking
+    
+    info_label := label.new(bar_index + label_offset_in, close, info_txt, style=label.style_label_left, color=info_col, textcolor=color.white, size=label_sz, textalign=text.align_left)
+
+// ==============================================================================
+// Appended Table
+// ==============================================================================
+if show_db and barstate.islast
+
+    // Re-define styles used in this extension (so they are always available here)
+    d_size  = f_getSize(size_db)
+    c_txt_m = color.new(#B0BEC5, 10)
+    c_bg_d  = color.new(#0D1117, 40)
+    c_bg_sec= color.new(#37474F, 20)
+    // ─── I) SIGNAL STATUS PANEL - Row 20 Header ───
+    table.merge_cells(db_pro, 0, 20, 6, 20)
+
+    string sig_header_txt = confirmed_state == STATE_BUYER ? "🐂 BUYERS ACTIVE" : 
+                          confirmed_state == STATE_SELLER ? "🐻 SELLERS ACTIVE" : 
+                          validation_status == VAL_PENDING ? "⏳ VALIDATING..." : 
+                          "⏸ RANGE / FLAT"
+    color sig_header_col = confirmed_state == STATE_BUYER ? color.new(#00E676, 40) : 
+                          confirmed_state == STATE_SELLER ? color.new(#FF1744, 40) : 
+                          validation_status == VAL_PENDING ? color.new(#FFD600, 40) :
+                          c_bg_sec
+    table.cell(db_pro, 0, 20, "── " + sig_header_txt + " ──", text_color=color.white, bgcolor=sig_header_col, text_size=d_size)
+
+    // ─── Row 21: Lock Info ───
+    float _dist_pct = not na(lock_price) and lock_price != 0 ? ((close - lock_price) / lock_price) * 100.0 : na
+    string _pos_txt = na(_dist_pct) ? "—" : _dist_pct > 0.1 ? "▲ ABOVE" : _dist_pct < -0.1 ? "▼ BELOW" : "● AT LOCK"
+    
+    table.cell(db_pro, 0, 21, "LOCK PRICE", text_color=c_txt_m, bgcolor=c_bg_d, text_size=d_size, text_halign=text.align_left)
+    table.cell(db_pro, 1, 21, not na(lock_price) ? str.tostring(lock_price, format.mintick) : "—", text_color=color.white, bgcolor=c_bg_d, text_size=d_size, text_halign=text.align_right)
+
+    table.cell(db_pro, 2, 21, "RANGE ±", text_color=c_txt_m, bgcolor=c_bg_d, text_size=d_size, text_halign=text.align_left)
+    table.cell(db_pro, 3, 21, str.tostring(lock_range_pct_in, "#.1") + "%", text_color=color.white, bgcolor=c_bg_d, text_size=d_size, text_halign=text.align_right)
+
+    table.cell(db_pro, 4, 21, "POSITION", text_color=c_txt_m, bgcolor=c_bg_d, text_size=d_size, text_halign=text.align_left)
+    table.cell(db_pro, 5, 21, _pos_txt, text_color=na(_dist_pct) ? color.gray : (_dist_pct > 0 ? #00E676 : _dist_pct < 0 ? #FF1744 : color.white), bgcolor=c_bg_d, text_size=d_size, text_halign=text.align_right)
+    table.cell(db_pro, 6, 21, "🔒", text_color=color.white, bgcolor=c_bg_d, text_size=d_size)
+
+    // ─── Row 22: Distance & Validation ───
+    table.cell(db_pro, 0, 22, "DISTANCE", text_color=c_txt_m, bgcolor=c_bg_d, text_size=d_size, text_halign=text.align_left)
+    table.cell(db_pro, 1, 22, not na(_dist_pct) ? (str.tostring(_dist_pct, "#.2") + "%") : "—", text_color=not na(_dist_pct) ? f_c_grad(_dist_pct, -1, 1) : color.gray, bgcolor=c_bg_d, text_size=d_size, text_halign=text.align_right)
+
+    table.cell(db_pro, 2, 22, "vs RANGE", text_color=c_txt_m, bgcolor=c_bg_d, text_size=d_size, text_halign=text.align_left)
+    table.cell(db_pro, 3, 22, price_vs_range, text_color=price_vs_range == "IN_RANGE" ? #00E676 : #FFD600, bgcolor=c_bg_d, text_size=d_size, text_halign=text.align_right)
+
+    table.cell(db_pro, 4, 22, "VAL TICKS", text_color=c_txt_m, bgcolor=c_bg_d, text_size=d_size, text_halign=text.align_left)
+    table.cell(db_pro, 5, 22, str.tostring(validation_ticks) + "/" + str.tostring(validation_ticks_in), text_color=validation_ticks >= validation_ticks_in ? #00E676 : #FFD600, bgcolor=c_bg_d, text_size=d_size, text_halign=text.align_right)
+    table.cell(db_pro, 6, 22, validation_status == VAL_PENDING ? "⏳" : (validation_status == VAL_CONFIRMED ? "✓" : "—"), text_color=validation_status == VAL_CONFIRMED ? #00E676 : #FFD600, bgcolor=c_bg_d, text_size=d_size)
+
+    // ─── J) PREDICTION PANEL - Row 23 Header ───
+    table.merge_cells(db_pro, 0, 23, 6, 23)
+    table.cell(db_pro, 0, 23, "── 📊 REALTIME PREDICTION ──", text_color=c_txt_m, bgcolor=c_bg_sec, text_size=d_size)
+
+    // ─── Row 24: Prediction Info ───
+    table.cell(db_pro, 0, 24, "WINNER", text_color=c_txt_m, bgcolor=c_bg_d, text_size=d_size, text_halign=text.align_left)
+    table.cell(db_pro, 1, 24, pred_winner, text_color=current_prediction == 1 ? #00E676 : current_prediction == -1 ? #FF1744 : color.gray, bgcolor=c_bg_d, text_size=d_size, text_halign=text.align_right)
+
+    table.cell(db_pro, 2, 24, "CONFIDENCE", text_color=c_txt_m, bgcolor=c_bg_d, text_size=d_size, text_halign=text.align_left)
+    table.cell(db_pro, 3, 24, str.tostring(pred_confidence, "#.0") + "%", text_color=f_c_grad(pred_confidence, 50, 70), bgcolor=c_bg_d, text_size=d_size, text_halign=text.align_right)
+
+    table.cell(db_pro, 4, 24, "ACCURACY", text_color=c_txt_m, bgcolor=c_bg_d, text_size=d_size, text_halign=text.align_left)
+    table.cell(db_pro, 5, 24, str.tostring(prediction_accuracy, "#.1") + "%", text_color=f_c_grad(prediction_accuracy, 40, 60), bgcolor=c_bg_d, text_size=d_size, text_halign=text.align_right)
+    table.cell(db_pro, 6, 24, "🎯", text_color=color.white, bgcolor=c_bg_d, text_size=d_size)
+
+    // ─── Row 25: Prediction Stats ───
+    table.cell(db_pro, 0, 25, "STATS", text_color=c_txt_m, bgcolor=c_bg_d, text_size=d_size, text_halign=text.align_left)
+    table.cell(db_pro, 1, 25, str.tostring(prediction_correct) + "/" + str.tostring(prediction_total), text_color=color.white, bgcolor=c_bg_d, text_size=d_size, text_halign=text.align_right)
+
+    table.cell(db_pro, 2, 25, "BUY PROB", text_color=c_txt_m, bgcolor=c_bg_d, text_size=d_size, text_halign=text.align_left)
+    table.cell(db_pro, 3, 25, str.tostring(prob_buyer, "#") + "%", text_color=#00E676, bgcolor=c_bg_d, text_size=d_size, text_halign=text.align_right)
+
+    table.cell(db_pro, 4, 25, "SELL PROB", text_color=c_txt_m, bgcolor=c_bg_d, text_size=d_size, text_halign=text.align_left)
+    table.cell(db_pro, 5, 25, str.tostring(prob_seller, "#") + "%", text_color=#FF1744, bgcolor=c_bg_d, text_size=d_size, text_halign=text.align_right)
+    table.cell(db_pro, 6, 25, "📈", text_color=color.white, bgcolor=c_bg_d, text_size=d_size)
+
+    // ─── Row 26: Looking For ───
+    string looking_txt = confirmed_state == STATE_BUYER ? "🔍 Exit or Sell Reversal" :
+                         confirmed_state == STATE_SELLER ? "🔍 Exit or Buy Reversal" :
+                         validation_status == VAL_PENDING ? "🔍 Confirmation..." :
+                         "🔍 New Buyer or Seller"
+    table.merge_cells(db_pro, 0, 26, 6, 26)
+    table.cell(db_pro, 0, 26, looking_txt, text_color=#2196F3, bgcolor=c_bg_d, text_size=d_size)
+
+    // ─── Row 27: Exit Mode Info ───
+    table.merge_cells(db_pro, 0, 27, 6, 27)
+    table.cell(db_pro, 0, 27, "Exit Mode: " + exit_mode_in + " | Hold: " + str.tostring(hold_bars_min_in) + " bars | SL: " + str.tostring(stop_loss_pct_in, "#.1") + "%", text_color=color.new(c_txt_m, 30), bgcolor=c_bg_d, text_size=d_size)

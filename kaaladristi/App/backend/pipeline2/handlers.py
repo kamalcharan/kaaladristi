@@ -46,7 +46,7 @@ FIXABLE_DIMENSIONS = frozenset({
     'supertrend', 'rolling_metrics', 'd365', 'stage_classification', 'vani_flags',
     'equity_weekly', 'equity_monthly',
     'index_returns', 'industry_composites', 'market_breadth', 'breadth_roc',
-    'scan_refresh',
+    'symbol_enrichment', 'scan_refresh', 'wg_journeys', 'integrity_checks', 'dots',
 })
 
 
@@ -280,6 +280,54 @@ def handle_rolling_metrics(conn, trade_date: date, force: bool,
     from scripts.backfill_rolling_metrics import compute_rolling_metrics_for_date
     return _handle_script('rolling_metrics', conn, trade_date, force, on_progress,
                           compute_rolling_metrics_for_date)
+
+
+def handle_symbol_enrichment(conn, trade_date: date, force: bool,
+                             exchange: Optional[str], on_progress: ProgressFn) -> HandlerResult:
+    # Closes the untagged-symbol gap that used to accumulate silently every
+    # time symbol_registrar admitted a new bhavcopy symbol. Enriches
+    # industry/company_name/is_fno/is_etf via Yahoo, refreshes
+    # shares_outstanding on a rolling cadence, and recomputes mcap_cr from
+    # today's closes. See scripts/enrich_equity_metadata.py.
+    #
+    # BUGFIX 2026-08-24: this used to route through _handle_script, which
+    # (a) probes fill_rate('symbol_enrichment') — a key DIMENSION_HEALTH
+    # never contained, so the step raised ValueError before the script
+    # ever ran — and (b) passes verbose=, which enrich_for_pipeline does
+    # not accept. Net effect: the nightly dimension NEVER successfully ran;
+    # the backlog only moved on manual CLI runs. Bespoke handler now (the
+    # scan_refresh pattern): no fill-rate probe on a master table.
+    from scripts.enrich_equity_metadata import enrich_for_pipeline
+    on_progress('running capped symbol enrichment + mcap recompute', 20)
+    try:
+        rows, status = enrich_for_pipeline(conn, trade_date, force)
+    except Exception as e:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        return HandlerResult('failed', 0.0, 0.0, 0, error_msg=str(e)[:500])
+    return HandlerResult(status, 0.0, 100.0, rows)
+
+
+def handle_wg_journeys(conn, trade_date: date, force: bool,
+                       exchange: Optional[str], on_progress: ProgressFn) -> HandlerResult:
+    # Waking Giants v4: re-derives the full Hibernation → Wake → Ascent
+    # journey state (km_wg_journeys, migration 177) from 15y of
+    # cliff-adjusted per-ISIN merged history. Idempotent full rewrite;
+    # runs after scan_refresh so daily zones/weekly/monthly aggregates are
+    # final. See scripts/compute_wg_journeys.py.
+    from scripts.compute_wg_journeys import compute_wg_for_pipeline
+    on_progress('evaluating hibernation → wake → ascent journeys', 20)
+    try:
+        rows, status = compute_wg_for_pipeline(conn, trade_date, force)
+    except Exception as e:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        return HandlerResult('failed', 0.0, 0.0, 0, error_msg=str(e)[:500])
+    return HandlerResult(status, 0.0, 100.0, rows)
 
 
 def handle_rs_percentile(conn, trade_date: date, force: bool,
@@ -602,6 +650,56 @@ def handle_equity_monthly(conn, trade_date: date, force: bool,
                                     on_progress, is_month_end, aggregate_monthly_bars, 'monthly')
 
 
+def handle_dots(conn, trade_date: date, force: bool,
+                exchange: Optional[str], on_progress: ProgressFn) -> HandlerResult:
+    """Rebuild dot_svd / dot_sbd / dot_syd for the trade date.
+
+    These are the owner's Chartink screener definitions and the selection
+    basis for the Volume Drive scanner. The script existed but was never
+    wired into pipeline2 — so after the last manual run (2026-08-03) the
+    columns went all-FALSE universe-wide again and Volume Drive went
+    inert, exactly as CLAUDE.md warned it would. Found by the integrity
+    sweep's staleness check on its first live run.
+    """
+    from scripts.compute_dots import compute_dots_for_pipeline
+    on_progress('computing SVD / SBD / SYD dots', 20)
+    try:
+        rows, status = compute_dots_for_pipeline(conn, trade_date, force)
+    except Exception as e:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        return HandlerResult('failed', 0.0, 0.0, 0, error_msg=str(e)[:500])
+    return HandlerResult(status, 0.0, 100.0, rows)
+
+
+def handle_integrity_checks(conn, trade_date: date, force: bool,
+                            exchange: Optional[str], on_progress: ProgressFn) -> HandlerResult:
+    """Data-integrity sweep — reconciliation / invariant / staleness /
+    step-failure checks (lib/integrity_checks.py), persisted to
+    km_integrity_findings and pushed to any configured alert transport.
+
+    Deliberately reports 'failed' when a CRITICAL finding exists: the
+    audit's core lesson is that correctness bugs read green for months
+    because nothing ever turned red. This is the step that turns red.
+    Runs LAST so it can see every other step's outcome.
+    """
+    from scripts.run_integrity_checks import integrity_for_pipeline
+    on_progress('running data-integrity sweep', 20)
+    try:
+        rows, status = integrity_for_pipeline(conn, trade_date, force)
+    except Exception as e:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        return HandlerResult('failed', 0.0, 0.0, 0, error_msg=str(e)[:500])
+    return HandlerResult(status, 0.0, 100.0, rows,
+                         error_msg=None if status == 'completed'
+                         else 'critical data-integrity finding(s) — see km_integrity_findings')
+
+
 def handle_scan_refresh(conn, trade_date: date, force: bool,
                         exchange: Optional[str], on_progress: ProgressFn) -> HandlerResult:
     """Refresh the scanner materialized views (km_scan_results + companion
@@ -856,6 +954,8 @@ def handle(dimension: str, conn, trade_date: date, force: bool,
         return handle_supertrend(conn, trade_date, force, exchange, on_progress)
     if dimension == 'rolling_metrics':
         return handle_rolling_metrics(conn, trade_date, force, exchange, on_progress)
+    if dimension == 'symbol_enrichment':
+        return handle_symbol_enrichment(conn, trade_date, force, exchange, on_progress)
     if dimension == 'equity_weekly':
         return handle_equity_weekly(conn, trade_date, force, exchange, on_progress)
     if dimension == 'equity_monthly':
@@ -878,6 +978,12 @@ def handle(dimension: str, conn, trade_date: date, force: bool,
         return handle_breadth_roc(conn, trade_date, force, exchange, on_progress)
     if dimension == 'scan_refresh':
         return handle_scan_refresh(conn, trade_date, force, exchange, on_progress)
+    if dimension == 'wg_journeys':
+        return handle_wg_journeys(conn, trade_date, force, exchange, on_progress)
+    if dimension == 'dots':
+        return handle_dots(conn, trade_date, force, exchange, on_progress)
+    if dimension == 'integrity_checks':
+        return handle_integrity_checks(conn, trade_date, force, exchange, on_progress)
     raise ValueError(f'Unknown dimension: {dimension}')
 
 
@@ -907,5 +1013,9 @@ KNOWN_DIMENSIONS = [
     'industry_composites',
     'market_breadth',
     'breadth_roc',
+    'symbol_enrichment',
+    'dots',
     'scan_refresh',
+    'wg_journeys',
+    'integrity_checks',
 ]

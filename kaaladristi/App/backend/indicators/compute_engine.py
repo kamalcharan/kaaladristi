@@ -309,6 +309,61 @@ def compute_rolling_range(df: pd.DataFrame) -> dict:
     breakout_level    = close.shift(1).rolling(20, min_periods=1).max().round(2)
     pct_from_breakout = ((close - breakout_level) / breakout_level * 100).round(2)
 
+    # ── breakdown_level = rolling 20-bar LOW of the prior close ──────────
+    # Exact mirror of breakout_level. Negative pct_from_breakdown means price
+    # has broken below the 20-day floor. NOT the same as pct_from_breakout < 0,
+    # which merely says "not at a 20-day high" and is true of ~89 percent of the
+    # market on any given day.
+    breakdown_level    = close.shift(1).rolling(20, min_periods=1).min().round(2)
+    pct_from_breakdown = (
+        ((close - breakdown_level) / breakdown_level * 100)
+        .where(breakdown_level > 0)
+        .round(2)
+    )
+    # Representability guard — REQUIRED here in a way it is not for the breakout
+    # mirror. breakdown_level is the rolling MIN, so it is the DENOMINATOR that
+    # can go tiny; breakout_level is the MAX and never does. Junk historical BSE
+    # bars put a 0.01 close inside the window (scrip 514306, 2007-06-06) while
+    # price is orders of magnitude higher, yielding ratios past 1e9. The column
+    # is NUMERIC(10,2), so anything at or beyond 1e8 fails the UPSERT.
+    pct_from_breakdown = pct_from_breakdown.where(pct_from_breakdown.abs() < 1e8)
+    # Same guard on the breakout side for symmetry. It has never fired in
+    # practice (a MAX denominator is large by construction) but a symbol whose
+    # entire prior window sits at 0.01 would trip it.
+    pct_from_breakout = pct_from_breakout.where(pct_from_breakout.abs() < 1e8)
+
+    # ── Week-to-date: reference = last close before this week's Monday ────
+    # Buckets are Mon-Sun calendar weeks. shift(1) over the weeks PRESENT in
+    # this symbol's history yields "the last close strictly before this week",
+    # which is gap-safe: a symbol that did not trade last week references its
+    # last available close rather than dropping out with a NULL.
+    _wk             = df['trade_date'].dt.to_period('W-SUN')
+    _last_by_week   = df.groupby(_wk)['close'].last()
+    prev_week_close = _wk.map(_last_by_week.shift(1)).astype(float).round(2)
+    # The .where guards are representability, NOT business thresholds: pct_wtd
+    # is NUMERIC(10,2), so |value| must stay under 1e8 or the UPSERT raises
+    # NumericValueOutOfRange. Junk historical BSE bars (OHLC all exactly
+    # 100000.0) sitting near 0.01 closes in the same symbol yield ~1e9 %.
+    pct_wtd = (
+        ((close - prev_week_close) / prev_week_close * 100)
+        .where(prev_week_close > 0)
+        .round(2)
+    )
+    pct_wtd = pct_wtd.where(pct_wtd.abs() < 1e8)
+
+    # ── Month-to-date: reference = last close before this month's 1st ─────
+    # Same construction as the weekly block, one bucket wider. shift(1) over
+    # the months PRESENT keeps it gap-safe for suspended symbols.
+    _mo              = df['trade_date'].dt.to_period('M')
+    _last_by_month   = df.groupby(_mo)['close'].last()
+    prev_month_close = _mo.map(_last_by_month.shift(1)).astype(float).round(2)
+    pct_mtd = (
+        ((close - prev_month_close) / prev_month_close * 100)
+        .where(prev_month_close > 0)
+        .round(2)
+    )
+    pct_mtd = pct_mtd.where(pct_mtd.abs() < 1e8)
+
     # ── pct_below_52w_high ────────────────────────────────────────────────
     pct_below_52w_high = ((w52_high - close) / w52_high * 100).where(w52_high > 0).round(2)
 
@@ -338,6 +393,12 @@ def compute_rolling_range(df: pd.DataFrame) -> dict:
         'ret_66d':             ret_66d,
         'breakout_level':      breakout_level,
         'pct_from_breakout':   pct_from_breakout,
+        'breakdown_level':     breakdown_level,
+        'pct_from_breakdown':  pct_from_breakdown,
+        'prev_week_close':     prev_week_close,
+        'pct_wtd':             pct_wtd,
+        'prev_month_close':    prev_month_close,
+        'pct_mtd':             pct_mtd,
         'pct_below_52w_high':  pct_below_52w_high,
         'deliv_value_cr':      deliv_value_cr,
     }
@@ -747,6 +808,9 @@ ROLLING_COLUMNS = [
     'ret_5d', 'ret_22d', 'ret_66d',
     'breakout_level', 'pct_from_breakout', 'pct_below_52w_high',
     'deliv_value_cr',
+    'prev_week_close', 'pct_wtd',
+    'prev_month_close', 'pct_mtd',
+    'breakdown_level', 'pct_from_breakdown',
 ]
 
 
@@ -901,7 +965,13 @@ def _flush_rolling_batch(conn, batch: list):
           breakout_level      = v.breakout_level,
           pct_from_breakout   = v.pct_from_breakout,
           pct_below_52w_high  = v.pct_below_52w_high,
-          deliv_value_cr      = v.deliv_value_cr
+          deliv_value_cr      = v.deliv_value_cr,
+          prev_week_close     = v.prev_week_close,
+          pct_wtd             = v.pct_wtd,
+          prev_month_close    = v.prev_month_close,
+          pct_mtd             = v.pct_mtd,
+          breakdown_level     = v.breakdown_level,
+          pct_from_breakdown  = v.pct_from_breakdown
         FROM (VALUES %s) AS v(
           id, w52_high, w52_low, lifetime_high,
           d30_pct_chng, d365_pct_chng,
@@ -910,7 +980,9 @@ def _flush_rolling_batch(conn, batch: list):
           surge_22d, score_5d, score_22d,
           ret_5d, ret_22d, ret_66d,
           breakout_level, pct_from_breakout, pct_below_52w_high,
-          deliv_value_cr
+          deliv_value_cr, prev_week_close, pct_wtd,
+          prev_month_close, pct_mtd,
+          breakdown_level, pct_from_breakdown
         )
         WHERE e.id = v.id::int
     """
@@ -924,6 +996,9 @@ def _flush_rolling_batch(conn, batch: list):
             r['ret_5d'], r['ret_22d'], r['ret_66d'],
             r['breakout_level'], r['pct_from_breakout'], r['pct_below_52w_high'],
             r['deliv_value_cr'],
+            r['prev_week_close'], r['pct_wtd'],
+            r['prev_month_close'], r['pct_mtd'],
+            r['breakdown_level'], r['pct_from_breakdown'],
         )
         for r in batch
     ]

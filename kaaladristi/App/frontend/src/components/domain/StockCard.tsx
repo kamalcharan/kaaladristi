@@ -228,12 +228,17 @@ export function StockCard({
   stageBadge,
   extraRight,
   vaniContext,
+  linkQueryExtra,
 }: {
   stock: ScanStock;
   stageBadge?: string;
   extraRight?: React.ReactNode;
   /** Page context for the ✦ Ask-VaNi trigger, e.g. "Scanner / Stage 2 Leaders". */
   vaniContext?: string;
+  /** Extra query string appended to the chart-navigation URL. Used by
+   *  scanners with a Thesis-tab handoff (e.g. `&tab=thesis&setup=stage_2_leaders`).
+   *  Leading `&` is required — the URL already carries `?name=…`. */
+  linkQueryExtra?: string;
 }) {
   const navigate = useNavigate();
   const heroName = displaySymbol(stock);
@@ -259,7 +264,7 @@ export function StockCard({
     : 'var(--bear)';
 
   const handleClick = () => navigate(
-    `/chart/equity/${stock.equity_id}?name=${encodeURIComponent(toNavName(stock))}`,
+    `/chart/equity/${stock.equity_id}?name=${encodeURIComponent(toNavName(stock))}${linkQueryExtra ?? ''}`,
   );
 
   return (

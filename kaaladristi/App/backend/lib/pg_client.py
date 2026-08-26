@@ -209,6 +209,25 @@ class PgClient:
         finally:
             self._put(conn)
 
+    def execute_write(self, sql: str, params=None) -> int:
+        """Raw write statement (UPDATE/INSERT/DELETE). Unlike execute(),
+        commits on success (execute() never commits — a write through it
+        would sit in an open transaction on the pooled connection and be
+        rolled back by the next caller) and returns the affected rowcount
+        instead of fetching rows."""
+        conn = self._conn()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(sql, params or ())
+                affected = cur.rowcount
+            conn.commit()
+            return affected
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            self._put(conn)
+
     # ── PING ──────────────────────────────────────────────────────────────
 
     def ping(self) -> bool:

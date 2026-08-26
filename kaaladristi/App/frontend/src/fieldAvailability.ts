@@ -20,6 +20,9 @@ export const FIELD_AVAILABILITY: Record<string, {
       'rvol', 'rsi_14', 'magic_rs',
     ],
     optionalCols: [
+      'prev_week_close', 'pct_wtd',
+      'prev_month_close', 'pct_mtd',
+      'breakdown_level', 'pct_from_breakdown',
       'pct_5d', 'pct_22d', 'pct_66d',
       'avg_amt_66d', 'score_66d',
       'ret_5d', 'ret_22d', 'ret_66d',
