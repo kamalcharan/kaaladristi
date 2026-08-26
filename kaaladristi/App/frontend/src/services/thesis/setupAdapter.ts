@@ -80,6 +80,12 @@ export interface LatestEodRow {
   dot_svd: boolean | null;
   dot_sbd: boolean | null;
   dot_syd: boolean | null;
+  // Week-to-date columns (migration 183 — weekly_movers adapter). breakout_level
+  // rides along so the adapter can say whether a weekly advance ALSO cleared the
+  // 20-day shelf, which is the difference between momentum and a breakout.
+  prev_week_close: number | null;
+  pct_wtd: number | null;
+  breakout_level: number | null;
 }
 
 /** The equity's master-table row — identity + exchange + industry. */
