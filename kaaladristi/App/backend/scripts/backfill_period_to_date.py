@@ -43,6 +43,7 @@ import sys
 import argparse
 import time
 import psycopg2
+from datetime import date, timedelta
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from lib.config import DATABASE_URL
@@ -59,101 +60,141 @@ PERIODS = {
 def get_conn():
     if not DATABASE_URL:
         raise RuntimeError('DATABASE_URL / DB_PRIMARY not set in .env')
+    # keepalives are NOT optional here. connect_timeout covers only the CONNECT;
+    # a long UPDATE over a NAT/firewall that silently drops the idle socket
+    # leaves psycopg2 blocked on a read that never returns. That is exactly what
+    # happened on the first monthly run: two hours with pg_stat_activity empty,
+    # zero dead tuples, and nothing written. With keepalives the client gets an
+    # error in ~2 minutes instead of hanging indefinitely.
     return psycopg2.connect(
         DATABASE_URL,
         connect_timeout=30,
+        keepalives=1,
+        keepalives_idle=30,
+        keepalives_interval=10,
+        keepalives_count=5,
         options=f"-c statement_timeout={STATEMENT_TIMEOUT_MS}",
     )
 
 
-_SQL_TEMPLATE = """
+# Period references are aggregated ONCE into a temp table, then applied in
+# bounded per-year UPDATEs. Three reasons this beats one 16.5M-row statement:
+#   · the LAG still sees FULL history, so the gap-safe reference stays correct
+#     even for a symbol suspended for years (a windowed re-scan per chunk would
+#     silently break exactly those symbols);
+#   · each transaction is small enough to commit and survive a flaky link;
+#   · progress is visible, and a re-run resumes rather than restarting.
+_BUILD_REF = """
+CREATE TEMP TABLE period_ref AS
 WITH bars AS (
-    -- Full history, unfiltered: the prior period may sit outside --from/--to.
-    SELECT id, equity_id, trade_date, close,
+    SELECT equity_id, trade_date, close,
            date_trunc('{unit}', trade_date)::date AS p_start
     FROM km_equity_eod
     WHERE close IS NOT NULL
 ), p_last AS (
-    -- Last close of each period PRESENT for that symbol.
     SELECT DISTINCT ON (equity_id, p_start)
            equity_id, p_start, close AS p_close
     FROM bars
     ORDER BY equity_id, p_start, trade_date DESC
-), p_prev AS (
-    -- LAG over periods present == "last close strictly before this period".
-    SELECT equity_id, p_start,
-           LAG(p_close) OVER (PARTITION BY equity_id ORDER BY p_start) AS prev_close
-    FROM p_last
-), scored AS (
-    SELECT b.id,
-           ROUND(p.prev_close, 2) AS ref_close,
-           -- Representability guard, NOT a business threshold: the pct column is
-           -- NUMERIC(10,2), so the absolute value must stay under 1e8. Junk
-           -- historical BSE bars (OHLC all exactly 100000.0) sit next to 0.01
-           -- closes in the same symbol and produce ratios near 1e7 -- a "return"
-           -- of roughly 1e9 percent. Those are not returns; store NULL rather
-           -- than overflow the UPDATE or rank garbage first in the screener.
-           -- NOTE: never write a literal percent sign anywhere in this template.
-           -- psycopg2 treats it as a parameter placeholder whenever a params
-           -- sequence is passed and raises IndexError. Spell the word.
-           CASE
-             WHEN p.prev_close > 0
-              AND abs((b.close - p.prev_close) / p.prev_close * 100.0) < 100000000
-             THEN ROUND((b.close - p.prev_close) / p.prev_close * 100.0, 2)
-             ELSE NULL
-           END AS pct_val
-    FROM bars b
-    JOIN p_prev p ON p.equity_id = b.equity_id AND p.p_start = b.p_start
-    {date_filter}
 )
+SELECT equity_id, p_start,
+       LAG(p_close) OVER (PARTITION BY equity_id ORDER BY p_start) AS prev_close
+FROM p_last;
+"""
+
+_INDEX_REF = "CREATE INDEX ON period_ref (equity_id, p_start);"
+
+_APPLY = """
 UPDATE km_equity_eod e
-SET {ref_col} = s.ref_close,
-    {pct_col} = s.pct_val
-FROM scored s
-WHERE e.id = s.id
-  AND s.ref_close IS NOT NULL;
+SET {ref_col} = ROUND(r.prev_close, 2),
+    -- Representability guard, NOT a business threshold: the pct column is
+    -- NUMERIC(10,2), so the absolute value must stay under 1e8. Junk historical
+    -- BSE bars (OHLC all exactly 100000.0) sit next to 0.01 closes in the same
+    -- symbol and produce ratios near 1e7 -- a "return" of roughly 1e9 percent.
+    -- Those are not returns; store NULL rather than overflow the UPDATE.
+    -- NOTE: never write a literal percent sign anywhere in this template.
+    -- psycopg2 treats it as a parameter placeholder whenever a params sequence
+    -- is passed and raises IndexError. Spell the word.
+    {pct_col} = CASE
+        WHEN r.prev_close > 0
+         AND abs((e.close - r.prev_close) / r.prev_close * 100.0) < 100000000
+        THEN ROUND((e.close - r.prev_close) / r.prev_close * 100.0, 2)
+        ELSE NULL
+      END
+FROM period_ref r
+WHERE r.equity_id = e.equity_id
+  AND r.p_start = date_trunc('{unit}', e.trade_date)::date
+  AND r.prev_close IS NOT NULL
+  AND e.close IS NOT NULL
+  AND e.trade_date >= %s AND e.trade_date < %s;
 """
 
 # psycopg2 interpolates whenever a params sequence is passed, so any literal
 # percent sign in the template is parsed as a placeholder. Fail loudly at import
 # rather than at execute time, where it surfaces as a bare IndexError.
-assert "%" not in _SQL_TEMPLATE, (
-    "backfill_period_to_date: _SQL_TEMPLATE contains a literal percent sign; "
-    "psycopg2 will treat it as a parameter placeholder. Spell out 'percent'."
+for _name, _tpl in (('_BUILD_REF', _BUILD_REF), ('_INDEX_REF', _INDEX_REF)):
+    assert "%" not in _tpl, (
+        f"backfill_period_to_date: {_name} contains a literal percent sign; "
+        "psycopg2 will treat it as a parameter placeholder. Spell out 'percent'."
+    )
+# _APPLY legitimately carries exactly the two %s date placeholders and nothing else.
+assert _APPLY.count("%") == 2 and _APPLY.count("%s") == 2, (
+    "backfill_period_to_date: _APPLY must contain exactly two %s placeholders "
+    "and no other percent sign."
 )
 
 
-def build_sql(period, from_date, to_date):
-    unit, ref_col, pct_col = PERIODS[period]
-    clauses, params = [], []
-    if from_date:
-        clauses.append("b.trade_date >= %s")
-        params.append(from_date)
-    if to_date:
-        clauses.append("b.trade_date <= %s")
-        params.append(to_date)
-    date_filter = ("WHERE " + " AND ".join(clauses)) if clauses else ""
-    sql = (_SQL_TEMPLATE
-           .replace("{unit}", unit)
-           .replace("{ref_col}", ref_col)
-           .replace("{pct_col}", pct_col)
-           .replace("{date_filter}", date_filter))
-    return sql, params
-
-
 def run_update(period, from_date, to_date):
-    sql, params = build_sql(period, from_date, to_date)
-    _, ref_col, pct_col = PERIODS[period]
-    scope = f"{from_date or 'start'} .. {to_date or 'end'}"
-    print(f"[{period}] updating {ref_col} / {pct_col} for {scope}")
-    t0 = time.time()
+    unit, ref_col, pct_col = PERIODS[period]
     conn = get_conn()
     try:
         with conn.cursor() as cur:
-            cur.execute(sql, params)
-            print(f"[{period}] {cur.rowcount} rows updated in {time.time()-t0:.1f}s")
+            cur.execute("SELECT min(trade_date), max(trade_date) FROM km_equity_eod")
+            db_lo, db_hi = cur.fetchone()
+        lo = date.fromisoformat(from_date) if from_date else db_lo
+        hi = date.fromisoformat(to_date) if to_date else db_hi
+        if lo is None or hi is None:
+            print(f"[{period}] km_equity_eod is empty — nothing to do")
+            return
+
+        print(f"[{period}] building period references over FULL history "
+              f"(gap-safe LAG needs it) …")
+        t0 = time.time()
+        with conn.cursor() as cur:
+            cur.execute("DROP TABLE IF EXISTS period_ref")
+            cur.execute(_BUILD_REF.replace("{unit}", unit))
+            cur.execute(_INDEX_REF)
         conn.commit()
+        print(f"[{period}] references built in {time.time()-t0:.1f}s")
+
+        apply_sql = (_APPLY.replace("{unit}", unit)
+                           .replace("{ref_col}", ref_col)
+                           .replace("{pct_col}", pct_col))
+
+        total = 0
+        t0 = time.time()
+        for year in range(lo.year, hi.year + 1):
+            y_lo = max(lo, date(year, 1, 1))
+            y_hi = min(hi, date(year, 12, 31))
+            if y_lo > y_hi:
+                continue
+            with conn.cursor() as cur:
+                cur.execute(apply_sql, [y_lo.isoformat(),
+                                        (y_hi + timedelta(days=1)).isoformat()])
+                n = cur.rowcount
+            conn.commit()          # bounded transaction, per year
+            total += n
+            print(f"[{period}]   {year}: {n:>9,} rows   "
+                  f"(running {total:>10,} · {time.time()-t0:.0f}s)", flush=True)
+
+        print(f"[{period}] {total:,} rows updated in {time.time()-t0:.1f}s")
     finally:
+        try:
+            with conn.cursor() as cur:
+                cur.execute("DROP TABLE IF EXISTS period_ref")
+            conn.commit()
+        except Exception:
+            pass
         conn.close()
 
 
