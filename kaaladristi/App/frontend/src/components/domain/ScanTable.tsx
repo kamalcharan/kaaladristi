@@ -60,7 +60,7 @@ const PRESET_COL_OVERRIDES: Partial<Record<string, string[]>> = {
 
   // The three breakdown screeners mirror their up-side siblings exactly, with
   // the down-side pair swapped in. Same Score / delivery-value / rvol tail, so
-  // a reader moving between Breakout Surge and Breakdown Watch sees one grid.
+  // a reader moving between Breakout Surge and Breakdown Surge sees one grid.
   breakdown_watch: [
     'symbol', 'close', 'score_5d', 'score_22d', 'pct_chng',
     'breakdown_level', 'pct_from_breakdown',

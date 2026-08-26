@@ -43,7 +43,11 @@ export const SCAN_PRESETS: ScanDefinition[] = [
   { id: 'breakout_surge',       name: 'Breakout Surge',        description: 'NSE stocks closing above their 20-day high on a green day — ranked by Score 5D',        limit: 500, universe: 'NSE_ONLY', category: 'price_action',  category_label: 'Price Action',  category_color: '#f59e0b', category_sort: 1, is_default_tab: true,  timeframe: 'daily', vani_rule: 'is_vani_surge_or_breakout' },
   { id: 'weekly_movers',        name: 'Weekly Movers',         description: 'NSE stocks trading above last week\u2019s close \u2014 ranked by week-to-date gain', limit: 500, universe: 'NSE_ONLY', category: 'price_action',  category_label: 'Price Action',  category_color: '#f59e0b', category_sort: 1, is_default_tab: false, timeframe: 'daily', vani_rule: 'is_vani_surge_or_breakout' },
   { id: 'monthly_movers',       name: 'Monthly Movers',        description: 'NSE stocks trading above last month\u2019s close \u2014 ranked by month-to-date gain', limit: 500, universe: 'NSE_ONLY', category: 'price_action',  category_label: 'Price Action',  category_color: '#f59e0b', category_sort: 1, is_default_tab: false, timeframe: 'daily', vani_rule: 'is_vani_surge_or_breakout' },
-  { id: 'breakdown_watch',      name: 'Breakdown Watch',       description: 'NSE stocks closing below their 20-day low on a red day \u2014 ranked by depth below the level', limit: 500, universe: 'NSE_ONLY', category: 'price_action',  category_label: 'Price Action',  category_color: '#f59e0b', category_sort: 1, is_default_tab: false, timeframe: 'daily', vani_rule: 'is_vani_weakness' },
+  // ID stays 'breakdown_watch' on purpose (migration 189): IDs are addresses
+  // — ?setup= URLs, the adapter registry key, PRESET_COL_OVERRIDES — and the
+  // display name is the only thing the owner reads. Renaming the ID to match
+  // would break shared links for nothing.
+  { id: 'breakdown_watch',      name: 'Breakdown Surge',       description: 'NSE stocks closing below their 20-day low on a red day \u2014 ranked by depth below the level', limit: 500, universe: 'NSE_ONLY', category: 'price_action',  category_label: 'Price Action',  category_color: '#f59e0b', category_sort: 1, is_default_tab: false, timeframe: 'daily', vani_rule: 'is_vani_weakness' },
   { id: 'weekly_decliners',     name: 'Weekly Decliners',      description: 'NSE stocks trading below last week\u2019s close \u2014 ranked by week-to-date loss', limit: 500, universe: 'NSE_ONLY', category: 'price_action',  category_label: 'Price Action',  category_color: '#f59e0b', category_sort: 1, is_default_tab: false, timeframe: 'daily', vani_rule: 'is_vani_weakness' },
   { id: 'monthly_decliners',    name: 'Monthly Decliners',     description: 'NSE stocks trading below last month\u2019s close \u2014 ranked by month-to-date loss', limit: 500, universe: 'NSE_ONLY', category: 'price_action',  category_label: 'Price Action',  category_color: '#f59e0b', category_sort: 1, is_default_tab: false, timeframe: 'daily', vani_rule: 'is_vani_weakness' },
   { id: 'volume_drive',         name: 'Volume Drive',          description: 'Stocks printing a volume-drive or accumulation bar — ranked by delivery conviction',                                limit: 60,  universe: 'NSE_BSE',  category: 'flow',          category_label: 'Flow',          category_color: '#3b82f6', category_sort: 3, is_default_tab: false, timeframe: 'daily', vani_rule: 'svd_delivery_conviction' },
@@ -361,7 +365,8 @@ async function fetchBreakoutSurge(exchangeFilter: ExchangeFilter): Promise<ScanS
   return results.slice(0, resultLimit);
 }
 
-/** Scan: Breakdown Watch — the exact mirror of Breakout Surge.
+/** Scan: Breakdown Surge — the exact mirror of Breakout Surge.
+ *  (preset ID remains breakdown_watch — see migration 189.)
  *
  *  Definition: close BELOW the 20-day breakdown level on a red day, close >= 50.
  *  breakdown_level / pct_from_breakdown are DB-precomputed (migration 187) as

@@ -561,7 +561,7 @@ export interface ScanStock {
   // Monthly Movers (MTD) computed fields (migration 185)
   prev_month_close?: number | null;
   pct_mtd?: number | null;
-  // Breakdown Watch computed fields (migration 187)
+  // Breakdown Surge computed fields (migration 187)
   breakdown_level?: number | null;
   pct_from_breakdown?: number | null;
   // Breakout Surge Daily — DB score/pct columns (migration 111)

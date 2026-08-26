@@ -1,5 +1,5 @@
 /**
- * Breakdown Watch — adapter for the Scanner Story Page.
+ * Breakdown Surge — adapter for the Scanner Story Page.
  *
  * The exact mirror of Breakout Surge, and the ONE preset in the down-side
  * family that earns the word "breakdown": it selects on close under the 20-day
@@ -26,7 +26,7 @@ import { smaFromEnd, priorMinFromEnd, trailingWindow } from '../setupAdapter';
 import { buildCycleLabels } from '../cycleLabels';
 
 const SETUP_KEY = 'breakdown_watch';
-const SETUP_LABEL = 'Breakdown Watch';
+const SETUP_LABEL = 'Breakdown Surge';
 const PERIOD_WORD = 'session';
 const PRIOR_LOW_BARS = 4;   // prior month's low — the deeper rung
 const ZONE_WIDTH = 0.015;
