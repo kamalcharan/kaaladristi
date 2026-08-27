@@ -48,6 +48,25 @@ const SORT_OPTIONS: { key: SortKey; label: string }[] = [
   { key: 'symbol',          label: 'Symbol' },
 ];
 
+// Sort comparison, shared by both of this file's sorters and matching
+// ScanTable's. Decides on the VALUE, not on the JavaScript type: the old test
+// was `typeof va === 'string'` -> localeCompare, which sorted any numeric
+// column that arrived as text LEXICOGRAPHICALLY. That is sign- and
+// magnitude-blind -- '8.8' outranks '56.7', and every negative clumps at one
+// end because '-' precedes every digit. Nine of the twelve fetchers pass
+// numerics through from the API without Number(), so whether a column sorted
+// correctly depended on which fetcher served the tab.
+function compareScanValues(va: string | number, vb: string | number, dir: SortDir): number {
+  const na = typeof va === 'number' ? va : Number(va);
+  const nb = typeof vb === 'number' ? vb : Number(vb);
+  if (Number.isFinite(na) && Number.isFinite(nb)) {
+    return dir === 'asc' ? na - nb : nb - na;
+  }
+  return dir === 'asc'
+    ? String(va).localeCompare(String(vb))
+    : String(vb).localeCompare(String(va));
+}
+
 // Which filter defaults a preset opens with. Kept in ONE place because the
 // initial useState and the preset-switch useEffect both need it — when they
 // were separate literals a new preset family could get the right defaults on
@@ -74,10 +93,7 @@ function sortStocks(stocks: ScanStock[], key: SortKey, dir: SortDir): ScanStock[
       case 'reward':          va = a.rewardPct ?? -99;           vb = b.rewardPct ?? -99;           break;
       case 'vaniOpportunity': va = a.vaniOpportunity ? 1 : 0;  vb = b.vaniOpportunity ? 1 : 0;  break;
     }
-    if (typeof va === 'string') {
-      return dir === 'asc' ? va.localeCompare(vb as string) : (vb as string).localeCompare(va);
-    }
-    return dir === 'asc' ? (va as number) - (vb as number) : (vb as number) - (va as number);
+    return compareScanValues(va, vb, dir);
   });
   return arr;
 }
@@ -758,10 +774,7 @@ function sortCFStocks(stocks: ScanStock[], key: CFSortKey, dir: SortDir): ScanSt
       case 'ret_66d':          va = a.ret_66d ?? -999;           vb = b.ret_66d ?? -999;           break;
       default:                 va = 0;                           vb = 0;
     }
-    if (typeof va === 'string') {
-      return dir === 'asc' ? va.localeCompare(vb as string) : (vb as string).localeCompare(va);
-    }
-    return dir === 'asc' ? (va as number) - (vb as number) : (vb as number) - (va as number);
+    return compareScanValues(va, vb, dir);
   });
 }
 
