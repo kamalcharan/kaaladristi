@@ -44,8 +44,21 @@
 -- that already succeeded is a no-op.
 -- ---------------------------------------------------------------------
 
--- (1) km_equity_eod columns
-BEGIN;
+-- (1) km_equity_eod columns.
+--
+-- POLLED, not queued. ADD COLUMN on a nullable column with no default is a
+-- catalogue change — instant once it holds the lock. The whole difficulty is
+-- ACQUIRING it: ACCESS EXCLUSIVE needs every other lock on the table released
+-- at the same instant, and km_equity_eod is the busiest table here (PostgREST
+-- readers, the pipeline, any running backfill). A plain ALTER can starve
+-- indefinitely, and while it waits it blocks every NEW reader behind it — the
+-- migration stops looking like a lock and starts looking like an outage.
+--
+-- So: a short lock_timeout and a retry loop. Each attempt gives up after 3
+-- seconds and releases the queue, so readers keep flowing between attempts.
+-- Two minutes of polling usually finds a gap; if it does not, that is a real
+-- finding — something is holding a long transaction and should be found
+-- rather than waited out.
 
 -- Fail fast instead of queueing. An ALTER waiting on ACCESS EXCLUSIVE also
 -- blocks every read that arrives behind it, so a migration parked on a
@@ -53,23 +66,44 @@ BEGIN;
 -- like a slow migration rather than a lock. 30s, then an error that names
 -- the problem. Seen live: migration 192 sat 20 minutes behind an orphaned
 -- DELETE from a crashed compute run.
-SET lock_timeout = '30s';
+SET lock_timeout = '3s';
 
-
-ALTER TABLE km_equity_eod
-    -- Signed distance from the Golden Line. Positive = above.
-    ADD COLUMN IF NOT EXISTS pct_from_gl   NUMERIC(10,2),
-    -- 'BREAKOUT' | 'RETEST' | NULL
-    ADD COLUMN IF NOT EXISTS gl_event      VARCHAR(16),
-    -- Consecutive sessions closed above the Golden Line, this bar included.
-    ADD COLUMN IF NOT EXISTS gl_days_above INTEGER;
+DO $do$
+DECLARE tries int := 0;
+BEGIN
+  LOOP
+    tries := tries + 1;
+    BEGIN
+      ALTER TABLE km_equity_eod
+          -- Signed distance from the Golden Line. Positive = above.
+          ADD COLUMN IF NOT EXISTS pct_from_gl   NUMERIC(10,2),
+          -- 'BREAKOUT' | 'RETEST' | NULL
+          ADD COLUMN IF NOT EXISTS gl_event      VARCHAR(16),
+          -- Consecutive sessions closed above the Golden Line, this bar included.
+          ADD COLUMN IF NOT EXISTS gl_days_above INTEGER;
+      RAISE NOTICE 'km_equity_eod: columns added (attempt %)', tries;
+      EXIT;
+    EXCEPTION WHEN lock_not_available THEN
+      IF tries >= 40 THEN
+        RAISE EXCEPTION
+          'km_equity_eod still locked after % attempts (~2 min). Something is holding a long transaction — find it with pg_blocking_pids() rather than waiting.', tries;
+      END IF;
+      RAISE NOTICE 'km_equity_eod busy, attempt % — retrying', tries;
+      PERFORM pg_sleep(3);
+    END;
+  END LOOP;
+END
+$do$;
 
 COMMENT ON COLUMN km_equity_eod.pct_from_gl IS
     'Signed % distance of close from the Golden Line (sma_150). Positive = above.';
 COMMENT ON COLUMN km_equity_eod.gl_event IS
     'BREAKOUT = crossed above the Golden Line on an SVD/SBD day. RETEST = touched it intraday, closed above, on an SVD/SBD day, after 10+ sessions holding it.';
 
-COMMIT;
+-- No COMMIT here: parts 1 and 3 run their DO blocks in autocommit, so each
+-- retry releases the lock queue between attempts. Wrapping them in an
+-- explicit transaction would hold whatever they had already taken across
+-- every pg_sleep, which is the queueing behaviour this replaces.
 
 -- (2) The partial index — both scanners filter on the event being present,
 -- and events are rare, so it stays small. CONCURRENTLY cannot run inside a transaction block, which is
@@ -84,8 +118,7 @@ CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_equity_eod_gl_event
 -- (3) km_wg_journeys columns. This is the table a crashed compute run can
 -- leave locked by an orphaned DELETE, so it is isolated: a lock timeout here
 -- must not cost the rest of the migration.
-BEGIN;
-SET lock_timeout = '30s';
+SET lock_timeout = '3s';
 
 -- ---------------------------------------------------------------------
 -- Journey-side columns. The Waking Giants tabs show the GL event against a
@@ -96,6 +129,12 @@ SET lock_timeout = '30s';
 -- the move after the turn. SPARC turned 8 Apr at Rs 136 and did not "wake"
 -- until 6 Jul at Rs 262.
 -- ---------------------------------------------------------------------
+DO $do$
+DECLARE tries int := 0;
+BEGIN
+  LOOP
+    tries := tries + 1;
+    BEGIN
 ALTER TABLE km_wg_journeys
     ADD COLUMN IF NOT EXISTS gl_event      VARCHAR(16),
     ADD COLUMN IF NOT EXISTS gl_days_above INTEGER,
@@ -105,11 +144,22 @@ ALTER TABLE km_wg_journeys
     ADD COLUMN IF NOT EXISTS turn_date     DATE,
     ADD COLUMN IF NOT EXISTS turn_close    NUMERIC(12,2),
     ADD COLUMN IF NOT EXISTS pct_from_turn NUMERIC(10,2);
+      RAISE NOTICE 'km_wg_journeys: columns added (attempt %)', tries;
+      EXIT;
+    EXCEPTION WHEN lock_not_available THEN
+      IF tries >= 40 THEN
+        RAISE EXCEPTION
+          'km_wg_journeys still locked after % attempts (~2 min). Most likely an orphaned DELETE from a crashed compute run — terminate it with pg_terminate_backend().', tries;
+      END IF;
+      RAISE NOTICE 'km_wg_journeys busy, attempt % — retrying', tries;
+      PERFORM pg_sleep(3);
+    END;
+  END LOOP;
+END
+$do$;
 
 COMMENT ON COLUMN km_wg_journeys.turn_date IS
     'Where the move began: the Golden Line was crossed and held with the weekly clock green. Earlier than wake_date, which is the multi-year-ceiling confirmation.';
-
-COMMIT;
 
 -- (4) Preset rows + the VaNi rule. Row-level writes on a tiny table; nothing
 -- here can block, and it is the part most worth not losing to someone else's
