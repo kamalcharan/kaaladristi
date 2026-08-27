@@ -35,6 +35,16 @@
 -- handle_gl_events runs between `dots` and `scan_refresh`.
 -- =====================================================================
 
+-- ---------------------------------------------------------------------
+-- FOUR SEPARATE TRANSACTIONS, deliberately. The first draft wrapped the
+-- whole file in one, so a lock timeout on ANY table discarded everything --
+-- including the preset rows, which take no meaningful lock at all. Run them
+-- in order; if one fails on a lock, clear the blocker and re-run just that
+-- part. Every statement is IF NOT EXISTS / ON CONFLICT, so re-running a part
+-- that already succeeded is a no-op.
+-- ---------------------------------------------------------------------
+
+-- (1) km_equity_eod columns
 BEGIN;
 
 -- Fail fast instead of queueing. An ALTER waiting on ACCESS EXCLUSIVE also
@@ -59,10 +69,23 @@ COMMENT ON COLUMN km_equity_eod.pct_from_gl IS
 COMMENT ON COLUMN km_equity_eod.gl_event IS
     'BREAKOUT = crossed above the Golden Line on an SVD/SBD day. RETEST = touched it intraday, closed above, on an SVD/SBD day, after 10+ sessions holding it.';
 
--- Partial index: both scanners filter on the event being present, and events
--- are rare, so the index stays small.
-CREATE INDEX IF NOT EXISTS idx_equity_eod_gl_event
+COMMIT;
+
+-- (2) The partial index — both scanners filter on the event being present,
+-- and events are rare, so it stays small. CONCURRENTLY cannot run inside a transaction block, which is
+-- why it sits outside one: a plain CREATE INDEX on km_equity_eod takes a
+-- lock that blocks writes for the whole build on a table of this size, and
+-- the nightly pipeline writes to it. This form is slower but takes no
+-- blocking lock. If it ever fails it leaves an INVALID index behind --
+-- DROP INDEX idx_equity_eod_gl_event; and run it again.
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_equity_eod_gl_event
     ON km_equity_eod (trade_date, gl_event) WHERE gl_event IS NOT NULL;
+
+-- (3) km_wg_journeys columns. This is the table a crashed compute run can
+-- leave locked by an orphaned DELETE, so it is isolated: a lock timeout here
+-- must not cost the rest of the migration.
+BEGIN;
+SET lock_timeout = '30s';
 
 -- ---------------------------------------------------------------------
 -- Journey-side columns. The Waking Giants tabs show the GL event against a
@@ -85,6 +108,13 @@ ALTER TABLE km_wg_journeys
 
 COMMENT ON COLUMN km_wg_journeys.turn_date IS
     'Where the move began: the Golden Line was crossed and held with the weekly clock green. Earlier than wake_date, which is the multi-year-ceiling confirmation.';
+
+COMMIT;
+
+-- (4) Preset rows + the VaNi rule. Row-level writes on a tiny table; nothing
+-- here can block, and it is the part most worth not losing to someone else's
+-- lock.
+BEGIN;
 
 -- =====================================================================
 -- Scanner presets. Price Action, because both are price-structure events.
