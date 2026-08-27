@@ -367,6 +367,16 @@ def handle_stage_classification(conn, trade_date: date, force: bool,
                           _stage_then_entry)
 
 
+def handle_gl_events(conn, trade_date: date, force: bool,
+                     exchange: Optional[str], on_progress: ProgressFn) -> HandlerResult:
+    """Golden Line breakout / retest. Ordered AFTER `dots` in DAILY_STEPS —
+    it reads dot_svd/dot_sbd, and running it earlier would evaluate against
+    yesterday's dots and miss every event on the day it happened."""
+    from scripts.backfill_gl_events import compute_gl_events_for_date
+    return _handle_script('gl_events', conn, trade_date, force, on_progress,
+                          compute_gl_events_for_date)
+
+
 def handle_vani_flags(conn, trade_date: date, force: bool,
                       exchange: Optional[str], on_progress: ProgressFn) -> HandlerResult:
     from scripts.backfill_vani_flags import compute_vani_flags_for_date
@@ -976,6 +986,8 @@ def handle(dimension: str, conn, trade_date: date, force: bool,
         return handle_rs_percentile(conn, trade_date, force, exchange, on_progress)
     if dimension == 'd365':
         return handle_d365(conn, trade_date, force, exchange, on_progress)
+    if dimension == 'gl_events':
+        return handle_gl_events(conn, trade_date, force, exchange, on_progress)
     if dimension == 'stage_classification':
         return handle_stage_classification(conn, trade_date, force, exchange, on_progress)
     if dimension == 'vani_flags':
@@ -1018,6 +1030,7 @@ KNOWN_DIMENSIONS = [
     'rolling_metrics',
     'd365',
     'stage_classification',
+    'gl_events',
     'vani_flags',
     'equity_weekly',
     'equity_monthly',

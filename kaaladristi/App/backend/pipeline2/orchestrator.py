@@ -67,6 +67,7 @@ DAILY_STEPS: list[tuple[str, Optional[str]]] = [
     ('market_breadth',        None),
     ('breadth_roc',           None),
     ('dots',                  None),   # SVD/SBD/SYD — Volume Drive selects on these; must precede scan_refresh
+    ('gl_events',             None),   # Golden Line breakout/retest — reads sma_150 AND the dots, so AFTER `dots`
     ('scan_refresh',          None),   # matview reads all equity/industry compute above
     ('wg_journeys',           None),   # journey state reads final daily zones + weekly/monthly aggregates
     ('integrity_checks',      None),   # LAST — sweeps every other step's outcome + the day's data

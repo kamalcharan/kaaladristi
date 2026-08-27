@@ -618,6 +618,13 @@ export interface ScanStock {
   wg_resting?: boolean | null;              // weekly close below the Golden Line (journey alive)
   wake_date?: string | null;                // daily breakout date
   wake_close?: number | null;               // close on wake_date, ADJUSTED series (migration 192)
+  turn_date?: string | null;
+  turn_close?: number | null;
+  pct_from_turn?: number | null;
+  gl_event?: string | null;
+  gl_days_above?: number | null;
+  pct_from_gl?: number | null;
+  clocks?: string | null;
   pct_from_wake?: number | null;            // % since the journey woke, both sides adjusted
   gl_dist_pct?: number | null;              // close vs the Golden Line (SMA150), %
 }

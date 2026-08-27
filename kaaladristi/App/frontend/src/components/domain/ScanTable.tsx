@@ -99,6 +99,21 @@ const PRESET_COL_OVERRIDES: Partial<Record<string, string[]>> = {
     'ret_5d', 'magic_rs', 'rsi_14', 'flow_type',
   ],
 
+  // The two Golden Line presets. The event leads because it is why the row is
+  // present; then how far from the line, then how long it has held it.
+  gl_breakout: [
+    'symbol', 'close', 'pct_chng', 'gl_event', 'pct_from_gl', 'gl_days_above',
+    'dot_signal', 'delivery_pct', 'rvol',
+    'score_5d', 'score_22d', 'avg_amt_5d', 'avg_amt_22d',
+    'rsi_14', 'magic_rs', 'mcap_cr',
+  ],
+  gl_retest: [
+    'symbol', 'close', 'pct_chng', 'gl_event', 'gl_days_above', 'pct_from_gl',
+    'dot_signal', 'delivery_pct', 'rvol',
+    'score_5d', 'score_22d', 'avg_amt_5d', 'avg_amt_22d',
+    'rsi_14', 'magic_rs', 'mcap_cr',
+  ],
+
   // Waking Giants v4 journey tabs — the journey dimensions lead. base_years =
   // "Slept", align_score = the 0-6 timeframe alignment, pct_from_3y_high
   // carries % vs the hibernation ceiling on these presets.
@@ -107,19 +122,27 @@ const PRESET_COL_OVERRIDES: Partial<Record<string, string[]>> = {
   // given back read the same as one still working. SPARC on 2026-08-27
   // showed "2mo · 5/6 · -22.4%" while trading a quarter below its own wake.
   waking_giants: [
-    'symbol', 'close', 'pct_chng', 'base_years', 'journey_age_days',
-    'wake_date', 'wake_close', 'pct_from_wake',
-    'align_score', 'gl_dist_pct', 'pct_from_3y_high', 'listing_age_years',
+    'symbol', 'close', 'pct_chng', 'base_years',
+    'turn_date', 'turn_close', 'pct_from_turn',
+    'wake_date', 'wake_close', 'pct_from_wake', 'journey_age_days',
+    'clocks', 'align_score', 'gl_dist_pct', 'gl_event',
+    'pct_from_3y_high', 'listing_age_years',
     'delivery_pct', 'magic_rs', 'mcap_cr',
   ],
   wg_ascent: [
-    'symbol', 'close', 'pct_chng', 'align_score', 'journey_age_days',
-    'wake_date', 'wake_close', 'pct_from_wake',
-    'wg_resting', 'base_years', 'gl_dist_pct', 'listing_age_years',
+    'symbol', 'close', 'pct_chng', 'clocks', 'align_score',
+    'turn_date', 'turn_close', 'pct_from_turn',
+    'wake_date', 'wake_close', 'pct_from_wake', 'journey_age_days',
+    'wg_resting', 'base_years', 'gl_dist_pct', 'gl_event', 'listing_age_years',
     'magic_rs', 'mcap_cr',
   ],
+  // Stirring has no wake yet, so the TURN is the whole story here — a stock
+  // that has crossed the Golden Line with the weekly clock green but has not
+  // cleared its ceiling is exactly what this tab is for.
   wg_stirring: [
     'symbol', 'close', 'pct_chng', 'gl_acc_days', 'base_years',
+    'turn_date', 'turn_close', 'pct_from_turn',
+    'clocks', 'gl_dist_pct', 'gl_event',
     'pct_from_3y_high', 'listing_age_years', 'delivery_pct', 'magic_rs', 'mcap_cr',
   ],
 }

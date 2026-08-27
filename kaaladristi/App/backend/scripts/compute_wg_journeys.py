@@ -72,6 +72,13 @@ STIR_DELIV_MULT       = 1.15   # … delivery >= max(floor, mult × own 60d medi
 STIR_MAX_ABS_PCT      = 2.5
 STIR_MAX_RVOL         = 2.5
 SLEEP_MAX_ALIGN       = 1      # journey returns to sleep at alignment <= this
+# An UNCONFIRMED journey (never reached ASCENDING) also dies if the DAILY
+# clock stays red this many consecutive sessions. Alignment is weighted
+# 1/2/3 across daily/weekly/monthly, so the fastest clock — the one that
+# turns first — cannot move the score on its own: SPARC sat at 5/6 with its
+# daily red for six weeks and price 25% below its own wake. Confirmed
+# journeys are untouched; alignment <= 1 stays their only exit.
+DAILY_VETO_DAYS       = 15
 MIN_BARS              = 300    # need a real history to talk about hibernation
 
 BULL_ZONES = {'Strong Bull', 'Mild Bull', 'Neutral Bull'}
@@ -80,7 +87,22 @@ BULL_ZONES = {'Strong Bull', 'Mild Bull', 'Neutral Bull'}
 def get_conn():
     if not DATABASE_URL:
         raise RuntimeError('DATABASE_URL / DB_PRIMARY not set in .env')
-    return psycopg2.connect(DATABASE_URL, connect_timeout=30)
+    # keepalives, because this script holds a connection open across a long
+    # CPU-bound stretch. connect_timeout covers the CONNECT only -- it does
+    # nothing for a socket that dies while idle. The walk loads ~5.8M rows and
+    # then spends minutes in pandas with the connection untouched, which is
+    # exactly long enough for a firewall or NAT to drop it silently; the first
+    # statement afterwards (the DELETE in write_rows) then fails with "server
+    # closed the connection unexpectedly" AFTER all the work is done.
+    return psycopg2.connect(
+        DATABASE_URL,
+        connect_timeout=30,
+        keepalives=1,
+        keepalives_idle=30,
+        keepalives_interval=10,
+        keepalives_count=5,
+        options='-c statement_timeout=900000',
+    )
 
 
 # ── Pool ─────────────────────────────────────────────────────────────────
@@ -295,9 +317,16 @@ def load_stir_inputs(conn, ids: list[int]) -> pd.DataFrame:
 
 def load_display(conn, ids: list[int]) -> dict[int, dict]:
     """Latest EOD display fields per stock."""
+    # score_5d/score_22d/rvol and the SVD/SBD/SYD dots come along because the
+    # Discovery tabs can render them and km_wg_journeys never carried them --
+    # the columns sat blank with no error, the same dash-with-no-cause shape
+    # the scanner contract audit exists to catch.
     sql = """
         SELECT DISTINCT ON (equity_id) equity_id, trade_date, close, pct_chng,
-               delivery_pct, magic_rs, magic_rs_zone
+               delivery_pct, magic_rs, magic_rs_zone,
+               score_5d, score_22d, rvol,
+               dot_svd, dot_sbd, dot_syd,
+               gl_event, gl_days_above
         FROM km_equity_eod WHERE equity_id = ANY(%s)
         ORDER BY equity_id, trade_date DESC
     """
@@ -441,7 +470,17 @@ def walk_stock(s: pd.Series, zones: pd.Series, wk: pd.DataFrame, mo: pd.DataFram
                     if m == m and m >= journey['base_high']:
                         journey['confirm_date'] = idx[i]
                         state = 'ASCENDING'
-                if sc <= SLEEP_MAX_ALIGN:
+                # Daily-clock veto: only for a journey that never confirmed.
+                # Counted on bars where the daily clock is KNOWN, so a stretch
+                # with no data cannot silently accumulate a veto.
+                if state == 'WAKING' and journey.get('confirm_date') is None:
+                    if d_known[i] and not d_green[i]:
+                        journey['daily_red'] = journey.get('daily_red', 0) + 1
+                    elif d_known[i]:
+                        journey['daily_red'] = 0
+
+                if (sc <= SLEEP_MAX_ALIGN
+                        or journey.get('daily_red', 0) >= DAILY_VETO_DAYS):
                     journey['sleep_date'] = idx[i]
                     journey['end_state'] = state
                     archived.append(journey)
@@ -457,6 +496,29 @@ def walk_stock(s: pd.Series, zones: pd.Series, wk: pd.DataFrame, mo: pd.DataFram
     w_g = bool(w_green[-1]) if w_known[-1] else None
     m_g = bool(m_green[-1]) if m_known[-1] else None
 
+    # ── the turn ──────────────────────────────────────────────────────
+    # Where the move began, as distinct from where it was confirmed. The wake
+    # requires clearing a multi-year ceiling, which by construction sits ABOVE
+    # the base, so it fires late — measured over the eight 2026 wakes, a median
+    # 62 sessions and most of the move after this point.
+    #
+    # A property of NOW, not of the journey: it is anchored to the CURRENT
+    # unbroken run above the Golden Line, so if the line is lost the turn goes
+    # NULL rather than reporting a turn the stock has since given back.
+    turn_date = turn_close = pct_from_turn = None
+    above_gl = (vals > gl_arr) & ~np.isnan(gl_arr)
+    if above_gl[-1]:
+        not_above = np.where(~above_gl)[0]
+        run_start = int(not_above[-1] + 1) if len(not_above) else 0
+        wk_ok = w_known & w_green
+        cand = np.where(wk_ok[run_start:])[0]
+        if len(cand):
+            j = run_start + int(cand[0])
+            turn_date = idx[j].date()
+            turn_close = round(float(vals[j]), 2)
+            if vals[j] > 0:
+                pct_from_turn = round((c / vals[j] - 1) * 100, 2)
+
     resting = False
     if state in ('WAKING', 'ASCENDING') and len(wk_close):
         wk_last = float(wk_close.iloc[-1])
@@ -468,6 +530,8 @@ def walk_stock(s: pd.Series, zones: pd.Series, wk: pd.DataFrame, mo: pd.DataFram
         'align_score': int(score),
         'align_daily': d_g, 'align_weekly': w_g, 'align_monthly': m_g,
         'gl_dist_pct': round((c / float(g) - 1) * 100, 2) if pd.notna(g) and g > 0 else None,
+        'turn_date': turn_date, 'turn_close': turn_close,
+        'pct_from_turn': pct_from_turn,
         'close_adj': c,
     }
     if journey is not None:
@@ -536,20 +600,48 @@ CURRENT_COLS = [
     'wake_close', 'pct_from_wake',
     'symbol', 'company_name', 'industry', 'exchange', 'isin', 'mcap_cr', 'close', 'pct_chng',
     'delivery_pct', 'magic_rs', 'magic_rs_zone', 'listing_age_years', 'trade_date',
+    'score_5d', 'score_22d', 'rvol', 'dot_svd', 'dot_sbd', 'dot_syd',
+    'gl_event', 'gl_days_above', 'turn_date', 'turn_close', 'pct_from_turn',
 ]
 
 
 def write_rows(conn, current_rows: list[dict], archive_rows: list[dict]):
+    """Replace the table. Opens its OWN connection and ignores `conn`.
+
+    The caller's connection was opened before the walk and has been idle
+    through all of it. Even with keepalives it is the wrong socket to bet the
+    only write of the run on, after the expensive part is already finished --
+    a dropped connection here throws away the whole computation. A fresh
+    connection costs milliseconds.
+
+    DELETE + INSERT run in ONE transaction (psycopg2's default), so a failure
+    mid-write rolls back and leaves the previous table intact rather than
+    emptying the tabs. Keep it that way: an autocommit DELETE here would mean
+    a crash during the INSERT wipes Waking Giants until the next nightly run.
+    """
+    rows = current_rows + archive_rows
     cols = ', '.join(CURRENT_COLS)
     ph = ', '.join([f'%({c})s' for c in CURRENT_COLS])
-    with conn.cursor() as cur:
-        # full rewrite — the walk re-derives everything, so replace both
-        # current rows and the archive (idempotent, drift-proof).
-        cur.execute('DELETE FROM km_wg_journeys')
-        psycopg2.extras.execute_batch(
-            cur, f'INSERT INTO km_wg_journeys ({cols}) VALUES ({ph})',
-            current_rows + archive_rows, page_size=500)
-    conn.commit()
+    w = get_conn()
+    try:
+        with w.cursor() as cur:
+            # Bound the wait for the table lock. Without it, a reader mid-query
+            # can park this DELETE indefinitely while it holds the write lock
+            # the scanner tabs need -- the failure the owner hit was a dead
+            # socket, but an unbounded lock wait looks identical from outside.
+            cur.execute('SET lock_timeout = 30000')
+            cur.execute('DELETE FROM km_wg_journeys')
+            psycopg2.extras.execute_batch(
+                cur, f'INSERT INTO km_wg_journeys ({cols}) VALUES ({ph})',
+                rows, page_size=500)
+        w.commit()
+        print(f'  Wrote {len(rows):,} rows '
+              f'({len(current_rows):,} current + {len(archive_rows):,} archived).')
+    except Exception:
+        w.rollback()
+        raise
+    finally:
+        w.close()
 
 
 def run(dry_run: bool):
@@ -619,6 +711,11 @@ def run(dry_run: bool):
             'close': disp.get('close'), 'pct_chng': disp.get('pct_chng'),
             'delivery_pct': disp.get('delivery_pct'), 'magic_rs': disp.get('magic_rs'),
             'magic_rs_zone': disp.get('magic_rs_zone'), 'trade_date': disp.get('trade_date'),
+            'score_5d': disp.get('score_5d'), 'score_22d': disp.get('score_22d'),
+            'rvol': disp.get('rvol'),
+            'dot_svd': disp.get('dot_svd'), 'dot_sbd': disp.get('dot_sbd'),
+            'dot_syd': disp.get('dot_syd'),
+            'gl_event': disp.get('gl_event'), 'gl_days_above': disp.get('gl_days_above'),
         }
         row = {**{c: None for c in CURRENT_COLS}, **base,
                **{k: v for k, v in cur_state.items() if k in CURRENT_COLS}}

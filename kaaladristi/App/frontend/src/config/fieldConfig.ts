@@ -213,6 +213,72 @@ export const ALL_FIELDS: Record<string, FieldConfig> = {
     colorFn: (val: any) => STAGE_COLOR[String(val ?? '')] ?? 'var(--text-muted)',
   },
 
+  // ── Golden Line (migration 194) ─────────────────────────────────────────
+  // sma_150 IS the Golden Line — a 150-BAR mean of close (migration 014).
+  // It was always on km_equity_eod; what was missing was a record of what
+  // happens AT it, which is the thing a scanner can filter on.
+
+  gl_event: {
+    key: 'gl_event',
+    label: 'GL Event',
+    tooltip: 'BREAKOUT — the close crossed from at-or-below the Golden Line to above it on a session printing SVD or SBD. RETEST — the low reached the line while the close held above it, on an SVD/SBD session, after ten or more sessions holding the line.',
+    type: 'category',
+    width: 96,
+    colorFn: (val: any) =>
+      val === 'BREAKOUT' ? 'var(--bull)' : val === 'RETEST' ? 'var(--accent)' : 'var(--text-faint)',
+  },
+
+  pct_from_gl: {
+    key: 'pct_from_gl',
+    label: 'vs GL',
+    tooltip: 'Signed distance of the close from the Golden Line (150-bar mean close). Positive is above the line, negative below.',
+    type: 'pct',
+    width: 78,
+  },
+
+  gl_days_above: {
+    key: 'gl_days_above',
+    label: 'Days Above GL',
+    tooltip: 'Consecutive sessions closed above the Golden Line, this session included. Zero means the close is at or below it.',
+    type: 'number',
+    width: 96,
+    formatFn: (val: any) => (val == null ? '—' : String(Math.round(Number(val)))),
+  },
+
+  // ── Waking Giants clocks + turn (migrations 192/194) ────────────────────
+
+  clocks: {
+    key: 'clocks',
+    label: 'D W M',
+    tooltip: 'The three MagicRS clocks: daily, weekly, monthly. Green = bullish zone, red = not, grey = no data for that timeframe. The alignment score weights them 1/2/3, so a score alone cannot tell you WHICH clock turned — the daily is the fastest and carries the least weight.',
+    type: 'category',
+    width: 74,
+  },
+
+  turn_date: {
+    key: 'turn_date',
+    label: 'Turned On',
+    tooltip: 'Where the move began: the Golden Line was crossed and held with the weekly clock already green. Earlier than the wake, which requires clearing the multi-year ceiling and therefore confirms late. Blank once the Golden Line is lost.',
+    type: 'date',
+    width: 100,
+  },
+
+  turn_close: {
+    key: 'turn_close',
+    label: 'Turn Price',
+    tooltip: 'Close on the day the move began. Split- and bonus-adjusted, the same series as the base ceiling.',
+    type: 'price',
+    width: 96,
+  },
+
+  pct_from_turn: {
+    key: 'pct_from_turn',
+    label: '% Since Turn',
+    tooltip: 'Price change since the move began. Compare with % Since Wake: the gap between them is how much of the move was already made before the breakout confirmed it.',
+    type: 'pct',
+    width: 104,
+  },
+
   // ── Waking Giants: where the journey started (migration 192) ────────────
   // journey_age_days already said WHEN. Without the price it woke at, the
   // grid could not say whether the breakout went anywhere — SPARC read
@@ -489,8 +555,14 @@ export const ALL_FIELDS: Record<string, FieldConfig> = {
     tooltip: 'Distance of the close from the Golden Line (SMA 150). Expanding distance after a wake is follow-through; negative marks a rest.',
     type: 'number',
     width: 70,
-    formatFn: (val: any) => (val == null ? '—' : `${Number(val).toFixed(1)}%`),
-    colorFn: (val: any) => (val != null && Number(val) < 0 ? 'var(--risk-amber)' : 'var(--text-secondary)'),
+    // Signed, and coloured on BOTH sides. It used to print an unsigned number
+    // in grey when above the line, so the state that matters — holding the
+    // Golden Line — had no visual at all.
+    formatFn: (val: any) =>
+      (val == null ? '—' : `${Number(val) > 0 ? '+' : ''}${Number(val).toFixed(1)}%`),
+    colorFn: (val: any) =>
+      val == null ? 'var(--text-secondary)'
+        : Number(val) < 0 ? 'var(--risk-amber)' : 'var(--bull)',
   },
   drawdown_3y_pct: {
     key: 'drawdown_3y_pct',
