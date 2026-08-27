@@ -77,6 +77,29 @@ export const FIELD_AVAILABILITY: Record<string, {
     ],
   },
 
+  // Discovery (Waking Giants family). This group existed in kd_scan_presets
+  // from migration 177 but never here, so any discovery preset without a
+  // PRESET_COL_OVERRIDES entry fell through getFieldsForGroup's 3-column
+  // default and rendered Symbol | Close | 1D% only. The journey tabs were
+  // masked by their overrides; nothing else was.
+  discovery: {
+    defaultCols: [
+      'symbol', 'close', 'pct_chng',
+      'pct_from_3y_high', 'listing_age_years',
+      'delivery_pct', 'magic_rs', 'rvol', 'mcap_cr',
+    ],
+    optionalCols: [
+      'score_5d', 'score_22d',
+      'avg_amt_5d', 'avg_amt_22d', 'avg_amt_66d',
+      'delivery_surge_x', 'deliv_value_cr',
+      'ret_5d', 'ret_22d', 'ret_66d',
+      'rsi_14', 'flow_type', 'sniper_inst', 'rss_value',
+      'accum_distrib', 'supertrend_dir', 'stage',
+      'ema_20', 'sma_50', 'sma_150', 'sma_200',
+      'w52_high', 'pctBelow52wHigh', 'd_pct',
+    ],
+  },
+
   market: {
     defaultCols: [
       'symbol', 'close', 'score_5d', 'score_22d', 'pct_chng',

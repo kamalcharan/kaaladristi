@@ -97,21 +97,46 @@ def main():
     # contract that would make every scanner look defect-free.
     served_presets = matview_served_presets()
 
+    # `defects` is created HERE, before the first check writes to it. It used
+    # to be re-assigned to [] further down, after the mapper-gap loop had
+    # already appended to it — so the one check that catches a dash bug had
+    # its findings thrown away before the report was printed.
+    defects = []
+
+    db_meta = _db_preset_meta(conn)
+
     # Mapper gaps: matview-populated columns the frontend row mapper drops
     # before the table sees them (the Score 5D/22D dash bug lived here, one
     # layer past the DB — a DB-only audit called it fixed while the UI
     # stayed blank).
     from lib import scan_contract
-    for _p, _cols in sorted(scan_contract.mapper_gaps(_db_preset_meta(conn)).items()):
+    for _p, _cols in sorted(scan_contract.mapper_gaps(db_meta).items()):
         defects.append(f'{_p}: mapper drops {_cols} — dashes despite populated matview')
-    required_cols = matview_preset_columns(matview_cols, _db_preset_meta(conn))
+
+    # Column keys the table asks for that fieldConfig.ts does not define —
+    # dead width in the grid, no header, no error.
+    for _p, _cols in sorted(scan_contract.unknown_columns(db_meta).items()):
+        defects.append(f'{_p}: renders undefined column keys {_cols}')
+
+    # Presets that fall through to getFieldsForGroup()'s 3-column default:
+    # Symbol | Close | 1D% and nothing else, with correct data behind it.
+    for _p in scan_contract.fallback_columns(db_meta):
+        defects.append(f'{_p}: resolves to the 3-column fallback — its category '
+                       f'has no FIELD_AVAILABILITY entry')
+
+    # Active DB presets the frontend cannot dispatch. The rail is DB-driven,
+    # so each one is a tab that throws "Unknown scan" when clicked.
+    for _p in scan_contract.orphan_presets(db_meta):
+        defects.append(f'{_p}: active preset with no frontend route — '
+                       f'its tab renders and then fails to run')
+
+    required_cols = matview_preset_columns(matview_cols, db_meta)
 
     print('Scanner contract completeness audit')
     print('=' * 96)
     print(f"{'preset':22} {'src':8} {'cols':>6} {'universe':>9} {'liquidity':>10} {'vani':>6} {'limit':>6}")
     print('-' * 96)
 
-    defects = []
     for p in presets:
         pid, rows = p['id'], p['rows']
         # 'matview' means the FRONTEND reads it from km_scan_results — not

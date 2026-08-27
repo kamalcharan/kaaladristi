@@ -87,9 +87,16 @@ const PRESET_COL_OVERRIDES: Partial<Record<string, string[]>> = {
   // gives no clue why a row is present. Delivery follows because it is the
   // ranking key and the VaNi chip's threshold (dot_svd + deliv >= 50 measured
   // 23.7% next-day vs 7.1% for the dot alone), then the volume evidence.
+  // The Score pair and Avg Amt 5D were missing here while every other Flow
+  // preset shows them, so Volume Drive read as a different product inside its
+  // own menu. fetchVolumeDrive already SELECTs all three -- the values were
+  // fetched and then dropped at the column list, which is why the DB looked
+  // healthy. Scores go directly after the dot so the delivery evidence the
+  // preset selects on stays adjacent to it.
   volume_drive: [
-    'symbol', 'dot_signal', 'delivery_pct', 'close', 'pct_chng',
-    'rvol', 'delivery_surge_x', 'ret_5d', 'magic_rs', 'rsi_14', 'flow_type',
+    'symbol', 'dot_signal', 'score_5d', 'score_22d', 'delivery_pct', 'close', 'pct_chng',
+    'rvol', 'delivery_surge_x', 'avg_amt_5d', 'avg_amt_22d',
+    'ret_5d', 'magic_rs', 'rsi_14', 'flow_type',
   ],
 
   // Waking Giants v4 journey tabs — the journey dimensions lead. base_years =
