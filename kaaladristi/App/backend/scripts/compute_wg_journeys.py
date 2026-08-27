@@ -125,7 +125,19 @@ cand AS (
                        COALESCE(s.listing_date, f.first_listed))))::int AS age_yr
   FROM km_equity_symbols s
   LEFT JOIN first_listed f ON f.isin = s.isin
-  WHERE s.is_active AND s.exchange = 'NSE'
+  WHERE s.is_active
+    -- ONE row per company, not one per exchange, and never an exchange rule.
+    -- The NSE row is preferred where the company has one; a BSE-only company
+    -- enters on its BSE row. This used to be a flat `exchange = 'NSE'`, which
+    -- silently excluded every company that does not trade on NSE at all --
+    -- ~294 above the market-cap floor, ~50 of them also clearing the turnover
+    -- floor. Being listed on one exchange rather than two is not a reason to
+    -- be invisible to the engine.
+    AND (s.exchange = 'NSE'
+         OR (s.exchange = 'BSE'
+             AND NOT EXISTS (SELECT 1 FROM km_equity_symbols n
+                             WHERE n.isin IS NOT NULL AND n.isin = s.isin
+                               AND n.exchange = 'NSE' AND n.is_active)))
     AND COALESCE(f.first_listed, s.listing_date) IS NOT NULL
     AND s.mcap_cr >= %(mcap)s
     AND EXTRACT(YEAR FROM AGE(CURRENT_DATE,
