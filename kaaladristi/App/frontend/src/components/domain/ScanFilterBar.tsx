@@ -32,6 +32,10 @@ export interface ScanFilters {
   // ── Volume Drive-specific ──
   /** Which dot signals to keep. Empty/undefined = all. Values: 'SVD' | 'SBD' | 'SYD'. */
   dots?: string[];
+  // ── Waking Giants-specific ──
+  /** Only wakes within this many days. 90 | 120 | 150; 150 is also the hard
+   *  fetch cap in scanEngine — beyond it nothing is loaded at all. */
+  wakeWindowDays?: number;
 }
 
 export const EMPTY_FILTERS: ScanFilters = {};
@@ -47,14 +51,26 @@ export const FPB_DEFAULT_FILTERS: ScanFilters = {};
 // (see applyFilters: mcap filters skip unknown-mcap rows).
 export const DEFAULT_FILTERS: ScanFilters = { mcapMin: 100 };
 
+// The Waking Giants pool already enforces its own market-cap and combined-ADV
+// floors, so the generic Rs 100 Cr default would be a second, redundant gate.
+// What these tabs open with instead is the wake window.
+export const JOURNEY_DEFAULT_FILTERS: ScanFilters = { wakeWindowDays: 90 };
+
+// Waking ONLY. Ascent is deliberately excluded: a stock there has woken AND
+// confirmed, so a wake eight months old is the success case, not staleness --
+// filtering Ascent by wake age would throw away exactly the journeys that
+// worked. Stirring has no wake_date at all.
+const JOURNEY_WAKE_PRESETS = new Set(['waking_giants']);
+
 const STAGE_PRESETS = new Set([
   'stage_2_leaders', 'stage_2_watch',
   'stage_3_watch', 'stage_4_leaders', 'vani_exit_watch',
 ]);
 
-type FilterGroup = 'stage' | 'conviction' | 'breakout' | 'fpb' | 'drive' | 'standard';
+type FilterGroup = 'stage' | 'conviction' | 'breakout' | 'fpb' | 'drive' | 'journey' | 'standard';
 
 function getFilterGroup(presetId: string): FilterGroup {
+  if (JOURNEY_WAKE_PRESETS.has(presetId)) return 'journey';
   if (STAGE_PRESETS.has(presetId)) return 'stage';
   if (presetId === 'conviction_flow') return 'conviction';
   if (presetId === 'breakout_surge') return 'breakout';
@@ -69,7 +85,7 @@ export function applyFilters(stocks: ScanStock[], filters: ScanFilters): ScanSto
   const { mcapMin, mcapMax, industries, move5dMax, move22dMax, move66dMax,
     surgeMin, deliveryPctMin, rvolMin, pctFromBreakoutMin, pctFromBreakoutMax,
     score5dMin, score22dMin, accelerating,
-    fpbPhase, tightnessMin, coiledDaysMin, dots } = filters;
+    fpbPhase, tightnessMin, coiledDaysMin, dots, wakeWindowDays } = filters;
 
   if (
     mcapMin == null && mcapMax == null &&
@@ -79,7 +95,7 @@ export function applyFilters(stocks: ScanStock[], filters: ScanFilters): ScanSto
     pctFromBreakoutMin == null && pctFromBreakoutMax == null &&
     score5dMin == null && score22dMin == null && !accelerating &&
     (!fpbPhase || fpbPhase === 'all') && tightnessMin == null && coiledDaysMin == null &&
-    (!dots || dots.length === 0)
+    (!dots || dots.length === 0) && wakeWindowDays == null
   ) return stocks;
 
   return stocks.filter((s) => {
@@ -104,6 +120,13 @@ export function applyFilters(stocks: ScanStock[], filters: ScanFilters): ScanSto
     // Dot filter: a row with no dot is excluded whenever any dot is selected —
     // the point of the control is "show me only these signals".
     if (dots && dots.length > 0 && !dots.includes(s.dot_signal ?? '')) return false;
+    // Wake window. A row with no wake_date (Stirring, or a journey that has
+    // not woken) is KEPT — the window narrows wakes, it does not demand one.
+    if (wakeWindowDays != null && s.wake_date) {
+      const cutoff = new Date(Date.now() - wakeWindowDays * 86400000)
+        .toISOString().slice(0, 10);
+      if (s.wake_date < cutoff) return false;
+    }
     if (fpbPhase && fpbPhase !== 'all') {
       const want = fpbPhase === 'burst' ? 'BURST' : fpbPhase === 'shatter' ? 'SHATTER' : 'SETUP';
       if (s.fpb_phase !== want) return false;
@@ -121,7 +144,8 @@ export function hasActiveFilters(f: ScanFilters): boolean {
     f.pctFromBreakoutMin != null || f.pctFromBreakoutMax != null ||
     f.score5dMin != null || f.score22dMin != null || !!f.accelerating ||
     (f.fpbPhase != null && f.fpbPhase !== 'all') || f.tightnessMin != null || f.coiledDaysMin != null ||
-    (f.dots != null && f.dots.length > 0)
+    (f.dots != null && f.dots.length > 0) ||
+    (f.wakeWindowDays != null && f.wakeWindowDays !== 90)
   );
 }
 
@@ -461,6 +485,25 @@ export function ScanFilterBar({ presetId, stocks, filters, onFiltersChange }: Sc
                 <NumInput label="% From Brk Max" value={filters.pctFromBreakoutMax} onChange={(v) => set('pctFromBreakoutMax', v)} placeholder="%" />
               </div>
               <NumInput label="5D Move <" value={filters.move5dMax} onChange={(v) => set('move5dMax', v)} placeholder="%" />
+            </>
+          )}
+
+          {group === 'journey' && (
+            <>
+              <div style={fieldStyle}>
+                <span style={labelStyle}>Woke Within</span>
+                <select
+                  value={filters.wakeWindowDays ?? 90}
+                  onChange={(e) => set('wakeWindowDays', Number(e.target.value))}
+                  style={{ ...inputStyle, width: '108px', height: '26px', cursor: 'pointer' }}
+                >
+                  <option value={90}>90 days</option>
+                  <option value={120}>120 days</option>
+                  <option value={150}>150 days</option>
+                </select>
+              </div>
+              <NumInput label="MCap Min (Cr)" value={filters.mcapMin} onChange={(v) => set('mcapMin', v)} placeholder="Cr" />
+              <NumInput label="Delivery% Min" value={filters.deliveryPctMin} onChange={(v) => set('deliveryPctMin', v)} placeholder="%" />
             </>
           )}
 

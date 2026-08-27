@@ -2096,7 +2096,22 @@ const WG_JOURNEY_PRESETS: Record<string, string> = {
 
 // A wake is shown on the Waking tab only while fresh — the formation window
 // where the breakout is still an observation about NOW.
-const WAKING_FRESH_DAYS = 90;
+// Wake freshness. The tab is an OPPORTUNITY feed (owner 2026-08-24: a breakout
+// from years ago is no opportunity now), and the owner has since set the outer
+// bound: beyond 150 days a wake is not of interest at all.
+//
+// So 150 is a HARD CAP at the query — nothing older is ever fetched — and
+// 90/120/150 are selectable inside that, applied client-side by
+// ScanFilterBar's wakeWindowDays. Fetching the cap and narrowing in the client
+// means switching the window is instant and cannot refetch.
+//
+// Note these three windows currently return the SAME 8 rows: the 157 older
+// WAKING journeys are the ISIN-clock artefact (journeys opened on twin-merged
+// price with no clocks can never sleep), not real old wakes. The filter only
+// starts to discriminate once that is fixed and the table is rebuilt.
+export const WAKE_WINDOWS = [90, 120, 150] as const;
+export const WAKE_WINDOW_DEFAULT = 90;
+const WAKING_FRESH_DAYS = 150;
 
 /** Map a km_wg_journeys row to a ScanStock (display fields are stamped
  *  denormalized on the row by compute_wg_journeys.py). */
@@ -2192,7 +2207,10 @@ async function fetchWgJourneyCounts(): Promise<Record<string, number>> {
       .limit(3000)
       .execute();
     if (error || !Array.isArray(data)) return counts;
-    const cutoff = new Date(Date.now() - WAKING_FRESH_DAYS * 24 * 60 * 60 * 1000)
+    // The BADGE counts at the window the tab OPENS with, not at the 150-day
+    // fetch cap. Counting at the cap would put a number on the rail that the
+    // tab never shows until the owner widens the filter by hand.
+    const cutoff = new Date(Date.now() - WAKE_WINDOW_DEFAULT * 24 * 60 * 60 * 1000)
       .toISOString().slice(0, 10);
     for (const r of data as any[]) {
       if (r.state === 'WAKING') {

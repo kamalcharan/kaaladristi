@@ -12,7 +12,7 @@ import BreakoutSurgeCards from '@/components/domain/BreakoutSurgeTable';
 import { downloadScanXls, type ScanVariant } from '@/utils/downloadXls';
 import type { ScanDefinition, ScanStock } from '@/types';
 import AtmosphericBadge from '@/components/domain/AtmosphericBadge';
-import { ScanFilterBar, applyFilters, DEFAULT_FILTERS, FPB_DEFAULT_FILTERS, type ScanFilters } from '@/components/domain/ScanFilterBar';
+import { ScanFilterBar, applyFilters, DEFAULT_FILTERS, FPB_DEFAULT_FILTERS, JOURNEY_DEFAULT_FILTERS, type ScanFilters } from '@/components/domain/ScanFilterBar';
 import ScanVaNiPublisher from '@/components/domain/ScanVaNiPublisher';
 import ScanStalenessBanner from '@/components/domain/ScanStalenessBanner';
 import { navName } from '@/lib/symbolUtils';
@@ -47,6 +47,16 @@ const SORT_OPTIONS: { key: SortKey; label: string }[] = [
   { key: 'rsi_14',          label: 'RSI' },
   { key: 'symbol',          label: 'Symbol' },
 ];
+
+// Which filter defaults a preset opens with. Kept in ONE place because the
+// initial useState and the preset-switch useEffect both need it — when they
+// were separate literals a new preset family could get the right defaults on
+// first paint and the generic ones after the first tab switch.
+function defaultFiltersFor(presetId: string): ScanFilters {
+  if (presetId === 'flower_pot_burst') return FPB_DEFAULT_FILTERS;
+  if (presetId === 'waking_giants') return JOURNEY_DEFAULT_FILTERS;
+  return DEFAULT_FILTERS;
+}
 
 function sortStocks(stocks: ScanStock[], key: SortKey, dir: SortDir): ScanStock[] {
   const arr = [...stocks];
@@ -1081,7 +1091,7 @@ function ScannerResults({ presetId }: { presetId: string }) {
   const [sortKey, setSortKey] = useState<SortKey>('score_5d');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
   const [oppFilter, setOppFilter] = useState(false);
-  const [filters, setFilters] = useState<ScanFilters>(DEFAULT_FILTERS);
+  const [filters, setFilters] = useState<ScanFilters>(() => defaultFiltersFor(presetId));
   const [viewMode, setViewMode] = useViewMode();
 
   const openVaNiWithIntent = useVaNiStore((s) => s.openWithIntent);
@@ -1109,7 +1119,7 @@ function ScannerResults({ presetId }: { presetId: string }) {
     [fetchedStocks, hideVani],
   );
 
-  useEffect(() => { setFilters(DEFAULT_FILTERS); }, [presetId]);
+  useEffect(() => { setFilters(defaultFiltersFor(presetId)); }, [presetId]);
   useEffect(() => { if (typeof window !== 'undefined') (window as any).__scanResults = rawStocks; }, [rawStocks]);
 
   const stocks = useMemo(() => applyFilters(rawStocks ?? [], filters), [rawStocks, filters]);
