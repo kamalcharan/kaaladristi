@@ -37,6 +37,15 @@
 
 BEGIN;
 
+-- Fail fast instead of queueing. An ALTER waiting on ACCESS EXCLUSIVE also
+-- blocks every read that arrives behind it, so a migration parked on a
+-- zombie transaction takes the Waking Giants tabs down with it and looks
+-- like a slow migration rather than a lock. 30s, then an error that names
+-- the problem. Seen live: migration 192 sat 20 minutes behind an orphaned
+-- DELETE from a crashed compute run.
+SET lock_timeout = '30s';
+
+
 ALTER TABLE km_equity_eod
     -- Signed distance from the Golden Line. Positive = above.
     ADD COLUMN IF NOT EXISTS pct_from_gl   NUMERIC(10,2),
