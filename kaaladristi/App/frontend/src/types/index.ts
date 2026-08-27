@@ -574,6 +574,15 @@ export interface ScanStock {
   // Stage 2 Watch / VaNi Opportunity fields
   rs_percentile?: number | null;
   stage?: string | null;
+  // Stage entry (migration 191). Read off the CONFIRMED stage —
+  // see fieldConfig's stage_since tooltip for why the raw label
+  // cannot be used for an entry date.
+  stage_confirmed?: string | null;
+  stage_since?: string | null;
+  stage_since_close?: number | null;
+  stage_bars?: number | null;
+  pct_from_stage_entry?: number | null;
+  stage_since_censored?: boolean;
   sma200_rising?: boolean | null;
   chartink_score?: number | null;
   is_vani_s2?: boolean | null;
@@ -729,6 +738,15 @@ export interface EquityEodSnapshot {
   is_vani_breakout?: boolean | null;
   // Weinstein stage classification
   stage?: string | null;
+  // Stage entry (migration 191). Read off the CONFIRMED stage —
+  // see fieldConfig's stage_since tooltip for why the raw label
+  // cannot be used for an entry date.
+  stage_confirmed?: string | null;
+  stage_since?: string | null;
+  stage_since_close?: number | null;
+  stage_bars?: number | null;
+  pct_from_stage_entry?: number | null;
+  stage_since_censored?: boolean;
   // Migration 112 — computed scanner fields
   ret_5d?: number | null;
   ret_22d?: number | null;

@@ -37,9 +37,13 @@ export const FIELD_AVAILABILITY: Record<string, {
   },
 
   stage_analysis: {
+    // The stage-entry trio sits immediately after `stage`, because the three
+    // only mean anything next to the label they qualify: which stage, since
+    // when, from what price, and how far it has travelled since.
     defaultCols: [
       'symbol', 'close', 'score_5d', 'score_22d', 'pct_chng',
       'magic_rs', 'rs_percentile', 'stage',
+      'stage_since', 'stage_since_close', 'pct_from_stage_entry',
       'rsi_14', 'rvol', 'flow_type',
       'sniper_inst', 'rss_value',
       'avg_amt_5d', 'avg_amt_22d',
@@ -53,6 +57,7 @@ export const FIELD_AVAILABILITY: Record<string, {
       'ema_20', 'sma_50', 'sma_150', 'sma_200',
       'w52_high', 'sniper_hot',
       'accum_distrib', 'supertrend_dir',
+      'stage_confirmed', 'stage_bars',
       'd_pct',
     ],
   },

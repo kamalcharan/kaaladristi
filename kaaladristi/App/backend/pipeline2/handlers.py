@@ -351,8 +351,20 @@ def handle_d365(conn, trade_date: date, force: bool,
 def handle_stage_classification(conn, trade_date: date, force: bool,
                                 exchange: Optional[str], on_progress: ProgressFn) -> HandlerResult:
     from scripts.backfill_stage_classification import compute_stage_for_date
+    from scripts.backfill_stage_entry import compute_stage_entry_for_date
+
+    def _stage_then_entry(c, td, verbose=False):
+        """Stage first, then the entry carry — the second READS `stage`, so the
+        order is load-bearing, and they belong to one dimension for exactly
+        that reason. Splitting them into two pipeline steps would let a
+        reordering leave stage_since a day behind `stage` with nothing failing.
+        """
+        rows = compute_stage_for_date(c, td, verbose=verbose)
+        compute_stage_entry_for_date(c, td, verbose=verbose)
+        return rows
+
     return _handle_script('stage_classification', conn, trade_date, force, on_progress,
-                          compute_stage_for_date)
+                          _stage_then_entry)
 
 
 def handle_vani_flags(conn, trade_date: date, force: bool,
