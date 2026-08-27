@@ -54,11 +54,18 @@
 -- indefinitely, and while it waits it blocks every NEW reader behind it — the
 -- migration stops looking like a lock and starts looking like an outage.
 --
--- So: a short lock_timeout and a retry loop. Each attempt gives up after 3
--- seconds and releases the queue, so readers keep flowing between attempts.
--- Two minutes of polling usually finds a gap; if it does not, that is a real
--- finding — something is holding a long transaction and should be found
--- rather than waited out.
+-- So: a short lock_timeout and a retry loop. Each attempt gives up after 2
+-- seconds and releases the queue, so readers keep flowing between attempts,
+-- then retries after 1 second — two thirds of the wall clock is spent trying,
+-- which matters when the gap you need is momentary.
+--
+-- 200 attempts is about ten minutes. Exhausting that is a FINDING, not a
+-- longer wait: it means the lock is held continuously, and the thing to do is
+-- look at what holds it (pg_locks joined to pg_stat_activity on
+-- 'km_equity_eod'::regclass shows HOLDERS; pg_blocking_pids shows nothing
+-- here because this loop is only ever waiting for two seconds at a time) and
+-- stop it — a running backfill, the pipeline scheduler, or a client left in
+-- an open transaction.
 
 -- Fail fast instead of queueing. An ALTER waiting on ACCESS EXCLUSIVE also
 -- blocks every read that arrives behind it, so a migration parked on a
@@ -66,7 +73,7 @@
 -- like a slow migration rather than a lock. 30s, then an error that names
 -- the problem. Seen live: migration 192 sat 20 minutes behind an orphaned
 -- DELETE from a crashed compute run.
-SET lock_timeout = '3s';
+SET lock_timeout = '2s';
 
 DO $do$
 DECLARE tries int := 0;
@@ -84,12 +91,14 @@ BEGIN
       RAISE NOTICE 'km_equity_eod: columns added (attempt %)', tries;
       EXIT;
     EXCEPTION WHEN lock_not_available THEN
-      IF tries >= 40 THEN
+      IF tries >= 200 THEN
         RAISE EXCEPTION
-          'km_equity_eod still locked after % attempts (~2 min). Something is holding a long transaction — find it with pg_blocking_pids() rather than waiting.', tries;
+          'km_equity_eod still locked after % attempts (~10 min). Something is holding a long transaction — find it with pg_blocking_pids() rather than waiting.', tries;
       END IF;
-      RAISE NOTICE 'km_equity_eod busy, attempt % — retrying', tries;
-      PERFORM pg_sleep(3);
+      IF tries % 20 = 0 THEN
+        RAISE NOTICE 'km_equity_eod still busy after % attempts — a reader stream, not one stuck txn', tries;
+      END IF;
+      PERFORM pg_sleep(1);
     END;
   END LOOP;
 END
@@ -118,7 +127,7 @@ CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_equity_eod_gl_event
 -- (3) km_wg_journeys columns. This is the table a crashed compute run can
 -- leave locked by an orphaned DELETE, so it is isolated: a lock timeout here
 -- must not cost the rest of the migration.
-SET lock_timeout = '3s';
+SET lock_timeout = '2s';
 
 -- ---------------------------------------------------------------------
 -- Journey-side columns. The Waking Giants tabs show the GL event against a
@@ -147,12 +156,14 @@ ALTER TABLE km_wg_journeys
       RAISE NOTICE 'km_wg_journeys: columns added (attempt %)', tries;
       EXIT;
     EXCEPTION WHEN lock_not_available THEN
-      IF tries >= 40 THEN
+      IF tries >= 200 THEN
         RAISE EXCEPTION
-          'km_wg_journeys still locked after % attempts (~2 min). Most likely an orphaned DELETE from a crashed compute run — terminate it with pg_terminate_backend().', tries;
+          'km_wg_journeys still locked after % attempts (~10 min). Most likely an orphaned DELETE from a crashed compute run — terminate it with pg_terminate_backend().', tries;
       END IF;
-      RAISE NOTICE 'km_wg_journeys busy, attempt % — retrying', tries;
-      PERFORM pg_sleep(3);
+      IF tries % 20 = 0 THEN
+        RAISE NOTICE 'km_wg_journeys still busy after % attempts', tries;
+      END IF;
+      PERFORM pg_sleep(1);
     END;
   END LOOP;
 END
