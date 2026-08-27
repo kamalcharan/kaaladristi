@@ -2142,7 +2142,7 @@ function wgJourneyRowToScanStock(r: any): ScanStock {
     rsi_14: null,
     magic_rs: num(r.magic_rs),
     magic_rs_zone: r.magic_rs_zone ?? null,
-    flow_type: null, rvol: null, sniper_inst: null, sniper_hot: null,
+    flow_type: null, rvol: num(r.rvol), sniper_inst: null, sniper_hot: null,
     accum_distrib: null, rss_value: null, rss_spread: null,
     sma_150: null, volume_divergence_flag: null,
     has_recent_svd: false, has_recent_sbd: false, has_recent_syd: false,
@@ -2156,6 +2156,12 @@ function wgJourneyRowToScanStock(r: any): ScanStock {
     magicRsTrend: [], reward: null, rewardPct: null, pctBelow52wHigh: null,
     vaniOpportunity: false,
     avg_amt_5d: null, avg_amt_22d: null, avg_amt_66d: null,
+    // Display fields the Discovery tabs render (migration 193). They were
+    // absent from km_wg_journeys, so Score 5D / Score 22D / RVOL / the dot sat
+    // blank on these tabs with nothing to explain why.
+    score_5d: num(r.score_5d),
+    score_22d: num(r.score_22d),
+    dot_signal: r.dot_svd ? 'SVD' : r.dot_sbd ? 'SBD' : r.dot_syd ? 'SYD' : null,
     // journey fields
     wg_phase: r.state ?? null,
     gl_acc_days: num(r.stir_days),

@@ -80,7 +80,22 @@ BULL_ZONES = {'Strong Bull', 'Mild Bull', 'Neutral Bull'}
 def get_conn():
     if not DATABASE_URL:
         raise RuntimeError('DATABASE_URL / DB_PRIMARY not set in .env')
-    return psycopg2.connect(DATABASE_URL, connect_timeout=30)
+    # keepalives, because this script holds a connection open across a long
+    # CPU-bound stretch. connect_timeout covers the CONNECT only -- it does
+    # nothing for a socket that dies while idle. The walk loads ~5.8M rows and
+    # then spends minutes in pandas with the connection untouched, which is
+    # exactly long enough for a firewall or NAT to drop it silently; the first
+    # statement afterwards (the DELETE in write_rows) then fails with "server
+    # closed the connection unexpectedly" AFTER all the work is done.
+    return psycopg2.connect(
+        DATABASE_URL,
+        connect_timeout=30,
+        keepalives=1,
+        keepalives_idle=30,
+        keepalives_interval=10,
+        keepalives_count=5,
+        options='-c statement_timeout=900000',
+    )
 
 
 # ── Pool ─────────────────────────────────────────────────────────────────
@@ -295,9 +310,15 @@ def load_stir_inputs(conn, ids: list[int]) -> pd.DataFrame:
 
 def load_display(conn, ids: list[int]) -> dict[int, dict]:
     """Latest EOD display fields per stock."""
+    # score_5d/score_22d/rvol and the SVD/SBD/SYD dots come along because the
+    # Discovery tabs can render them and km_wg_journeys never carried them --
+    # the columns sat blank with no error, the same dash-with-no-cause shape
+    # the scanner contract audit exists to catch.
     sql = """
         SELECT DISTINCT ON (equity_id) equity_id, trade_date, close, pct_chng,
-               delivery_pct, magic_rs, magic_rs_zone
+               delivery_pct, magic_rs, magic_rs_zone,
+               score_5d, score_22d, rvol,
+               dot_svd, dot_sbd, dot_syd
         FROM km_equity_eod WHERE equity_id = ANY(%s)
         ORDER BY equity_id, trade_date DESC
     """
@@ -536,20 +557,47 @@ CURRENT_COLS = [
     'wake_close', 'pct_from_wake',
     'symbol', 'company_name', 'industry', 'exchange', 'isin', 'mcap_cr', 'close', 'pct_chng',
     'delivery_pct', 'magic_rs', 'magic_rs_zone', 'listing_age_years', 'trade_date',
+    'score_5d', 'score_22d', 'rvol', 'dot_svd', 'dot_sbd', 'dot_syd',
 ]
 
 
 def write_rows(conn, current_rows: list[dict], archive_rows: list[dict]):
+    """Replace the table. Opens its OWN connection and ignores `conn`.
+
+    The caller's connection was opened before the walk and has been idle
+    through all of it. Even with keepalives it is the wrong socket to bet the
+    only write of the run on, after the expensive part is already finished --
+    a dropped connection here throws away the whole computation. A fresh
+    connection costs milliseconds.
+
+    DELETE + INSERT run in ONE transaction (psycopg2's default), so a failure
+    mid-write rolls back and leaves the previous table intact rather than
+    emptying the tabs. Keep it that way: an autocommit DELETE here would mean
+    a crash during the INSERT wipes Waking Giants until the next nightly run.
+    """
+    rows = current_rows + archive_rows
     cols = ', '.join(CURRENT_COLS)
     ph = ', '.join([f'%({c})s' for c in CURRENT_COLS])
-    with conn.cursor() as cur:
-        # full rewrite — the walk re-derives everything, so replace both
-        # current rows and the archive (idempotent, drift-proof).
-        cur.execute('DELETE FROM km_wg_journeys')
-        psycopg2.extras.execute_batch(
-            cur, f'INSERT INTO km_wg_journeys ({cols}) VALUES ({ph})',
-            current_rows + archive_rows, page_size=500)
-    conn.commit()
+    w = get_conn()
+    try:
+        with w.cursor() as cur:
+            # Bound the wait for the table lock. Without it, a reader mid-query
+            # can park this DELETE indefinitely while it holds the write lock
+            # the scanner tabs need -- the failure the owner hit was a dead
+            # socket, but an unbounded lock wait looks identical from outside.
+            cur.execute('SET lock_timeout = 30000')
+            cur.execute('DELETE FROM km_wg_journeys')
+            psycopg2.extras.execute_batch(
+                cur, f'INSERT INTO km_wg_journeys ({cols}) VALUES ({ph})',
+                rows, page_size=500)
+        w.commit()
+        print(f'  Wrote {len(rows):,} rows '
+              f'({len(current_rows):,} current + {len(archive_rows):,} archived).')
+    except Exception:
+        w.rollback()
+        raise
+    finally:
+        w.close()
 
 
 def run(dry_run: bool):
@@ -619,6 +667,10 @@ def run(dry_run: bool):
             'close': disp.get('close'), 'pct_chng': disp.get('pct_chng'),
             'delivery_pct': disp.get('delivery_pct'), 'magic_rs': disp.get('magic_rs'),
             'magic_rs_zone': disp.get('magic_rs_zone'), 'trade_date': disp.get('trade_date'),
+            'score_5d': disp.get('score_5d'), 'score_22d': disp.get('score_22d'),
+            'rvol': disp.get('rvol'),
+            'dot_svd': disp.get('dot_svd'), 'dot_sbd': disp.get('dot_sbd'),
+            'dot_syd': disp.get('dot_syd'),
         }
         row = {**{c: None for c in CURRENT_COLS}, **base,
                **{k: v for k, v in cur_state.items() if k in CURRENT_COLS}}
