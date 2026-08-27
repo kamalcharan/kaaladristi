@@ -20,6 +20,9 @@ Principles:
 
 from __future__ import annotations
 
+import time
+import zlib
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import date, timedelta
 from typing import Callable, Optional
@@ -159,6 +162,69 @@ def _rpc(conn, fn_name: str, params: dict) -> list[dict]:
     return [dict(r) for r in rows]
 
 
+# ── Cross-process step lock ───────────────────────────────────────────────
+#
+# Nothing here prevented two processes running the SAME compute step at once.
+# The job table uses FOR UPDATE SKIP LOCKED, which stops two workers claiming
+# the same JOB ROW — it says nothing about two different jobs writing the same
+# TABLE rows. This deployment runs two workers (v1 on 8100, v2 on 8101), so a
+# scheduled daily_run and a fix job, or the two workers, can execute the same
+# dimension concurrently.
+#
+# The compute RPCs update km_equity_eod row by row (UPDATE ... WHERE
+# equity_id=$1 AND trade_date=$2), so two concurrent runs take the same rows
+# in whatever order their scans produce and eventually take them in opposite
+# orders. Seen live 2026-08-27: bse_flow deadlocked against another process,
+# both running "UPDATE km_equity_eod SET flow_type=$1, vacuum_flag=$2, ...".
+# Postgres killed one and the daily run came back partial.
+#
+# A session advisory lock keyed on the dimension makes the second run WAIT
+# instead of interleaving. A deadlock needs two writers holding rows in
+# opposite orders; serialised, there is only ever one.
+#
+# It matters beyond the deadlock too: these row-by-row RPCs hold locks on
+# km_equity_eod for the whole step, and two at once leave no gap for anything
+# else — which is why an ALTER TABLE on that table could not acquire its lock
+# at all, even polling for ten minutes.
+_STEP_LOCK_NAMESPACE = 4726  # distinct from any other advisory-lock user
+
+
+@contextmanager
+def _step_lock(conn, dim: str, on_progress: ProgressFn, wait_s: int = 600):
+    """Serialise one compute step across processes.
+
+    Polls rather than blocking outright, so a wedged holder surfaces as a
+    timeout naming the step instead of a worker hung forever.
+    """
+    key = zlib.crc32(dim.encode()) & 0x7FFFFFFF
+    deadline = time.time() + wait_s
+    got = False
+    try:
+        while True:
+            with conn.cursor() as cur:
+                cur.execute('SELECT pg_try_advisory_lock(%s, %s)',
+                            (_STEP_LOCK_NAMESPACE, key))
+                got = cur.fetchone()[0]
+            conn.commit()
+            if got:
+                break
+            if time.time() >= deadline:
+                raise TimeoutError(
+                    f'another process has been running {dim} for over {wait_s}s')
+            on_progress(f'{dim} already running elsewhere — waiting', 10)
+            time.sleep(5)
+        yield
+    finally:
+        if got:
+            try:
+                with conn.cursor() as cur:
+                    cur.execute('SELECT pg_advisory_unlock(%s, %s)',
+                                (_STEP_LOCK_NAMESPACE, key))
+                conn.commit()
+            except Exception:
+                pass
+
+
 # ── Column-fill handlers (indicators / flow / magic_rs) ──────────────────
 
 def _handle_columnfill(
@@ -179,6 +245,7 @@ def _handle_columnfill(
 
     on_progress(f'running compute RPC for {dim}', 30)
     try:
+      with _step_lock(conn, dim, on_progress):
         if 'indicators' in dim:
             _rpc(conn, 'compute_all_pending_indicators', {
                 'p_table': table, 'p_id_col': id_col,
