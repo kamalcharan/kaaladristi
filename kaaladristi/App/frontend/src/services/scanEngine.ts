@@ -112,6 +112,66 @@ const MIN_AVG_AMT_22D_CR = 1.0;
 // ── Utilities ─────────────────────────────────────────────────
 
 
+// ── Scanner-ready date ────────────────────────────────────────
+//
+// km_trading_calendar says "completed" at STEP 2 OF 22. The legacy
+// run_nse_pipeline marks the day the moment the bhavcopy is ingested
+// (daily_pipeline.py:526), and the twenty enrichment steps — indicators,
+// magic_rs, rolling metrics, stage, VaNi flags, dots, matview refresh — all
+// run after it. So from ~18:02 until the run ends, the calendar advertises a
+// date that has prices and nothing a scanner filters or ranks on.
+//
+// Measured live mid-run on 2026-08-27: 7,450 bars ingested, ema_20 7,166,
+// magic_rs 6,691 — but score_5d 0, avg_amt_22d 0, stage 0. Every direct
+// scanner pointed at that date and returned nothing.
+//
+// The fix is to stop trusting a status word and read the OUTPUT of the last
+// step that builds the scanner surface. `scan_refresh` is step 36 of 38,
+// after dots (35) and vani_flags (25) and rolling_metrics (22), so the newest
+// trade_date in km_scan_results IS "the newest date every scanner input
+// exists for". One tiny query, no heuristics, and it cannot drift from the
+// pipeline because it is produced by it.
+//
+// If the matview is unavailable this returns null and callers fall back to
+// the calendar exactly as before — a probe failure must never freeze the app.
+// Deliberately SHORT. This cache exists only to collapse the eleven calls
+// fetchRecentDates makes within one page load into one query — React Query's
+// useScanReadyDate owns the real caching and the 60s poll. Matching its 60s
+// here would stack two TTLs and could leave the poll reading a value up to a
+// minute old, delaying the swap onto the new session at the end of the run.
+const SCAN_READY_TTL_MS = 10_000;
+let _scanReadyCache: { at: number; value: Promise<string | null> } | null = null;
+
+export function fetchScanReadyDate(): Promise<string | null> {
+  const now = Date.now();
+  if (_scanReadyCache && now - _scanReadyCache.at < SCAN_READY_TTL_MS) {
+    return _scanReadyCache.value;
+  }
+  // Cached as a PROMISE, not a value: eleven fetchers call fetchRecentDates
+  // within one page load, and caching the value would still let all eleven
+  // fire the query before the first resolved.
+  const value = (async (): Promise<string | null> => {
+    try {
+      const { data, error } = await from('km_scan_results')
+        .select('trade_date')
+        .order('trade_date', { ascending: false })
+        .limit(1)
+        .execute();
+      if (error || !Array.isArray(data) || data.length === 0) return null;
+      return (data[0] as { trade_date?: string }).trade_date ?? null;
+    } catch {
+      return null;
+    }
+  })();
+  _scanReadyCache = { at: now, value };
+  return value;
+}
+
+// Extra calendar rows fetched so that capping at the scanner-ready date still
+// leaves `limit` of them. Two in-flight days is already generous — the cap
+// normally removes one.
+const SCAN_READY_HEADROOM = 3;
+
 // 3b: Fetch trading dates from km_trading_calendar — exchange-aware, exact count
 //
 // ⚠ History: this filtered status='completed' ONLY. The backend's own
@@ -129,16 +189,26 @@ const MIN_AVG_AMT_22D_CR = 1.0;
 // still excluded — that status means eod_download itself didn't happen,
 // so there's genuinely nothing usable for that date.
 async function fetchRecentDates(limit: number): Promise<string[]> {
-  const { data } = await from('km_trading_calendar')
-    .select('trade_date')
-    .in('status', ['completed', 'partial'])
-    .eq('exchange', 'NSE')
-    .order('trade_date', { ascending: false })
-    .limit(limit)
-    .execute();
+  const [calendar, readyDate] = await Promise.all([
+    from('km_trading_calendar')
+      .select('trade_date')
+      .in('status', ['completed', 'partial'])
+      .eq('exchange', 'NSE')
+      .order('trade_date', { ascending: false })
+      .limit(limit + SCAN_READY_HEADROOM)
+      .execute(),
+    fetchScanReadyDate(),
+  ]);
 
-  const rows = (data ?? []) as { trade_date: string }[];
-  return rows.map((r) => r.trade_date).sort((a, b) => b.localeCompare(a));
+  const rows = (calendar.data ?? []) as { trade_date: string }[];
+  const dates = rows.map((r) => r.trade_date).sort((a, b) => b.localeCompare(a));
+
+  // Drop dates the pipeline has ingested but not yet enriched. Applies to the
+  // multi-date callers too (Flower Pot's ~72-session window, the confluence
+  // lookback): a bar whose indicators are still NULL is not a usable bar for
+  // them either.
+  const usable = readyDate ? dates.filter((d) => d <= readyDate) : dates;
+  return usable.slice(0, limit);
 }
 
 // ── VaNi Opportunity Rule — data-driven ────────────────────────

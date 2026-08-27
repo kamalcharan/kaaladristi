@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { executeScan, getAllScanCounts, fetchScanPresets, fetchVaniHighlights, fetchFpbActive, SCAN_PRESETS, type ExchangeFilter, type ScanTimeframe, type ScanCountsResult, type VaniHighlights, type FpbActiveRow } from '@/services/scanEngine';
+import { executeScan, getAllScanCounts, fetchScanPresets, fetchVaniHighlights, fetchFpbActive, fetchScanReadyDate, SCAN_PRESETS, type ExchangeFilter, type ScanTimeframe, type ScanCountsResult, type VaniHighlights, type FpbActiveRow } from '@/services/scanEngine';
 import type { ScanStock, ScanDefinition } from '@/types';
 import { usePipelineStatus } from '@/hooks/usePipelineStatus';
 
@@ -100,9 +100,21 @@ export function useStage2Scan(filters: Stage2Filters) {
 // change produce a genuinely NEW query — it fetches immediately on the
 // next poll tick, no reliance on focus/mount timing at all. staleTime stays
 // short as a secondary guard for exchange/timeframe/filter changes.
+//
+// The key is the SCANNER-READY date, not latestDataDate. Those diverge for the
+// length of every daily run: the calendar is marked 'completed' at step 2 of
+// 38, so latestDataDate advances the moment the bhavcopy lands, while the
+// scanners keep serving the last fully processed session. Keyed on
+// latestDataDate, the key would flip at ~18:02 (a refetch that returns the
+// same previous session) and then NOT flip again when the run actually
+// finished — leaving the owner on yesterday's rows until they reloaded by
+// hand, which is the exact staleness this key exists to prevent. Keyed on the
+// ready date it flips once, at the moment there is something new to show.
+// Falls back to latestDataDate when the matview is unavailable.
 function useScanDateKey(): string {
   const { latestDataDate } = usePipelineStatus();
-  return latestDataDate ?? 'unknown';
+  const { data: readyDate } = useScanReadyDate();
+  return readyDate ?? latestDataDate ?? 'unknown';
 }
 
 export function useScan(
@@ -148,6 +160,25 @@ export function useFpbActive() {
     queryFn: fetchFpbActive,
     staleTime: 3 * 60 * 1000,
     retry: 0,
+  });
+}
+
+/** Newest trade_date every scanner input exists for — the output of the last
+ *  matview-building pipeline step, not the calendar's "completed" flag, which
+ *  is written twenty steps earlier. Null when the matview is unavailable. */
+export function useScanReadyDate() {
+  return useQuery<string | null>({
+    queryKey: ['scan_ready_date'],
+    queryFn: fetchScanReadyDate,
+    // Polled on the same 60s cadence as usePipelineStatus, and for the same
+    // reason: this value flips exactly once a day, at the end of the nightly
+    // run, and it is the trigger that swaps every scanner onto the new
+    // session. Without the poll it would only move on focus or remount, so a
+    // page left open through the run would sit on the previous session until
+    // someone reloaded — the staleness this whole path exists to remove.
+    staleTime: 60_000,
+    refetchInterval: 60_000,
+    retry: 1,
   });
 }
 

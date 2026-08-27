@@ -13,6 +13,7 @@
  */
 
 import { usePipelineStatus } from '@/hooks/usePipelineStatus';
+import { useScanReadyDate } from '@/hooks/useScan';
 import type { ScanStock } from '@/types';
 
 function mostCommonTradeDate(stocks: ScanStock[]): string | null {
@@ -31,22 +32,52 @@ function mostCommonTradeDate(stocks: ScanStock[]): string | null {
 
 export default function ScanStalenessBanner({ stocks }: { stocks: ScanStock[] }) {
   const { latestDataDate } = usePipelineStatus();
+  const { data: readyDate } = useScanReadyDate();
   const rowDate = mostCommonTradeDate(stocks);
 
-  if (!rowDate || !latestDataDate || rowDate >= latestDataDate) return null;
+  if (!rowDate || !latestDataDate) return null;
 
+  // Two different situations used to render the same message, and one of them
+  // was a lie. The daily run marks km_trading_calendar 'completed' at step 2
+  // of 38, so between ~18:02 and the end of the run latestDataDate is a date
+  // whose indicators do not exist yet. Telling the owner "newer data is
+  // available, refresh the page" there sends them to reload a page that
+  // cannot improve — the data is mid-computation, not mis-cached.
+  const stillProcessing = readyDate != null && latestDataDate > readyDate;
+
+  if (stillProcessing && rowDate >= readyDate) {
+    return (
+      <Note tone="neutral">
+        Showing <strong>{rowDate}</strong> — the latest fully processed session.
+        {' '}{latestDataDate}&apos;s prices have landed and its indicators are still computing.
+      </Note>
+    );
+  }
+
+  // Genuine staleness: rows older than what IS ready. A caching edge case or a
+  // slow retry — refreshing really does fix this one.
+  const target = readyDate ?? latestDataDate;
+  if (rowDate >= target) return null;
+
+  return (
+    <Note tone="warn">
+      Showing results from <strong>{rowDate}</strong> — newer data ({target}) is available.
+      Refresh the page to update.
+    </Note>
+  );
+}
+
+function Note({ tone, children }: { tone: 'warn' | 'neutral'; children: React.ReactNode }) {
+  const accent = tone === 'warn' ? 'var(--risk-amber)' : 'var(--text-muted)';
   return (
     <div style={{
       display: 'flex', alignItems: 'center', gap: 10,
       padding: '10px 14px', marginBottom: 14, borderRadius: 10,
-      background: 'color-mix(in srgb, var(--risk-amber) 12%, transparent)',
-      border: '1px solid color-mix(in srgb, var(--risk-amber) 40%, transparent)',
+      background: `color-mix(in srgb, ${accent} 12%, transparent)`,
+      border: `1px solid color-mix(in srgb, ${accent} 40%, transparent)`,
     }}>
-      <span style={{ fontSize: 14 }}>⚠</span>
-      <span style={{ fontSize: 12, color: 'var(--text-primary)' }}>
-        Showing results from <strong>{rowDate}</strong> — newer data ({latestDataDate}) is available.
-        Refresh the page to update.
-      </span>
+      <span style={{ fontSize: 14 }}>{tone === 'warn' ? '⚠' : '⏳'}</span>
+      <span style={{ fontSize: 12, color: 'var(--text-primary)' }}>{children}</span>
     </div>
   );
 }
