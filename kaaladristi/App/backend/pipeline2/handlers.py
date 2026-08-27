@@ -434,11 +434,40 @@ def handle_stage_classification(conn, trade_date: date, force: bool,
                           _stage_then_entry)
 
 
+def _columns_exist(conn, table: str, cols: list[str]) -> bool:
+    """True when EVERY named column exists on `table`.
+
+    A step whose columns have not been migrated yet must skip, not fail. The
+    precedent is handle_scan_refresh, which returns 'partial' when
+    km_scan_results is absent rather than taking the whole run down. Without
+    this, deploying the backend before running a migration turns every
+    nightly run partial until someone notices — which is exactly what
+    happened on 2026-08-27 with gl_events and wg_journeys against migration
+    194.
+    """
+    with conn.cursor() as cur:
+        cur.execute("""
+            SELECT count(*) FROM information_schema.columns
+            WHERE table_name = %s AND column_name = ANY(%s)
+        """, (table, cols))
+        found = cur.fetchone()[0]
+    conn.commit()
+    return found == len(cols)
+
+
 def handle_gl_events(conn, trade_date: date, force: bool,
                      exchange: Optional[str], on_progress: ProgressFn) -> HandlerResult:
     """Golden Line breakout / retest. Ordered AFTER `dots` in DAILY_STEPS —
     it reads dot_svd/dot_sbd, and running it earlier would evaluate against
     yesterday's dots and miss every event on the day it happened."""
+    # Checked BEFORE _handle_script, because its first act is a fill_rate query
+    # on gl_days_above — the step would fail on the health probe, before the
+    # compute it is guarding ever runs.
+    if not _columns_exist(conn, 'km_equity_eod',
+                          ['pct_from_gl', 'gl_event', 'gl_days_above']):
+        return HandlerResult('partial', 0.0, 0.0, 0,
+                             error_msg='Golden Line columns absent '
+                                       '(migration 194 not applied) — step skipped')
     from scripts.backfill_gl_events import compute_gl_events_for_date
     return _handle_script('gl_events', conn, trade_date, force, on_progress,
                           compute_gl_events_for_date)

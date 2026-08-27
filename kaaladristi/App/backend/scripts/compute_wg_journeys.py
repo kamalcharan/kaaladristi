@@ -327,18 +327,42 @@ def load_stir_inputs(conn, ids: list[int]) -> pd.DataFrame:
     return pd.DataFrame(rows, columns=['equity_id', 'trade_date', 'delivery_pct', 'rvol', 'pct_chng'])
 
 
+def _existing_columns(conn, table: str, wanted: list[str]) -> list[str]:
+    """Subset of `wanted` that actually exists on `table`.
+
+    This script must run against a database where some of migrations 192/193/
+    194 have not been applied yet — the backend gets deployed before the
+    migrations, every time. Selecting or inserting a column that does not
+    exist takes down the whole nightly wg_journeys step for a DISPLAY field,
+    which is what happened on 2026-08-27 ("column gl_event does not exist").
+    Adapt to the schema instead of assuming it.
+    """
+    with conn.cursor() as cur:
+        cur.execute("""
+            SELECT column_name FROM information_schema.columns
+            WHERE table_name = %s AND column_name = ANY(%s)
+        """, (table, wanted))
+        have = {r[0] for r in cur.fetchall()}
+    conn.commit()
+    return [c for c in wanted if c in have]
+
+
 def load_display(conn, ids: list[int]) -> dict[int, dict]:
     """Latest EOD display fields per stock."""
     # score_5d/score_22d/rvol and the SVD/SBD/SYD dots come along because the
     # Discovery tabs can render them and km_wg_journeys never carried them --
     # the columns sat blank with no error, the same dash-with-no-cause shape
     # the scanner contract audit exists to catch.
-    sql = """
-        SELECT DISTINCT ON (equity_id) equity_id, trade_date, close, pct_chng,
-               delivery_pct, magic_rs, magic_rs_zone,
-               score_5d, score_22d, rvol,
-               dot_svd, dot_sbd, dot_syd,
-               gl_event, gl_days_above
+    base = ['equity_id', 'trade_date', 'close', 'pct_chng',
+            'delivery_pct', 'magic_rs', 'magic_rs_zone']
+    # Optional across migrations 193/194 — present or not, the step still runs.
+    extra = _existing_columns(conn, 'km_equity_eod', [
+        'score_5d', 'score_22d', 'rvol',
+        'dot_svd', 'dot_sbd', 'dot_syd',
+        'gl_event', 'gl_days_above',
+    ])
+    sql = f"""
+        SELECT DISTINCT ON (equity_id) {', '.join(base + extra)}
         FROM km_equity_eod WHERE equity_id = ANY(%s)
         ORDER BY equity_id, trade_date DESC
     """
@@ -632,9 +656,20 @@ def write_rows(conn, current_rows: list[dict], archive_rows: list[dict]):
     a crash during the INSERT wipes Waking Giants until the next nightly run.
     """
     rows = current_rows + archive_rows
-    cols = ', '.join(CURRENT_COLS)
-    ph = ', '.join([f'%({c})s' for c in CURRENT_COLS])
     w = get_conn()
+    # Insert only the columns km_wg_journeys ACTUALLY has. CURRENT_COLS grows
+    # with each migration (192 wake price, 193 scores/dots, 194 GL event and
+    # turn), and the backend is always deployed before the migrations are run,
+    # so naming a column that does not exist yet fails the whole nightly step
+    # over a display field. The journey state machine does not depend on any
+    # of them.
+    live_cols = _existing_columns(w, 'km_wg_journeys', list(CURRENT_COLS))
+    missing = [c for c in CURRENT_COLS if c not in live_cols]
+    if missing:
+        print(f'  NOTE: km_wg_journeys is missing {len(missing)} column(s) '
+              f'— writing without them: {", ".join(missing)}')
+    cols = ', '.join(live_cols)
+    ph = ', '.join([f'%({c})s' for c in live_cols])
     try:
         with w.cursor() as cur:
             # Bound the wait for the table lock. Without it, a reader mid-query
