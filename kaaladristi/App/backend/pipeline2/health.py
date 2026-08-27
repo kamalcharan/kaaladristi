@@ -80,6 +80,10 @@ DIMENSION_HEALTH: dict[str, tuple[str, str | None, list[str] | None, float | Non
     'rolling_metrics':       ('km_equity_eod',    'equity_id', ['w52_high', 'w52_low', 'lifetime_high'],                   0.95),
     'd365':                  ('km_equity_eod',    'equity_id', ['d365_pct_chng'],                                          0.85),
     'stage_classification':  ('km_equity_eod',    'equity_id', ['stage'],                                                  0.95),
+    # gl_days_above is written on EVERY bar (0 below the line); gl_event is
+    # rare by design, so measuring fill on it would report the step broken on
+    # any quiet day.
+    'gl_events':             ('km_equity_eod',    'equity_id', ['gl_days_above'],                                          0.90),
     'vani_flags':            ('km_equity_eod',    'equity_id', ['is_vani_strength', 'is_vani_breakout'],                   1.0),
     # index_returns samples ret_5d only — ret_22d/ret_66d are legitimately
     # NULL for indices younger than their window, and indices with no EOD
@@ -130,6 +134,7 @@ LABELS: dict[str, str] = {
     'rolling_metrics':       'Rolling Metrics',
     'd365':                  'D365 % Change',
     'stage_classification':  'Stage Classification',
+    'gl_events':             'Golden Line Events',
     'vani_flags':            'VaNi Flags',
     'index_returns':         'Index Returns & Scores',
     'industry_composites':   'Industry Composites',
