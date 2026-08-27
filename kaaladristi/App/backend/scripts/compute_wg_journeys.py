@@ -402,8 +402,9 @@ def walk_stock(s: pd.Series, zones: pd.Series, wk: pd.DataFrame, mo: pd.DataFram
     Returns (current: dict, archived: list[dict]). Everything the daily loop
     reads is precomputed into numpy arrays (as-of joins done once via ffill),
     so the loop is O(n). Where the enriched layer is shallow (pre-2025)
-    alignment is unknown and journeys are tracked on price structure alone
-    (no sleep call without full clock data).
+    alignment is unknown, and a journey can neither open nor close there —
+    both the wake and the sleep test require clocks_known, so the engine never
+    asserts a journey it cannot evaluate.
     """
     closes = s.dropna()
     if len(closes) < MIN_BARS:
@@ -478,7 +479,25 @@ def walk_stock(s: pd.Series, zones: pd.Series, wk: pd.DataFrame, mo: pd.DataFram
         if state == 'HIBERNATING':
             pm = prior_max[i]
             g = gl_arr[i]
-            if pm == pm and g == g and c > pm and c >= g:  # x == x → not NaN
+            # A journey may only OPEN on a bar where the clocks are known.
+            #
+            # Sleep has always been gated on clocks_known; wake was not. That
+            # asymmetry let a journey be born where it could never die: the
+            # weekly clock has no data before 2020-05-22 and the monthly none
+            # before 2021-09-30 — for ANY symbol, so no ISIN merge can reach
+            # further back — which means the sleep test simply cannot fire on
+            # an earlier bar. Journeys opened in 2013/2014 on price structure
+            # alone therefore survived a decade, and 121 of them were still
+            # open after the clock merge: 50 WAKING and 71 ASCENDING with
+            # wakes predating 2024-06, the oldest 2013-09-19.
+            #
+            # Declaring a journey the engine cannot evaluate is the bug.
+            # base_years is unaffected — it measures how long since the price
+            # level was last traded, which needs no clocks — so a stock that
+            # based through the dark years still wakes with its full base
+            # length; it just wakes on a bar we can actually judge.
+            if (clocks_known_arr[i]
+                    and pm == pm and g == g and c > pm and c >= g):  # x == x → not NaN
                 by, bstart = base_years_at(i)
                 if by >= MIN_BASE_YEARS_DETECT:
                     journey = {
