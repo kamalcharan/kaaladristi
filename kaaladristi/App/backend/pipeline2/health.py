@@ -256,6 +256,24 @@ def fill_rate(conn, dimension: str, trade_date: date) -> float:
     table, id_col, cols, _ok = meta
     exchange = _exchange_for(dimension)
 
+    # A dimension whose columns have not been migrated yet reads as 0%, not as
+    # an exception. fill_rate is the choke point for the health dashboard, the
+    # 19:30 gap sweep AND every handler's before/after reading, so a raise here
+    # takes down all three — which is how gl_events failed on its own health
+    # probe before reaching the compute it was guarding, and why guarding the
+    # handler alone was not enough. The backend is always deployed before the
+    # migrations run; this is a normal state, not an error.
+    if cols:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT count(*) FROM information_schema.columns
+                WHERE table_name = %s AND column_name = ANY(%s)
+            """, (table, list(cols)))
+            present = cur.fetchone()[0]
+        conn.commit()
+        if present < len(cols):
+            return 0.0
+
     with conn.cursor() as cur:
         # Download dimensions — row count only, graded against min_expected.
         if dimension in DOWNLOAD_EXPECTED:
