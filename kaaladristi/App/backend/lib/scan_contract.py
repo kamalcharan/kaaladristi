@@ -320,6 +320,43 @@ def unknown_columns(db_meta: dict | None = None) -> dict[str, list[str]]:
     return out
 
 
+def fallback_columns(db_meta: dict | None = None) -> list[str]:
+    """Presets that resolve to getFieldsForGroup()'s 3-column fallback.
+
+    A preset whose category has no FIELD_AVAILABILITY entry -- and no
+    PRESET_COL_OVERRIDES entry to mask it -- renders Symbol | Close | 1D% and
+    nothing else. No error, no log: the table just looks thin, and every
+    DB-facing check still reports the preset healthy because the DATA is fine.
+
+    Two live instances when this was added (2026-08-27):
+      * power_sell carried category '' in SCAN_PRESETS. The DB row says
+        'market' and wins at run time, so it only surfaced on first paint --
+        and permanently whenever /api/scan/presets was unreachable.
+      * the 'discovery' category (migration 177) never existed in
+        FIELD_AVAILABILITY at all. The journey tabs were masked by their own
+        overrides; first_ascent was not.
+    """
+    c = contract(db_meta)
+    return sorted(p for p, cols in c['columns'].items() if cols == _GROUP_FALLBACK)
+
+
+def orphan_presets(db_meta: dict) -> list[str]:
+    """Active kd_scan_presets rows that executeScan() cannot dispatch.
+
+    The scanner rail is built from the DB (ScanView groups kd_scan_presets by
+    category), so an active preset ALWAYS renders a tab. If the frontend has
+    no route for it, that tab throws 'Unknown scan: <id>' the moment it is
+    clicked.
+
+    contract() iterates the TS preset array, so a DB-only preset was invisible
+    to every check here -- which is exactly how first_ascent survived: retired
+    by migration 177, resurrected by migration 181's carried-forward preset
+    block, with zero frontend references anywhere in src/.
+    """
+    routes = routing()
+    return sorted(pid for pid in db_meta if pid not in routes)
+
+
 def contract(db_meta: dict | None = None) -> dict:
     """The whole contract. Pass kd_scan_presets rows as `db_meta` so preset
     metadata resolves DB-first, the way getPresetMeta() does."""
