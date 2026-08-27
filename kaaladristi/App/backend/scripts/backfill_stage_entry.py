@@ -38,6 +38,22 @@ Usage:
     # Smaller batches if the box is tight
     python scripts/backfill_stage_entry.py --batch-size 100
 
+    # Re-run after an interruption: resumes by default, skipping symbols that
+    # already carry stage entry data. Batches commit individually, so the
+    # restart point is the last committed batch, never mid-symbol.
+    python scripts/backfill_stage_entry.py
+
+    # Force a full reprocess (after changing MIN_SPELL, say)
+    python scripts/backfill_stage_entry.py --restart
+
+PREFERABLY NOT WHILE THE NIGHTLY RUN IS WRITING
+-----------------------------------------------
+This UPDATEs a large slice of km_equity_eod. So do several pipeline steps.
+Two writers taking row locks in plan order will eventually pick them up in
+opposite orders and Postgres kills one -- seen live, 26 batches in. Batches
+now retry on deadlock rather than losing the run, but the cheapest fix is
+still to run this outside the 18:00 window.
+
     # Read-only summary of what is currently stored
     python scripts/backfill_stage_entry.py --verify
 
@@ -198,16 +214,56 @@ WHERE t.id = r.id
 """
 
 
-def run_backfill(batch_size: int) -> int:
+# A batch that loses a deadlock is retried, not abandoned. The partner is
+# whatever else writes km_equity_eod at the time -- the nightly run, another
+# backfill -- and the two take row locks in whatever order their plans choose,
+# so a collision is a matter of timing, not of anything being wrong. Postgres
+# kills one side; re-running it almost always succeeds because the partner has
+# moved on. Waits are long enough to let a whole pipeline step finish.
+DEADLOCK_RETRIES = 5
+DEADLOCK_BACKOFF_S = [5, 15, 45, 90, 180]
+
+
+def _symbols_to_process(conn, resume: bool) -> tuple[list[int], int]:
+    """Return (ids to process, count already done).
+
+    A symbol counts as done when ANY of its rows carries stage_run_bars --
+    which is written on every classified bar, and only ever committed a whole
+    batch at a time, so a symbol is either fully processed or untouched. There
+    is no half-written state for a resume to mistake for a finished one.
+
+    Symbols whose entire history is unclassified (stage NULL or 'UNKNOWN'
+    throughout -- young listings with no sma_200 yet) update zero rows and so
+    never carry the marker. They get re-attempted on every resume; that costs
+    a cheap no-op scan and is the honest tradeoff against a marker that would
+    have to lie about them being done.
+    """
+    with conn.cursor() as cur:
+        cur.execute("SELECT DISTINCT equity_id FROM km_equity_eod ORDER BY equity_id")
+        all_ids = [row[0] for row in cur.fetchall()]
+        if not resume:
+            return all_ids, 0
+        cur.execute("SELECT DISTINCT equity_id FROM km_equity_eod "
+                    "WHERE stage_run_bars IS NOT NULL")
+        done = {row[0] for row in cur.fetchall()}
+    return [i for i in all_ids if i not in done], len(done)
+
+
+def run_backfill(batch_size: int, resume: bool = True) -> int:
     conn = get_conn()
     try:
-        with conn.cursor() as cur:
-            cur.execute("SELECT DISTINCT equity_id FROM km_equity_eod ORDER BY equity_id")
-            ids = [row[0] for row in cur.fetchall()]
+        ids, already_done = _symbols_to_process(conn, resume)
 
         total = len(ids)
+        if total == 0:
+            print(f"\n[stage-entry] nothing to do — all {already_done:,} symbols "
+                  f"already carry stage entry data. Use --restart to reprocess.")
+            return 0
+
         batches = (total + batch_size - 1) // batch_size
         print(f"\n[stage-entry] {total:,} symbols in {batches} batches of {batch_size}.")
+        if already_done:
+            print(f"  Resuming — skipping {already_done:,} symbols already processed.")
         print(f"  MIN_SPELL = {MIN_SPELL} bars. Each batch carries each symbol's FULL")
         print(f"  history — date-chunking would silently truncate spells.\n")
 
@@ -215,10 +271,7 @@ def run_backfill(batch_size: int) -> int:
         updated = 0
         for i in range(0, total, batch_size):
             chunk = ids[i:i + batch_size]
-            with conn.cursor() as cur:
-                cur.execute(_SQL, {'ids': chunk, 'min_spell': MIN_SPELL, 'guard': PCT_GUARD})
-                n = cur.rowcount
-            conn.commit()
+            n = _run_one_batch(conn, chunk)
             updated += n
             done = min(i + batch_size, total)
             print(f"  [{done:>5}/{total}] {n:>9,} rows   "
@@ -228,6 +281,36 @@ def run_backfill(batch_size: int) -> int:
         return updated
     finally:
         conn.close()
+
+
+def _run_one_batch(conn, chunk: list[int]) -> int:
+    """Execute one batch, retrying a deadlock rather than losing the run."""
+    for attempt in range(DEADLOCK_RETRIES + 1):
+        try:
+            with conn.cursor() as cur:
+                cur.execute(_SQL, {'ids': chunk, 'min_spell': MIN_SPELL,
+                                   'guard': PCT_GUARD})
+                n = cur.rowcount
+            conn.commit()
+            return n
+        except psycopg2.errors.DeadlockDetected:
+            conn.rollback()
+            if attempt >= DEADLOCK_RETRIES:
+                raise
+            wait = DEADLOCK_BACKOFF_S[attempt]
+            print(f"    deadlock — another writer holds these rows; "
+                  f"retry {attempt + 1}/{DEADLOCK_RETRIES} in {wait}s", flush=True)
+            time.sleep(wait)
+        except psycopg2.Error:
+            # Anything else (a dropped socket, a statement timeout) aborts the
+            # transaction too. Roll back so the connection is usable, then let
+            # it surface -- resume picks up from the last committed batch.
+            try:
+                conn.rollback()
+            except psycopg2.Error:
+                pass
+            raise
+    raise RuntimeError('unreachable')
 
 
 def run_verify() -> None:
@@ -273,6 +356,10 @@ def main():
         description='Backfill stage entry date/price on km_equity_eod (migration 191).')
     parser.add_argument('--batch-size', type=int, default=250,
                         help='symbols per batch (default 250)')
+    parser.add_argument('--restart', action='store_true',
+                        help='reprocess every symbol instead of resuming '
+                             '(resume is the default — it skips symbols that '
+                             'already carry stage entry data)')
     parser.add_argument('--verify', action='store_true',
                         help='report what is stored; write nothing')
     args = parser.parse_args()
@@ -280,7 +367,7 @@ def main():
     if args.verify:
         run_verify()
     else:
-        run_backfill(args.batch_size)
+        run_backfill(args.batch_size, resume=not args.restart)
 
 
 if __name__ == '__main__':
