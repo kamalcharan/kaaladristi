@@ -111,6 +111,76 @@ const MIN_AVG_AMT_22D_CR = 1.0;
 
 // ── Utilities ─────────────────────────────────────────────────
 
+// PostgREST numerics reach the client as whatever the serialiser produced.
+// Passing them straight into ScanStock left number-typed fields holding text,
+// which is what made the sort comparators' string branch fire and order
+// MagicRS lexicographically ('8.8' above '56.7', negatives clumped at one
+// end). Coerce at the boundary so the declared type is the actual type and
+// nothing downstream has to defend itself.
+const toNum = (v: any): number | null =>
+  v == null || v === '' || Number.isNaN(Number(v)) ? null : Number(v);
+
+
+
+// ── Scanner-ready date ────────────────────────────────────────
+//
+// km_trading_calendar says "completed" at STEP 2 OF 22. The legacy
+// run_nse_pipeline marks the day the moment the bhavcopy is ingested
+// (daily_pipeline.py:526), and the twenty enrichment steps — indicators,
+// magic_rs, rolling metrics, stage, VaNi flags, dots, matview refresh — all
+// run after it. So from ~18:02 until the run ends, the calendar advertises a
+// date that has prices and nothing a scanner filters or ranks on.
+//
+// Measured live mid-run on 2026-08-27: 7,450 bars ingested, ema_20 7,166,
+// magic_rs 6,691 — but score_5d 0, avg_amt_22d 0, stage 0. Every direct
+// scanner pointed at that date and returned nothing.
+//
+// The fix is to stop trusting a status word and read the OUTPUT of the last
+// step that builds the scanner surface. `scan_refresh` is step 36 of 38,
+// after dots (35) and vani_flags (25) and rolling_metrics (22), so the newest
+// trade_date in km_scan_results IS "the newest date every scanner input
+// exists for". One tiny query, no heuristics, and it cannot drift from the
+// pipeline because it is produced by it.
+//
+// If the matview is unavailable this returns null and callers fall back to
+// the calendar exactly as before — a probe failure must never freeze the app.
+// Deliberately SHORT. This cache exists only to collapse the eleven calls
+// fetchRecentDates makes within one page load into one query — React Query's
+// useScanReadyDate owns the real caching and the 60s poll. Matching its 60s
+// here would stack two TTLs and could leave the poll reading a value up to a
+// minute old, delaying the swap onto the new session at the end of the run.
+const SCAN_READY_TTL_MS = 10_000;
+let _scanReadyCache: { at: number; value: Promise<string | null> } | null = null;
+
+export function fetchScanReadyDate(): Promise<string | null> {
+  const now = Date.now();
+  if (_scanReadyCache && now - _scanReadyCache.at < SCAN_READY_TTL_MS) {
+    return _scanReadyCache.value;
+  }
+  // Cached as a PROMISE, not a value: eleven fetchers call fetchRecentDates
+  // within one page load, and caching the value would still let all eleven
+  // fire the query before the first resolved.
+  const value = (async (): Promise<string | null> => {
+    try {
+      const { data, error } = await from('km_scan_results')
+        .select('trade_date')
+        .order('trade_date', { ascending: false })
+        .limit(1)
+        .execute();
+      if (error || !Array.isArray(data) || data.length === 0) return null;
+      return (data[0] as { trade_date?: string }).trade_date ?? null;
+    } catch {
+      return null;
+    }
+  })();
+  _scanReadyCache = { at: now, value };
+  return value;
+}
+
+// Extra calendar rows fetched so that capping at the scanner-ready date still
+// leaves `limit` of them. Two in-flight days is already generous — the cap
+// normally removes one.
+const SCAN_READY_HEADROOM = 3;
 
 // 3b: Fetch trading dates from km_trading_calendar — exchange-aware, exact count
 //
@@ -129,16 +199,26 @@ const MIN_AVG_AMT_22D_CR = 1.0;
 // still excluded — that status means eod_download itself didn't happen,
 // so there's genuinely nothing usable for that date.
 async function fetchRecentDates(limit: number): Promise<string[]> {
-  const { data } = await from('km_trading_calendar')
-    .select('trade_date')
-    .in('status', ['completed', 'partial'])
-    .eq('exchange', 'NSE')
-    .order('trade_date', { ascending: false })
-    .limit(limit)
-    .execute();
+  const [calendar, readyDate] = await Promise.all([
+    from('km_trading_calendar')
+      .select('trade_date')
+      .in('status', ['completed', 'partial'])
+      .eq('exchange', 'NSE')
+      .order('trade_date', { ascending: false })
+      .limit(limit + SCAN_READY_HEADROOM)
+      .execute(),
+    fetchScanReadyDate(),
+  ]);
 
-  const rows = (data ?? []) as { trade_date: string }[];
-  return rows.map((r) => r.trade_date).sort((a, b) => b.localeCompare(a));
+  const rows = (calendar.data ?? []) as { trade_date: string }[];
+  const dates = rows.map((r) => r.trade_date).sort((a, b) => b.localeCompare(a));
+
+  // Drop dates the pipeline has ingested but not yet enriched. Applies to the
+  // multi-date callers too (Flower Pot's ~72-session window, the confluence
+  // lookback): a bar whose indicators are still NULL is not a usable bar for
+  // them either.
+  const usable = readyDate ? dates.filter((d) => d <= readyDate) : dates;
+  return usable.slice(0, limit);
 }
 
 // ── VaNi Opportunity Rule — data-driven ────────────────────────
@@ -313,33 +393,33 @@ async function fetchBreakoutSurge(exchangeFilter: ExchangeFilter): Promise<ScanS
       open:                 row.open ?? null,
       high:                 row.high ?? null,
       low:                  row.low ?? null,
-      pct_chng:             row.pct_chng ?? null,
-      magic_rs:             row.magic_rs ?? null,
+      pct_chng:             toNum(row.pct_chng),
+      magic_rs:             toNum(row.magic_rs),
       magic_rs_zone:        row.magic_rs_zone ?? null,
-      rss_value:            row.rss_value ?? null,
-      rss_spread:           row.rss_spread ?? null,
-      rsi_14:               row.rsi_14 ?? null,
-      rvol:                 row.rvol ?? null,
+      rss_value:            toNum(row.rss_value),
+      rss_spread:           toNum(row.rss_spread),
+      rsi_14:               toNum(row.rsi_14),
+      rvol:                 toNum(row.rvol),
       flow_type:            row.flow_type ?? null,
       supertrend_dir:       row.supertrend_dir ?? null,
-      sma_50:               row.sma_50 ?? null,
-      sma_150:              row.sma_150 ?? null,
-      sma_200:              row.sma_200 ?? null,
+      sma_50:               toNum(row.sma_50),
+      sma_150:              toNum(row.sma_150),
+      sma_200:              toNum(row.sma_200),
       ema_20:               ema20,
       atr_14:               atr14,
-      w52_high:             row.w52_high ?? null,
-      w52_low:              row.w52_low ?? null,
-      lifetime_high:        row.lifetime_high ?? null,
-      avg_amt_5d:           row.avg_amt_5d ?? null,
-      avg_amt_22d:          row.avg_amt_22d ?? null,
-      avg_amt_66d:          row.avg_amt_66d ?? null,
-      delivery_surge_x:     row.delivery_surge_x ?? null,
-      sniper_inst:          row.sniper_inst ?? null,
-      sniper_hot:           row.sniper_hot ?? null,
+      w52_high:             toNum(row.w52_high),
+      w52_low:              toNum(row.w52_low),
+      lifetime_high:        toNum(row.lifetime_high),
+      avg_amt_5d:           toNum(row.avg_amt_5d),
+      avg_amt_22d:          toNum(row.avg_amt_22d),
+      avg_amt_66d:          toNum(row.avg_amt_66d),
+      delivery_surge_x:     toNum(row.delivery_surge_x),
+      sniper_inst:          toNum(row.sniper_inst),
+      sniper_hot:           toNum(row.sniper_hot),
       accum_distrib:        row.accum_distrib ?? null,
       volume_divergence_flag: row.volume_divergence_flag ?? null,
-      delivery_pct:         row.delivery_pct ?? null,
-      deliv_value_cr:       row.deliv_value_cr ?? null,
+      delivery_pct:         toNum(row.delivery_pct),
+      deliv_value_cr:       toNum(row.deliv_value_cr),
       has_recent_svd:       !!row.dot_svd,
       has_recent_sbd:       !!row.dot_sbd,
       has_recent_syd:       !!row.dot_syd,
@@ -357,6 +437,12 @@ async function fetchBreakoutSurge(exchangeFilter: ExchangeFilter): Promise<ScanS
       rel_5d_n500:          null, rel_22d_n500: null, rel_66d_n500: null,
       vaniOpportunity:      computeVaniOpportunity(row, vaniRule),
       stage:                row.stage ?? null,
+      stage_confirmed:      row.stage_confirmed ?? null,
+      stage_since:          row.stage_since ?? null,
+      stage_since_close:    row.stage_since_close != null ? Number(row.stage_since_close) : null,
+      stage_bars:           row.stage_bars != null ? Number(row.stage_bars) : null,
+      pct_from_stage_entry: row.pct_from_stage_entry != null ? Number(row.pct_from_stage_entry) : null,
+      stage_since_censored: row.stage_since_censored === true,
       d_pct:                row.pct_chng != null ? Math.round(Number(row.pct_chng) * 100) / 100 : null,
       breakout_level:       row.breakout_level    != null ? Number(row.breakout_level)    : null,
       pct_from_breakout:    row.pct_from_breakout != null ? Number(row.pct_from_breakout) : null,
@@ -473,33 +559,33 @@ async function fetchBreakdownWatch(exchangeFilter: ExchangeFilter): Promise<Scan
       open: row.open ?? null,
       high: row.high ?? null,
       low: row.low ?? null,
-      pct_chng: row.pct_chng ?? null,
-      magic_rs: row.magic_rs ?? null,
+      pct_chng: toNum(row.pct_chng),
+      magic_rs: toNum(row.magic_rs),
       magic_rs_zone: row.magic_rs_zone ?? null,
-      rss_value: row.rss_value ?? null,
-      rss_spread: row.rss_spread ?? null,
-      rsi_14: row.rsi_14 ?? null,
-      rvol: row.rvol ?? null,
+      rss_value: toNum(row.rss_value),
+      rss_spread: toNum(row.rss_spread),
+      rsi_14: toNum(row.rsi_14),
+      rvol: toNum(row.rvol),
       flow_type: row.flow_type ?? null,
       supertrend_dir: row.supertrend_dir ?? null,
-      sma_50: row.sma_50 ?? null,
-      sma_150: row.sma_150 ?? null,
-      sma_200: row.sma_200 ?? null,
+      sma_50: toNum(row.sma_50),
+      sma_150: toNum(row.sma_150),
+      sma_200: toNum(row.sma_200),
       ema_20: ema20,
       atr_14: atr14,
-      w52_high: row.w52_high ?? null,
-      w52_low: row.w52_low ?? null,
-      lifetime_high: row.lifetime_high ?? null,
-      avg_amt_5d: row.avg_amt_5d ?? null,
-      avg_amt_22d: row.avg_amt_22d ?? null,
-      avg_amt_66d: row.avg_amt_66d ?? null,
-      delivery_surge_x: row.delivery_surge_x ?? null,
-      sniper_inst: row.sniper_inst ?? null,
-      sniper_hot: row.sniper_hot ?? null,
+      w52_high: toNum(row.w52_high),
+      w52_low: toNum(row.w52_low),
+      lifetime_high: toNum(row.lifetime_high),
+      avg_amt_5d: toNum(row.avg_amt_5d),
+      avg_amt_22d: toNum(row.avg_amt_22d),
+      avg_amt_66d: toNum(row.avg_amt_66d),
+      delivery_surge_x: toNum(row.delivery_surge_x),
+      sniper_inst: toNum(row.sniper_inst),
+      sniper_hot: toNum(row.sniper_hot),
       accum_distrib: row.accum_distrib ?? null,
       volume_divergence_flag: row.volume_divergence_flag ?? null,
-      delivery_pct: row.delivery_pct ?? null,
-      deliv_value_cr: row.deliv_value_cr ?? null,
+      delivery_pct: toNum(row.delivery_pct),
+      deliv_value_cr: toNum(row.deliv_value_cr),
       has_recent_svd: !!row.dot_svd,
       has_recent_sbd: !!row.dot_sbd,
       has_recent_syd: !!row.dot_syd,
@@ -517,6 +603,12 @@ async function fetchBreakdownWatch(exchangeFilter: ExchangeFilter): Promise<Scan
       rel_5d_n500: null, rel_22d_n500: null, rel_66d_n500: null,
       vaniOpportunity: computeVaniOpportunity(row, vaniRule),
       stage: row.stage ?? null,
+      stage_confirmed: row.stage_confirmed ?? null,
+      stage_since: row.stage_since ?? null,
+      stage_since_close: row.stage_since_close != null ? Number(row.stage_since_close) : null,
+      stage_bars: row.stage_bars != null ? Number(row.stage_bars) : null,
+      pct_from_stage_entry: row.pct_from_stage_entry != null ? Number(row.pct_from_stage_entry) : null,
+      stage_since_censored: row.stage_since_censored === true,
       d_pct: row.pct_chng != null ? Math.round(Number(row.pct_chng) * 100) / 100 : null,
       breakout_level: row.breakout_level != null ? Number(row.breakout_level) : null,
       pct_from_breakout: row.pct_from_breakout != null ? Number(row.pct_from_breakout) : null,
@@ -652,33 +744,33 @@ async function fetchPeriodMovers(
       open:                 row.open ?? null,
       high:                 row.high ?? null,
       low:                  row.low ?? null,
-      pct_chng:             row.pct_chng ?? null,
-      magic_rs:             row.magic_rs ?? null,
+      pct_chng:             toNum(row.pct_chng),
+      magic_rs:             toNum(row.magic_rs),
       magic_rs_zone:        row.magic_rs_zone ?? null,
-      rss_value:            row.rss_value ?? null,
-      rss_spread:           row.rss_spread ?? null,
-      rsi_14:               row.rsi_14 ?? null,
-      rvol:                 row.rvol ?? null,
+      rss_value:            toNum(row.rss_value),
+      rss_spread:           toNum(row.rss_spread),
+      rsi_14:               toNum(row.rsi_14),
+      rvol:                 toNum(row.rvol),
       flow_type:            row.flow_type ?? null,
       supertrend_dir:       row.supertrend_dir ?? null,
-      sma_50:               row.sma_50 ?? null,
-      sma_150:              row.sma_150 ?? null,
-      sma_200:              row.sma_200 ?? null,
+      sma_50:               toNum(row.sma_50),
+      sma_150:              toNum(row.sma_150),
+      sma_200:              toNum(row.sma_200),
       ema_20:               ema20,
       atr_14:               atr14,
-      w52_high:             row.w52_high ?? null,
-      w52_low:              row.w52_low ?? null,
-      lifetime_high:        row.lifetime_high ?? null,
-      avg_amt_5d:           row.avg_amt_5d ?? null,
-      avg_amt_22d:          row.avg_amt_22d ?? null,
-      avg_amt_66d:          row.avg_amt_66d ?? null,
-      delivery_surge_x:     row.delivery_surge_x ?? null,
-      sniper_inst:          row.sniper_inst ?? null,
-      sniper_hot:           row.sniper_hot ?? null,
+      w52_high:             toNum(row.w52_high),
+      w52_low:              toNum(row.w52_low),
+      lifetime_high:        toNum(row.lifetime_high),
+      avg_amt_5d:           toNum(row.avg_amt_5d),
+      avg_amt_22d:          toNum(row.avg_amt_22d),
+      avg_amt_66d:          toNum(row.avg_amt_66d),
+      delivery_surge_x:     toNum(row.delivery_surge_x),
+      sniper_inst:          toNum(row.sniper_inst),
+      sniper_hot:           toNum(row.sniper_hot),
       accum_distrib:        row.accum_distrib ?? null,
       volume_divergence_flag: row.volume_divergence_flag ?? null,
-      delivery_pct:         row.delivery_pct ?? null,
-      deliv_value_cr:       row.deliv_value_cr ?? null,
+      delivery_pct:         toNum(row.delivery_pct),
+      deliv_value_cr:       toNum(row.deliv_value_cr),
       has_recent_svd:       !!row.dot_svd,
       has_recent_sbd:       !!row.dot_sbd,
       has_recent_syd:       !!row.dot_syd,
@@ -696,6 +788,12 @@ async function fetchPeriodMovers(
       rel_5d_n500:          null, rel_22d_n500: null, rel_66d_n500: null,
       vaniOpportunity:      computeVaniOpportunity(row, vaniRule),
       stage:                row.stage ?? null,
+      stage_confirmed:      row.stage_confirmed ?? null,
+      stage_since:          row.stage_since ?? null,
+      stage_since_close:    row.stage_since_close != null ? Number(row.stage_since_close) : null,
+      stage_bars:           row.stage_bars != null ? Number(row.stage_bars) : null,
+      pct_from_stage_entry: row.pct_from_stage_entry != null ? Number(row.pct_from_stage_entry) : null,
+      stage_since_censored: row.stage_since_censored === true,
       d_pct:                row.pct_chng != null ? Math.round(Number(row.pct_chng) * 100) / 100 : null,
       breakout_level:       row.breakout_level    != null ? Number(row.breakout_level)    : null,
       pct_from_breakout:    row.pct_from_breakout != null ? Number(row.pct_from_breakout) : null,
@@ -835,33 +933,33 @@ async function fetchVolumeDrive(exchangeFilter: ExchangeFilter): Promise<ScanSto
       open:                 row.open ?? null,
       high:                 row.high ?? null,
       low:                  row.low ?? null,
-      pct_chng:             row.pct_chng ?? null,
-      magic_rs:             row.magic_rs ?? null,
+      pct_chng:             toNum(row.pct_chng),
+      magic_rs:             toNum(row.magic_rs),
       magic_rs_zone:        row.magic_rs_zone ?? null,
-      rss_value:            row.rss_value ?? null,
-      rss_spread:           row.rss_spread ?? null,
-      rsi_14:               row.rsi_14 ?? null,
-      rvol:                 row.rvol ?? null,
+      rss_value:            toNum(row.rss_value),
+      rss_spread:           toNum(row.rss_spread),
+      rsi_14:               toNum(row.rsi_14),
+      rvol:                 toNum(row.rvol),
       flow_type:            row.flow_type ?? null,
       supertrend_dir:       row.supertrend_dir ?? null,
-      sma_50:               row.sma_50 ?? null,
-      sma_150:              row.sma_150 ?? null,
-      sma_200:              row.sma_200 ?? null,
+      sma_50:               toNum(row.sma_50),
+      sma_150:              toNum(row.sma_150),
+      sma_200:              toNum(row.sma_200),
       ema_20:               ema20,
       atr_14:               atr14,
-      w52_high:             row.w52_high ?? null,
-      w52_low:              row.w52_low ?? null,
-      lifetime_high:        row.lifetime_high ?? null,
-      avg_amt_5d:           row.avg_amt_5d ?? null,
-      avg_amt_22d:          row.avg_amt_22d ?? null,
-      avg_amt_66d:          row.avg_amt_66d ?? null,
-      delivery_surge_x:     row.delivery_surge_x ?? null,
-      sniper_inst:          row.sniper_inst ?? null,
-      sniper_hot:           row.sniper_hot ?? null,
+      w52_high:             toNum(row.w52_high),
+      w52_low:              toNum(row.w52_low),
+      lifetime_high:        toNum(row.lifetime_high),
+      avg_amt_5d:           toNum(row.avg_amt_5d),
+      avg_amt_22d:          toNum(row.avg_amt_22d),
+      avg_amt_66d:          toNum(row.avg_amt_66d),
+      delivery_surge_x:     toNum(row.delivery_surge_x),
+      sniper_inst:          toNum(row.sniper_inst),
+      sniper_hot:           toNum(row.sniper_hot),
       accum_distrib:        row.accum_distrib ?? null,
       volume_divergence_flag: row.volume_divergence_flag ?? null,
-      delivery_pct:         row.delivery_pct ?? null,
-      deliv_value_cr:       row.deliv_value_cr ?? null,
+      delivery_pct:         toNum(row.delivery_pct),
+      deliv_value_cr:       toNum(row.deliv_value_cr),
       has_recent_svd:       !!row.dot_svd,
       has_recent_sbd:       !!row.dot_sbd,
       has_recent_syd:       !!row.dot_syd,
@@ -883,6 +981,12 @@ async function fetchVolumeDrive(exchangeFilter: ExchangeFilter): Promise<ScanSto
       rel_5d_n500:          null, rel_22d_n500: null, rel_66d_n500: null,
       vaniOpportunity:      computeVaniOpportunity(row, vaniRule),
       stage:                row.stage ?? null,
+      stage_confirmed:      row.stage_confirmed ?? null,
+      stage_since:          row.stage_since ?? null,
+      stage_since_close:    row.stage_since_close != null ? Number(row.stage_since_close) : null,
+      stage_bars:           row.stage_bars != null ? Number(row.stage_bars) : null,
+      pct_from_stage_entry: row.pct_from_stage_entry != null ? Number(row.pct_from_stage_entry) : null,
+      stage_since_censored: row.stage_since_censored === true,
       d_pct:                row.pct_chng != null ? Math.round(Number(row.pct_chng) * 100) / 100 : null,
       breakout_level:       row.breakout_level    != null ? Number(row.breakout_level)    : null,
       pct_from_breakout:    row.pct_from_breakout != null ? Number(row.pct_from_breakout) : null,
@@ -920,6 +1024,8 @@ async function fetchStage2Leaders(exchangeFilter: ExchangeFilter): Promise<ScanS
       'volume_divergence_flag', 'delivery_pct',
       'dot_svd', 'dot_sbd', 'dot_syd',
       'stage', 'is_vani_s2', 'rs_percentile',
+      'stage_confirmed', 'stage_since', 'stage_since_close', 'stage_bars',
+      'pct_from_stage_entry', 'stage_since_censored',
       'score_5d', 'score_22d',
       'km_equity_symbols(id,symbol,company_name,exchange,industry,mcap_cr,isin)',
     ].join(','))
@@ -973,31 +1079,31 @@ async function fetchStage2Leaders(exchangeFilter: ExchangeFilter): Promise<ScanS
       open:                 row.open ?? null,
       high:                 row.high ?? null,
       low:                  row.low ?? null,
-      pct_chng:             row.pct_chng ?? null,
-      magic_rs:             row.magic_rs ?? null,
+      pct_chng:             toNum(row.pct_chng),
+      magic_rs:             toNum(row.magic_rs),
       magic_rs_zone:        row.magic_rs_zone ?? null,
-      rss_value:            row.rss_value ?? null,
-      rss_spread:           row.rss_spread ?? null,
-      rsi_14:               row.rsi_14 ?? null,
-      rvol:                 row.rvol ?? null,
+      rss_value:            toNum(row.rss_value),
+      rss_spread:           toNum(row.rss_spread),
+      rsi_14:               toNum(row.rsi_14),
+      rvol:                 toNum(row.rvol),
       flow_type:            row.flow_type ?? null,
       supertrend_dir:       row.supertrend_dir ?? null,
-      sma_50:               row.sma_50 ?? null,
-      sma_200:              row.sma_200 ?? null,
-      sma_150:              row.sma_150 ?? null,
+      sma_50:               toNum(row.sma_50),
+      sma_200:              toNum(row.sma_200),
+      sma_150:              toNum(row.sma_150),
       ema_20:               ema20,
       atr_14:               atr14,
-      w52_high:             row.w52_high ?? null,
-      w52_low:              row.w52_low ?? null,
-      lifetime_high:        row.lifetime_high ?? null,
-      avg_amt_5d:           row.avg_amt_5d ?? null,
-      avg_amt_22d:          row.avg_amt_22d ?? null,
-      delivery_surge_x:     row.delivery_surge_x ?? null,
-      sniper_inst:          row.sniper_inst ?? null,
-      sniper_hot:           row.sniper_hot ?? null,
+      w52_high:             toNum(row.w52_high),
+      w52_low:              toNum(row.w52_low),
+      lifetime_high:        toNum(row.lifetime_high),
+      avg_amt_5d:           toNum(row.avg_amt_5d),
+      avg_amt_22d:          toNum(row.avg_amt_22d),
+      delivery_surge_x:     toNum(row.delivery_surge_x),
+      sniper_inst:          toNum(row.sniper_inst),
+      sniper_hot:           toNum(row.sniper_hot),
       accum_distrib:        row.accum_distrib ?? null,
       volume_divergence_flag: row.volume_divergence_flag ?? null,
-      delivery_pct:         row.delivery_pct ?? null,
+      delivery_pct:         toNum(row.delivery_pct),
       has_recent_svd:       !!row.dot_svd,
       has_recent_sbd:       !!row.dot_sbd,
       has_recent_syd:       !!row.dot_syd,
@@ -1012,8 +1118,14 @@ async function fetchStage2Leaders(exchangeFilter: ExchangeFilter): Promise<ScanS
       rel_5d_n50:           null, rel_22d_n50:  null, rel_66d_n50:  null,
       rel_5d_n500:          null, rel_22d_n500: null, rel_66d_n500: null,
       vaniOpportunity:      computeVaniOpportunity(row, getPresetMeta('stage_2_leaders')?.vani_rule),
-      rs_percentile:        row.rs_percentile ?? null,
+      rs_percentile:        toNum(row.rs_percentile),
       stage:                row.stage ?? null,
+      stage_confirmed:      row.stage_confirmed ?? null,
+      stage_since:          row.stage_since ?? null,
+      stage_since_close:    row.stage_since_close != null ? Number(row.stage_since_close) : null,
+      stage_bars:           row.stage_bars != null ? Number(row.stage_bars) : null,
+      pct_from_stage_entry: row.pct_from_stage_entry != null ? Number(row.pct_from_stage_entry) : null,
+      stage_since_censored: row.stage_since_censored === true,
       is_vani_s2:           row.is_vani_s2 ?? null,
     };
   });
@@ -1040,6 +1152,8 @@ async function fetchStage2Watch(exchangeFilter: ExchangeFilter): Promise<ScanSto
       // SELECT does not fetch reads as undefined and the chip stays dark, so
       // the rule change is only half the fix — the column has to come with it.
       'stage', 'rs_percentile', 'chartink_score', 'is_vani_s2', 'is_vani_smart',
+      'stage_confirmed', 'stage_since', 'stage_since_close', 'stage_bars',
+      'pct_from_stage_entry', 'stage_since_censored',
       'score_5d', 'score_22d',
       'km_equity_symbols(id,symbol,company_name,exchange,industry,mcap_cr,isin)',
     ].join(','))
@@ -1089,22 +1203,22 @@ async function fetchStage2Watch(exchangeFilter: ExchangeFilter): Promise<ScanSto
       industry: sym?.industry ?? null,
       exchange: sym?.exchange ?? null, mcap_cr: sym?.mcap_cr ?? null,
       close: row.close, open: row.open ?? null, high: row.high ?? null, low: row.low ?? null,
-      pct_chng: row.pct_chng ?? null,
-      magic_rs: row.magic_rs ?? null, magic_rs_zone: row.magic_rs_zone ?? null,
-      rss_value: row.rss_value ?? null, rss_spread: row.rss_spread ?? null,
-      rsi_14: row.rsi_14 ?? null, rvol: row.rvol ?? null,
-      flow_type: row.flow_type ?? null, sniper_inst: row.sniper_inst ?? null,
-      sniper_hot: row.sniper_hot ?? null,
+      pct_chng: toNum(row.pct_chng),
+      magic_rs: toNum(row.magic_rs), magic_rs_zone: row.magic_rs_zone ?? null,
+      rss_value: toNum(row.rss_value), rss_spread: toNum(row.rss_spread),
+      rsi_14: toNum(row.rsi_14), rvol: toNum(row.rvol),
+      flow_type: row.flow_type ?? null, sniper_inst: toNum(row.sniper_inst),
+      sniper_hot: toNum(row.sniper_hot),
       accum_distrib: row.accum_distrib ?? null,
       volume_divergence_flag: row.volume_divergence_flag ?? null,
-      sma_50: row.sma_50 ?? null, sma_150: row.sma_150 ?? null,
-      sma_200: row.sma_200 ?? null, ema_20: ema20, atr_14: atr14,
-      w52_high: row.w52_high ?? null, w52_low: row.w52_low ?? null,
-      lifetime_high: row.lifetime_high ?? null,
-      delivery_pct: row.delivery_pct ?? null, supertrend_dir: row.supertrend_dir ?? null,
+      sma_50: toNum(row.sma_50), sma_150: toNum(row.sma_150),
+      sma_200: toNum(row.sma_200), ema_20: ema20, atr_14: atr14,
+      w52_high: toNum(row.w52_high), w52_low: toNum(row.w52_low),
+      lifetime_high: toNum(row.lifetime_high),
+      delivery_pct: toNum(row.delivery_pct), supertrend_dir: row.supertrend_dir ?? null,
       has_recent_svd: !!row.dot_svd, has_recent_sbd: !!row.dot_sbd, has_recent_syd: !!row.dot_syd,
-      avg_amt_5d: row.avg_amt_5d ?? null, avg_amt_22d: row.avg_amt_22d ?? null,
-      delivery_surge_x: row.delivery_surge_x ?? null,
+      avg_amt_5d: toNum(row.avg_amt_5d), avg_amt_22d: toNum(row.avg_amt_22d),
+      delivery_surge_x: toNum(row.delivery_surge_x),
       avg_amt_66d: null, xAmt: null,
       rel_5d_n50: null, rel_22d_n50: null, rel_66d_n50: null,
       rel_5d_n500: null, rel_22d_n500: null, rel_66d_n500: null,
@@ -1115,8 +1229,14 @@ async function fetchStage2Watch(exchangeFilter: ExchangeFilter): Promise<ScanSto
       rewardPct: ema20 && atr14 && atr14 > 0 ? ((ema20 + atr14) - row.close) / atr14 : null,
       pctBelow52wHigh,
       vaniOpportunity: computeVaniOpportunity(row, getPresetMeta('stage_2_watch')?.vani_rule),
-      rs_percentile: row.rs_percentile ?? null,
+      rs_percentile: toNum(row.rs_percentile),
       stage: row.stage ?? null,
+      stage_confirmed: row.stage_confirmed ?? null,
+      stage_since: row.stage_since ?? null,
+      stage_since_close: row.stage_since_close != null ? Number(row.stage_since_close) : null,
+      stage_bars: row.stage_bars != null ? Number(row.stage_bars) : null,
+      pct_from_stage_entry: row.pct_from_stage_entry != null ? Number(row.pct_from_stage_entry) : null,
+      stage_since_censored: row.stage_since_censored === true,
       sma200_rising: row.sma200_rising ?? null,
       chartink_score: row.chartink_score ?? null,
       is_vani_s2: row.is_vani_s2 ?? null,
@@ -1134,6 +1254,8 @@ async function fetchStage4Leaders(exchangeFilter: ExchangeFilter): Promise<ScanS
   const { data: rows } = await from('km_equity_eod')
     .select([
       'equity_id', 'trade_date', 'close', 'stage',
+      'stage_confirmed', 'stage_since', 'stage_since_close', 'stage_bars',
+      'pct_from_stage_entry', 'stage_since_censored',
       'open', 'high', 'low', 'pct_chng',
       'sma_50', 'sma_150', 'sma_200', 'sma200_rising',
       'magic_rs', 'magic_rs_zone', 'rs_percentile',
@@ -1199,32 +1321,32 @@ async function fetchStage4Leaders(exchangeFilter: ExchangeFilter): Promise<ScanS
       open:                 row.open ?? null,
       high:                 row.high ?? null,
       low:                  row.low ?? null,
-      pct_chng:             row.pct_chng ?? null,
-      magic_rs:             row.magic_rs ?? null,
+      pct_chng:             toNum(row.pct_chng),
+      magic_rs:             toNum(row.magic_rs),
       magic_rs_zone:        row.magic_rs_zone ?? null,
-      rss_value:            row.rss_value ?? null,
-      rss_spread:           row.rss_spread ?? null,
-      rsi_14:               row.rsi_14 ?? null,
-      rvol:                 row.rvol ?? null,
+      rss_value:            toNum(row.rss_value),
+      rss_spread:           toNum(row.rss_spread),
+      rsi_14:               toNum(row.rsi_14),
+      rvol:                 toNum(row.rvol),
       flow_type:            row.flow_type ?? null,
       supertrend_dir:       row.supertrend_dir ?? null,
-      sma_50:               row.sma_50 ?? null,
-      sma_150:              row.sma_150 ?? null,
-      sma_200:              row.sma_200 ?? null,
+      sma_50:               toNum(row.sma_50),
+      sma_150:              toNum(row.sma_150),
+      sma_200:              toNum(row.sma_200),
       sma200_rising:        row.sma200_rising ?? null,
       ema_20:               ema20,
       atr_14:               atr14,
-      w52_high:             row.w52_high ?? null,
-      w52_low:              row.w52_low ?? null,
-      lifetime_high:        row.lifetime_high ?? null,
-      avg_amt_5d:           row.avg_amt_5d ?? null,
-      avg_amt_22d:          row.avg_amt_22d ?? null,
-      delivery_surge_x:     row.delivery_surge_x ?? null,
-      sniper_inst:          row.sniper_inst ?? null,
-      sniper_hot:           row.sniper_hot ?? null,
+      w52_high:             toNum(row.w52_high),
+      w52_low:              toNum(row.w52_low),
+      lifetime_high:        toNum(row.lifetime_high),
+      avg_amt_5d:           toNum(row.avg_amt_5d),
+      avg_amt_22d:          toNum(row.avg_amt_22d),
+      delivery_surge_x:     toNum(row.delivery_surge_x),
+      sniper_inst:          toNum(row.sniper_inst),
+      sniper_hot:           toNum(row.sniper_hot),
       accum_distrib:        row.accum_distrib ?? null,
       volume_divergence_flag: row.volume_divergence_flag ?? null,
-      delivery_pct:         row.delivery_pct ?? null,
+      delivery_pct:         toNum(row.delivery_pct),
       has_recent_svd:       !!row.dot_svd,
       has_recent_sbd:       !!row.dot_sbd,
       has_recent_syd:       !!row.dot_syd,
@@ -1239,8 +1361,14 @@ async function fetchStage4Leaders(exchangeFilter: ExchangeFilter): Promise<ScanS
       rel_5d_n50:           null, rel_22d_n50:  null, rel_66d_n50:  null,
       rel_5d_n500:          null, rel_22d_n500: null, rel_66d_n500: null,
       vaniOpportunity:      computeVaniOpportunity(row, getPresetMeta('stage_4_leaders')?.vani_rule),
-      rs_percentile:        row.rs_percentile ?? null,
+      rs_percentile:        toNum(row.rs_percentile),
       stage:                row.stage ?? null,
+      stage_confirmed:      row.stage_confirmed ?? null,
+      stage_since:          row.stage_since ?? null,
+      stage_since_close:    row.stage_since_close != null ? Number(row.stage_since_close) : null,
+      stage_bars:           row.stage_bars != null ? Number(row.stage_bars) : null,
+      pct_from_stage_entry: row.pct_from_stage_entry != null ? Number(row.pct_from_stage_entry) : null,
+      stage_since_censored: row.stage_since_censored === true,
       is_vani_weakness:     row.is_vani_weakness ?? null,
       is_vani_distrib:      row.is_vani_distrib ?? null,
       is_vani_surge:        row.is_vani_surge ?? null,
@@ -1260,6 +1388,8 @@ async function fetchStage3Watch(exchangeFilter: ExchangeFilter): Promise<ScanSto
   const { data: rows } = await from('km_equity_eod')
     .select([
       'equity_id', 'trade_date', 'close', 'stage',
+      'stage_confirmed', 'stage_since', 'stage_since_close', 'stage_bars',
+      'pct_from_stage_entry', 'stage_since_censored',
       'pct_chng', 'magic_rs', 'magic_rs_zone', 'rs_percentile',
       'rss_value', 'rss_spread',
       'sma_50', 'sma_150', 'sma_200', 'sma200_rising',
@@ -1326,29 +1456,29 @@ async function fetchStage3Watch(exchangeFilter: ExchangeFilter): Promise<ScanSto
       trade_date:           row.trade_date,
       close:                row.close,
       open:                 null, high: null, low: null,
-      pct_chng:             row.pct_chng ?? null,
-      magic_rs:             row.magic_rs ?? null,
+      pct_chng:             toNum(row.pct_chng),
+      magic_rs:             toNum(row.magic_rs),
       magic_rs_zone:        row.magic_rs_zone ?? null,
-      rss_value:            row.rss_value ?? null, rss_spread: row.rss_spread ?? null,
-      rsi_14:               row.rsi_14 ?? null,
-      rvol:                 row.rvol ?? null,
+      rss_value:            toNum(row.rss_value), rss_spread: toNum(row.rss_spread),
+      rsi_14:               toNum(row.rsi_14),
+      rvol:                 toNum(row.rvol),
       flow_type:            row.flow_type ?? null,
       supertrend_dir:       row.supertrend_dir ?? null,
-      sma_50:               row.sma_50 ?? null,
-      sma_150:              row.sma_150 ?? null,
-      sma_200:              row.sma_200 ?? null,
+      sma_50:               toNum(row.sma_50),
+      sma_150:              toNum(row.sma_150),
+      sma_200:              toNum(row.sma_200),
       sma200_rising:        row.sma200_rising ?? null,
       ema_20:               ema20,
       atr_14:               atr14,
-      w52_high:             row.w52_high ?? null,
-      w52_low:              row.w52_low ?? null,
+      w52_high:             toNum(row.w52_high),
+      w52_low:              toNum(row.w52_low),
       lifetime_high:        null,
       avg_amt_5d:           null, avg_amt_22d: null, delivery_surge_x: null,
-      sniper_inst:          row.sniper_inst ?? null,
-      sniper_hot:           row.sniper_hot ?? null,
+      sniper_inst:          toNum(row.sniper_inst),
+      sniper_hot:           toNum(row.sniper_hot),
       accum_distrib:        row.accum_distrib ?? null,
       volume_divergence_flag: row.volume_divergence_flag ?? null,
-      delivery_pct:         row.delivery_pct ?? null,
+      delivery_pct:         toNum(row.delivery_pct),
       has_recent_svd:       !!row.dot_svd,
       has_recent_sbd:       !!row.dot_sbd,
       has_recent_syd:       !!row.dot_syd,
@@ -1362,8 +1492,14 @@ async function fetchStage3Watch(exchangeFilter: ExchangeFilter): Promise<ScanSto
       rel_5d_n50:           null, rel_22d_n50:  null, rel_66d_n50:  null,
       rel_5d_n500:          null, rel_22d_n500: null, rel_66d_n500: null,
       vaniOpportunity:      computeVaniOpportunity(row, getPresetMeta('stage_3_watch')?.vani_rule),
-      rs_percentile:        row.rs_percentile ?? null,
+      rs_percentile:        toNum(row.rs_percentile),
       stage:                row.stage ?? null,
+      stage_confirmed:      row.stage_confirmed ?? null,
+      stage_since:          row.stage_since ?? null,
+      stage_since_close:    row.stage_since_close != null ? Number(row.stage_since_close) : null,
+      stage_bars:           row.stage_bars != null ? Number(row.stage_bars) : null,
+      pct_from_stage_entry: row.pct_from_stage_entry != null ? Number(row.pct_from_stage_entry) : null,
+      stage_since_censored: row.stage_since_censored === true,
       is_vani_weakness:     row.is_vani_weakness ?? null,
     };
   });
@@ -1378,6 +1514,8 @@ async function fetchVaNiExitWatch(exchangeFilter: ExchangeFilter): Promise<ScanS
   const { data: rows } = await from('km_equity_eod')
     .select([
       'equity_id', 'trade_date', 'close', 'stage',
+      'stage_confirmed', 'stage_since', 'stage_since_close', 'stage_bars',
+      'pct_from_stage_entry', 'stage_since_censored',
       'pct_chng', 'magic_rs', 'magic_rs_zone', 'rs_percentile',
       'rss_value', 'rss_spread',
       'sma_50', 'sma_150', 'sma_200',
@@ -1435,26 +1573,26 @@ async function fetchVaNiExitWatch(exchangeFilter: ExchangeFilter): Promise<ScanS
       trade_date:           row.trade_date,
       close:                row.close,
       open:                 null, high: null, low: null,
-      pct_chng:             row.pct_chng ?? null,
-      magic_rs:             row.magic_rs ?? null,
+      pct_chng:             toNum(row.pct_chng),
+      magic_rs:             toNum(row.magic_rs),
       magic_rs_zone:        row.magic_rs_zone ?? null,
-      rss_value:            row.rss_value ?? null, rss_spread: row.rss_spread ?? null,
-      rsi_14:               row.rsi_14 ?? null,
-      rvol:                 row.rvol ?? null,
+      rss_value:            toNum(row.rss_value), rss_spread: toNum(row.rss_spread),
+      rsi_14:               toNum(row.rsi_14),
+      rvol:                 toNum(row.rvol),
       flow_type:            row.flow_type ?? null,
       supertrend_dir:       null,
-      sma_50:               row.sma_50 ?? null,
-      sma_150:              row.sma_150 ?? null,
-      sma_200:              row.sma_200 ?? null,
+      sma_50:               toNum(row.sma_50),
+      sma_150:              toNum(row.sma_150),
+      sma_200:              toNum(row.sma_200),
       sma200_rising:        null,
       ema_20:               ema20,
       atr_14:               atr14,
-      w52_high:             row.w52_high ?? null,
-      w52_low:              row.w52_low ?? null,
+      w52_high:             toNum(row.w52_high),
+      w52_low:              toNum(row.w52_low),
       lifetime_high:        null,
       avg_amt_5d:           null, avg_amt_22d: null, delivery_surge_x: null,
-      sniper_inst:          row.sniper_inst ?? null,
-      sniper_hot:           row.sniper_hot ?? null,
+      sniper_inst:          toNum(row.sniper_inst),
+      sniper_hot:           toNum(row.sniper_hot),
       accum_distrib:        null,
       volume_divergence_flag: null,
       delivery_pct:         null,
@@ -1471,8 +1609,14 @@ async function fetchVaNiExitWatch(exchangeFilter: ExchangeFilter): Promise<ScanS
       rel_5d_n50:           null, rel_22d_n50:  null, rel_66d_n50:  null,
       rel_5d_n500:          null, rel_22d_n500: null, rel_66d_n500: null,
       vaniOpportunity:      true, // always_true — all results in this scan qualify
-      rs_percentile:        row.rs_percentile ?? null,
+      rs_percentile:        toNum(row.rs_percentile),
       stage:                row.stage ?? null,
+      stage_confirmed:      row.stage_confirmed ?? null,
+      stage_since:          row.stage_since ?? null,
+      stage_since_close:    row.stage_since_close != null ? Number(row.stage_since_close) : null,
+      stage_bars:           row.stage_bars != null ? Number(row.stage_bars) : null,
+      pct_from_stage_entry: row.pct_from_stage_entry != null ? Number(row.pct_from_stage_entry) : null,
+      stage_since_censored: row.stage_since_censored === true,
     };
   });
 }
@@ -1962,7 +2106,22 @@ const WG_JOURNEY_PRESETS: Record<string, string> = {
 
 // A wake is shown on the Waking tab only while fresh — the formation window
 // where the breakout is still an observation about NOW.
-const WAKING_FRESH_DAYS = 90;
+// Wake freshness. The tab is an OPPORTUNITY feed (owner 2026-08-24: a breakout
+// from years ago is no opportunity now), and the owner has since set the outer
+// bound: beyond 150 days a wake is not of interest at all.
+//
+// So 150 is a HARD CAP at the query — nothing older is ever fetched — and
+// 90/120/150 are selectable inside that, applied client-side by
+// ScanFilterBar's wakeWindowDays. Fetching the cap and narrowing in the client
+// means switching the window is instant and cannot refetch.
+//
+// Note these three windows currently return the SAME 8 rows: the 157 older
+// WAKING journeys are the ISIN-clock artefact (journeys opened on twin-merged
+// price with no clocks can never sleep), not real old wakes. The filter only
+// starts to discriminate once that is fixed and the table is rebuilt.
+export const WAKE_WINDOWS = [90, 120, 150] as const;
+export const WAKE_WINDOW_DEFAULT = 90;
+const WAKING_FRESH_DAYS = 150;
 
 /** Map a km_wg_journeys row to a ScanStock (display fields are stamped
  *  denormalized on the row by compute_wg_journeys.py). */
@@ -2009,6 +2168,8 @@ function wgJourneyRowToScanStock(r: any): ScanStock {
     journey_age_days: num(r.journey_age_days),
     wg_resting: truthy(r.resting),
     wake_date: r.wake_date ?? null,
+    wake_close: num(r.wake_close),
+    pct_from_wake: num(r.pct_from_wake),
     gl_dist_pct: num(r.gl_dist_pct),
   };
 }
@@ -2056,7 +2217,10 @@ async function fetchWgJourneyCounts(): Promise<Record<string, number>> {
       .limit(3000)
       .execute();
     if (error || !Array.isArray(data)) return counts;
-    const cutoff = new Date(Date.now() - WAKING_FRESH_DAYS * 24 * 60 * 60 * 1000)
+    // The BADGE counts at the window the tab OPENS with, not at the 150-day
+    // fetch cap. Counting at the cap would put a number on the rail that the
+    // tab never shows until the owner widens the filter by hand.
+    const cutoff = new Date(Date.now() - WAKE_WINDOW_DEFAULT * 24 * 60 * 60 * 1000)
       .toISOString().slice(0, 10);
     for (const r of data as any[]) {
       if (r.state === 'WAKING') {

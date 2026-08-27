@@ -574,6 +574,15 @@ export interface ScanStock {
   // Stage 2 Watch / VaNi Opportunity fields
   rs_percentile?: number | null;
   stage?: string | null;
+  // Stage entry (migration 191). Read off the CONFIRMED stage —
+  // see fieldConfig's stage_since tooltip for why the raw label
+  // cannot be used for an entry date.
+  stage_confirmed?: string | null;
+  stage_since?: string | null;
+  stage_since_close?: number | null;
+  stage_bars?: number | null;
+  pct_from_stage_entry?: number | null;
+  stage_since_censored?: boolean;
   sma200_rising?: boolean | null;
   chartink_score?: number | null;
   is_vani_s2?: boolean | null;
@@ -608,6 +617,8 @@ export interface ScanStock {
   journey_age_days?: number | null;         // days since the wake event
   wg_resting?: boolean | null;              // weekly close below the Golden Line (journey alive)
   wake_date?: string | null;                // daily breakout date
+  wake_close?: number | null;               // close on wake_date, ADJUSTED series (migration 192)
+  pct_from_wake?: number | null;            // % since the journey woke, both sides adjusted
   gl_dist_pct?: number | null;              // close vs the Golden Line (SMA150), %
 }
 
@@ -729,6 +740,15 @@ export interface EquityEodSnapshot {
   is_vani_breakout?: boolean | null;
   // Weinstein stage classification
   stage?: string | null;
+  // Stage entry (migration 191). Read off the CONFIRMED stage —
+  // see fieldConfig's stage_since tooltip for why the raw label
+  // cannot be used for an entry date.
+  stage_confirmed?: string | null;
+  stage_since?: string | null;
+  stage_since_close?: number | null;
+  stage_bars?: number | null;
+  pct_from_stage_entry?: number | null;
+  stage_since_censored?: boolean;
   // Migration 112 — computed scanner fields
   ret_5d?: number | null;
   ret_22d?: number | null;

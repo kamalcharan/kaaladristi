@@ -197,6 +197,71 @@ def merge_isin_histories(closes_raw: pd.DataFrame, pool_ids: list[int],
     return pd.DataFrame(merged).sort_index()
 
 
+def merge_isin_frame(frame: pd.DataFrame, pool_ids: list[int],
+                     twin_map: dict[int, list[int]]) -> pd.DataFrame:
+    """The clock equivalent of merge_isin_histories: one row set per POOL
+    stock, its own exchange line where present, the ISIN twin's filling the
+    deep past.
+
+    WHY THIS EXISTS
+    ---------------
+    Closes were merged per ISIN; the CLOCKS were not. They were read per
+    equity_id, which for the 2024-06 NSE cohort is a row that carries ~2y of
+    bars and almost no enriched history, while the merged price series behind
+    it reaches back 12-24 years on the BSE twin.
+
+    The state machine only calls sleep when `clocks_known` (daily AND weekly
+    AND monthly) is true, so with no clocks it never called sleep. A journey
+    opened on price alone in 2014 could never close, and a NEW wake requires
+    HIBERNATING -- so the engine was permanently blind on exactly the stocks
+    it was written for. Measured 2026-08-27: 290 of 335 journeys with a wake
+    (86.6%) had no daily clock at their own wake date, average journey age 7.4y
+    (ASCENDING) and 8.0y (WAKING), oldest open wake 2013-09-19. Of the 334 with
+    a twin, ALL 334 have twin clock coverage reaching their wake date -- the
+    data was in the database the whole time, just never loaded.
+
+    Falls back to the pool row's own line where a twin has nothing.
+    """
+    value_cols = [c for c in frame.columns if c not in ('equity_id', 'trade_date')]
+
+    # Rows with NOTHING in them are dropped BEFORE the merge. Without this the
+    # own-line-wins rule backfires precisely where the fix is needed: the
+    # 2024-06 NSE cohort HAS a row on every date from 2024-06 onward, carrying
+    # a NULL zone until 2026-07-31. Keeping it would let a present-but-empty
+    # own row shadow the twin's real value and leave the clock unknown anyway.
+    # A date left with no row at all reads as "unknown", which is the honest
+    # answer. Weekly/monthly rows keep zone and rs_short independently, so the
+    # test is "all value columns null", not "zone null" -- _tri_state_arrays
+    # can work from rs_short alone.
+    live = frame.dropna(subset=value_cols, how='all')
+
+    # groupby once. Slicing the frame per pool id inside the loop is O(n*m)
+    # over a multi-million-row daily frame.
+    by_id = {eq: g for eq, g in live.groupby('equity_id', sort=False)}
+
+    merged = []
+    for eq in pool_ids:
+        parts = []
+        own = by_id.get(eq)
+        if own is not None and len(own):
+            parts.append(own)
+        for tid in twin_map.get(eq, []):
+            t = by_id.get(tid)
+            if t is not None and len(t):
+                parts.append(t.assign(equity_id=eq))
+        if not parts:
+            continue
+        # Own line first, so on a shared date the pool stock's own reading
+        # wins and the twin only fills gaps — same precedence as
+        # combine_first in merge_isin_histories.
+        out = (pd.concat(parts)
+                 .drop_duplicates(subset=['equity_id', 'trade_date'], keep='first'))
+        merged.append(out)
+    if not merged:
+        return frame.iloc[0:0]
+    return pd.concat(merged).sort_values(['equity_id', 'trade_date'])
+
+
 def load_tf_zones(conn, table: str, ids: list[int]) -> pd.DataFrame:
     """Weekly/monthly MagicRS reads (zone + short) for alignment."""
     sql = f"""
@@ -353,6 +418,12 @@ def walk_stock(s: pd.Series, zones: pd.Series, wk: pd.DataFrame, mo: pd.DataFram
                 if by >= MIN_BASE_YEARS_DETECT:
                     journey = {
                         'wake_date': idx[i], 'base_high': float(pm),
+                        # Close on the wake bar, from THIS series -- the
+                        # ISIN-merged, cliff-adjusted one the whole walk uses.
+                        # Reading it back off the raw EOD table later would
+                        # mix series with base_high and misreport every stock
+                        # that has had a split or bonus since it woke.
+                        'wake_close': float(c),
                         'base_years': round(by, 1), 'base_start': bstart,
                         'confirm_date': None, 'weekly_confirmed': False,
                     }
@@ -408,6 +479,12 @@ def walk_stock(s: pd.Series, zones: pd.Series, wk: pd.DataFrame, mo: pd.DataFram
             'confirm_date': journey['confirm_date'].date() if journey['confirm_date'] else None,
             'pct_from_base_high': round((c / journey['base_high'] - 1) * 100, 2),
             'journey_age_days': int((t - journey['wake_date']).days),
+            'wake_close': round(journey['wake_close'], 2),
+            # Both sides adjusted, so this is directly comparable with
+            # pct_from_base_high rather than being a different kind of number
+            # sitting in the next column.
+            'pct_from_wake': (round((c / journey['wake_close'] - 1) * 100, 2)
+                              if journey['wake_close'] > 0 else None),
         })
     else:
         # hibernating — describe the CURRENT sleep. "base_years" for a
@@ -423,6 +500,7 @@ def walk_stock(s: pd.Series, zones: pd.Series, wk: pd.DataFrame, mo: pd.DataFram
             'wake_date': None, 'confirm_date': None,
             'pct_from_base_high': round((c / float(hi_win) - 1) * 100, 2) if pd.notna(hi_win) else None,
             'journey_age_days': None,
+            'wake_close': None, 'pct_from_wake': None,
         })
     return current, archived
 
@@ -455,6 +533,7 @@ CURRENT_COLS = [
     'equity_id', 'is_current', 'state', 'resting', 'base_start', 'base_high', 'base_years',
     'wake_date', 'confirm_date', 'sleep_date', 'align_score', 'align_daily', 'align_weekly',
     'align_monthly', 'gl_dist_pct', 'pct_from_base_high', 'journey_age_days', 'stir_days',
+    'wake_close', 'pct_from_wake',
     'symbol', 'company_name', 'industry', 'exchange', 'isin', 'mcap_cr', 'close', 'pct_chng',
     'delivery_pct', 'magic_rs', 'magic_rs_zone', 'listing_age_years', 'trade_date',
 ]
@@ -489,10 +568,22 @@ def run(dry_run: bool):
     closes = merge_isin_histories(closes_raw, ids, twin_map)
     print(f'  Merged per-ISIN histories: {closes.notna().sum().sum():,.0f} bars across {len(closes.columns)} pool stocks')
     closes = adjust_close_cliffs(closes)
-    zones_piv = daily.pivot(index='trade_date', columns='equity_id', values='magic_rs_zone').sort_index()
+    # Clocks merge per ISIN exactly as closes do. Before this they were read
+    # per equity_id while the price series behind them was already merged, so
+    # the walk saw 12-24 years of price against ~20 days of alignment and the
+    # sleep test could never fire. See merge_isin_frame.
+    daily_clocks = merge_isin_frame(
+        daily[['equity_id', 'trade_date', 'magic_rs_zone']], ids, twin_map)
+    zones_piv = daily_clocks.pivot(index='trade_date', columns='equity_id',
+                                   values='magic_rs_zone').sort_index()
 
-    wk_all = load_tf_zones(conn, 'km_equity_weekly', ids)
-    mo_all = load_tf_zones(conn, 'km_equity_monthly', ids)
+    # all_ids, not ids — the twin rows have to be fetched before they can be
+    # merged. Passing `ids` here is the original bug in its purest form.
+    wk_all = merge_isin_frame(load_tf_zones(conn, 'km_equity_weekly', all_ids), ids, twin_map)
+    mo_all = merge_isin_frame(load_tf_zones(conn, 'km_equity_monthly', all_ids), ids, twin_map)
+    _clock_days = int(zones_piv.notna().sum().sum())
+    print(f'  Merged per-ISIN clocks: {_clock_days:,} daily zone points, '
+          f'{len(wk_all):,} weekly / {len(mo_all):,} monthly rows')
     stir = stir_days_map(load_stir_inputs(conn, ids))
     display = load_display(conn, ids)
     pool_by_id = pool.set_index('id')
@@ -540,6 +631,7 @@ def run(dry_run: bool):
                 'state': j.get('end_state', 'WAKING'), 'resting': False,
                 'base_start': j['base_start'].date(), 'base_high': round(j['base_high'], 2),
                 'base_years': j['base_years'], 'wake_date': j['wake_date'].date(),
+                'wake_close': round(j['wake_close'], 2),
                 'confirm_date': j['confirm_date'].date() if j.get('confirm_date') else None,
                 'sleep_date': j['sleep_date'].date(),
                 'symbol': p['symbol'], 'exchange': p['exchange'], 'isin': p['isin'],

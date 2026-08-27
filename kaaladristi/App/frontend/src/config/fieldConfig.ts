@@ -13,6 +13,7 @@ export type FieldType =
   | 'score100'
   | 'rsi'
   | 'flow'
+  | 'date'
 
 export interface ThresholdColor {
   low: string     // CSS var — color when value < lowMax
@@ -31,7 +32,10 @@ export interface FieldConfig {
   width: number
   sticky?: boolean
   thresholds?: ThresholdColor
-  formatFn?: (val: any) => string
+  // The row is passed so a formatter can qualify its own value from a sibling
+  // column -- stage_since prefixes an approximate date when
+  // stage_since_censored says the real entry predates the data.
+  formatFn?: (val: any, row?: any) => string
   colorFn?: (val: any, row?: any) => string
 }
 
@@ -57,6 +61,11 @@ function formatByType(type: FieldType, val: any): string {
     case 'cr': {
       const n = Number(val)
       return isNaN(n) ? '—' : `${n.toFixed(2)} Cr`
+    }
+    case 'date': {
+      const d = new Date(String(val))
+      if (isNaN(d.getTime())) return '—'
+      return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' })
     }
     case 'surge': {
       const n = Number(val)
@@ -202,6 +211,93 @@ export const ALL_FIELDS: Record<string, FieldConfig> = {
     type: 'category',
     width: 90,
     colorFn: (val: any) => STAGE_COLOR[String(val ?? '')] ?? 'var(--text-muted)',
+  },
+
+  // ── Waking Giants: where the journey started (migration 192) ────────────
+  // journey_age_days already said WHEN. Without the price it woke at, the
+  // grid could not say whether the breakout went anywhere — SPARC read
+  // "2mo · 5/6" while sitting a quarter below its own wake.
+
+  wake_date: {
+    key: 'wake_date',
+    label: 'Woke On',
+    tooltip: 'The session the journey began: close broke above the multi-year base ceiling while at or above the Golden Line (150-day mean close). Blank for stocks still basing.',
+    type: 'date',
+    width: 100,
+  },
+
+  wake_close: {
+    key: 'wake_close',
+    label: 'Wake Price',
+    tooltip: 'Close on the day the journey began. Split- and bonus-adjusted and merged across NSE/BSE listings, the same series as the base ceiling — so it can differ slightly from the raw close shown elsewhere.',
+    type: 'price',
+    width: 100,
+  },
+
+  pct_from_wake: {
+    key: 'pct_from_wake',
+    label: '% Since Wake',
+    tooltip: 'Price change since the journey began. Both sides on the adjusted series, so it is directly comparable with % from the base ceiling. A deeply negative number means the breakout was given back — the journey stays listed until relative-strength alignment collapses, which price alone does not do.',
+    type: 'pct',
+    width: 108,
+  },
+
+  // ── Stage entry (migration 191) ──────────────────────────────────────────
+  // These four answer "when did this stock enter its stage, and at what
+  // price". They read the CONFIRMED stage, not the raw one: the raw `stage`
+  // label flickers so hard around the 200-SMA that 52% of its contiguous runs
+  // last 3 bars or fewer, and an entry date read off those is meaningless.
+
+  stage_confirmed: {
+    key: 'stage_confirmed',
+    label: 'Confirmed',
+    tooltip: 'The stage once it has held 10 bars (~2 weeks). When this differs from Stage, the raw label has just flipped and has not held yet — the flip is days old, not established.',
+    type: 'category',
+    width: 100,
+    colorFn: (val: any) => STAGE_COLOR[String(val ?? '')] ?? 'var(--text-muted)',
+  },
+
+  stage_since: {
+    key: 'stage_since',
+    label: 'In Stage Since',
+    tooltip: 'First session of the run that opened the confirmed stage — backdated to where the turn happened, not to where it was proven. A ≥ prefix means the stock was already in this stage on its first classifiable bar, so the real entry is earlier and this date is a floor.',
+    type: 'date',
+    width: 108,
+    // The censored case must not read as a precise date. Qualifying it here
+    // keeps one honest number in the cell instead of a separate flag column
+    // that a reader has to remember to look at.
+    formatFn: (val: any, row?: any) => {
+      if (val == null) return '—'
+      const d = new Date(String(val))
+      if (isNaN(d.getTime())) return '—'
+      const txt = d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' })
+      return row?.stage_since_censored ? `≥ ${txt}` : txt
+    },
+  },
+
+  stage_since_close: {
+    key: 'stage_since_close',
+    label: 'Entry Price',
+    tooltip: 'Close on the day the confirmed stage began. Raw bhavcopy close — not adjusted for splits or bonuses, so a stock that has had a corporate action since will read wrong.',
+    type: 'price',
+    width: 100,
+  },
+
+  pct_from_stage_entry: {
+    key: 'pct_from_stage_entry',
+    label: '% Since Entry',
+    tooltip: 'Price change since the confirmed stage began. Not a return — no corporate-action adjustment.',
+    type: 'pct',
+    width: 105,
+  },
+
+  stage_bars: {
+    key: 'stage_bars',
+    label: 'Bars In',
+    tooltip: 'Sessions held since the confirmed stage began. Sessions, not calendar days — a long holiday stretch would overstate how much trading the stage has actually survived.',
+    type: 'number',
+    width: 78,
+    formatFn: (val: any) => (val == null ? '—' : String(Math.round(Number(val)))),
   },
 
   rsi_14: {
@@ -851,7 +947,7 @@ export function formatValue(key: string, val: any, _row?: any): string {
   if (val == null) return '—'
   const cfg = ALL_FIELDS[key]
   if (!cfg) return String(val)
-  if (cfg.formatFn) return cfg.formatFn(val)
+  if (cfg.formatFn) return cfg.formatFn(val, _row)
   return formatByType(cfg.type, val)
 }
 

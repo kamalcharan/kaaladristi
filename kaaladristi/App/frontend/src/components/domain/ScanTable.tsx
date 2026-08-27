@@ -102,14 +102,21 @@ const PRESET_COL_OVERRIDES: Partial<Record<string, string[]>> = {
   // Waking Giants v4 journey tabs — the journey dimensions lead. base_years =
   // "Slept", align_score = the 0-6 timeframe alignment, pct_from_3y_high
   // carries % vs the hibernation ceiling on these presets.
+  // The wake trio sits next to journey_age_days: it said WHEN the journey
+  // started and nothing said from where, so a breakout that had been fully
+  // given back read the same as one still working. SPARC on 2026-08-27
+  // showed "2mo · 5/6 · -22.4%" while trading a quarter below its own wake.
   waking_giants: [
-    'symbol', 'close', 'pct_chng', 'base_years', 'journey_age_days', 'align_score',
-    'gl_dist_pct', 'pct_from_3y_high', 'listing_age_years',
+    'symbol', 'close', 'pct_chng', 'base_years', 'journey_age_days',
+    'wake_date', 'wake_close', 'pct_from_wake',
+    'align_score', 'gl_dist_pct', 'pct_from_3y_high', 'listing_age_years',
     'delivery_pct', 'magic_rs', 'mcap_cr',
   ],
   wg_ascent: [
-    'symbol', 'close', 'pct_chng', 'align_score', 'journey_age_days', 'wg_resting',
-    'base_years', 'gl_dist_pct', 'listing_age_years', 'magic_rs', 'mcap_cr',
+    'symbol', 'close', 'pct_chng', 'align_score', 'journey_age_days',
+    'wake_date', 'wake_close', 'pct_from_wake',
+    'wg_resting', 'base_years', 'gl_dist_pct', 'listing_age_years',
+    'magic_rs', 'mcap_cr',
   ],
   wg_stirring: [
     'symbol', 'close', 'pct_chng', 'gl_acc_days', 'base_years',
@@ -147,19 +154,40 @@ function getDefaultSort(presetId: string) {
 
 // ── Sort ───────────────────────────────────────────────────────────────────────
 
+/** Numeric when BOTH sides parse as finite numbers, text otherwise.
+ *
+ *  The old test was `typeof av === 'string'` -> localeCompare, which sorted
+ *  any numeric column that arrived as text LEXICOGRAPHICALLY. That is
+ *  sign-blind and magnitude-blind: '8.8' outranks '17.5', and every negative
+ *  clumps at one end regardless of size, because '-' sorts before every digit.
+ *  Nine of the twelve fetchers pass numerics straight through from the API
+ *  without Number(), so whether a column sorted correctly depended on which
+ *  fetcher served it -- MagicRS sorted right on the matview-backed and journey
+ *  tabs and wrongly everywhere else. Deciding on the VALUE rather than on the
+ *  JavaScript type fixes every numeric column at once: MagicRS, 1D%, the
+ *  returns, % Since Wake, % Since Entry.
+ */
+function compareValues(av: unknown, bv: unknown, dir: 'asc' | 'desc'): number {
+  const an = typeof av === 'number' ? av : Number(av)
+  const bn = typeof bv === 'number' ? bv : Number(bv)
+  if (Number.isFinite(an) && Number.isFinite(bn)) {
+    return dir === 'asc' ? an - bn : bn - an
+  }
+  const as = String(av), bs = String(bv)
+  return dir === 'asc' ? as.localeCompare(bs) : bs.localeCompare(as)
+}
+
 function sortStocks(stocks: ScanStock[], key: string, dir: 'asc' | 'desc'): ScanStock[] {
   const arr = [...stocks]
   arr.sort((a, b) => {
     const av = (a as unknown as Record<string, unknown>)[key]
     const bv = (b as unknown as Record<string, unknown>)[key]
+    // Nulls last in BOTH directions — an empty cell is absence of data, not a
+    // value at one end of the range.
     if (av == null && bv == null) return 0
     if (av == null) return 1
     if (bv == null) return -1
-    if (typeof av === 'string' && typeof bv === 'string') {
-      return dir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av)
-    }
-    const an = Number(av), bn = Number(bv)
-    return dir === 'asc' ? an - bn : bn - an
+    return compareValues(av, bv, dir)
   })
   return arr
 }

@@ -37,6 +37,43 @@ const STAGE_COLS  = 'trade_date,stage';
 const LATEST_COLS = 'trade_date,close,pct_chng,pivot_pp,pivot_r1,pivot_r2,pivot_s1,pivot_s2,ema_20,sma_50,sma_150,w52_high,w52_low,stage,magic_rs,magic_rs_zone,rs_percentile,rvol,delivery_pct,accum_distrib,flow_type,rss_value,sniper_inst,delivery_surge_x,avg_amt_22d,volume_divergence_flag,sma_200,dot_svd,dot_sbd,dot_syd,prev_week_close,pct_wtd,breakout_level,prev_month_close,pct_mtd,breakdown_level,pct_from_breakdown';
 const SYMBOL_COLS = 'id,symbol,company_name,exchange,industry,isin,mcap_cr';
 
+
+// Numeric coercion at the boundary.
+//
+// These rows were cast straight to their typed shapes (`as WeeklyBar[]`,
+// `as LatestEodRow`) with no conversion, so a field declared `number` could
+// hold text. Arithmetic survives that — JavaScript coerces — but COMPARISON
+// between two such fields does not: `"9.5" > "17.2"` is true, because two
+// strings compare lexicographically. The adapters are built on exactly that
+// shape (`latest.close > latest.sma_150`, `latest.sma_50 > latest.sma_150`,
+// `latest.close < latest.sma_200`), so every Story View checklist verdict
+// depended on the serialiser's choice of type rather than on the prices.
+//
+// Casting a shape does not convert it. Convert it here, once, and the declared
+// types become true for everything downstream.
+const NUMERIC_ROW_FIELDS = new Set([
+  'open', 'high', 'low', 'close', 'volume', 'magic_rs', 'pct_chng',
+  'pivot_pp', 'pivot_r1', 'pivot_r2', 'pivot_s1', 'pivot_s2',
+  'ema_20', 'sma_50', 'sma_150', 'sma_200', 'w52_high', 'w52_low',
+  'rs_percentile', 'rvol', 'delivery_pct', 'rss_value', 'sniper_inst',
+  'delivery_surge_x', 'avg_amt_22d', 'mcap_cr',
+  'prev_week_close', 'pct_wtd', 'breakout_level',
+  'prev_month_close', 'pct_mtd', 'breakdown_level', 'pct_from_breakdown',
+]);
+
+function coerceNumerics<T extends object>(row: T | undefined): T | undefined {
+  if (!row) return row;
+  const out: Record<string, unknown> = { ...(row as Record<string, unknown>) };
+  for (const k of Object.keys(out)) {
+    if (!NUMERIC_ROW_FIELDS.has(k)) continue;
+    const v = out[k];
+    if (v == null || typeof v === 'number') continue;
+    const n = Number(v);
+    out[k] = Number.isNaN(n) ? null : n;
+  }
+  return out as T;
+}
+
 export interface UseSetupDataResult {
   data: SetupData | null;
   isLoading: boolean;
@@ -95,9 +132,10 @@ export function useSetupData(equityId: number | null, setupKey: string | null): 
       if (symbolRes.error) throw new Error(`symbol: ${symbolRes.error.message}`);
       if (stageRes.error)  throw new Error(`stage: ${stageRes.error.message}`);
 
-      const weeklyRaw = (weeklyRes.data ?? []) as WeeklyBar[];
-      const latest    = (latestRes.data ?? [])[0] as LatestEodRow | undefined;
-      const identity  = (symbolRes.data ?? [])[0] as EquityIdentity | undefined;
+      const weeklyRaw = ((weeklyRes.data ?? []) as WeeklyBar[])
+        .map((b) => coerceNumerics(b)!) as WeeklyBar[];
+      const latest    = coerceNumerics((latestRes.data ?? [])[0] as LatestEodRow | undefined);
+      const identity  = coerceNumerics((symbolRes.data ?? [])[0] as EquityIdentity | undefined);
 
       // Stage aggregation: for each weekly bar, pick the eod stage on that
       // trade_date if present, else carry the most recent prior-date stage
