@@ -102,14 +102,21 @@ const PRESET_COL_OVERRIDES: Partial<Record<string, string[]>> = {
   // Waking Giants v4 journey tabs — the journey dimensions lead. base_years =
   // "Slept", align_score = the 0-6 timeframe alignment, pct_from_3y_high
   // carries % vs the hibernation ceiling on these presets.
+  // The wake trio sits next to journey_age_days: it said WHEN the journey
+  // started and nothing said from where, so a breakout that had been fully
+  // given back read the same as one still working. SPARC on 2026-08-27
+  // showed "2mo · 5/6 · -22.4%" while trading a quarter below its own wake.
   waking_giants: [
-    'symbol', 'close', 'pct_chng', 'base_years', 'journey_age_days', 'align_score',
-    'gl_dist_pct', 'pct_from_3y_high', 'listing_age_years',
+    'symbol', 'close', 'pct_chng', 'base_years', 'journey_age_days',
+    'wake_date', 'wake_close', 'pct_from_wake',
+    'align_score', 'gl_dist_pct', 'pct_from_3y_high', 'listing_age_years',
     'delivery_pct', 'magic_rs', 'mcap_cr',
   ],
   wg_ascent: [
-    'symbol', 'close', 'pct_chng', 'align_score', 'journey_age_days', 'wg_resting',
-    'base_years', 'gl_dist_pct', 'listing_age_years', 'magic_rs', 'mcap_cr',
+    'symbol', 'close', 'pct_chng', 'align_score', 'journey_age_days',
+    'wake_date', 'wake_close', 'pct_from_wake',
+    'wg_resting', 'base_years', 'gl_dist_pct', 'listing_age_years',
+    'magic_rs', 'mcap_cr',
   ],
   wg_stirring: [
     'symbol', 'close', 'pct_chng', 'gl_acc_days', 'base_years',

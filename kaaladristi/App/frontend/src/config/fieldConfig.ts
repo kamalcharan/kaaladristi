@@ -213,6 +213,35 @@ export const ALL_FIELDS: Record<string, FieldConfig> = {
     colorFn: (val: any) => STAGE_COLOR[String(val ?? '')] ?? 'var(--text-muted)',
   },
 
+  // ── Waking Giants: where the journey started (migration 192) ────────────
+  // journey_age_days already said WHEN. Without the price it woke at, the
+  // grid could not say whether the breakout went anywhere — SPARC read
+  // "2mo · 5/6" while sitting a quarter below its own wake.
+
+  wake_date: {
+    key: 'wake_date',
+    label: 'Woke On',
+    tooltip: 'The session the journey began: close broke above the multi-year base ceiling while at or above the Golden Line (150-day mean close). Blank for stocks still basing.',
+    type: 'date',
+    width: 100,
+  },
+
+  wake_close: {
+    key: 'wake_close',
+    label: 'Wake Price',
+    tooltip: 'Close on the day the journey began. Split- and bonus-adjusted and merged across NSE/BSE listings, the same series as the base ceiling — so it can differ slightly from the raw close shown elsewhere.',
+    type: 'price',
+    width: 100,
+  },
+
+  pct_from_wake: {
+    key: 'pct_from_wake',
+    label: '% Since Wake',
+    tooltip: 'Price change since the journey began. Both sides on the adjusted series, so it is directly comparable with % from the base ceiling. A deeply negative number means the breakout was given back — the journey stays listed until relative-strength alignment collapses, which price alone does not do.',
+    type: 'pct',
+    width: 108,
+  },
+
   // ── Stage entry (migration 191) ──────────────────────────────────────────
   // These four answer "when did this stock enter its stage, and at what
   // price". They read the CONFIRMED stage, not the raw one: the raw `stage`

@@ -2143,6 +2143,8 @@ function wgJourneyRowToScanStock(r: any): ScanStock {
     journey_age_days: num(r.journey_age_days),
     wg_resting: truthy(r.resting),
     wake_date: r.wake_date ?? null,
+    wake_close: num(r.wake_close),
+    pct_from_wake: num(r.pct_from_wake),
     gl_dist_pct: num(r.gl_dist_pct),
   };
 }

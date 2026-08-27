@@ -353,6 +353,12 @@ def walk_stock(s: pd.Series, zones: pd.Series, wk: pd.DataFrame, mo: pd.DataFram
                 if by >= MIN_BASE_YEARS_DETECT:
                     journey = {
                         'wake_date': idx[i], 'base_high': float(pm),
+                        # Close on the wake bar, from THIS series -- the
+                        # ISIN-merged, cliff-adjusted one the whole walk uses.
+                        # Reading it back off the raw EOD table later would
+                        # mix series with base_high and misreport every stock
+                        # that has had a split or bonus since it woke.
+                        'wake_close': float(c),
                         'base_years': round(by, 1), 'base_start': bstart,
                         'confirm_date': None, 'weekly_confirmed': False,
                     }
@@ -408,6 +414,12 @@ def walk_stock(s: pd.Series, zones: pd.Series, wk: pd.DataFrame, mo: pd.DataFram
             'confirm_date': journey['confirm_date'].date() if journey['confirm_date'] else None,
             'pct_from_base_high': round((c / journey['base_high'] - 1) * 100, 2),
             'journey_age_days': int((t - journey['wake_date']).days),
+            'wake_close': round(journey['wake_close'], 2),
+            # Both sides adjusted, so this is directly comparable with
+            # pct_from_base_high rather than being a different kind of number
+            # sitting in the next column.
+            'pct_from_wake': (round((c / journey['wake_close'] - 1) * 100, 2)
+                              if journey['wake_close'] > 0 else None),
         })
     else:
         # hibernating — describe the CURRENT sleep. "base_years" for a
@@ -423,6 +435,7 @@ def walk_stock(s: pd.Series, zones: pd.Series, wk: pd.DataFrame, mo: pd.DataFram
             'wake_date': None, 'confirm_date': None,
             'pct_from_base_high': round((c / float(hi_win) - 1) * 100, 2) if pd.notna(hi_win) else None,
             'journey_age_days': None,
+            'wake_close': None, 'pct_from_wake': None,
         })
     return current, archived
 
@@ -455,6 +468,7 @@ CURRENT_COLS = [
     'equity_id', 'is_current', 'state', 'resting', 'base_start', 'base_high', 'base_years',
     'wake_date', 'confirm_date', 'sleep_date', 'align_score', 'align_daily', 'align_weekly',
     'align_monthly', 'gl_dist_pct', 'pct_from_base_high', 'journey_age_days', 'stir_days',
+    'wake_close', 'pct_from_wake',
     'symbol', 'company_name', 'industry', 'exchange', 'isin', 'mcap_cr', 'close', 'pct_chng',
     'delivery_pct', 'magic_rs', 'magic_rs_zone', 'listing_age_years', 'trade_date',
 ]
@@ -540,6 +554,7 @@ def run(dry_run: bool):
                 'state': j.get('end_state', 'WAKING'), 'resting': False,
                 'base_start': j['base_start'].date(), 'base_high': round(j['base_high'], 2),
                 'base_years': j['base_years'], 'wake_date': j['wake_date'].date(),
+                'wake_close': round(j['wake_close'], 2),
                 'confirm_date': j['confirm_date'].date() if j.get('confirm_date') else None,
                 'sleep_date': j['sleep_date'].date(),
                 'symbol': p['symbol'], 'exchange': p['exchange'], 'isin': p['isin'],
