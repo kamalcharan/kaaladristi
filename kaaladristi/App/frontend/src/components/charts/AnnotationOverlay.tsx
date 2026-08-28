@@ -26,6 +26,7 @@
  * Pointer events: none. The chart underneath handles all interactions.
  */
 
+import type { StoryKind } from '@/services/storyEvents';
 import { useEffect, useRef, useState } from 'react';
 import type { IChartApi, ISeriesApi, Time } from 'lightweight-charts';
 
@@ -62,7 +63,9 @@ export interface OverlayBigMoney {
 
 export interface OverlayStoryPin {
   trade_date: string;
-  kind: 'flow' | 'conviction' | 'stage' | 'magic_rs' | 'big_money' | 'rs_breakaway' | 'fpb' | 'scan' | 'sector';
+  /** StoryKind itself. This was a hand-copied duplicate of that union and
+   *  silently fell behind it whenever a kind was added. */
+  kind: StoryKind;
   title: string;
   tone: 'bull' | 'bear' | 'neutral';
   price: number;
@@ -123,6 +126,8 @@ const PIN_COLOR: Record<OverlayStoryPin['kind'], string> = {
   fpb: 'var(--story-fpb)',
   scan: 'var(--story-scan)',
   sector: 'var(--story-sector)',
+  gl: 'var(--story-gl)',
+  discovery: 'var(--story-discovery)',
 };
 
 /** Compact display form for setup level labels on the segment rail. */

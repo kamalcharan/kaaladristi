@@ -14,6 +14,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useAuthStore } from '@/stores/authStore'
 import { useBookmarkStore } from '@/stores/bookmarkStore'
 import { computeThesis, type Relationship, type ThesisBar, type ThesisRead } from '@/services/thesis'
+import type { StoryJourney } from '@/services/storyEvents'
 import { KIND_COLORS } from '@/services/storyEvents'
 import { narrateVani } from '@/services/vaniNarrate'
 import type { Pillar } from './VerdictHero'
@@ -46,9 +47,10 @@ const TONE: Record<'bull' | 'bear' | 'neutral', string> = {
 }
 
 export default function ThesisTab({
-  bars, equityId, name, currentClose, autoOpenForm, onAutoOpened,
+  bars, journey, equityId, name, currentClose, autoOpenForm, onAutoOpened,
 }: {
   bars: ThesisBar[]
+  journey?: StoryJourney | null
   equityId: number
   name: string
   currentClose: number | null
@@ -73,8 +75,8 @@ export default function ThesisTab({
   const relationship: Relationship = position ? 'position' : bookmarkedIds.has(equityId) ? 'watchlist' : 'none'
 
   const thesis = useMemo(
-    () => computeThesis(bars, relationship, position),
-    [bars, relationship, position],
+    () => computeThesis(bars, relationship, position, journey),
+    [bars, relationship, position, journey],
   )
 
   const lastDate = bars[bars.length - 1]?.trade_date ?? ''

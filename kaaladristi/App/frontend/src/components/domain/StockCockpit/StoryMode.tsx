@@ -12,7 +12,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { X } from 'lucide-react'
 import TradingChart from '@/components/charts/TradingChart'
 import type { IndicatorRow } from '@/services/indicatorData'
-import { buildStoryEvents, KIND_COLORS, type StoryEvent } from '@/services/storyEvents'
+import { buildStoryEvents, KIND_COLORS, type StoryEvent, type StoryJourney } from '@/services/storyEvents'
 import { narrateVani } from '@/services/vaniNarrate'
 import { buildPillars, type LatestRow, type VerdictMode } from './VerdictHero'
 
@@ -37,6 +37,7 @@ interface Props {
   open: boolean
   onClose: () => void
   bars: IndicatorRow[]
+  journey?: StoryJourney | null
   name: string
   latest: LatestRow | null
   snapshot?: { corrState?: CorrState } | null
@@ -77,8 +78,8 @@ function readAtDate(map: Map<string, SectorPoint> | undefined, date: string): Se
 const SPEEDS = [0.5, 1, 2] as const
 const BASE_DWELL_MS = 2600
 
-export default function StoryMode({ open, onClose, bars, name, latest, snapshot, bigMoneyDates, sectorByDate, breadthByDate, mode, breadthPct, overlays, astroBands }: Props) {
-  const events = useMemo(() => buildStoryEvents(bars, bigMoneyDates, sectorByDate), [bars, bigMoneyDates, sectorByDate])
+export default function StoryMode({ open, onClose, bars, name, latest, snapshot, bigMoneyDates, sectorByDate, breadthByDate, mode, breadthPct, overlays, astroBands, journey }: Props) {
+  const events = useMemo(() => buildStoryEvents(bars, bigMoneyDates, sectorByDate, journey), [bars, bigMoneyDates, sectorByDate, journey])
   const pillars = useMemo(() => (latest ? buildPillars(latest, { mode, breadthPct }) : []), [latest, mode, breadthPct])
   // Thermometer source: a stock reads its SECTOR percentile; an index reads its
   // own BREADTH score. Same vertical card, different feed + label.

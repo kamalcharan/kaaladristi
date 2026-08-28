@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, useRef } from 'react';
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { TrendingUp, TrendingDown, BarChart3, AlertCircle, RefreshCw, ArrowLeft } from 'lucide-react';
-import { fetchIndicatorDataById, fetchEquityEodById, fetchEquityTimeframeById, resampleRows, type EquityTimeframe } from '@/services/indicatorData';
+import { fetchIndicatorDataById, fetchEquityEodById, fetchEquityTimeframeById, resampleRows, type EquityTimeframe, fetchStockJourney } from '@/services/indicatorData';
 import TradingChart from '@/components/charts/TradingChart';
 import VaNiInsight from '@/components/domain/VaNiInsight';
 import { useInstrumentInsight } from '@/hooks';
@@ -12,7 +12,7 @@ import ThesisTab from '@/components/domain/StockCockpit/ThesisTab';
 import type { ThesisBar } from '@/services/thesis';
 import StoryMode from '@/components/domain/StockCockpit/StoryMode';
 import ScannerArrivalView from '@/components/domain/StockCockpit/ScannerArrival/ScannerArrivalView';
-import { buildStoryEvents, KIND_COLORS, type StoryEvent } from '@/services/storyEvents';
+import { buildStoryEvents, KIND_COLORS, type StoryEvent, type StoryKind } from '@/services/storyEvents';
 import { fetchSectorSeries } from '@/services/sectorSeries';
 import DeliveryVsTraded from '@/components/domain/StockCockpit/DeliveryVsTraded';
 import SectorMembershipCard from '@/components/domain/StockCockpit/SectorMembershipCard';
@@ -544,9 +544,17 @@ export default function ChartView() {
   // score/magic_rs/flow columns (conviction · magic-RS flip · flow flip fire);
   // equity-only signals (stage/scan/big-money/sector) simply don't trigger when
   // their columns are absent.
+  // The Waking Giants journey — one row, two dated markers (turn and wake).
+  // Equity-only: indices are on no journey.
+  const { data: journey } = useQuery({
+    queryKey: ['stock-journey', numId],
+    queryFn: () => fetchStockJourney(numId),
+    enabled: isEquity && !!numId,
+    staleTime: 300_000,
+  });
   const storyEvents = useMemo(
-    () => ((isEquity || isIndex) && tf === 'daily' ? buildStoryEvents(rows, bigMoneyDates, sectorByDate) : []),
-    [isEquity, isIndex, tf, rows, bigMoneyDates, sectorByDate],
+    () => ((isEquity || isIndex) && tf === 'daily' ? buildStoryEvents(rows, bigMoneyDates, sectorByDate, journey) : []),
+    [isEquity, isIndex, tf, rows, bigMoneyDates, sectorByDate, journey],
   );
 
   /** Full editorial overlay bundle passed to TradingChart. Combines the
@@ -589,7 +597,10 @@ export default function ChartView() {
     );
     const storyPins: Array<{
       trade_date: string;
-      kind: 'flow' | 'conviction' | 'stage' | 'magic_rs' | 'big_money' | 'rs_breakaway' | 'fpb' | 'scan' | 'sector';
+      // StoryKind itself, not a copy of it. This list was written out by hand
+      // and then fell behind the real union the moment a kind was added --
+      // the same two-lists-never-compared shape as the scanner select lists.
+      kind: StoryKind;
       title: string;
       tone: 'bull' | 'bear' | 'neutral';
       price: number;
@@ -1283,6 +1294,7 @@ export default function ChartView() {
         {isEquity && dvTab === 'thesis' && !isLoading && rows.length > 0 && (
           <ThesisTab
             bars={rows as unknown as ThesisBar[]}
+            journey={journey}
             equityId={numId}
             name={name}
             currentClose={currentClose}
@@ -1311,6 +1323,7 @@ export default function ChartView() {
           snapshot={snapshot}
           bigMoneyDates={bigMoneyDates}
           sectorByDate={sectorByDate}
+          journey={journey}
           breadthByDate={breadthByDate}
           mode={isIndex ? 'index' : 'equity'}
           breadthPct={breadthPct}

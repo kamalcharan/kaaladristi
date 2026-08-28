@@ -125,6 +125,9 @@
   --story-bigmoney: #f5a623;   --story-magicrs: #10b981;   --story-flow: #38bdf8;
   --story-stage: #a855f7;      --story-scan: #06b6d4;      --story-conviction: #eab308;
   --story-fpb: #fb923c;        --story-sector: #22c55e;    --story-rsbreakaway: #ec4899;
+  /* Golden Line events and Waking Giants journey markers. Gold for the line
+     itself; teal matches the Discovery category colour on the scan rail. */
+  --story-gl: #d4af37;         --story-discovery: #14b8a6;
   /* Story View — editorial cycle-band tints. Used ONLY by the
      ScannerArrival chart to shade the three regime bands (bull /
      bear / neutral) behind the candles. Kept as tokens so the
