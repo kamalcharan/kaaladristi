@@ -24,7 +24,9 @@ const SIGNAL_DOT: Record<FlowSignal, { color: string; label: string; short: stri
   QUIET:    { color: '#64748b',           label: 'Quiet',              short: 'Quiet' },
 };
 
-export default function SectorMembershipCard({ equityId }: { equityId: number }) {
+export default function SectorMembershipCard(
+  { equityId, exchange }: { equityId: number; exchange?: string | null },
+) {
   const { data: memberships = [], isLoading } = useStockMembership(equityId);
   // Sector Pulse data is shared+cached (5 min) — attach a live signal dot to
   // every membership we have cells for (sectoral + curated indices).
@@ -35,7 +37,34 @@ export default function SectorMembershipCard({ equityId }: { equityId: number })
       .map((p) => [p.id, flowSignal(p.cells[0], STRONG_SCORE_CUT_INDEX)]),
   );
 
-  if (isLoading || memberships.length === 0) return null;
+  // Rendering NOTHING on an empty list is what made this section look broken:
+  // the header expanded onto blank space, and "in no index" was indistinguishable
+  // from "we never loaded it". Say which.
+  //
+  // 6,580 of 6,615 active BSE rows and 2,376 of 3,797 NSE rows land here. On BSE
+  // that is mostly correct — NIFTY indices do not contain BSE scrips, and the 35
+  // BSE stocks that DO appear are in curated indices, which this card reads from
+  // km_index_constituents alongside the official ones. On NSE it is a real gap:
+  // the membership seeder last ran on 2026-02-14, so nothing registered since
+  // has index_names at all.
+  if (isLoading) return null;
+  if (memberships.length === 0) {
+    return (
+      <div className="rounded-lg bg-kd-card border border-kd-border p-3">
+        <div className="flex items-center gap-2 mb-1.5">
+          <Layers className="w-3.5 h-3.5 text-[var(--text-faint)]" />
+          <span className="text-[11px] font-serif font-semibold text-primary tracking-wide">
+            Member Of
+          </span>
+        </div>
+        <p className="text-[10px] font-mono text-muted leading-relaxed">
+          {exchange === 'BSE'
+            ? 'Not in any tracked index. NSE indices cover NSE listings — check this company\u2019s NSE line, or add it to a curated index.'
+            : 'Not in any tracked index.'}
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="rounded-lg bg-kd-card border border-kd-border p-3">
