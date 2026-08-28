@@ -349,7 +349,16 @@ function MagicRsStats({ data, activeIndex, benchmarkLabel, variant = 'long' }: M
   // Lagging, and ZONE_LABELS is their single source — a second copy here would
   // be one more list to drift, which is the shape of most of this week.
   const above = rs != null && ma != null && rs > ma;
-  const verdict = zone ? (ZONE_LABELS[zone]?.label ?? 'Neutral') : 'No read';
+  // Plain words first. "Leading" and "Lagging" are the house vocabulary and
+  // stay as the grade chip, but the sentence a reader lands on should be the
+  // one they would say out loud: this stock is stronger or weaker than the
+  // index. Both are observational — a comparison already made, not a call on
+  // what happens next — so D39 is satisfied either way.
+  const plain = zone == null ? 'No read'
+    : zone.includes('Bull') ? `Stronger than ${benchmarkLabel}`
+    : zone.includes('Bear') ? `Weaker than ${benchmarkLabel}`
+    : `In line with ${benchmarkLabel}`;
+  const grade = zone ? (ZONE_LABELS[zone]?.label ?? 'Neutral') : null;
   const vColor = zone == null ? 'var(--text-muted)'
     : zone.includes('Bull') ? 'var(--risk-green)'
     : zone.includes('Bear') ? 'var(--risk-red)' : 'var(--text-muted)';
@@ -365,12 +374,25 @@ function MagicRsStats({ data, activeIndex, benchmarkLabel, variant = 'long' }: M
     <div style={{ borderTop: '1px solid var(--border)' }}>
       {/* The verdict, large enough to read without leaning in. */}
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 px-3 pt-2">
+        {/* The verdict is about the STOCK AGAINST THE BENCHMARK — that is what
+            the indicator measures. Leading it in the header with "below its
+            60-bar average" described the mechanism that decides the zone and
+            said nothing about the index, which is the whole point of a
+            relative-strength read. Mechanism moved to the supporting line. */}
         <span className="text-[15px] font-serif font-semibold" style={{ color: vColor }}>
-          {verdict}
+          {plain}
         </span>
-        <span className="text-[11px] font-mono" style={{ color: 'var(--text-secondary)' }}>
-          {above ? 'above' : 'below'} its {variant === 'short' ? '10' : '60'}-bar average
-          {held > 0 && ` for ${held} bar${held === 1 ? '' : 's'}`}
+        {grade && (
+          <span
+            className="text-[9px] font-mono uppercase tracking-wider px-1.5 py-0.5 rounded"
+            style={{ color: vColor, border: `1px solid ${vColor}`, opacity: 0.85 }}
+          >
+            {grade}
+          </span>
+        )}
+        <span className="text-[11px] font-mono" style={{ color: 'var(--text-faint)' }}>
+          {diff != null && `strength ${Math.abs(diff).toFixed(1)} pts ${above ? 'above' : 'below'} its ${variant === 'short' ? '10' : '60'}-bar trend`}
+          {held > 0 && ` · ${held} bar${held === 1 ? '' : 's'}`}
         </span>
         <span className="ml-auto inline-flex items-center gap-2">
           {frames.map((f) => (
@@ -403,7 +425,7 @@ function MagicRsStats({ data, activeIndex, benchmarkLabel, variant = 'long' }: M
       </div>
 
       <div className="px-3 pb-2 text-[9px] font-mono text-[var(--text-faint)] leading-relaxed">
-        vs {benchmarkLabel} · {variant === 'short' ? 'SHORT 21-bar RS, 10-bar average — the only series weekly/monthly carry' : '144-bar RS, 60-bar average'} · 1D/1W/1M are 1, 5 and 20-bar changes
+        {variant === 'short' ? 'SHORT 21-bar RS, 10-bar average — the only series weekly/monthly carry' : '144-bar RS, 60-bar average'} · 1D/1W/1M are 1, 5 and 20-bar changes
         {short && ` · series starts ${withRs[0].trade_date} (${withRs.length} of ${data.length} bars)`}
       </div>
     </div>
