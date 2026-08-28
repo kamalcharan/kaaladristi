@@ -60,12 +60,12 @@ const EXTREME_LOOKBACK = 60;
  *  dark theme that drowns the lines, so the bands step 16/10/5% and still read
  *  as a field rather than the invisible 5/3/1.5% they were. */
 const ZONE_ALPHA: Record<string, { hue: 'green' | 'red'; a: string }> = {
-  'Strong Bull':  { hue: 'green', a: '29' },
-  'Mild Bull':    { hue: 'green', a: '1A' },
-  'Neutral Bull': { hue: 'green', a: '0D' },
-  'Neutral Bear': { hue: 'red',   a: '0D' },
-  'Mild Bear':    { hue: 'red',   a: '1A' },
-  'Strong Bear':  { hue: 'red',   a: '29' },
+  'Strong Bull':  { hue: 'green', a: '3D' },
+  'Mild Bull':    { hue: 'green', a: '26' },
+  'Neutral Bull': { hue: 'green', a: '12' },
+  'Neutral Bear': { hue: 'red',   a: '12' },
+  'Mild Bear':    { hue: 'red',   a: '26' },
+  'Strong Bear':  { hue: 'red',   a: '3D' },
 };
 
 /** Zone → line/column colour. Pine colours the MagicRS LINE by zone; drawing
@@ -290,21 +290,29 @@ export default function MagicRsSubchart({ data, activeIndex, benchmarkLabel }: M
   );
 }
 
-/** The Pine table, reduced to the four rows that carry the read:
- *  MagicRS, MagicMA, their difference, and how long the current side has held. */
+/** The read, before the numbers.
+ *
+ *  The reference indicator answers "is this strong or weak" from across the
+ *  room — a committed green or red field, and a table of STATUS WORDS, not
+ *  just values. Ours showed four 10px numbers and left the reader to work out
+ *  what they meant. A subchart that needs arithmetic to interpret is not
+ *  helping anyone decide anything.
+ */
 function MagicRsStats({ data, activeIndex, benchmarkLabel }: MagicRsSubchartProps) {
-  const cur = data[Math.min(activeIndex, data.length - 1)];
+  const idx = Math.min(activeIndex, data.length - 1);
+  const cur = data[idx];
   if (!cur) return null;
 
   const rs = cur.magic_rs;
   const ma = cur.magic_ma;
   const diff = rs != null && ma != null ? rs - ma : null;
+  const zone = cur.magic_rs_zone;
 
   // Consecutive bars on the current side of the MA — Pine's "Trend Duration".
   let held = 0;
   if (rs != null && ma != null) {
     const above = rs > ma;
-    for (let i = Math.min(activeIndex, data.length - 1); i >= 0; i--) {
+    for (let i = idx; i >= 0; i--) {
       const d = data[i];
       if (d.magic_rs == null || d.magic_ma == null) break;
       if (d.magic_rs > d.magic_ma !== above) break;
@@ -312,33 +320,80 @@ function MagicRsStats({ data, activeIndex, benchmarkLabel }: MagicRsSubchartProp
     }
   }
 
-  // How much of the series actually exists — the WALCHANNAG case, where 21 of
-  // 555 bars carry Magic RS and the chart alone cannot say so.
+  // 1D / 1W / 1M — change in Magic RS over 1, 5 and 20 BARS. Not true weekly or
+  // monthly series: long MagicRS needs 145 bars, which weekly and monthly
+  // histories never reach (the migration-169 lesson), so a bar-count lookback
+  // is the honest form of the same question.
+  const chg = (back: number): number | null => {
+    const a = data[idx - back]?.magic_rs;
+    const b = rs;
+    return a != null && b != null ? b - a : null;
+  };
+  const frames: { label: string; v: number | null }[] = [
+    { label: '1D', v: chg(1) }, { label: '1W', v: chg(5) }, { label: '1M', v: chg(20) },
+  ];
+
+  const bullish = rs != null && ma != null && rs > ma;
+  const verdict = zone == null ? 'No read'
+    : zone.includes('Strong Bull') ? 'Leading'
+    : zone.includes('Mild Bull') ? 'Improving'
+    : zone.includes('Strong Bear') ? 'Lagging'
+    : zone.includes('Mild Bear') ? 'Weakening'
+    : 'Neutral';
+  const vColor = zone == null ? 'var(--text-muted)'
+    : zone.includes('Bull') ? 'var(--risk-green)'
+    : zone.includes('Bear') ? 'var(--risk-red)' : 'var(--text-muted)';
+
   const withRs = data.filter((d) => d.magic_rs != null);
   const short = withRs.length > 0 && withRs.length < data.length;
 
-  const fmt = (v: number | null, suffix = '') =>
-    v == null ? '—' : `${v > 0 ? '+' : ''}${v.toFixed(2)}${suffix}`;
+  const fmt = (v: number | null) => (v == null ? '—' : `${v > 0 ? '+' : ''}${v.toFixed(2)}%`);
   const tone = (v: number | null) =>
     v == null ? 'var(--text-muted)' : v > 0 ? 'var(--risk-green)' : v < 0 ? 'var(--risk-red)' : 'var(--text-muted)';
 
   return (
-    <div className="px-2 py-1.5" style={{ borderTop: '1px solid var(--border)' }}>
-      <div className="grid grid-cols-4 gap-1">
+    <div style={{ borderTop: '1px solid var(--border)' }}>
+      {/* The verdict, large enough to read without leaning in. */}
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 px-3 pt-2">
+        <span className="text-[15px] font-serif font-semibold" style={{ color: vColor }}>
+          {verdict}
+        </span>
+        <span className="text-[11px] font-mono" style={{ color: 'var(--text-secondary)' }}>
+          {zone ?? 'zone unknown'} · {bullish ? 'above' : 'below'} its 60-bar average
+          {held > 0 && ` for ${held} bar${held === 1 ? '' : 's'}`}
+        </span>
+        <span className="ml-auto inline-flex items-center gap-2">
+          {frames.map((f) => (
+            <span key={f.label} className="inline-flex items-center gap-1">
+              <span className="text-[10px] font-mono text-[var(--text-faint)]">{f.label}</span>
+              <span
+                style={{
+                  width: 7, height: 7, borderRadius: 99, display: 'inline-block',
+                  background: f.v == null ? 'var(--text-faint)' : tone(f.v),
+                }}
+                title={f.v == null ? 'no data' : `${f.label}: ${fmt(f.v)} change in Magic RS`}
+              />
+            </span>
+          ))}
+        </span>
+      </div>
+
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 px-3 py-2">
         {[
-          { k: 'MagicRS', v: fmt(rs, '%'), c: tone(rs) },
-          { k: 'MagicMA', v: fmt(ma, '%'), c: 'var(--accent-indigo)' },
-          { k: 'RS Diff', v: fmt(diff, '%'), c: tone(diff) },
-          { k: 'Held', v: held > 0 ? `${held} bar${held === 1 ? '' : 's'}` : '—', c: 'var(--text-secondary)' },
-        ].map((s) => (
-          <div key={s.k}>
-            <div className="text-[8px] font-mono uppercase tracking-wider text-[var(--text-faint)]">{s.k}</div>
-            <div className="text-[10px] font-mono tabular-nums" style={{ color: s.c }}>{s.v}</div>
+          { k: 'Magic RS', v: fmt(rs), c: tone(rs) },
+          { k: '60-bar avg', v: fmt(ma), c: 'var(--accent-indigo)' },
+          { k: 'Gap to avg', v: fmt(diff), c: tone(diff) },
+          { k: 'Held', v: held > 0 ? `${held} bars` : '—', c: 'var(--text-secondary)' },
+        ].map((x) => (
+          <div key={x.k}>
+            <div className="text-[9px] font-mono uppercase tracking-wider text-[var(--text-faint)]">{x.k}</div>
+            <div className="text-[13px] font-mono tabular-nums" style={{ color: x.c }}>{x.v}</div>
           </div>
         ))}
       </div>
-      <div className="mt-1 text-[8px] font-mono text-[var(--text-faint)] leading-relaxed">
-        vs {benchmarkLabel} · 144-bar RS, 60-bar MA
+
+      <div className="px-3 pb-2 text-[9px] font-mono text-[var(--text-faint)] leading-relaxed">
+        vs {benchmarkLabel} · 144-bar RS, 60-bar average · 1D/1W/1M are 1, 5 and 20-bar changes
         {short && ` · series starts ${withRs[0].trade_date} (${withRs.length} of ${data.length} bars)`}
       </div>
     </div>

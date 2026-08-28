@@ -491,12 +491,34 @@ export default function ChartView() {
   const smNarrative = snapshot ? buildSmNarrative(snapshot) : '';
 
   // Magic RS widget data (same shape EquityVisualPulsePage builds)
+  // Magic RS follows the CHART's rows, not pulseBars.
+  //
+  // pulseBars is a hard .limit(130). The price chart is range-driven — 1Y, 5Y,
+  // MAX — so the two panes sat one above the other showing different spans, and
+  // changing the chart range left Magic RS identical. An x-axis that does not
+  // move with the chart above it is not a subchart, it is a second unrelated
+  // picture. rows carries magic_rs / magic_ma / magic_rs_zone already
+  // (INDICATOR_COLS), so this costs no extra fetch.
   const magicRsData = useMemo(
-    () => pulseBars.map((b) => ({ trade_date: b.trade_date, magic_rs: b.magic_rs, magic_ma: b.magic_ma, magic_rs_zone: b.magic_rs_zone })),
-    [pulseBars],
+    () => (rows as unknown as PulseBar[]).map((b) => ({
+      trade_date: b.trade_date,
+      magic_rs: b.magic_rs ?? null,
+      magic_ma: b.magic_ma ?? null,
+      magic_rs_zone: b.magic_rs_zone ?? null,
+    })),
+    [rows],
   );
+  // The scrubber indexes pulseBars; rows is a different length, so the active
+  // bar is matched by DATE rather than by position. Falls back to the latest
+  // bar, which is what an unscrubbed chart is showing anyway.
+  const magicRsActiveIdx = useMemo(() => {
+    const d = pulseBars[effectiveIdx]?.trade_date;
+    if (!d) return Math.max(0, magicRsData.length - 1);
+    const i = magicRsData.findIndex((x) => x.trade_date === d);
+    return i >= 0 ? i : Math.max(0, magicRsData.length - 1);
+  }, [pulseBars, effectiveIdx, magicRsData]);
   // Magic RS is a pipeline column vs CNX500 — null for many BSE/thin stocks.
-  const hasRsData = useMemo(() => pulseBars.some((b) => b.magic_rs != null), [pulseBars]);
+  const hasRsData = useMemo(() => magicRsData.some((b) => b.magic_rs != null), [magicRsData]);
 
   // ── Equity-specific computations ──
   const rsChange1d = useMemo(() => rsChangeLookback(pulseBars, effectiveIdx, 1), [pulseBars, effectiveIdx]);
@@ -856,35 +878,37 @@ export default function ChartView() {
         </div>
       </div>
 
-      {/* ═══ Magic RS — FULL WIDTH, directly under the price chart.
-          It lived in the 3fr rail, which gave a 144-bar relative-strength
-          series roughly a third of the width the price it explains gets. The
-          histogram and zone field need room to read as a field; squeezed into
-          a rail they read as noise. Full width also puts it in the same
-          column as the chart, which is the only honest place for something
-          meant to be read against it. ═══ */}
-      {snapshot && (hasRsData ? (
-        <SignalFlipCard
-          title="Magic RS"
-          widget={<MagicRsSubchart data={magicRsData} activeIndex={effectiveIdx} benchmarkLabel="NIFTY 500" />}
-          chart={
-            <SignalLineChart
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              data={pulseBars as any}
-              series={[
-                { key: 'magic_rs', color: 'var(--gold, #d4a84b)', label: 'Magic RS' },
-                { key: 'magic_ma', color: 'var(--text-faint, #64748b)', label: 'MA', dashed: true },
-              ]}
-              refLines={[{ y: 0 }]}
+      {/* ═══ Magic RS — directly under the price chart, in the SAME grid
+          template so its width matches the chart exactly. Spanning the page
+          put it wider than the thing it explains, which is worse than the rail
+          it came from: the x-axis no longer lines up with anything. ═══ */}
+      <div className="grid grid-cols-1 lg:grid-cols-[7fr_3fr] gap-3 mb-3">
+        <div className="min-w-0">
+    {snapshot && (hasRsData ? (
+            <SignalFlipCard
+              title="Magic RS"
+              widget={<MagicRsSubchart data={magicRsData} activeIndex={magicRsActiveIdx} benchmarkLabel="NIFTY 500" />}
+              chart={
+                <SignalLineChart
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  data={magicRsData as any}
+                  series={[
+                    { key: 'magic_rs', color: 'var(--gold, #d4a84b)', label: 'Magic RS' },
+                    { key: 'magic_ma', color: 'var(--text-faint, #64748b)', label: 'MA', dashed: true },
+                  ]}
+                  refLines={[{ y: 0 }]}
+                />
+              }
             />
-          }
-        />
-      ) : (
-        <div className="rounded-lg bg-kd-card border border-kd-border p-3">
-          <div className="text-[11px] font-serif font-semibold text-primary mb-1">Magic RS</div>
-          <div className="text-[10px] text-muted leading-snug">Not computed (RS vs NIFTY 500 needs a benchmark series — absent for many BSE/thin names).</div>
+          ) : (
+            <div className="rounded-lg bg-kd-card border border-kd-border p-3">
+              <div className="text-[11px] font-serif font-semibold text-primary mb-1">Magic RS</div>
+              <div className="text-[10px] text-muted leading-snug">Not computed (RS vs NIFTY 500 needs a benchmark series — absent for many BSE/thin names).</div>
+            </div>
+          ))}
         </div>
-      ))}
+        <div className="hidden lg:block" />
+      </div>
 
       {pulseBars.length > 0 && (
         <div className="mt-1">
