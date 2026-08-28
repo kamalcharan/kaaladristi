@@ -843,29 +843,6 @@ export default function ChartView() {
       <div id="study-chart" style={{ scrollMarginTop: 118 }} className="grid grid-cols-1 lg:grid-cols-[7fr_3fr] gap-3 mb-3">
         <div className="min-w-0">{chartArea}</div>
         <div className="flex flex-col gap-3 min-w-0">
-          {snapshot && (hasRsData ? (
-            <SignalFlipCard
-              title="Magic RS"
-              minHeight={180}
-              widget={<MagicRsSubchart data={magicRsData} activeIndex={effectiveIdx} benchmarkLabel="NIFTY 500" />}
-              chart={
-                <SignalLineChart
-                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                  data={pulseBars as any}
-                  series={[
-                    { key: 'magic_rs', color: 'var(--gold, #d4a84b)', label: 'Magic RS' },
-                    { key: 'magic_ma', color: 'var(--text-faint, #64748b)', label: 'MA', dashed: true },
-                  ]}
-                  refLines={[{ y: 0 }]}
-                />
-              }
-            />
-          ) : (
-            <div className="rounded-lg bg-kd-card border border-kd-border p-3">
-              <div className="text-[11px] font-serif font-semibold text-primary mb-1">Magic RS</div>
-              <div className="text-[10px] text-muted leading-snug">Not computed (RS vs NIFTY 500 needs a benchmark series — absent for many BSE/thin names).</div>
-            </div>
-          ))}
           {!isLoading && !isError && rows.length > 0 && tf === 'daily' && (
             <CockpitIndicatorPanels rows={rows} />
           )}
@@ -878,6 +855,37 @@ export default function ChartView() {
           )}
         </div>
       </div>
+
+      {/* ═══ Magic RS — FULL WIDTH, directly under the price chart.
+          It lived in the 3fr rail, which gave a 144-bar relative-strength
+          series roughly a third of the width the price it explains gets. The
+          histogram and zone field need room to read as a field; squeezed into
+          a rail they read as noise. Full width also puts it in the same
+          column as the chart, which is the only honest place for something
+          meant to be read against it. ═══ */}
+      {snapshot && (hasRsData ? (
+        <SignalFlipCard
+          title="Magic RS"
+          widget={<MagicRsSubchart data={magicRsData} activeIndex={effectiveIdx} benchmarkLabel="NIFTY 500" />}
+          chart={
+            <SignalLineChart
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              data={pulseBars as any}
+              series={[
+                { key: 'magic_rs', color: 'var(--gold, #d4a84b)', label: 'Magic RS' },
+                { key: 'magic_ma', color: 'var(--text-faint, #64748b)', label: 'MA', dashed: true },
+              ]}
+              refLines={[{ y: 0 }]}
+            />
+          }
+        />
+      ) : (
+        <div className="rounded-lg bg-kd-card border border-kd-border p-3">
+          <div className="text-[11px] font-serif font-semibold text-primary mb-1">Magic RS</div>
+          <div className="text-[10px] text-muted leading-snug">Not computed (RS vs NIFTY 500 needs a benchmark series — absent for many BSE/thin names).</div>
+        </div>
+      ))}
+
       {pulseBars.length > 0 && (
         <div className="mt-1">
           <TimelineSlider
