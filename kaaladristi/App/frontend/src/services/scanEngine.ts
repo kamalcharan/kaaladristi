@@ -2323,6 +2323,97 @@ function wgJourneyRowToScanStock(r: any): ScanStock {
   };
 }
 
+/** The EOD columns km_wg_journeys does not carry.
+ *  km_wg_journeys is a JOURNEY table — it stores where a stock is in its
+ *  sleep/wake arc, plus the handful of display fields migration 193 copied
+ *  in. Everything else the scan table can render (RSI, flow, the avg-amount
+ *  family, delivery surge, the return columns, the sniper pair) lives only in
+ *  km_equity_eod, so those cells rendered blank on every Discovery tab.
+ *
+ *  Read-time join rather than more copied columns: the tabs are capped at a
+ *  few dozen rows, the lookup is on km_equity_eod's (trade_date, equity_id)
+ *  key, and a copy would need a migration, a backfill, and a nightly rewrite
+ *  that can go stale against the row it was copied from. */
+const WG_EOD_COLS = [
+  'equity_id', 'trade_date',
+  'open', 'high', 'low',
+  'rss_value', 'rss_spread', 'rsi_14', 'flow_type', 'supertrend_dir',
+  'sma_50', 'sma_150', 'sma_200', 'ema_20', 'atr_14',
+  'w52_high', 'w52_low', 'lifetime_high',
+  'avg_amt_5d', 'avg_amt_22d', 'avg_amt_66d', 'delivery_surge_x',
+  'sniper_inst', 'sniper_hot', 'accum_distrib',
+  'volume_divergence_flag', 'deliv_value_cr',
+  'stage', 'score_5d', 'score_22d',
+  'ret_5d', 'ret_22d', 'ret_66d', 'pct_below_52w_high',
+].join(',');
+
+/** Fill the EOD-only fields on already-mapped journey rows, in place.
+ *  Keyed on (equity_id, trade_date) and NOT on the latest session: a journey
+ *  whose stock stopped trading keeps its own last bar date, and joining those
+ *  rows to today would silently show another day's numbers. */
+async function enrichWgFromEod(rows: ScanStock[]): Promise<ScanStock[]> {
+  if (rows.length === 0) return rows;
+  const ids = Array.from(new Set(rows.map((r) => r.equity_id)));
+  const dates = Array.from(
+    new Set(rows.map((r) => r.trade_date).filter((d): d is string => !!d)),
+  );
+  if (ids.length === 0 || dates.length === 0) return rows;
+
+  const { data, error } = await from('km_equity_eod')
+    .select(WG_EOD_COLS)
+    .in('equity_id', ids)
+    .in('trade_date', dates)
+    .limit(ids.length * dates.length)
+    .execute();
+  // Enrichment is additive — a failure here leaves the journey fields intact
+  // rather than emptying the tab.
+  if (error || !Array.isArray(data)) return rows;
+
+  const key = (eid: any, d: any) => `${eid}|${String(d).slice(0, 10)}`;
+  const byKey = new Map<string, any>();
+  for (const e of data as any[]) byKey.set(key(e.equity_id, e.trade_date), e);
+
+  for (const r of rows) {
+    const e = byKey.get(key(r.equity_id, r.trade_date));
+    if (!e) continue;
+    const ema20 = toNum(e.ema_20);
+    const atr14 = toNum(e.atr_14);
+    r.open = toNum(e.open); r.high = toNum(e.high); r.low = toNum(e.low);
+    r.rss_value = toNum(e.rss_value); r.rss_spread = toNum(e.rss_spread);
+    r.rsi_14 = toNum(e.rsi_14);
+    r.flow_type = e.flow_type ?? null;
+    r.supertrend_dir = e.supertrend_dir ?? null;
+    r.sma_50 = toNum(e.sma_50); r.sma_150 = toNum(e.sma_150); r.sma_200 = toNum(e.sma_200);
+    r.ema_20 = ema20; r.atr_14 = atr14;
+    r.w52_high = toNum(e.w52_high); r.w52_low = toNum(e.w52_low);
+    r.lifetime_high = toNum(e.lifetime_high);
+    r.avg_amt_5d = toNum(e.avg_amt_5d);
+    r.avg_amt_22d = toNum(e.avg_amt_22d);
+    r.avg_amt_66d = toNum(e.avg_amt_66d);
+    r.delivery_surge_x = toNum(e.delivery_surge_x);
+    r.sniper_inst = toNum(e.sniper_inst); r.sniper_hot = toNum(e.sniper_hot);
+    r.accum_distrib = e.accum_distrib ?? null;
+    r.volume_divergence_flag = e.volume_divergence_flag ?? null;
+    r.deliv_value_cr = toNum(e.deliv_value_cr);
+    r.stage = e.stage ?? null;
+    r.ret_5d = toNum(e.ret_5d);
+    r.ret_22d = toNum(e.ret_22d);
+    r.ret_66d = toNum(e.ret_66d);
+    r.pctBelow52wHigh = toNum(e.pct_below_52w_high);
+    // Migration 193 copied these onto the journey row; the EOD row is the
+    // source they were copied from, so it wins when present.
+    r.score_5d = toNum(e.score_5d) ?? r.score_5d ?? null;
+    r.score_22d = toNum(e.score_22d) ?? r.score_22d ?? null;
+    // The reward pair is derived, so it only becomes computable now that
+    // ema_20 and atr_14 have arrived.
+    r.reward = ema20 && atr14 ? (ema20 + atr14) - Number(r.close) : null;
+    r.rewardPct = ema20 && atr14 && atr14 > 0
+      ? ((ema20 + atr14) - Number(r.close)) / atr14
+      : null;
+  }
+  return rows;
+}
+
 /** One journey-state tab = one indexed read of km_wg_journeys. */
 async function fetchWgJourneys(presetId: string, exchangeFilter: ExchangeFilter): Promise<ScanStock[]> {
   if (exchangeFilter === 'BSE') return [];
@@ -2353,7 +2444,7 @@ async function fetchWgJourneys(presetId: string, exchangeFilter: ExchangeFilter)
   if (error || !Array.isArray(data)) {
     throw new Error(`km_wg_journeys unavailable for ${presetId} — run migration 177 + compute_wg_journeys.py`);
   }
-  return (data as any[]).map(wgJourneyRowToScanStock);
+  return enrichWgFromEod((data as any[]).map(wgJourneyRowToScanStock));
 }
 
 /** Counts for the three journey tabs (landing page). */
