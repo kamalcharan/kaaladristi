@@ -114,15 +114,18 @@ COMMENT ON COLUMN km_equity_eod.gl_event IS
 -- explicit transaction would hold whatever they had already taken across
 -- every pg_sleep, which is the queueing behaviour this replaces.
 
--- (2) The partial index — both scanners filter on the event being present,
--- and events are rare, so it stays small. CONCURRENTLY cannot run inside a transaction block, which is
--- why it sits outside one: a plain CREATE INDEX on km_equity_eod takes a
--- lock that blocks writes for the whole build on a table of this size, and
--- the nightly pipeline writes to it. This form is slower but takes no
--- blocking lock. If it ever fails it leaves an INVALID index behind --
--- DROP INDEX idx_equity_eod_gl_event; and run it again.
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_equity_eod_gl_event
-    ON km_equity_eod (trade_date, gl_event) WHERE gl_event IS NOT NULL;
+-- (2) The partial index — MOVED OUT of this file.
+--
+-- CREATE INDEX CONCURRENTLY cannot run inside a transaction block, and
+-- pgAdmin's Query Tool wraps a multi-statement script in one — so leaving it
+-- here fails the file halfway through no matter what the rest does. It is
+-- also entirely optional: both GL scanners filter trade_date = <date> AND
+-- gl_event = <event>, and idx_equity_eod_trade_date already narrows that to
+-- ~7,500 rows, which is cheap to scan.
+--
+-- It now lives in km_migration_194b_gl_event_index.sql. Run that one on its
+-- own, whenever convenient — CONCURRENTLY takes no blocking lock, so it is
+-- safe during market hours and during the nightly pipeline.
 
 -- (3) km_wg_journeys columns. This is the table a crashed compute run can
 -- leave locked by an orphaned DELETE, so it is isolated: a lock timeout here
