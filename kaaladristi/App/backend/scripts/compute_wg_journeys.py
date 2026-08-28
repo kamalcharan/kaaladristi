@@ -347,6 +347,11 @@ def _existing_columns(conn, table: str, wanted: list[str]) -> list[str]:
     return [c for c in wanted if c in have]
 
 
+# Sessions a Golden Line event stays visible on a journey row. See the note
+# in load_display() for why this cannot be read off the latest bar.
+GL_EVENT_LOOKBACK_SESSIONS = 30
+
+
 def load_display(conn, ids: list[int]) -> dict[int, dict]:
     """Latest EOD display fields per stock."""
     # score_5d/score_22d/rvol and the SVD/SBD/SYD dots come along because the
@@ -359,7 +364,7 @@ def load_display(conn, ids: list[int]) -> dict[int, dict]:
     extra = _existing_columns(conn, 'km_equity_eod', [
         'score_5d', 'score_22d', 'rvol',
         'dot_svd', 'dot_sbd', 'dot_syd',
-        'gl_event', 'gl_days_above',
+        'gl_days_above',
     ])
     sql = f"""
         SELECT DISTINCT ON (equity_id) {', '.join(base + extra)}
@@ -368,7 +373,40 @@ def load_display(conn, ids: list[int]) -> dict[int, dict]:
     """
     with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
         cur.execute(sql, (ids,))
-        return {r['equity_id']: dict(r) for r in cur.fetchall()}
+        out = {r['equity_id']: dict(r) for r in cur.fetchall()}
+
+    # gl_event is read over a WINDOW, not off the latest bar.
+    #
+    # A Golden Line breakout is a ONE-DAY event, so reading it from the same
+    # DISTINCT ON latest-bar row as everything else gave the chip a one-day
+    # lifespan: BBTC and WHIRLPOOL broke out on 2026-08-27, the next session's
+    # bar arrived, and the mark vanished. The table went from 2 lit rows to 0
+    # overnight with nothing wrong in the data.
+    #
+    # 30 sessions (owner call, 2026-08-28). The chip now says "this stock had
+    # an SVD/SBD-backed Golden Line event recently", which is the subset rule
+    # that was asked for, rather than "one fired today".
+    if 'gl_event' in _existing_columns(conn, 'km_equity_eod', ['gl_event']):
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("""
+                WITH sess AS (
+                    SELECT trade_date,
+                           row_number() OVER (ORDER BY trade_date DESC) AS rn
+                    FROM (SELECT DISTINCT trade_date FROM km_equity_eod
+                          WHERE trade_date > CURRENT_DATE - 200) d
+                )
+                SELECT DISTINCT ON (e.equity_id)
+                       e.equity_id, e.gl_event, e.trade_date AS gl_event_date
+                FROM km_equity_eod e
+                JOIN sess s ON s.trade_date = e.trade_date AND s.rn <= %s
+                WHERE e.equity_id = ANY(%s) AND e.gl_event IS NOT NULL
+                ORDER BY e.equity_id, e.trade_date DESC
+            """, (GL_EVENT_LOOKBACK_SESSIONS, ids))
+            for r in cur.fetchall():
+                d = out.setdefault(r['equity_id'], {})
+                d['gl_event'] = r['gl_event']
+                d['gl_event_date'] = r['gl_event_date']
+    return out
 
 
 # ── Per-stock journey walk ───────────────────────────────────────────────
@@ -656,7 +694,7 @@ CURRENT_COLS = [
     'symbol', 'company_name', 'industry', 'exchange', 'isin', 'mcap_cr', 'close', 'pct_chng',
     'delivery_pct', 'magic_rs', 'magic_rs_zone', 'listing_age_years', 'trade_date',
     'score_5d', 'score_22d', 'rvol', 'dot_svd', 'dot_sbd', 'dot_syd',
-    'gl_event', 'gl_days_above', 'turn_date', 'turn_close', 'pct_from_turn',
+    'gl_event', 'gl_event_date', 'gl_days_above', 'turn_date', 'turn_close', 'pct_from_turn',
 ]
 
 
@@ -781,7 +819,8 @@ def run(dry_run: bool):
             'rvol': disp.get('rvol'),
             'dot_svd': disp.get('dot_svd'), 'dot_sbd': disp.get('dot_sbd'),
             'dot_syd': disp.get('dot_syd'),
-            'gl_event': disp.get('gl_event'), 'gl_days_above': disp.get('gl_days_above'),
+            'gl_event': disp.get('gl_event'), 'gl_event_date': disp.get('gl_event_date'),
+            'gl_days_above': disp.get('gl_days_above'),
         }
         row = {**{c: None for c in CURRENT_COLS}, **base,
                **{k: v for k, v in cur_state.items() if k in CURRENT_COLS}}
