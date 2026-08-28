@@ -174,27 +174,36 @@ WITH h AS (
     -- the count at 1 and delay the next confirmation by however many bars the
     -- run had already accumulated. Caught by replaying the two paths against
     -- each other -- the user-visible columns agreed, this one did not.
+    -- The entry trio anchors on the RAW run -- the same column the STAGE badge
+    -- shows -- not on the confirmed spell.
+    --
+    -- It used to anchor on the spell, so a row could read "S2" beside a date
+    -- and price belonging to the S3 run that preceded it. ZIMLAB on 2026-08-27
+    -- showed S2 since 31 Jul at Rs 112.99 when its S2 run began 19 Aug at
+    -- Rs 118.04: 31 Jul was the S3 entry. 226 of 1,029 S2 rows carried that
+    -- mismatch, understating the move every time.
+    --
+    -- stage_confirmed is untouched and still spell-based -- it is the honest
+    -- answer to "has this flip held ten bars", and remains an optional column.
+    -- Only the trio moves.
     SELECT a.id, a.equity_id, a.close, a.run_pos,
            m.conf_stage,
-           m.rn - m.entry_rn + 1 AS bars_in,
-           -- rn is 1 on each symbol's FIRST classified bar, so entry_rn = 1
-           -- IS the censored case. An earlier draft compared against
-           -- min(rn) over the spell rows, which excludes unconfirmed bars --
-           -- it read the first CONFIRMED bar as the symbol's first bar and
-           -- never fired.
-           m.entry_rn = 1 AS censored,
+           a.run_pos AS bars_in,
+           -- rn is 1 on each symbol's FIRST classified bar, so a run opening
+           -- there is censored: its real start predates the data.
+           (a.rn - a.run_pos + 1) = 1 AS censored,
            e.trade_date AS since_date,
            e.close      AS since_close
     FROM runs a
     LEFT JOIN marked m ON m.id = a.id
-    -- Same numbering as h, so entry_rn addresses the same bar.
+    -- Same numbering as h, so the raw run's first bar addresses the same row.
     LEFT JOIN (SELECT equity_id, trade_date, close,
                  row_number() OVER (PARTITION BY equity_id ORDER BY trade_date) AS rn
           FROM km_equity_eod
           WHERE equity_id = ANY(%(ids)s)
             AND stage IS NOT NULL
             AND stage <> 'UNKNOWN') e
-      ON e.equity_id = m.equity_id AND e.rn = m.entry_rn
+      ON e.equity_id = a.equity_id AND e.rn = a.rn - a.run_pos + 1
 )
 UPDATE km_equity_eod t
 SET stage_confirmed      = r.conf_stage,
@@ -418,41 +427,35 @@ WITH cur AS (
     LEFT JOIN prev p ON p.equity_id = c.equity_id
 ), resolved AS (
     SELECT k.*,
-           -- A new spell opens only when the run has held long enough AND the
-           -- stage actually differs from what is already confirmed. Without
-           -- the second test, a stage that dips out and returns would reset
-           -- its own clock every time it re-confirmed.
+           -- The ENTRY opens the moment the raw stage changes -- run_bars = 1
+           -- is exactly that bar, and it is today's bar, so no lookup is
+           -- needed for the date at all. (The old form hunted backwards with
+           -- OFFSET run_bars - 1 because it was dating the confirmed spell,
+           -- which starts ten bars before it is recognised.)
+           (k.run_bars = 1) AS opens_new,
+           -- CONFIRMATION is a separate clock and keeps the old rule: held
+           -- long enough AND actually different from what is confirmed, so a
+           -- stage that dips out and returns does not reset it.
            (k.run_bars >= %(min_spell)s
-            AND (k.prev_conf IS NULL OR k.prev_conf <> k.stage)) AS opens_new,
-           e.trade_date AS new_since,
-           e.close      AS new_since_close
+            AND (k.prev_conf IS NULL OR k.prev_conf <> k.stage)) AS confirms_new
     FROM calc k
-    LEFT JOIN LATERAL (
-        SELECT x.trade_date, x.close
-        FROM km_equity_eod x
-        WHERE x.equity_id = k.equity_id
-          AND x.trade_date <= %(dt)s
-          AND x.trade_date >= %(dt)s::date - INTERVAL '400 days'
-          AND x.stage IS NOT NULL AND x.stage <> 'UNKNOWN'
-        ORDER BY x.trade_date DESC
-        OFFSET k.run_bars - 1 LIMIT 1
-    ) e ON k.run_bars >= %(min_spell)s
 ), final AS (
     SELECT r.id, r.equity_id, r.close, r.run_bars,
-           CASE WHEN r.opens_new THEN r.stage ELSE r.prev_conf END AS f_conf,
-           CASE WHEN r.opens_new THEN r.new_since ELSE r.prev_since END AS f_since,
-           CASE WHEN r.opens_new THEN ROUND(r.new_since_close, 2)
+           CASE WHEN r.confirms_new THEN r.stage ELSE r.prev_conf END AS f_conf,
+           -- A new raw run starts on THIS bar, so the entry is this date and
+           -- this close; otherwise the run continues and both carry forward.
+           CASE WHEN r.opens_new THEN %(dt)s::date ELSE r.prev_since END AS f_since,
+           CASE WHEN r.opens_new THEN ROUND(r.close, 2)
                 ELSE r.prev_since_close END AS f_since_close,
-           CASE WHEN r.opens_new THEN r.run_bars
-                WHEN r.prev_conf IS NOT NULL THEN COALESCE(r.prev_bars, 0) + 1
-                ELSE NULL END AS f_bars,
+           -- bars_in is now the raw run length, matching the batch path.
+           r.run_bars AS f_bars,
            CASE WHEN r.opens_new
-                     -- censored = the spell opens on the symbol's first
+                     -- censored = the run opens on the symbol's first
                      -- classified bar, so the real entry predates the data
                      THEN NOT EXISTS (
                          SELECT 1 FROM km_equity_eod z
                          WHERE z.equity_id = r.equity_id
-                           AND z.trade_date < r.new_since
+                           AND z.trade_date < %(dt)s
                            AND z.stage IS NOT NULL AND z.stage <> 'UNKNOWN')
                 ELSE r.prev_censored END AS f_censored
     FROM resolved r
