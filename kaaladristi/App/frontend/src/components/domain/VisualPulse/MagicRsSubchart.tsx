@@ -25,6 +25,7 @@
  */
 
 import React, { useRef, useEffect, useCallback } from 'react';
+import { ZONE_LABELS } from '@/constants/signalScale';
 
 export interface MagicRsDataPoint {
   trade_date: string;
@@ -343,13 +344,12 @@ function MagicRsStats({ data, activeIndex, benchmarkLabel, variant = 'long' }: M
     { label: '1D', v: chg(1) }, { label: '1W', v: chg(5) }, { label: '1M', v: chg(20) },
   ];
 
-  const bullish = rs != null && ma != null && rs > ma;
-  const verdict = zone == null ? 'No read'
-    : zone.includes('Strong Bull') ? 'Leading'
-    : zone.includes('Mild Bull') ? 'Improving'
-    : zone.includes('Strong Bear') ? 'Lagging'
-    : zone.includes('Mild Bear') ? 'Weakening'
-    : 'Neutral';
+  // D39: 'Strong Bull' / 'Strong Bear' are DB values, never display text. The
+  // observational labels are Leading / Improving / Neutral / Weakening /
+  // Lagging, and ZONE_LABELS is their single source — a second copy here would
+  // be one more list to drift, which is the shape of most of this week.
+  const above = rs != null && ma != null && rs > ma;
+  const verdict = zone ? (ZONE_LABELS[zone]?.label ?? 'Neutral') : 'No read';
   const vColor = zone == null ? 'var(--text-muted)'
     : zone.includes('Bull') ? 'var(--risk-green)'
     : zone.includes('Bear') ? 'var(--risk-red)' : 'var(--text-muted)';
@@ -369,7 +369,7 @@ function MagicRsStats({ data, activeIndex, benchmarkLabel, variant = 'long' }: M
           {verdict}
         </span>
         <span className="text-[11px] font-mono" style={{ color: 'var(--text-secondary)' }}>
-          {zone ?? 'zone unknown'} · {bullish ? 'above' : 'below'} its {variant === 'short' ? '10' : '60'}-bar average
+          {above ? 'above' : 'below'} its {variant === 'short' ? '10' : '60'}-bar average
           {held > 0 && ` for ${held} bar${held === 1 ? '' : 's'}`}
         </span>
         <span className="ml-auto inline-flex items-center gap-2">

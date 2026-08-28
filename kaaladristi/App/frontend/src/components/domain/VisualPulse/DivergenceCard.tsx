@@ -17,6 +17,17 @@ const FRESHNESS_LABEL: Record<string, string> = {
   old: 'Old — historical only',
 };
 
+/** D39 — the enum values carry direction; the BADGE must not. A divergence is
+ *  a disagreement between price and momentum, which is observable; naming it
+ *  bullish or bearish is a call on what happens next. Colour still carries the
+ *  side, as it does everywhere else. */
+const DIV_TYPE_LABELS: Record<string, string> = {
+  RegularBullish: 'Momentum holding',
+  RegularBearish: 'Momentum fading',
+  HiddenBullish: 'Momentum leading',
+  HiddenBearish: 'Momentum lagging',
+};
+
 const TYPE_COLORS: Record<string, string> = {
   RegularBullish: 'var(--risk-green)',
   RegularBearish: 'var(--risk-red)',
@@ -99,7 +110,7 @@ export default function DivergenceCard({ divergence, rsiHistory, priceHistory }:
             border: `1px solid color-mix(in srgb, ${color} 40%, transparent)`,
             color,
           }}>
-            {divergence.type!.replace(/([A-Z])/g, ' $1').trim()}
+            {DIV_TYPE_LABELS[divergence.type!] ?? 'Divergence'}
           </span>
         )}
       </div>

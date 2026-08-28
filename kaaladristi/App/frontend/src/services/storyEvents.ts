@@ -109,22 +109,28 @@ function zoneBucket(z?: string | null): StoryTone | null {
 }
 
 // Weinstein's four stages, plus the approach state the classifier emits.
-// S3 reads BEAR, not neutral: leaving an advance is the warning, and calling it
-// neutral is what let a topping stock look unchanged on the timeline.
+//
+// D39 — the names describe STRUCTURE, never direction. "advancing" and
+// "declining" read as a call on where price goes next; base, breakout attempt,
+// top formation and markdown describe the shape the stage IS. `tone` stays
+// bull/bear because it is an internal colour key, never rendered as text.
+//
+// S3 still carries the BEAR tone: leaving a Stage 2 run is the moment worth
+// marking, and toning it neutral is what let a topping stock look unchanged.
 const STAGE_NAME: Record<string, string> = {
-  S1: 'S1 (basing)',
-  S2_CANDIDATE: 'S2 candidate (approaching)',
-  S2: 'S2 (advancing)',
-  S3: 'S3 (topping)',
-  S4: 'S4 (declining)',
+  S1: 'Stage 1 · base',
+  S2_CANDIDATE: 'Stage 2 · breakout attempt',
+  S2: 'Stage 2',
+  S3: 'Stage 3 · top formation',
+  S4: 'Stage 4 · markdown',
 }
 
 const STAGE_LABEL: Record<string, { title: string; name: string; tone: StoryTone }> = {
-  S1: { title: 'Entered Stage 1', name: 'S1 (basing)', tone: 'neutral' },
-  S2_CANDIDATE: { title: 'Approaching Stage 2', name: 'S2 candidate (approaching)', tone: 'neutral' },
-  S2: { title: 'Entered Stage 2', name: 'S2 (advancing)', tone: 'bull' },
-  S3: { title: 'Entered Stage 3', name: 'S3 (topping)', tone: 'bear' },
-  S4: { title: 'Entered Stage 4', name: 'S4 (declining)', tone: 'bear' },
+  S1: { title: 'Entered Stage 1', name: STAGE_NAME.S1, tone: 'neutral' },
+  S2_CANDIDATE: { title: 'Approaching Stage 2', name: STAGE_NAME.S2_CANDIDATE, tone: 'neutral' },
+  S2: { title: 'Entered Stage 2', name: STAGE_NAME.S2, tone: 'bull' },
+  S3: { title: 'Entered Stage 3', name: STAGE_NAME.S3, tone: 'bear' },
+  S4: { title: 'Entered Stage 4', name: STAGE_NAME.S4, tone: 'bear' },
 }
 
 const GL_LABEL: Record<string, { title: string; detail: string; tone: StoryTone }> = {
@@ -372,7 +378,7 @@ export function buildStoryEvents(
     // Treat it exactly like a missing previous stage: say nothing.
     if (b.stage && p.stage && b.stage !== p.stage && p.stage !== 'UNKNOWN') {
       const st = STAGE_LABEL[b.stage]   // undefined for UNKNOWN — nothing fires
-      if (st) add(i, 'stage', st.title, `Weinstein stage ${STAGE_NAME[p.stage] ?? p.stage} → ${st.name}`, st.tone)
+      if (st) add(i, 'stage', st.title, `${STAGE_NAME[p.stage] ?? p.stage} → ${st.name}`, st.tone)
     }
 
     // 4b) Golden Line event — an SVD/SBD-backed cross or hold of the 150 SMA.
