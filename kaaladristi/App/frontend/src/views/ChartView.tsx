@@ -9,6 +9,7 @@ import { useInstrumentInsight } from '@/hooks';
 import StatStrip from '@/components/domain/StockCockpit/StatStrip';
 import VerdictHero from '@/components/domain/StockCockpit/VerdictHero';
 import ThesisTab from '@/components/domain/StockCockpit/ThesisTab';
+import DataTab from '@/components/domain/StockCockpit/DataTab';
 import type { ThesisBar } from '@/services/thesis';
 import StoryMode from '@/components/domain/StockCockpit/StoryMode';
 import ScannerArrivalView from '@/components/domain/StockCockpit/ScannerArrival/ScannerArrivalView';
@@ -209,8 +210,11 @@ export default function ChartView() {
   // Stock DeepDive tabs: Analysis | Chart & Replay | Thesis. Deep-linkable via
   // ?tab= so bookmarks / positions / scanners can land straight on Thesis.
   const tabParam = searchParams.get('tab');
-  const [dvTab, setDvTab] = useState<'analysis' | 'chart' | 'thesis'>(
-    tabParam === 'thesis' ? 'thesis' : tabParam === 'chart' ? 'chart' : 'analysis',
+  const [dvTab, setDvTab] = useState<'analysis' | 'chart' | 'thesis' | 'data'>(
+    tabParam === 'thesis' ? 'thesis'
+      : tabParam === 'chart' ? 'chart'
+      : tabParam === 'data' ? 'data'
+      : 'analysis',
   );
   // Scanner arrival — when the URL carries ?setup=<preset> the user came
   // from a scanner (e.g. Stage 2 Leaders). We land on Chart & Replay tab
@@ -1040,8 +1044,10 @@ export default function ChartView() {
             Slice 3). SHARED by equity + index. Data/Results are placeholders. ═══ */}
         {(isEquity || isIndex) && !isLoading && rows.length > 0 && (
           <div className="flex items-center gap-1 mb-3 border-b border-kd-border">
-            {([['analysis', 'Analysis'], ['chart', 'Chart & Replay'], ['thesis', 'Thesis']] as const)
-              .filter(([id]) => id !== 'thesis' || isEquity)
+            {([['analysis', 'Analysis'], ['chart', 'Chart & Replay'], ['thesis', 'Thesis'], ['data', 'Data']] as const)
+              // Thesis and Data are equity-only: both read km_equity_eod
+              // columns that km_index_eod does not carry.
+              .filter(([id]) => (id !== 'thesis' && id !== 'data') || isEquity)
               .map(([id, label]) => (
               <button
                 key={id}
@@ -1056,7 +1062,6 @@ export default function ChartView() {
                 {label}
               </button>
             ))}
-            <span className="px-3 py-2 text-sm text-[var(--text-faint)] cursor-default">Data · soon</span>
             <span className="px-3 py-2 text-sm text-[var(--text-faint)] cursor-default">Results · soon</span>
           </div>
         )}
@@ -1301,6 +1306,11 @@ export default function ChartView() {
             autoOpenForm={wantPositionForm}
             onAutoOpened={() => setWantPositionForm(false)}
           />
+        )}
+
+        {/* ═══ Data — the raw record behind every other view. Equity-only. ═══ */}
+        {isEquity && dvTab === 'data' && !isLoading && rows.length > 0 && (
+          <DataTab equityId={numId} symbol={name} />
         )}
 
       </div>
