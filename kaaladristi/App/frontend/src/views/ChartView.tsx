@@ -1,8 +1,8 @@
-import { useState, useMemo, useEffect, useRef } from 'react';
+import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { TrendingUp, TrendingDown, BarChart3, AlertCircle, RefreshCw, ArrowLeft } from 'lucide-react';
-import { fetchIndicatorDataById, fetchEquityEodById, fetchEquityTimeframeById, resampleRows, type EquityTimeframe, fetchStockJourney } from '@/services/indicatorData';
+import { fetchIndicatorDataById, fetchEquityEodById, fetchEquityTimeframeById, resampleRows, type EquityTimeframe, fetchStockJourney, type IndicatorRow } from '@/services/indicatorData';
 import TradingChart from '@/components/charts/TradingChart';
 import VaNiInsight from '@/components/domain/VaNiInsight';
 import { useInstrumentInsight } from '@/hooks';
@@ -491,6 +491,19 @@ export default function ChartView() {
   const smNarrative = snapshot ? buildSmNarrative(snapshot) : '';
 
   // Magic RS widget data (same shape EquityVisualPulsePage builds)
+  // The price chart's VISIBLE window — pan and zoom, not just the range picker.
+  // TradingChart has exposed onVisibleRangeChange all along and nothing was
+  // listening, so Magic RS matched the range but not the viewport: zooming into
+  // three months of price left the subchart showing all five years underneath
+  // it. lightweight-charts already syncs its own sub-panes this way; this gives
+  // the canvas pane the same feed.
+  const [visibleRange, setVisibleRange] = useState<{ from: string; to: string } | null>(null);
+  const handleVisibleRange = useCallback(
+    (from: string, to: string) =>
+      setVisibleRange((p) => (p && p.from === from && p.to === to ? p : { from, to })),
+    [],
+  );
+
   // Magic RS follows the CHART's rows, not pulseBars.
   //
   // pulseBars is a hard .limit(130). The price chart is range-driven — 1Y, 5Y,
@@ -499,24 +512,39 @@ export default function ChartView() {
   // move with the chart above it is not a subchart, it is a second unrelated
   // picture. rows carries magic_rs / magic_ma / magic_rs_zone already
   // (INDICATOR_COLS), so this costs no extra fetch.
+  // Weekly and monthly carry ONLY the short series. Long MagicRS is a 144-bar
+  // lookback — 144 weeks is ~3 years and 144 months is ~12, against a deepest
+  // monthly history of 80 bars — so it is structurally absent there, not
+  // missing. Falling back to the short series is what those timeframes have;
+  // the alternative is the blank pane the daily-only columns produced.
+  const usingShortRs = tf !== 'daily';
   const magicRsData = useMemo(
-    () => (rows as unknown as PulseBar[]).map((b) => ({
+    () => (rows as unknown as IndicatorRow[]).map((b) => ({
       trade_date: b.trade_date,
-      magic_rs: b.magic_rs ?? null,
-      magic_ma: b.magic_ma ?? null,
-      magic_rs_zone: b.magic_rs_zone ?? null,
+      magic_rs: (usingShortRs ? b.magic_rs_short : b.magic_rs) ?? null,
+      magic_ma: (usingShortRs ? b.magic_rs_short_ma : b.magic_ma) ?? null,
+      magic_rs_zone: (usingShortRs ? b.magic_rs_short_zone : b.magic_rs_zone) ?? null,
     })),
-    [rows],
+    [rows, usingShortRs],
   );
+  // Clipped to the visible window when the user has panned or zoomed; the full
+  // range until then. Dates, not indices — the two panes hold different arrays.
+  const magicRsVisible = useMemo(() => {
+    if (!visibleRange) return magicRsData;
+    const clipped = magicRsData.filter(
+      (b) => b.trade_date >= visibleRange.from && b.trade_date <= visibleRange.to,
+    );
+    return clipped.length > 1 ? clipped : magicRsData;
+  }, [magicRsData, visibleRange]);
   // The scrubber indexes pulseBars; rows is a different length, so the active
   // bar is matched by DATE rather than by position. Falls back to the latest
   // bar, which is what an unscrubbed chart is showing anyway.
   const magicRsActiveIdx = useMemo(() => {
     const d = pulseBars[effectiveIdx]?.trade_date;
     if (!d) return Math.max(0, magicRsData.length - 1);
-    const i = magicRsData.findIndex((x) => x.trade_date === d);
-    return i >= 0 ? i : Math.max(0, magicRsData.length - 1);
-  }, [pulseBars, effectiveIdx, magicRsData]);
+    const i = magicRsVisible.findIndex((x) => x.trade_date === d);
+    return i >= 0 ? i : Math.max(0, magicRsVisible.length - 1);
+  }, [pulseBars, effectiveIdx, magicRsVisible]);
   // Magic RS is a pipeline column vs CNX500 — null for many BSE/thin stocks.
   const hasRsData = useMemo(() => magicRsData.some((b) => b.magic_rs != null), [magicRsData]);
 
@@ -802,6 +830,7 @@ export default function ChartView() {
               benchmarkIndexId={isIndex && id ? Number(id) : null}
               benchmarkName={isIndex ? name : null}
               storyBubble={storyBubble}
+              onVisibleRangeChange={handleVisibleRange}
               onZoneClick={handleZoneClick}
             />
             {zoneExplain && (
@@ -887,11 +916,16 @@ export default function ChartView() {
     {snapshot && (hasRsData ? (
             <SignalFlipCard
               title="Magic RS"
-              widget={<MagicRsSubchart data={magicRsData} activeIndex={magicRsActiveIdx} benchmarkLabel="NIFTY 500" />}
+              widget={<MagicRsSubchart
+                  data={magicRsVisible}
+                  activeIndex={magicRsActiveIdx}
+                  benchmarkLabel="NIFTY 500"
+                  variant={usingShortRs ? 'short' : 'long'}
+                />}
               chart={
                 <SignalLineChart
                   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                  data={magicRsData as any}
+                  data={magicRsVisible as any}
                   series={[
                     { key: 'magic_rs', color: 'var(--gold, #d4a84b)', label: 'Magic RS' },
                     { key: 'magic_ma', color: 'var(--text-faint, #64748b)', label: 'MA', dashed: true },

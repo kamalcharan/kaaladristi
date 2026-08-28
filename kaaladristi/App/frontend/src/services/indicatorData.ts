@@ -130,6 +130,10 @@ export interface IndicatorRow {
   gl_event?: string | null;
   gl_days_above?: number | null;
   pct_from_gl?: number | null;
+  // Short Magic RS — the only Magic RS weekly and monthly can carry.
+  magic_rs_short?: number | null;
+  magic_rs_short_ma?: number | null;
+  magic_rs_short_zone?: string | null;
 }
 
 export async function fetchIndicatorData(
@@ -206,7 +210,13 @@ export async function fetchEquityTimeframeById(
 ): Promise<IndicatorRow[]> {
   const table = tf === 'weekly' ? 'km_equity_weekly' : 'km_equity_monthly';
   const { data, error } = await from(table)
-    .select('trade_date,open,high,low,close,volume,avg_deliv_pct')
+    // Short Magic RS (migration 081) — weekly and monthly carry ONLY this.
+    // Long MagicRS needs 145 bars, which 145 weeks is ~3 years and 145 months
+    // is ~12 years; the deepest monthly history is 80 bars, so the long series
+    // is structurally impossible there (the migration-169 lesson). Selecting
+    // OHLCV alone is why the Magic RS pane went blank on W/M.
+    .select('trade_date,open,high,low,close,volume,avg_deliv_pct,'
+      + 'magic_rs_short,magic_rs_short_ma,magic_rs_short_zone')
     .eq('equity_id', equityId)
     .order('trade_date', { ascending: true })
     .limit(3000)

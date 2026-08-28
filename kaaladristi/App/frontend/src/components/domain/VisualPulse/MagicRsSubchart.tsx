@@ -37,6 +37,11 @@ interface MagicRsSubchartProps {
   data: MagicRsDataPoint[];
   activeIndex: number;
   benchmarkLabel: string;
+  /** 'long' = 144-bar RS with a 60-bar average (daily). 'short' = 21-bar RS
+   *  with a 10-bar average, which is all weekly and monthly can carry. The
+   *  label has to say which: reading a 21-bar RS as a 144-bar one is a real
+   *  misread, not a cosmetic one. */
+  variant?: 'long' | 'short';
 }
 
 function getCssVar(name: string, fallback: string): string {
@@ -76,7 +81,7 @@ function zoneColor(zone: string | null, green: string, red: string, neutral: str
   return neutral;
 }
 
-export default function MagicRsSubchart({ data, activeIndex, benchmarkLabel }: MagicRsSubchartProps) {
+export default function MagicRsSubchart({ data, activeIndex, benchmarkLabel, variant = 'long' }: MagicRsSubchartProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -290,7 +295,7 @@ export default function MagicRsSubchart({ data, activeIndex, benchmarkLabel }: M
   return (
     <div ref={containerRef} style={{ borderRadius: 6, overflow: 'hidden' }}>
       <canvas ref={canvasRef} style={{ display: 'block', width: '100%' }} />
-      <MagicRsStats data={data} activeIndex={activeIndex} benchmarkLabel={benchmarkLabel} />
+      <MagicRsStats data={data} activeIndex={activeIndex} benchmarkLabel={benchmarkLabel} variant={variant} />
     </div>
   );
 }
@@ -303,7 +308,7 @@ export default function MagicRsSubchart({ data, activeIndex, benchmarkLabel }: M
  *  what they meant. A subchart that needs arithmetic to interpret is not
  *  helping anyone decide anything.
  */
-function MagicRsStats({ data, activeIndex, benchmarkLabel }: MagicRsSubchartProps) {
+function MagicRsStats({ data, activeIndex, benchmarkLabel, variant = 'long' }: MagicRsSubchartProps) {
   const idx = Math.min(activeIndex, data.length - 1);
   const cur = data[idx];
   if (!cur) return null;
@@ -364,7 +369,7 @@ function MagicRsStats({ data, activeIndex, benchmarkLabel }: MagicRsSubchartProp
           {verdict}
         </span>
         <span className="text-[11px] font-mono" style={{ color: 'var(--text-secondary)' }}>
-          {zone ?? 'zone unknown'} · {bullish ? 'above' : 'below'} its 60-bar average
+          {zone ?? 'zone unknown'} · {bullish ? 'above' : 'below'} its {variant === 'short' ? '10' : '60'}-bar average
           {held > 0 && ` for ${held} bar${held === 1 ? '' : 's'}`}
         </span>
         <span className="ml-auto inline-flex items-center gap-2">
@@ -386,7 +391,7 @@ function MagicRsStats({ data, activeIndex, benchmarkLabel }: MagicRsSubchartProp
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 px-3 py-2">
         {[
           { k: 'Magic RS', v: fmt(rs), c: tone(rs) },
-          { k: '60-bar avg', v: fmt(ma), c: 'var(--accent-indigo)' },
+          { k: variant === 'short' ? '10-bar avg' : '60-bar avg', v: fmt(ma), c: 'var(--accent-indigo)' },
           { k: 'Gap to avg', v: fmt(diff), c: tone(diff) },
           { k: 'Held', v: held > 0 ? `${held} bars` : '—', c: 'var(--text-secondary)' },
         ].map((x) => (
@@ -398,7 +403,7 @@ function MagicRsStats({ data, activeIndex, benchmarkLabel }: MagicRsSubchartProp
       </div>
 
       <div className="px-3 pb-2 text-[9px] font-mono text-[var(--text-faint)] leading-relaxed">
-        vs {benchmarkLabel} · 144-bar RS, 60-bar average · 1D/1W/1M are 1, 5 and 20-bar changes
+        vs {benchmarkLabel} · {variant === 'short' ? 'SHORT 21-bar RS, 10-bar average — the only series weekly/monthly carry' : '144-bar RS, 60-bar average'} · 1D/1W/1M are 1, 5 and 20-bar changes
         {short && ` · series starts ${withRs[0].trade_date} (${withRs.length} of ${data.length} bars)`}
       </div>
     </div>
