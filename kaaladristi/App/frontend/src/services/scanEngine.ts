@@ -15,6 +15,7 @@
  *   "Conditions Favorable"   — scan match
  */
 
+import { ACTIVE_UNIVERSE_CAP } from './equityUniverse';
 import { from } from './postgrest';
 import type {
   ScanStock,
@@ -2062,7 +2063,10 @@ async function fetchFlowerPotBurstClientSide(exchangeFilter: ExchangeFilter): Pr
     .select('id,symbol,company_name,industry,exchange,isin,mcap_cr')
     .is('is_active', 'true')
     .eq('exchange', 'NSE')
-    .limit(8000)
+    // NSE-only is 3,797 rows today, well inside the old 8,000 — but sizing it
+    // off the shared cap means the next expansion cannot make this the bug the
+    // full-universe fetches just were.
+    .limit(ACTIVE_UNIVERSE_CAP)
     .execute();
   const syms = (symRes.data ?? []) as EquitySymbolRow[];
   const symMap = new Map<number, EquitySymbolRow>();
@@ -3013,7 +3017,7 @@ async function loadManipulationData(lookbackDays: number): Promise<ManipulationW
     from('km_equity_symbols')
       .select('id,symbol,company_name,industry,exchange,isin,is_active,mcap_cr')
       .is('is_active', 'true')
-      .limit(8000)
+      .limit(ACTIVE_UNIVERSE_CAP)
       .execute(),
 
     from('km_equity_eod')

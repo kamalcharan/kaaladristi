@@ -8,6 +8,7 @@
  * Clickable rows → /chart/equity/:id
  */
 
+import { ACTIVE_UNIVERSE_CAP } from '@/services/equityUniverse';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
@@ -67,7 +68,7 @@ async function fetchLeaderboard(): Promise<{ top: LeaderboardStock[]; bottom: Le
     from('km_equity_symbols')
       .select('id,symbol,company_name,exchange')
       .is('is_active', 'true')
-      .limit(8000)
+      .limit(ACTIVE_UNIVERSE_CAP)
       .execute(),
   ]);
 

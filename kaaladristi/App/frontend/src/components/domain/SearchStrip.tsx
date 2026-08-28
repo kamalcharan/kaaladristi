@@ -8,6 +8,7 @@
  *   Equity → /chart/equity/:id?name=...
  */
 
+import { ACTIVE_UNIVERSE_CAP } from '@/services/equityUniverse';
 import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
@@ -41,8 +42,14 @@ async function fetchSearchIndex(): Promise<SearchItem[]> {
     from('km_equity_symbols')
       .select('id,symbol,company_name,exchange,industry,isin')
       .is('is_active', 'true')
+      // NSE first. The ISIN dedup below prefers NSE, but it can only prefer
+      // among rows that actually arrived — and with a cap under the universe
+      // size and no ordering at all, whether a stock's NSE row was in the
+      // payload was luck. That is how searching IndusInd landed on its BSE
+      // row, which carries no index membership.
+      .order('exchange', { ascending: false })
       .order('symbol', { ascending: true })
-      .limit(8000)
+      .limit(ACTIVE_UNIVERSE_CAP)
       .execute(),
   ]);
 
