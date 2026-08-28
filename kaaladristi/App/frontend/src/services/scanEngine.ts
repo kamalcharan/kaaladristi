@@ -164,13 +164,42 @@ export function fetchScanReadyDate(): Promise<string | null> {
   // fire the query before the first resolved.
   const value = (async (): Promise<string | null> => {
     try {
+      // The date the matview PREDOMINANTLY holds, not the newest one in it.
+      //
+      // MAX() looked right until two arms disagreed about what "latest" means.
+      // Every preset resolves it as MAX(trade_date) WHERE ema_20 IS NOT NULL,
+      // except flower_pot_burst, whose fpb_base carries no ema_20 filter and so
+      // takes the raw max. On 2026-08-28 the refresh landed after the bars were
+      // inserted and before ema_20 was written: 14 presets stamped 08-27, FPB
+      // stamped 08-28, and MAX() handed every scanner a date that 14 of them
+      // had no rows for. The GL tabs read km_equity_eod at that date directly
+      // and came back empty while 17 breakouts sat on 08-27.
+      //
+      // The mode cannot be moved by one arm out of fifteen. It is also the
+      // honest definition of the question being asked — "which session is the
+      // scan layer actually showing?" — where MAX() answers "which session has
+      // any row at all", a far weaker claim.
       const { data, error } = await from('km_scan_results')
         .select('trade_date')
         .order('trade_date', { ascending: false })
-        .limit(1)
+        .limit(4000)
         .execute();
       if (error || !Array.isArray(data) || data.length === 0) return null;
-      return (data[0] as { trade_date?: string }).trade_date ?? null;
+      const tally = new Map<string, number>();
+      for (const r of data as { trade_date?: string }[]) {
+        const d = r.trade_date;
+        if (d) tally.set(d, (tally.get(d) ?? 0) + 1);
+      }
+      let best: string | null = null;
+      let bestN = 0;
+      for (const [d, n] of tally) {
+        // Ties break to the OLDER date: a tie means the matview is split, and
+        // the older side is the one guaranteed to be fully computed.
+        if (n > bestN || (n === bestN && best !== null && d < best)) {
+          best = d; bestN = n;
+        }
+      }
+      return best;
     } catch {
       return null;
     }
