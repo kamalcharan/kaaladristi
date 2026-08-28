@@ -2327,6 +2327,7 @@ function wgJourneyRowToScanStock(r: any): ScanStock {
     turn_close: num(r.turn_close),
     pct_from_turn: num(r.pct_from_turn),
     gl_event: r.gl_event ?? null,
+    gl_event_date: r.gl_event_date ?? null,
     gl_days_above: num(r.gl_days_above),
     // The three clocks as one glyph. align_score weights them 1/2/3, so the
     // score alone cannot say WHICH turned — and the daily, the fastest and

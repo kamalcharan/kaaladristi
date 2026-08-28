@@ -88,6 +88,24 @@ WITH lvl AS (
     FROM km_equity_eod
     WHERE equity_id = ANY(%(ids)s)
     WINDOW w AS (PARTITION BY equity_id ORDER BY trade_date)
+), near AS (
+    -- A dot ANYWHERE within +/- 5 calendar days of the bar, not only ON it.
+    -- Requiring the SVD/SBD to print on the exact crossing session threw away
+    -- two thirds of the crossings: of the 30 current WAKING journeys since
+    -- 2026-06-01, 14 crossed the Golden Line, 27 printed a dot on some bar,
+    -- but only 4 had both on one session. At +/- 5 days it is 7 (owner call,
+    -- 2026-08-28: "cross and volume conviction in the same week").
+    --
+    -- RANGE with an INTERVAL frame is keyed on the ORDER BY value, so this is
+    -- 5 CALENDAR days either side and a weekend costs no lookback. A ROWS
+    -- frame would have meant 5 SESSIONS, which drifts across holidays.
+    SELECT lvl.*,
+           bool_or(has_dot) OVER (
+               PARTITION BY equity_id ORDER BY trade_date
+               RANGE BETWEEN INTERVAL '5 days' PRECEDING
+                         AND INTERVAL '5 days' FOLLOWING
+           ) AS dot_near
+    FROM lvl
 ), isl AS (
     -- Gaps and islands: the running count of NOT-above bars is constant
     -- within a stretch that stays above the line, so it identifies the run.
@@ -95,7 +113,7 @@ WITH lvl AS (
            SUM(CASE WHEN above THEN 0 ELSE 1 END)
              OVER (PARTITION BY equity_id ORDER BY trade_date
                    ROWS UNBOUNDED PRECEDING) AS grp
-    FROM lvl
+    FROM near
 ), runs AS (
     SELECT isl.*,
            CASE
@@ -111,11 +129,11 @@ WITH lvl AS (
 ), ev AS (
     SELECT runs.*,
            CASE
-             WHEN has_dot AND above AND pclose IS NOT NULL AND pgl IS NOT NULL
+             WHEN dot_near AND above AND pclose IS NOT NULL AND pgl IS NOT NULL
                   AND pgl > 0 AND pclose <= pgl
                THEN 'BREAKOUT'
              -- days_above includes this bar, so "10 PRIOR sessions" is > 10.
-             WHEN has_dot AND above AND low IS NOT NULL AND low <= sma_150
+             WHEN dot_near AND above AND low IS NOT NULL AND low <= sma_150
                   AND days_above > %(min_days)s
                THEN 'RETEST'
              ELSE NULL
@@ -212,9 +230,20 @@ def compute_gl_events_for_date(db_conn, trade_date, verbose: bool = False) -> in
     running it before would compute against yesterday's dots and miss every
     event on the day it happened.
 
+    Rewrites a TRAILING WINDOW, not just `trade_date`. The dot no longer has
+    to print on the crossing bar — it counts anywhere within +/- 5 calendar
+    days (owner call, 2026-08-28) — and the forward half of that window does
+    not exist yet on the evening of the cross. A bar that crosses today and
+    draws its SVD three days from now is not an event tonight and IS one on
+    Thursday, so tonight's answer for it has to be revisited. Restricting the
+    UPDATE to one date would have made every forward-confirmed event
+    permanently invisible: computed once, on the only day it could not be
+    seen. Seven calendar days covers the five-day reach with slack for a
+    weekend.
+
     The windows still span each symbol's full history (gl_days_above counts
     back to the last close below the line, which can be years); only the
-    UPDATE is restricted to the target date.
+    UPDATE is restricted.
     """
     conn = get_conn()
     try:
@@ -227,8 +256,10 @@ def compute_gl_events_for_date(db_conn, trade_date, verbose: bool = False) -> in
             return 0
         n = 0
         for i in range(0, len(ids), 500):
-            n += _run_batch(conn, ids[i:i + 500],
-                            't.trade_date = %(dt)s', {'dt': str(trade_date)})
+            n += _run_batch(
+                conn, ids[i:i + 500],
+                't.trade_date > %(dt)s::date - 7 AND t.trade_date <= %(dt)s',
+                {'dt': str(trade_date)})
         if verbose:
             print(f"  [gl-events] {trade_date}: {n:,} rows in {time.time() - t0:.1f}s")
         return n
