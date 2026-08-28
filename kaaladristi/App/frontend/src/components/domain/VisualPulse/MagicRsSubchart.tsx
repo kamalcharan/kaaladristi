@@ -45,7 +45,13 @@ function getCssVar(name: string, fallback: string): string {
 }
 
 const PAD = { t: 8, b: 4, l: 8, r: 52 };
-const CHART_H = 150;
+/** Taller now that the card spans the full chart width — a wide, short strip
+ *  flattens the histogram into a bar code. */
+const CHART_H = 190;
+/** Minimum pixels per bar. The window is derived from the available width
+ *  rather than fixed at 40: in the 3fr rail 40 bars was already crowded, and
+ *  at full width it wasted two thirds of the space it had just been given. */
+const MIN_BAR_PX = 7;
 /** Bars considered for the new-high / new-low dots. Pine uses 60/120/240 on
  *  intraday; on daily bars one ~quarter lookback is the equivalent read. */
 const EXTREME_LOOKBACK = 60;
@@ -105,7 +111,10 @@ export default function MagicRsSubchart({ data, activeIndex, benchmarkLabel }: M
     // begins 21 bars ago was being drawn into a 40-slot axis, so it filled the
     // right half and left the rest blank — read as a downtrend when it was the
     // entire life of the series. WALCHANNAG: 555 price bars, 21 magic_rs.
-    const VISIBLE = 40;
+    const VISIBLE = Math.max(
+      40,
+      Math.min(data.length, Math.floor((W - PAD.l - PAD.r) / MIN_BAR_PX)),
+    );
     const startIdx = Math.max(0, activeIndex - VISIBLE + 1);
     const endIdx = activeIndex;
     const windowed = data.slice(startIdx, endIdx + 1);
