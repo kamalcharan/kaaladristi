@@ -29,6 +29,11 @@ export interface StoryBar {
   magic_rs_zone?: string | null
   flow_type?: string | null
   stage?: string | null
+  stage_confirmed?: string | null
+  sma_150?: number | null
+  gl_event?: string | null
+  gl_days_above?: number | null
+  pct_from_gl?: number | null
   is_vani_smart?: boolean | null
   is_vani_breakout?: boolean | null
   is_vani_surge?: boolean | null
@@ -46,6 +51,8 @@ export type StoryKind =
   | 'conviction'
   | 'flow'
   | 'rs_breakaway'
+  | 'gl'
+  | 'discovery'
 
 /** One signature colour per kind (→ globals.css --story-* vars). */
 export const KIND_COLORS: Record<StoryKind, string> = {
@@ -58,6 +65,8 @@ export const KIND_COLORS: Record<StoryKind, string> = {
   conviction: 'var(--story-conviction)',
   flow: 'var(--story-flow)',
   rs_breakaway: 'var(--story-rsbreakaway)',
+  gl: 'var(--story-gl)',
+  discovery: 'var(--story-discovery)',
 }
 
 export interface StoryEvent {
@@ -79,7 +88,9 @@ const REACTION_BARS = 5
 
 // Kind priority — when multiple events share a bar, the replay surfaces the top.
 const PRIORITY: Record<StoryKind, number> = {
+  discovery: 9,
   big_money: 8,
+  gl: 7.5,
   fpb: 7,
   rs_breakaway: 6.5,
   magic_rs: 6,
@@ -95,6 +106,38 @@ function zoneBucket(z?: string | null): StoryTone | null {
   if (z === 'Strong Bull' || z === 'Mild Bull') return 'bull'
   if (z === 'Strong Bear' || z === 'Mild Bear') return 'bear'
   return 'neutral' // Neutral / Neutral Bull / Neutral Bear
+}
+
+// Weinstein's four stages, plus the approach state the classifier emits.
+// S3 reads BEAR, not neutral: leaving an advance is the warning, and calling it
+// neutral is what let a topping stock look unchanged on the timeline.
+const STAGE_NAME: Record<string, string> = {
+  S1: 'S1 (basing)',
+  S2_CANDIDATE: 'S2 candidate (approaching)',
+  S2: 'S2 (advancing)',
+  S3: 'S3 (topping)',
+  S4: 'S4 (declining)',
+}
+
+const STAGE_LABEL: Record<string, { title: string; name: string; tone: StoryTone }> = {
+  S1: { title: 'Entered Stage 1', name: 'S1 (basing)', tone: 'neutral' },
+  S2_CANDIDATE: { title: 'Approaching Stage 2', name: 'S2 candidate (approaching)', tone: 'neutral' },
+  S2: { title: 'Entered Stage 2', name: 'S2 (advancing)', tone: 'bull' },
+  S3: { title: 'Entered Stage 3', name: 'S3 (topping)', tone: 'bear' },
+  S4: { title: 'Entered Stage 4', name: 'S4 (declining)', tone: 'bear' },
+}
+
+const GL_LABEL: Record<string, { title: string; detail: string; tone: StoryTone }> = {
+  BREAKOUT: {
+    title: 'Golden Line breakout',
+    detail: 'Closed back above the 150-day Golden Line with a volume-drive or accumulation bar within five days.',
+    tone: 'bull',
+  },
+  RETEST: {
+    title: 'Golden Line retest held',
+    detail: 'Came back to the Golden Line and held it, on a volume-drive or accumulation bar.',
+    tone: 'bull',
+  },
 }
 
 const FLOW_LABEL: Record<string, { title: string; tone: StoryTone }> = {
@@ -254,10 +297,26 @@ function breakawayEvents(bars: StoryBar[]): { i: number; title: string; detail: 
  * Build the ordered story for a stock's bars (ascending by date).
  * @param bigMoneyDates set of trade_date strings flagged as big-money days.
  */
+/** The Waking Giants journey, if this stock is on one.
+ *
+ *  Unlike every other input here this is NOT per-bar data — it is one row in
+ *  km_wg_journeys describing a multi-year arc, so it contributes two DATED
+ *  markers rather than something scanned bar by bar. Undefined for the vast
+ *  majority of stocks, which are on no journey at all. */
+export interface StoryJourney {
+  state?: string | null
+  wake_date?: string | null
+  wake_close?: number | null
+  turn_date?: string | null
+  turn_close?: number | null
+  base_years?: number | null
+}
+
 export function buildStoryEvents(
   bars: StoryBar[],
   bigMoneyDates?: Set<string>,
   sectorByDate?: Map<string, { leading: boolean }>,
+  journey?: StoryJourney | null,
 ): StoryEvent[] {
   const out: StoryEvent[] = []
   const add = (i: number, kind: StoryKind, title: string, detail: string, tone: StoryTone) =>
@@ -299,10 +358,35 @@ export function buildStoryEvents(
       add(i, 'flow', f.title, `Order flow flipped to ${f.title.toLowerCase()}`, f.tone)
     }
 
-    // 4) Stage change into Stage 2 (advancing) / Stage 4 (declining).
-    if (b.stage && p.stage && b.stage !== p.stage) {
-      if (b.stage === 'S2') add(i, 'stage', 'Entered Stage 2', `Weinstein stage ${p.stage} → S2 (advancing)`, 'bull')
-      else if (b.stage === 'S4') add(i, 'stage', 'Entered Stage 4', `Weinstein stage ${p.stage} → S4 (declining)`, 'bear')
+    // 4) Stage change — EVERY transition, not only the two loud ones.
+    //
+    // This used to fire on S2 and S4 alone, so a stock topping out of Stage 2
+    // into Stage 3 passed silently: the single transition a holder most wants
+    // marked was the one the replay refused to draw. ZIMLAB sat at S3 for
+    // thirteen sessions with nothing on the timeline to say so.
+    // UNKNOWN is not a stage, it is the classifier saying it could not tell --
+    // 38,848 bars carry it, almost all of them missing sma_200. A move OUT of
+    // it is the indicator arriving, not the stock changing character, and
+    // announcing "Entered Stage 4" on the day a moving average finally has
+    // enough bars would be a fabricated event (713 of them since 2026-07-01).
+    // Treat it exactly like a missing previous stage: say nothing.
+    if (b.stage && p.stage && b.stage !== p.stage && p.stage !== 'UNKNOWN') {
+      const st = STAGE_LABEL[b.stage]   // undefined for UNKNOWN — nothing fires
+      if (st) add(i, 'stage', st.title, `Weinstein stage ${STAGE_NAME[p.stage] ?? p.stage} → ${st.name}`, st.tone)
+    }
+
+    // 4b) Golden Line event — an SVD/SBD-backed cross or hold of the 150 SMA.
+    // gl_event is only ever written on a bar that already carries the volume
+    // signature (see backfill_gl_events.py), so its presence IS the confluence;
+    // nothing further needs testing here.
+    if (b.gl_event && b.gl_event !== p.gl_event) {
+      const g = GL_LABEL[b.gl_event]
+      if (g) {
+        const held = b.gl_days_above != null && b.gl_days_above > 0
+          ? ` Holding the line ${b.gl_days_above} sessions.`
+          : ''
+        add(i, 'gl', g.title, g.detail + held, g.tone)
+      }
     }
 
     // 5) Scan entries — an is_vani_* flag flipping false → true.
@@ -326,6 +410,37 @@ export function buildStoryEvents(
 
   // 8) RS breakaway — magic_rs cleanly separating from its own MA.
   for (const b of breakawayEvents(bars)) add(b.i, 'rs_breakaway', b.title, b.detail, b.tone)
+
+  // 9) Discovery — the journey's own turn and wake, placed on their bars.
+  //
+  // These are the two dates the whole Waking Giants engine exists to find, and
+  // until now neither appeared on any chart: a stock could be mid-journey with
+  // the timeline showing no sign of it. Matched by date rather than scanned,
+  // and skipped silently when the date falls outside the loaded range — a
+  // journey that woke two years ago has no bar to sit on in a 1-year view.
+  if (journey) {
+    const barAt = (d?: string | null) =>
+      d ? bars.findIndex((x) => x.trade_date === d) : -1
+    const yrs = journey.base_years != null
+      ? `${journey.base_years} years` : 'a long stretch'
+
+    const ti = barAt(journey.turn_date)
+    if (ti >= 0) {
+      add(ti, 'discovery', 'Journey turned',
+          `The weekly clock turned green and price cleared the Golden Line after ${yrs} of dormancy` +
+          (journey.turn_close != null ? ` — from Rs ${journey.turn_close}.` : '.'),
+          'bull')
+    }
+
+    const wi = barAt(journey.wake_date)
+    if (wi >= 0) {
+      add(wi, 'discovery', 'Journey woke',
+          `Cleared its hibernation ceiling` +
+          (journey.wake_close != null ? ` at Rs ${journey.wake_close}` : '') +
+          `${journey.state ? ` — now ${journey.state.toLowerCase()}` : ''}.`,
+          'bull')
+    }
+  }
 
   out.sort((a, b) => a.barIndex - b.barIndex)
   return out

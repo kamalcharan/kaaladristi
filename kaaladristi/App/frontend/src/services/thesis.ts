@@ -14,7 +14,7 @@
  * words, the chart and this tab never disagree.
  */
 
-import { buildStoryEvents, type StoryEvent, type StoryBar } from './storyEvents'
+import { buildStoryEvents, type StoryEvent, type StoryBar, type StoryJourney } from './storyEvents'
 import { buildPillars, type Pillar, type LatestRow } from '@/components/domain/StockCockpit/VerdictHero'
 
 export type Relationship = 'position' | 'watchlist' | 'none'
@@ -107,6 +107,7 @@ export function computeThesis(
   bars: ThesisBar[] | undefined,
   relationship: Relationship,
   position?: PositionInput | null,
+  journey?: StoryJourney | null,
 ): ThesisRead | null {
   if (!bars || bars.length === 0) return null
   const latest = bars[bars.length - 1]
@@ -137,7 +138,7 @@ export function computeThesis(
   // actually happened whenever the stock is also confirming higher. For a
   // position, since entry; otherwise only the recent window (so the feed is
   // actually recent, not 2-month-old events).
-  const events = buildStoryEvents(bars)
+  const events = buildStoryEvents(bars, undefined, undefined, journey)
   let signals = events
   if (relationship === 'position' && position?.entryDate) {
     signals = signals.filter((e) => e.date >= position.entryDate)
