@@ -1125,7 +1125,7 @@ export default function ChartView() {
                     </button>
                     {membershipOpen && (
                       <div className="px-1 pb-1">
-                        <SectorMembershipCard equityId={numId} />
+                        <SectorMembershipCard equityId={numId} exchange={equityPulse.meta?.exchange ?? null} />
                       </div>
                     )}
                   </div>
