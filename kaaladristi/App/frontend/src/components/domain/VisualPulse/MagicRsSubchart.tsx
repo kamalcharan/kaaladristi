@@ -48,10 +48,9 @@ const PAD = { t: 8, b: 4, l: 8, r: 52 };
 /** Taller now that the card spans the full chart width — a wide, short strip
  *  flattens the histogram into a bar code. */
 const CHART_H = 190;
-/** Minimum pixels per bar. The window is derived from the available width
- *  rather than fixed at 40: in the 3fr rail 40 bars was already crowded, and
- *  at full width it wasted two thirds of the space it had just been given. */
-const MIN_BAR_PX = 7;
+/** Below this, columns are drawn edge-to-edge instead of with a gap — at a
+ *  5-year range a bar is about a pixel wide and a 30% gap erases it. */
+const DENSE_BAR_PX = 3;
 /** Bars considered for the new-high / new-low dots. Pine uses 60/120/240 on
  *  intraday; on daily bars one ~quarter lookback is the equivalent read. */
 const EXTREME_LOOKBACK = 60;
@@ -111,12 +110,14 @@ export default function MagicRsSubchart({ data, activeIndex, benchmarkLabel }: M
     // begins 21 bars ago was being drawn into a 40-slot axis, so it filled the
     // right half and left the rest blank — read as a downtrend when it was the
     // entire life of the series. WALCHANNAG: 555 price bars, 21 magic_rs.
-    const VISIBLE = Math.max(
-      40,
-      Math.min(data.length, Math.floor((W - PAD.l - PAD.r) / MIN_BAR_PX)),
-    );
-    const startIdx = Math.max(0, activeIndex - VISIBLE + 1);
-    const endIdx = activeIndex;
+    // The WHOLE range, always. This was capped at width/7 px-per-bar, so it
+    // drew ~170 bars whether the chart held 248 (1Y) or 1,250 (5Y) — the pane
+    // looked identical at every range and there was nothing to scroll, because
+    // it was never showing a window OF the range, it was showing a fixed slice
+    // ending at the cursor. A subchart spans its chart's domain; bars get
+    // thinner as the range widens, exactly as the candles above do.
+    const startIdx = 0;
+    const endIdx = data.length - 1;
     const windowed = data.slice(startIdx, endIdx + 1);
     // Trim leading bars that carry no Magic RS at all, so the plot starts where
     // the series does instead of implying the value was absent-but-flat.
@@ -188,7 +189,8 @@ export default function MagicRsSubchart({ data, activeIndex, benchmarkLabel }: M
       if (!h) return;
       ctx.fillStyle = zoneColor(d.magic_rs_zone, colGreen, colRed, colIndigo) + '59';
       const top = toY(h);
-      ctx.fillRect(toX(i) - barW * 0.35, top, Math.max(barW * 0.7, 1), zeroY - top);
+      const w = barW >= DENSE_BAR_PX ? barW * 0.7 : barW;
+      ctx.fillRect(toX(i) - w / 2, top, Math.max(w, 0.6), zeroY - top);
     });
 
     // ── Zero line, above the columns so it stays legible ──────────────────
@@ -230,7 +232,10 @@ export default function MagicRsSubchart({ data, activeIndex, benchmarkLabel }: M
     // ── 5. Extreme dots — new high / low of MagicRS over the lookback ─────
     // Read against the FULL series, not the visible slice: an extreme is only
     // meaningful against history the window may not include.
-    visible.forEach((d, i) => {
+    // Dots are a highlight, not a texture — at a few pixels per bar they merge
+    // into a smear, so they are drawn only when bars are wide enough to carry
+    // one.
+    if (barW >= 2) visible.forEach((d, i) => {
       if (d.magic_rs == null) return;
       const globalIdx = startIdx + trimmed + i;
       const from = Math.max(0, globalIdx - EXTREME_LOOKBACK + 1);
