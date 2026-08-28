@@ -2224,6 +2224,21 @@ const MATVIEW_BUNDLE_PRESETS: ReadonlySet<string> = new Set([
   'conviction_flow',
 ]);
 
+// Price-action presets served by the matview from migration 195. Kept separate
+// from MATVIEW_BUNDLE_PRESETS because these six still have a working direct
+// fetcher behind them: migration 195 is applied by hand, so a frontend deployed
+// first would otherwise blank six tabs until someone ran it. executeScan tries
+// the matview and falls back, and the fallback logs, so a permanently-unapplied
+// migration is noisy rather than invisible.
+const MATVIEW_PRICE_ACTION_PRESETS: ReadonlySet<string> = new Set([
+  'weekly_movers',
+  'monthly_movers',
+  'weekly_decliners',
+  'monthly_decliners',
+  'breakout_surge',
+  'breakdown_watch',
+]);
+
 // Waking Giants v4 (migration 177) — the three journey-state presets read the
 // km_wg_journeys state table (the km_fpb_active pattern on a multi-year
 // clock), NOT the scan matview. Map: preset id → journey state.
@@ -2492,6 +2507,17 @@ function scanRowToScanStock(r: any): ScanStock {
     open: null, high: null, low: null,
     pct_chng: num(r.pct_chng),
     rsi_14: num(r.rsi_14),
+    // Migration 195 — the price-action columns. Absent from the row until that
+    // migration runs, in which case they read undefined and num() gives null,
+    // which is what the column showed before anyway.
+    prev_week_close: num(r.prev_week_close),
+    pct_wtd: num(r.pct_wtd),
+    prev_month_close: num(r.prev_month_close),
+    pct_mtd: num(r.pct_mtd),
+    breakout_level: num(r.breakout_level),
+    pct_from_breakout: num(r.pct_from_breakout),
+    breakdown_level: num(r.breakdown_level),
+    pct_from_breakdown: num(r.pct_from_breakdown),
     magic_rs: num(r.magic_rs),
     magic_rs_zone: r.magic_rs_zone ?? null,
     flow_type: r.flow_type ?? null,
@@ -2613,8 +2639,12 @@ async function fetchAllScanCountsFromMatview(
   try {
     const { data, error } = await from('km_scan_results')
       .select('preset_id,exchange,isin,vani_flag,trade_date')
-      .in('preset_id', [...MATVIEW_BUNDLE_PRESETS])
-      .limit(2000)
+      .in('preset_id', [...MATVIEW_BUNDLE_PRESETS, ...MATVIEW_PRICE_ACTION_PRESETS])
+      // Raised from 2000 with the six price-action presets (migration 195):
+      // their caps alone are 4 x 500 + breakout/breakdown, so 2000 would have
+      // silently truncated the counts — the badge would read low with no error.
+      // Ceiling across every arm is ~3.4k; 10k leaves room for another preset.
+      .limit(10000)
       .execute();
     if (error || !Array.isArray(data)) {
       console.warn('[scan] matview counts unavailable, using bundle fallback', error);
@@ -2666,6 +2696,24 @@ export async function executeScan(
   if (scanId === 'stage_3_watch')        return fetchStage3Watch(exchangeFilter);
   if (scanId === 'vani_exit_watch')      return fetchVaNiExitWatch(exchangeFilter);
   // breakout_surge_daily merged into breakout_surge (kept as alias for stale links)
+  // The six price-action presets moved onto km_scan_results in migration 195.
+  // Each hand-written SELECT below is now a FALLBACK, not the path: a fetcher
+  // that names its own columns is exactly what left the Columns picker showing
+  // dashes, because fieldAvailability offers columns per category while each
+  // fetcher chose its own subset. A matview row carries all 81.
+  if (timeframe === 'daily' && MATVIEW_PRICE_ACTION_PRESETS.has(scanId)) {
+    const rows = await fetchFromScanMatview(scanId, exchangeFilter);
+    // Empty is the migration-195-not-applied signal: the arm emits no rows at
+    // all until the view is recreated, and these six carry hundreds on a normal
+    // day. On a genuinely empty day the fallback runs and returns the same
+    // empty answer, so the only cost of guessing wrong is one extra query.
+    if (rows && rows.length > 0) return rows;
+    // All six are universe='NSE_ONLY', so a BSE filter is legitimately empty —
+    // the fallback would return empty too. Don't run it, and don't blame the
+    // migration for it.
+    if (exchangeFilter === 'BSE') return [];
+    console.warn(`[scan] ${scanId}: no km_scan_results rows — run migration 195 and REFRESH MATERIALIZED VIEW km_scan_results. Using the direct-query fallback.`);
+  }
   if (scanId === 'breakout_surge' || scanId === 'breakout_surge_daily') return fetchBreakoutSurge(exchangeFilter);
   if (scanId === 'weekly_movers')        return fetchPeriodMovers('weekly_movers', 'pct_wtd', 'up', exchangeFilter);
   if (scanId === 'monthly_movers')       return fetchPeriodMovers('monthly_movers', 'pct_mtd', 'up', exchangeFilter);

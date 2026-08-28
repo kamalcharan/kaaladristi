@@ -12,8 +12,7 @@ Dimensions, per preset:
   1. columns   — every column the UI renders exists in the source AND is
                  populated for at least one row
   2. universe  — rows respect kd_scan_presets.universe
-  3. liquidity — rows clear the platform floor (Rs 1 Cr/day)
-  4. vani      — a declared vani_rule actually produces flags
+  3. vani      — a declared vani_rule actually produces flags
   5. limits    — row count <= result_limit
 
 Usage:
@@ -31,8 +30,7 @@ import psycopg2.extras
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from lib.config import DATABASE_URL
-from lib.integrity_checks import (MIN_AVG_AMT_22D_CR, measure_liquidity,
-                                  VANI_RULE_SQL, VANI_MIN_EXPECTED,
+from lib.integrity_checks import (VANI_RULE_SQL, VANI_MIN_EXPECTED,
                                   matview_preset_columns, matview_served_presets,
                                   _db_preset_meta)
 
@@ -87,11 +85,6 @@ def main():
     """)
     presets = cur.fetchall()
 
-    # Liquidity is measured per preset on ITS OWN yardstick — combined-exchange
-    # ADV for the WG family, live-EOD fallback for arms that emit NULL for
-    # avg_amt_22d. Shared with the nightly sweep so both report one number.
-    liq = measure_liquidity(conn)
-
     # Both DERIVED from the frontend source at run time (lib/scan_contract.py).
     # If the extraction breaks, it raises here rather than yielding an empty
     # contract that would make every scanner look defect-free.
@@ -134,7 +127,7 @@ def main():
 
     print('Scanner contract completeness audit')
     print('=' * 96)
-    print(f"{'preset':22} {'src':8} {'cols':>6} {'universe':>9} {'liquidity':>10} {'vani':>6} {'limit':>6}")
+    print(f"{'preset':22} {'src':8} {'cols':>6} {'universe':>9} {'vani':>6} {'limit':>6}")
     print('-' * 96)
 
     for p in presets:
@@ -177,20 +170,7 @@ def main():
             uni_v = f"BSE{p['bse']}" if bad else 'OK'
             if bad: defects.append(f"{pid}: declared NSE_ONLY but {p['bse']} BSE rows")
 
-        # 3. liquidity — see measure_liquidity() for the per-preset yardstick
-        liq_v = 'n/a'
-        if in_mv:
-            _, below, unmeas = liq.get(pid, (rows, 0, 0))
-            if below:
-                liq_v = f'LOW{below}'
-                defects.append(f'{pid}: {below} rows below Rs {MIN_AVG_AMT_22D_CR} Cr')
-            elif unmeas:
-                liq_v = f'UNMEAS{unmeas}'
-                defects.append(f'{pid}: {unmeas} rows have no turnover on the latest session')
-            else:
-                liq_v = 'OK'
-
-        # 4. vani — enrichment, not presence. "0 flags" on a 25-row preset whose
+        # 3. vani — enrichment, not presence. "0 flags" on a 25-row preset whose
         # rule has a 0.5% base rate is the EXPECTED outcome, not a defect; the
         # old presence test reported three healthy presets as broken and would
         # have flipped power_buy to DEAD on 94% of days. See VANI_MIN_EXPECTED.
@@ -222,7 +202,7 @@ def main():
             lim_v = f'OVER{rows}' if over else 'OK'
             if over: defects.append(f"{pid}: {rows} rows exceeds limit {p['result_limit']}")
 
-        print(f"{pid:22} {src:8} {cols_v:>6} {uni_v:>9} {liq_v:>10} {vani_v:>6} {lim_v:>6}")
+        print(f"{pid:22} {src:8} {cols_v:>6} {uni_v:>9} {vani_v:>6} {lim_v:>6}")
 
     print('-' * 96)
     if defects:
