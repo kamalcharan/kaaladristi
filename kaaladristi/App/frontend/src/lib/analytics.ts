@@ -36,6 +36,11 @@ export function initAnalytics(): void {
   })
   posthog.register({ product: PRODUCT })
   ready = true
+  // Expose on window for manual verification (DevTools console) and
+  // PostHog's own browser toolbar — the npm/ESM import path (what Vite
+  // uses here) does NOT do this automatically like the <script> snippet
+  // loader does; only affects debuggability, not tracking behavior.
+  ;(window as unknown as { posthog: typeof posthog }).posthog = posthog
 }
 
 /** Call once a user's profile is known (login, session restore). */
