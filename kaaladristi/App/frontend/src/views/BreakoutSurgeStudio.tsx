@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useScan } from '@/hooks/useScan'
 import { displaySymbol } from '@/lib/symbolUtils'
@@ -7,11 +7,14 @@ import { getPresetMeta, type ExchangeFilter } from '@/services/scanEngine'
 import { DownloadXlsButton, TradingViewExportButton } from '@/components/domain/ScannerExportButtons'
 import { ExchangeTabs } from '@/components/domain/ExchangeTabs'
 import { ScanFilterBar, applyFilters, DEFAULT_FILTERS, hasActiveFilters, type ScanFilters } from '@/components/domain/ScanFilterBar'
-import { computeCohortStats, isHighlight } from '@/services/breakoutSurgeInsights'
+import { computeCohortStats, isHighlight, type CohortStats } from '@/services/breakoutSurgeInsights'
 import ScanTable from '@/components/domain/ScanTable'
 import BreakoutSurgeCards from '@/components/domain/BreakoutSurgeTable'
-import ScanVaNiPublisher from '@/components/domain/ScanVaNiPublisher'
-import type { ScanStock } from '@/types'
+import ScanVaNiPublisher, { toVaNiScanRows } from '@/components/domain/ScanVaNiPublisher'
+import VaNiInsight from '@/components/domain/VaNiInsight'
+import { useVaNiAsk } from '@/hooks/useVaNiChat'
+import { useVaNiStore } from '@/stores/vaniStore'
+import type { ScanStock, ScanDefinition } from '@/types'
 
 type QuickFilterKey = 'hl' | 'ob' | 'watch'
 const DEFAULT_QUICK: Record<QuickFilterKey, boolean> = { hl: false, ob: false, watch: false }
@@ -175,6 +178,25 @@ export default function BreakoutSurgeStudio() {
             />
           </div>
 
+          {/* ── VaNi Read — on-page, always visible (owner call: users should
+              SEE it, not have to open a drawer). Built entirely on VaNiInsight
+              (the common component every VaNi surface now shares, see
+              docs/claude/vani-common-component.md) — this file only owns the
+              pill row's actions, not a second bespoke card. ── */}
+          {meta && (
+            <ScannerVaNiCard
+              presetId="breakout_surge"
+              meta={meta}
+              rowsForContext={filtered}
+              totalCount={all.length}
+              dataDate={all[0]?.trade_date ?? null}
+              exchangeFilter={exchangeFilter}
+              cohortStats={stats}
+              onApplyHighlights={() => setQuick((p) => ({ ...p, hl: true }))}
+              onApplyWatchlist={() => setQuick((p) => ({ ...p, watch: true }))}
+            />
+          )}
+
           {/* ── Exchange + quick toggles (no ScanFilterBar equivalent) + real filter bar + view toggle ── */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
             <ExchangeTabs value={exchangeFilter} onChange={setExchangeFilter} disabledOptions={meta?.universe === 'NSE_ONLY' ? ['BSE'] : []} />
@@ -212,6 +234,110 @@ export default function BreakoutSurgeStudio() {
       )}
     </div>
     </>
+  )
+}
+
+/**
+ * On-page VaNi card — third attempt at this, and the difference from the
+ * first two matters: v8/v9 built a fully bespoke card (own header, own
+ * loading state, own feedback wiring) that duplicated VaNiInsight; v10
+ * deleted it entirely in favor of the header drawer only. Owner's actual
+ * ask, once the "two kinds of UX" confusion got sorted out: an always-
+ * visible on-page card IS wanted (users should see it, not click to open
+ * it) — the fix was never "delete the card," it was "don't reinvent the
+ * card's rendering." This component owns only the fetch (fires
+ * `scanner.read_results` once per trading date, same Tier A `cohort_stats`
+ * wired in earlier) and the pill row's page-specific actions (apply a
+ * filter, or hand off to the drawer). All rendering — header, loading
+ * state, body text, feedback — is `VaNiInsight`, unmodified.
+ *
+ * The pill row deliberately does NOT include "Why so many breakouts?" /
+ * "Which to skip?" / "What changed vs yesterday?" from the reference
+ * mockup — those need new backend VaNi intents (prompts, registration in
+ * vani_intents.py) that don't exist yet. Faking buttons that don't do
+ * anything real would be worse than not having them; real ones only:
+ * apply the highlights filter, apply the watchlist filter, the one real
+ * registered "explain this screener" intent (via the drawer), and a plain
+ * hand-off to the drawer for anything else.
+ */
+function ScannerVaNiCard({
+  presetId, meta, rowsForContext, totalCount, dataDate, exchangeFilter, cohortStats, onApplyHighlights, onApplyWatchlist,
+}: {
+  presetId: string
+  meta: ScanDefinition
+  rowsForContext: ScanStock[]
+  totalCount: number
+  dataDate: string | null
+  exchangeFilter: ExchangeFilter
+  cohortStats: CohortStats
+  onApplyHighlights: () => void
+  onApplyWatchlist: () => void
+}) {
+  const askMutation = useVaNiAsk()
+  const firedForDate = useRef<string | null>(null)
+  const { openWithIntent, toggle: toggleVaniPanel } = useVaNiStore()
+
+  useEffect(() => {
+    if (!dataDate || firedForDate.current === dataDate) return
+    firedForDate.current = dataDate
+    const hideVani = meta.vani_rule === 'always_true'
+    const rows = toVaNiScanRows(rowsForContext, hideVani)
+    askMutation.mutate({
+      intent_id: 'scanner.read_results',
+      preset_id: presetId,
+      data_date: dataDate,
+      timeframe: 'daily',
+      exchange: exchangeFilter,
+      total_count: totalCount,
+      rows: rows.map((r) => ({
+        symbol: r.symbol, industry: r.industry, zone: r.zone, flow: r.flow,
+        rsi: r.rsi, rvol: r.rvol, pct_chng: r.pctChng, surge: r.surge, vani: r.vani,
+      })),
+      ...(hideVani ? {} : {
+        cohort_stats: {
+          vani_highlight_count: cohortStats.highlightCount,
+          accelerating_pct: cohortStats.acceleratingPct,
+          real_volume_pct: cohortStats.realVolumePct,
+          leading_industry: cohortStats.leadingIndustry?.name ?? null,
+          leading_industry_count: cohortStats.leadingIndustry?.count ?? null,
+        },
+      }),
+    })
+    // rowsForContext/cohortStats/etc. intentionally excluded — fires once
+    // per new trading day's data, not on every filter/sort change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dataDate])
+
+  if (!dataDate) return null
+
+  const done = !askMutation.isPending && !!askMutation.data?.response
+  const pillStyle: React.CSSProperties = {
+    border: '1px solid var(--border-indigo)', color: 'var(--indigo)', background: 'transparent',
+    borderRadius: 100, padding: '6px 13px', fontSize: 12, fontWeight: 500,
+    cursor: 'pointer', fontFamily: 'var(--font-body)', whiteSpace: 'nowrap',
+  }
+
+  return (
+    <div style={{ marginBottom: 18 }}>
+      <VaNiInsight
+        insight={askMutation.data?.response}
+        isLoading={askMutation.isPending}
+        logId={askMutation.data?.log_id ?? undefined}
+        className="mt-0"
+      />
+      {done && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
+          {cohortStats.highlightCount > 0 && (
+            <button onClick={onApplyHighlights} className="text-white" style={{ ...pillStyle, background: 'var(--indigo)', border: 'none', fontWeight: 600 }}>
+              Start with the {cohortStats.highlightCount} Highlights →
+            </button>
+          )}
+          <button onClick={() => openWithIntent('scanner.explain_preset')} style={pillStyle}>What does this screener show?</button>
+          <button onClick={onApplyWatchlist} style={pillStyle}>My Watchlist</button>
+          <button onClick={toggleVaniPanel} style={pillStyle}>Ask a follow-up →</button>
+        </div>
+      )}
+    </div>
   )
 }
 

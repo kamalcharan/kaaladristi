@@ -349,6 +349,33 @@ scanner.
     identically to every other scanner page for VaNi — same entry point,
     same drawer, same intents, same feedback — which is the correct,
     boring, consistent answer, not a new pattern.
+    **Restored again (v11) — on-page card is back, this time correctly.**
+    v10's read of the owner's feedback was wrong on one count: the "why so
+    many kinds of UX" complaint wasn't "delete the on-page card, drawer
+    only" — it was "don't build a SECOND bespoke card that duplicates the
+    real one." Confirmed once the owner shared the original reference
+    mockup (`VaNi_Scanner.html`'s `vaniBlock` — an always-visible card with
+    rotating pill follow-ups) and said plainly: "i prefer on-page as user
+    will see it." Between v7 (`docs/claude/vani-common-component.md`, the
+    audit that made `VaNiInsight` the one common component across
+    ChartView/Dashboard/Panchang/Breadth/rule-popovers) and v10, the fix
+    needed was always available — just never applied here. `ScannerVaNiCard`
+    (local to `BreakoutSurgeStudio.tsx`) now owns ONLY the
+    `scanner.read_results` fetch (same payload/cohort_stats as v8/v9) and a
+    pill row of page-specific actions; all rendering — header, loading
+    state, body, feedback via `logId` — is `<VaNiInsight>` itself, zero
+    reinvention this time. Pills: "Start with the N Highlights →" (applies
+    the `hl` quick filter), "My Watchlist" (applies `watch`), "What does
+    this screener show?" (opens the drawer with `scanner.explain_preset`
+    queued), "Ask a follow-up →" (opens the drawer plain). Deliberately does
+    **not** include the mockup's "Why so many breakouts?" / "Which to
+    skip?" / "What changed vs yesterday?" pills — those need new backend
+    VaNi intents (prompts + registration in `vani_intents.py`) that don't
+    exist yet; faking buttons with no real backend behind them would be
+    worse than omitting them. Mobile: pill row wraps
+    (`flexWrap: 'wrap'`), no fixed widths anywhere in the card — reasonable
+    on paper, genuinely unverified from this environment (no device to
+    check on), same open item as Phase 3 below.
   - **Tier B (real backend work, own timeline):** "up from N yesterday",
     "new today", "sustaining N sessions" — needs the scheduled job +
     membership table `scannerenhancement.md` already designed. Ship without
@@ -424,3 +451,10 @@ UI. The now-unused imports (`useEffect`'s `useRef` sibling, `useVaNiAsk`,
 type-gap fix and `scanEngine.ts`'s universe-leak fix (both found as
 byproducts of building v8/v9) are unaffected — genuinely separate, real
 fixes kept as-is.
+
+**v11: `ScannerVaNiCard` added** (`BreakoutSurgeStudio.tsx`) — the on-page
+card, restored, built on `VaNiInsight` (import added back) instead of
+reinvented. `useVaNiAsk`, `toVaNiScanRows`, `useVaNiStore`, `ScanDefinition`,
+`CohortStats` imports return; `VaNiFeedback` does not (`VaNiInsight` renders
+it internally via its own `logId` prop, so this file never imports it
+directly).
