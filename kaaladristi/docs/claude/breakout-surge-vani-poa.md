@@ -149,6 +149,41 @@ scanner.
     access from this environment to fetch the actual day's values and
     confirm the gap directly — flagged back to the owner rather than
     guessing at a fix for code that already tests correct.
+  **Revised again (v6) — the real issue was the MagicRS dot's COLOR, not
+  the sort, plus exchange filter was missing entirely:**
+  - Owner sent a screenshot: values were correctly descending (76.3 → 65.5)
+    but the dot colors weren't — green, green, **red** (69.8), green, plus
+    two **gray** dots (73.3, 66.1) indistinguishable from green at a
+    glance. Root cause: `fieldConfig.ts`'s `magic_rs.colorFn` colors by
+    `magic_rs_zone` (`magic_rs − magic_ma` — trend vs. the stock's OWN
+    average), a real, deliberate, documented signal used correctly by the
+    card/chart views — but in a *table*, sitting directly next to the
+    sorted magic_rs number, a value can be zone-red while numerically
+    between two zone-green neighbors, and reads as a sort bug even though
+    it isn't one.
+  - Dispatched a research agent to find the exact cause of the gray dots
+    (real `magic_rs`, no zone): confirmed in
+    `compute_magic_rs_batch` (`km_migration_169_...sql`, daily warm-up path
+    unchanged from 026/069) — `magic_rs` starts at bar 144, `magic_ma`
+    (SMA-60 of `magic_rs`) needs ≥40 valid `magic_rs` values in its trailing
+    60-bar window, clearing around bar ~183. Zone is only set when BOTH are
+    non-null. So bars ~144–183 get a real MagicRS number with no zone yet —
+    a genuine, benign, self-resolving warm-up gap, not a bug.
+  - Fix, scoped to `ScanTable.tsx`'s table rendering only: the MagicRS
+    dot/text now colors by the SIGN of the number actually shown and sorted
+    on (`magicRsSignColor()` — bull/bear/faint-for-no-data), not by zone.
+    It can never visually disagree with the sorted number again, and there
+    is no more "gray, unclassified" third state for a populated value —
+    only bull, bear, or genuinely-no-data. `fieldConfig.ts`'s zone-based
+    `getColor()` is untouched and still governs every other consumer
+    (cards, charts, the leaderboard) — this is a **shared-component
+    change** (`ScanTable.tsx`, used by all ~20 scanners), scoped narrowly to
+    one column's color logic, not a change to the house zone vocabulary.
+  - **Exchange filter (Combined/NSE/BSE) was missing from this page
+    entirely** — added via a new `components/domain/ExchangeTabs.tsx`
+    (extracted from `ScanView.tsx`'s private component, same pattern as
+    `ScannerExportButtons.tsx`), wired with the same `universe === 'NSE_ONLY'
+    → disable BSE` rule production uses for this preset.
 - **Phase 2 — stabilise VaNi, two tiers:**
   - **Tier A (no new backend):** cohort stats (% accelerating, % RVOL>3,
     leading industry, VaNi Highlight count) computed client-side from the
@@ -176,11 +211,14 @@ scanner.
   the why-expand panel was dropped in v3, kept for possible Phase 2 reuse)
 - `App/frontend/src/components/domain/ScannerExportButtons.tsx` (new —
   `DownloadXlsButton`/`TradingViewExportButton`, extracted from ScanView.tsx)
+- `App/frontend/src/components/domain/ExchangeTabs.tsx` (new, v6 —
+  extracted from ScanView.tsx, same pattern as ScannerExportButtons.tsx)
 - `App/frontend/src/App.tsx` (added the one route, added the one import)
 - `App/frontend/src/services/breakoutSurgeSpec.ts` — created in v1/v2,
   **deleted in v3** (superseded by `fieldAvailability.ts`, see above)
 
 `ScanFilterBar.tsx`, `ScanView.tsx`, and `Sidebar.tsx` remain untouched.
-`ScanTable.tsx` got one small, deliberate shared change in v5 (VaNi
-Highlight row background, see above) — everything else about it, including
+`ScanTable.tsx` got two small, deliberate shared changes: v5 (VaNi Highlight
+row background) and v6 (MagicRS dot/text colored by sign instead of zone,
+table-only — see above). Everything else about it, including
 `FloatingHScrollbar.tsx`, is still used as-is, read-only.

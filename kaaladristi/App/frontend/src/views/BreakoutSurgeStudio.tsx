@@ -5,6 +5,7 @@ import { displaySymbol } from '@/lib/symbolUtils'
 import { useBookmarkStore } from '@/stores/bookmarkStore'
 import { getPresetMeta, type ExchangeFilter } from '@/services/scanEngine'
 import { DownloadXlsButton, TradingViewExportButton } from '@/components/domain/ScannerExportButtons'
+import { ExchangeTabs } from '@/components/domain/ExchangeTabs'
 import { ScanFilterBar, applyFilters, DEFAULT_FILTERS, hasActiveFilters, type ScanFilters } from '@/components/domain/ScanFilterBar'
 import { computeCohortStats, isHighlight } from '@/services/breakoutSurgeInsights'
 import ScanTable from '@/components/domain/ScanTable'
@@ -42,7 +43,7 @@ const DEFAULT_QUICK: Record<QuickFilterKey, boolean> = { hl: false, ob: false, w
  */
 export default function BreakoutSurgeStudio() {
   const navigate = useNavigate()
-  const [exchangeFilter] = useState<ExchangeFilter>('combined')
+  const [exchangeFilter, setExchangeFilter] = useState<ExchangeFilter>('combined')
   const [viewMode, setViewMode] = useState<'table' | 'cards'>('table')
   const [filters, setFilters] = useState<ScanFilters>(DEFAULT_FILTERS)
   const [quick, setQuick] = useState<Record<QuickFilterKey, boolean>>(DEFAULT_QUICK)
@@ -150,8 +151,9 @@ export default function BreakoutSurgeStudio() {
             />
           </div>
 
-          {/* ── Quick toggles (no ScanFilterBar equivalent) + real filter bar + view toggle ── */}
+          {/* ── Exchange + quick toggles (no ScanFilterBar equivalent) + real filter bar + view toggle ── */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
+            <ExchangeTabs value={exchangeFilter} onChange={setExchangeFilter} disabledOptions={meta?.universe === 'NSE_ONLY' ? ['BSE'] : []} />
             <button onClick={() => toggleQuick('ob')} style={{
               padding: '6px 13px', borderRadius: 100, fontSize: 12.5, fontWeight: 500, cursor: 'pointer',
               border: `1px solid ${quick.ob ? 'var(--accent)' : 'var(--border)'}`,

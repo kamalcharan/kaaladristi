@@ -200,6 +200,16 @@ function compareValues(av: unknown, bv: unknown, dir: 'asc' | 'desc'): number {
   return dir === 'asc' ? as.localeCompare(bs) : bs.localeCompare(as)
 }
 
+/** Table-only MagicRS color: sign of the displayed/sorted number, not zone. See comment at call site. */
+function magicRsSignColor(rawVal: unknown): string {
+  if (rawVal == null) return 'var(--text-faint)'
+  const n = Number(rawVal)
+  if (!Number.isFinite(n)) return 'var(--text-faint)'
+  if (n > 0) return 'var(--bull)'
+  if (n < 0) return 'var(--bear)'
+  return 'var(--text-secondary)'
+}
+
 function sortStocks(stocks: ScanStock[], key: string, dir: 'asc' | 'desc'): ScanStock[] {
   const arr = [...stocks]
   arr.sort((a, b) => {
@@ -511,7 +521,19 @@ export default function ScanTable({ stocks, presetId, onRowClick }: ScanTablePro
 
                   const rawVal = (stock as unknown as Record<string, unknown>)[colKey]
                   const text   = formatValue(colKey, rawVal, stock)
-                  const color  = getColor(colKey, rawVal, stock)
+                  // MagicRS is a special case here: fieldConfig's getColor() colors it
+                  // by magic_rs_zone (magic_rs - magic_ma — trend vs. the stock's OWN
+                  // average, a real and deliberately different signal used correctly
+                  // by the card/chart views). In a table, sitting right next to the
+                  // sorted magic_rs NUMBER itself, that produced a red dot between two
+                  // greens of similar magnitude, and a 3rd "gray, unclassified" state
+                  // (real magic_rs, zone not yet warmed up — self-resolving, ~40 bars
+                  // after magic_rs itself starts, not a bug) that read as broken and
+                  // was hard to tell apart from green at a glance. Table-only: color
+                  // the dot/text by the SIGN of the number actually shown and sorted
+                  // on, so it can never disagree with what's on screen, and there's no
+                  // third "unclassified" state — only bull/bear/no-data.
+                  const color  = colKey === 'magic_rs' ? magicRsSignColor(rawVal) : getColor(colKey, rawVal, stock)
 
                   // fontWeight emphasis for signal extremes — not expressible via FieldConfig thresholds
                   let fontWeight: number | undefined
