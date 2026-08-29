@@ -7,7 +7,7 @@ import { getPresetMeta, type ExchangeFilter } from '@/services/scanEngine'
 import { DownloadXlsButton, TradingViewExportButton } from '@/components/domain/ScannerExportButtons'
 import { ExchangeTabs } from '@/components/domain/ExchangeTabs'
 import { ScanFilterBar, applyFilters, DEFAULT_FILTERS, hasActiveFilters, type ScanFilters } from '@/components/domain/ScanFilterBar'
-import { computeCohortStats, isHighlight, type CohortStats } from '@/services/breakoutSurgeInsights'
+import { computeCohortStats, computeHighlightExplainFacts, isHighlight, type CohortStats } from '@/services/breakoutSurgeInsights'
 import ScanTable from '@/components/domain/ScanTable'
 import BreakoutSurgeCards from '@/components/domain/BreakoutSurgeTable'
 import ScanVaNiPublisher, { toVaNiScanRows } from '@/components/domain/ScanVaNiPublisher'
@@ -195,6 +195,7 @@ export default function BreakoutSurgeStudio() {
               presetId="breakout_surge"
               meta={meta}
               rowsForContext={filtered}
+              allStocks={all}
               totalCount={all.length}
               dataDate={all[0]?.trade_date ?? null}
               exchangeFilter={exchangeFilter}
@@ -275,20 +276,36 @@ export default function BreakoutSurgeStudio() {
  *     `POST /api/vani/warm-help-intents` endpoint so these never invoke the
  *     LLM live; still real intents through the same ask/cache path.
  *
+ * v16 — `scanner.why_highlighted`, fired by "Start with the N Highlights →"
+ * itself (in addition to its existing filter-apply + scroll, not instead of
+ * it). Owner's push-back on the original filter-only button: "VaNi intent
+ * is for explanation — tell why those 15 are picked to be highlighted."
+ * Grounded in `computeHighlightExplainFacts()` (breakoutSurgeInsights.ts) —
+ * real per-stock numbers over the full day's highlighted cohort (avg RVOL,
+ * avg closeness to 52-week high, avg RS, 1-2 named examples ranked by
+ * RVOL) — NOT the generic "reward-to-risk vs ATR" story `legend_vani_dot`
+ * used to tell, which turned out to be flatly wrong for this preset (its
+ * real gate, `is_vani_surge_or_breakout`, is volume + 52-week-high
+ * proximity + RS, see backfill_vani_flags.py). Caps at 1-2 named stocks,
+ * same convention as every other intent on this page.
+ *
  * Deliberately NOT built this round (see docs/claude/breakout-surge-vani-poa.md
  * v13): "new since yesterday" — day-over-day scan-membership tracking
  * (Tier B, scannerenhancement.md) doesn't exist yet, so "Your View" can't
- * surface newly-appeared stocks; and a 5th/6th intent beyond the owner's
- * four were left for a future round rather than guessed at.
+ * surface newly-appeared stocks.
  */
-type ScannerIntentKey = 'read_results' | 'your_view' | 'explain_preset' | 'how_bookmarks_work' | 'legend_vani_dot'
+type ScannerIntentKey = 'read_results' | 'your_view' | 'explain_preset' | 'why_highlighted' | 'how_bookmarks_work' | 'legend_vani_dot'
 
 function ScannerVaNiCard({
-  presetId, meta, rowsForContext, totalCount, dataDate, exchangeFilter, cohortStats, onApplyHighlights, onApplyWatchlist,
+  presetId, meta, rowsForContext, allStocks, totalCount, dataDate, exchangeFilter, cohortStats, onApplyHighlights, onApplyWatchlist,
 }: {
   presetId: string
   meta: ScanDefinition
   rowsForContext: ScanStock[]
+  /** Full day's cohort, unfiltered — scanner.why_highlighted's facts must
+   *  cover every highlighted stock today, not whatever's currently filtered
+   *  into view (matches cohortStats' scope, computed the same way). */
+  allStocks: ScanStock[]
   totalCount: number
   dataDate: string | null
   exchangeFilter: ExchangeFilter
@@ -301,6 +318,7 @@ function ScannerVaNiCard({
   const readMutation = useVaNiAsk()
   const yourViewMutation = useVaNiAsk()
   const explainMutation = useVaNiAsk()
+  const whyHighlightedMutation = useVaNiAsk()
   const bookmarksHelpMutation = useVaNiAsk()
   const dotHelpMutation = useVaNiAsk()
   const firedForDate = useRef<string | null>(null)
@@ -389,6 +407,35 @@ function ScannerVaNiCard({
     }
   }
 
+  // Fired by the "Start with the N Highlights →" pill, alongside (not
+  // instead of) its existing filter-apply + scroll — the button both DOES
+  // something (filters the table) and now EXPLAINS something (why those N
+  // stocks earned the flag), grounded in this cohort's real numbers via
+  // computeHighlightExplainFacts(), never a generic "reward:risk" story
+  // (that mechanism belongs to a different vani_rule, not this preset's).
+  const showWhyHighlighted = () => {
+    setActiveIntent('why_highlighted')
+    if (!whyHighlightedMutation.data && !whyHighlightedMutation.isPending) {
+      const facts = computeHighlightExplainFacts(allStocks)
+      whyHighlightedMutation.mutate({
+        intent_id: 'scanner.why_highlighted',
+        preset_id: presetId,
+        data_date: dataDate,
+        timeframe: 'daily',
+        exchange: exchangeFilter,
+        highlight_facts: {
+          count: facts.count,
+          avg_rvol: facts.avgRvol,
+          avg_pct_of_52w_high: facts.avgPctOf52wHigh,
+          avg_magic_rs: facts.avgMagicRs,
+          examples: facts.examples.map((e) => ({
+            symbol: e.symbol, rvol: e.rvol, pct_of_52w_high: e.pctOf52wHigh, magic_rs: e.magicRs,
+          })),
+        },
+      })
+    }
+  }
+
   // How-bookmarks-work / What's-the-dot are universal glossary answers,
   // pre-seeded into km_vani_cache (POST /api/vani/warm-help-intents) so
   // these calls hit cache, not the LLM — still a real intent_id/rows-through
@@ -423,6 +470,7 @@ function ScannerVaNiCard({
     read_results: readMutation,
     your_view: yourViewMutation,
     explain_preset: explainMutation,
+    why_highlighted: whyHighlightedMutation,
     how_bookmarks_work: bookmarksHelpMutation,
     legend_vani_dot: dotHelpMutation,
   }
@@ -470,7 +518,7 @@ function ScannerVaNiCard({
       {readDone && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
           {cohortStats.highlightCount > 0 && (
-            <button onClick={onApplyHighlights} className="text-white" style={primaryPillStyle}>
+            <button onClick={() => { onApplyHighlights(); showWhyHighlighted() }} className="text-white" style={primaryPillStyle}>
               Start with the {cohortStats.highlightCount} Highlights →
             </button>
           )}

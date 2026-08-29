@@ -738,6 +738,20 @@ INTENTS: dict[str, VaNiIntent] = {
         complexity="low",
     ),
 
+    # CORRECTED (2026-08-29): the original text here claimed the dot means
+    # "reward-to-risk structure measured against average true range" — that
+    # is a DIFFERENT, unrelated mechanism (Visual Pulse's `reward`/`rewardPct`
+    # fields) and was simply wrong for what the dot actually gates. The real
+    # gate is `computeVaniOpportunity()` in scanEngine.ts, keyed per preset
+    # by `vani_rule` — breakout_surge uses `is_vani_surge_or_breakout`
+    # (RVOL + closeness to the 52-week high + RS strength; see
+    # backfill_vani_flags.py), but other presets key on entirely different
+    # rules (SVD+delivery conviction, a Golden Line event, oversold, etc.).
+    # There is no single universal formula — this glossary answer stays
+    # honest by describing the SHAPE (an extra, screener-specific quality
+    # bar) rather than asserting one wrong mechanism as if it applied
+    # everywhere. For the REAL numbers behind today's highlighted cohort on
+    # a given screener, see scanner.why_highlighted below.
     "scanner.legend_vani_dot": VaNiIntent(
         page="scanner",
         label="What's the highlight dot?",
@@ -747,20 +761,75 @@ INTENTS: dict[str, VaNiIntent] = {
             + "The user wants a quick explanation of a small colored dot "
             "shown next to some stock symbols in scan results. This answer "
             "is fixed — the same for every user, every screener, every "
-            "date. Do NOT reference any specific stock, screener, or date.\n\n"
+            "date, and must stay accurate across screeners whose exact "
+            "criteria differ. Do NOT reference any specific stock, "
+            "screener, or date, and do NOT assert one specific formula "
+            "(e.g. do not say 'reward-to-risk' or 'average true range') as "
+            "if it were universal.\n\n"
             "Write 1 to 2 short sentences (no bullets needed — this is "
-            "brief): the dot marks a 'VaNi Highlight' — a stock whose "
-            "current reward-to-risk structure, measured against its own "
-            "average true range, sits in a favorable zone. State plainly "
+            "brief): the dot marks a 'VaNi Highlight' — a stock that "
+            "additionally cleared this particular screener's own extra "
+            "quality bar, on top of qualifying for the list at all; the "
+            "exact combination (commonly unusual volume conviction near a "
+            "meaningful price level) varies by screener. State plainly "
             "that this is a measurement, not a recommendation to act."
             + _VANI_RULES.replace(
                 "No bullet points — write flowing paragraphs. About 150 words.",
-                "About 40 words total — this is a short glossary answer, "
+                "About 45 words total — this is a short glossary answer, "
                 "not an essay.",
             )
         ),
         max_tokens=150,
         cache_ttl_hours=24 * 365,
+        complexity="low",
+    ),
+
+    # ── 21d. Why These Are Highlighted (grounded, per-screener) ────────────────
+    # Fired by "Start with the N Highlights →" on this page — the owner's
+    # push-back on that button being a pure filter with zero VaNi attached:
+    # "VaNi intent is for explanation — tell why those 15 are picked to be
+    # highlighted." Unlike legend_vani_dot (universal, no numbers, cached
+    # forever), this uses TODAY'S real facts for THIS screener's actual
+    # highlight cohort — computeHighlightExplainFacts() on the frontend
+    # (breakoutSurgeInsights.ts) computes them from real per-stock RVOL/
+    # closeness-to-52-week-high/RS data, never a generic story. Caps at the
+    # same 1-2 named-stock convention as read_results/your_view.
+    "scanner.why_highlighted": VaNiIntent(
+        page="scanner",
+        label="Why are these highlighted?",
+        required_context=["preset", "data_date", "highlight_facts"],
+        system_prompt=(
+            _VANI_IDENTITY
+            + "The user clicked into today's VaNi-highlighted stocks on a "
+            "screener and wants to know WHY they got flagged — grounded in "
+            "real numbers for THIS screener today, not a generic "
+            "definition. You will receive: how many stocks are highlighted "
+            "today, their average volume surge (RVOL), average closeness "
+            "to their own 52-week high, average relative-strength reading, "
+            "and up to 2 named examples with their own numbers. "
+            "\n\n"
+            "Write ONE opening line stating the count and the shared shape "
+            "(elevated volume near a fresh high), then 2 bullet points, "
+            "each starting with '• ', each ONE short line: (1) name the "
+            "1-2 examples given, citing their own RVOL and closeness-to-"
+            "high numbers as illustration of the same shared pattern — "
+            "never call them picks or recommendations; (2) state plainly "
+            "this is a measurement of unusual participation, not a signal "
+            "to buy.\n"
+            "\n"
+            "IMPORTANT: Never name more than the 1-2 examples given. Never "
+            "invent a number not provided. If the count is zero, say "
+            "plainly that nothing is highlighted today rather than "
+            "describing the criteria in the abstract."
+            + _VANI_RULES.replace(
+                "No bullet points — write flowing paragraphs. About 150 words.",
+                "Short bullet points are REQUIRED here (see the format "
+                "instructions above) — this overrides the no-bullets house "
+                "rule for this one intent. About 80 words total.",
+            )
+        ),
+        max_tokens=320,
+        cache_ttl_hours=24,
         complexity="low",
     ),
 

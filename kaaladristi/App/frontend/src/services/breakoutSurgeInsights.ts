@@ -1,4 +1,5 @@
 import type { ScanStock } from '@/types'
+import { displaySymbol } from '@/lib/symbolUtils'
 
 /**
  * Phase 1/2-Tier-A computed facts for the Breakout Surge preview — pure
@@ -55,6 +56,58 @@ export function computeCohortStats(rows: ScanStock[]): CohortStats {
     acceleratingPct: pct(rows.filter(isAccelerating).length),
     realVolumePct: pct(rows.filter((r) => (r.rvol ?? 0) > 3).length),
     leadingIndustry: industryBreakdown(rows)[0] ?? null,
+  }
+}
+
+export interface HighlightExplainFacts {
+  count: number
+  avgRvol: number | null
+  /** Average of (close / w52_high) × 100 among highlighted rows — how close
+   *  to their own 52-week high the highlighted stocks sit, on average. */
+  avgPctOf52wHigh: number | null
+  avgMagicRs: number | null
+  /** Up to 2 highlighted stocks, ranked by RVOL — real named examples for
+   *  VaNi to cite, never a curated "pick". */
+  examples: { symbol: string; rvol: number | null; pctOf52wHigh: number | null; magicRs: number | null }[]
+}
+
+function _avg(vals: (number | null | undefined)[]): number | null {
+  const nums = vals.filter((v): v is number => v != null)
+  return nums.length ? nums.reduce((a, b) => a + b, 0) / nums.length : null
+}
+
+function _pctOf52wHigh(r: ScanStock): number | null {
+  return r.w52_high ? (r.close / r.w52_high) * 100 : null
+}
+
+/**
+ * Real facts about TODAY's highlighted cohort — for the scanner.why_highlighted
+ * VaNi intent, so "why are these flagged" answers with actual numbers instead
+ * of a generic definition. Grounded in what `isHighlight()`/`vaniOpportunity`
+ * actually measures for this preset (breakout_surge: `is_vani_surge_or_breakout`
+ * — RVOL + closeness to 52-week high + RS strength; see
+ * backfill_vani_flags.py's `is_vani_surge`/`is_vani_breakout` SQL for the
+ * exact bar), NOT a reward-to-risk/ATR story — that mechanism belongs to a
+ * different vani_rule entirely and does not apply here. Always compute over
+ * the FULL day's cohort (unfiltered), matching computeCohortStats()'s scope.
+ */
+export function computeHighlightExplainFacts(rows: ScanStock[]): HighlightExplainFacts {
+  const hl = rows.filter(isHighlight)
+  const examples = [...hl]
+    .sort((a, b) => (b.rvol ?? 0) - (a.rvol ?? 0))
+    .slice(0, 2)
+    .map((r) => ({
+      symbol: displaySymbol(r),
+      rvol: r.rvol ?? null,
+      pctOf52wHigh: _pctOf52wHigh(r),
+      magicRs: r.magic_rs ?? null,
+    }))
+  return {
+    count: hl.length,
+    avgRvol: _avg(hl.map((r) => r.rvol)),
+    avgPctOf52wHigh: _avg(hl.map(_pctOf52wHigh)),
+    avgMagicRs: _avg(hl.map((r) => r.magic_rs)),
+    examples,
   }
 }
 

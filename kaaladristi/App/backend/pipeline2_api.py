@@ -274,6 +274,9 @@ class VaNiAskRequest(BaseModel):
     # over the visible rows). Both optional/empty for every other intent.
     bookmarked_symbols: Optional[list] = None
     top_accelerators: Optional[list] = None   # [{symbol, delta}, ...]
+    # scanner.why_highlighted only — real facts over the full day's
+    # VaNi-highlighted cohort, computed client-side (computeHighlightExplainFacts).
+    highlight_facts: Optional[dict] = None
 
 
 # Dependency order for the 'all' backfill — DERIVED from the daily run's own
@@ -4899,6 +4902,7 @@ def vani_ask(req: VaNiAskRequest):
                 cohort_stats=req.cohort_stats,
                 bookmarked_symbols=req.bookmarked_symbols,
                 top_accelerators=req.top_accelerators,
+                highlight_facts=req.highlight_facts,
             )
             if not ctx:
                 return {

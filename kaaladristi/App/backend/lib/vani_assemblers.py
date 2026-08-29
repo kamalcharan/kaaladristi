@@ -1253,6 +1253,7 @@ def assemble_scanner_context(
     cohort_stats: dict | None = None,
     bookmarked_symbols: list | None = None,
     top_accelerators: list | None = None,
+    highlight_facts: dict | None = None,
 ) -> dict | None:
     """Build scanner intent context. Returns None if the preset is unknown.
 
@@ -1267,6 +1268,13 @@ def assemble_scanner_context(
     score_5d - score_22d over the visible rows) and passed straight through —
     no new DB query on this path. Both None for every intent except
     scanner.your_view, which requires them.
+
+    highlight_facts (scanner.why_highlighted only): real facts over the full
+    day's VaNi-highlighted cohort — count, average RVOL/closeness-to-52-week-
+    high/RS, and up to 2 named examples — computed client-side by
+    computeHighlightExplainFacts() (breakoutSurgeInsights.ts). Not the
+    generic "reward-to-risk" story legend_vani_dot used to (wrongly) claim;
+    this is the real per-preset gate's numbers for today specifically.
     """
     # The two universal glossary intents (scanner.how_bookmarks_work,
     # scanner.legend_vani_dot) still require a preset_id at the API layer
@@ -1304,6 +1312,31 @@ def assemble_scanner_context(
             {'symbol': str(a.get('symbol', ''))[:40], 'delta': _safe_float(a.get('delta'))}
             for a in (top_accelerators or []) if isinstance(a, dict) and a.get('symbol')
         ][:5],
+        'highlight_facts': _clean_highlight_facts(highlight_facts),
+    }
+
+
+def _clean_highlight_facts(facts: dict | None) -> dict | None:
+    """Sanitize the client-computed highlight-explain payload before it
+    reaches the cache key or the LLM prompt."""
+    if not isinstance(facts, dict):
+        return None
+    examples = []
+    for e in (facts.get('examples') or [])[:2]:
+        if not isinstance(e, dict) or not e.get('symbol'):
+            continue
+        examples.append({
+            'symbol': str(e['symbol'])[:40],
+            'rvol': _safe_float(e.get('rvol')),
+            'pct_of_52w_high': _safe_float(e.get('pct_of_52w_high')),
+            'magic_rs': _safe_float(e.get('magic_rs')),
+        })
+    return {
+        'count': int(facts.get('count') or 0),
+        'avg_rvol': _safe_float(facts.get('avg_rvol')),
+        'avg_pct_of_52w_high': _safe_float(facts.get('avg_pct_of_52w_high')),
+        'avg_magic_rs': _safe_float(facts.get('avg_magic_rs')),
+        'examples': examples,
     }
 
 
@@ -1329,8 +1362,24 @@ def build_scanner_cache_context(intent_id: str, ctx: dict) -> dict:
     # model invent generic screening-theory vocabulary.
     if intent_id == 'scanner.explain_preset':
         return {'v': 4, 'preset_id': ctx['preset_id'], **ctx['preset']}
-    if intent_id in ('scanner.how_bookmarks_work', 'scanner.legend_vani_dot'):
+    if intent_id == 'scanner.how_bookmarks_work':
         return {'v': 1, 'intent': intent_id}
+    if intent_id == 'scanner.legend_vani_dot':
+        # v2: corrected the old wrong "reward-to-risk vs ATR" claim — that
+        # mechanism doesn't gate the highlight dot for any preset; bumped so
+        # the old (factually incorrect) cached answer can never be served.
+        return {'v': 2, 'intent': intent_id}
+    if intent_id == 'scanner.why_highlighted':
+        f = ctx.get('highlight_facts') or {}
+        return {
+            'v': 1,
+            'preset_id': ctx['preset_id'],
+            'date': ctx['data_date'],
+            'count': f.get('count', 0),
+            'avg_rvol_bucket': round(f['avg_rvol']) if f.get('avg_rvol') is not None else None,
+            'avg_pct_52wh_bucket': round(f['avg_pct_of_52w_high']) if f.get('avg_pct_of_52w_high') is not None else None,
+            'examples': [e['symbol'] for e in (f.get('examples') or [])],
+        }
     if intent_id == 'scanner.your_view':
         return {
             'v': 1,
@@ -1408,10 +1457,51 @@ def format_scanner_user_message(intent_id: str, ctx: dict) -> str:
             "Instructions: Write 1 to 2 short sentences (no bullets) "
             "explaining the small colored dot shown next to some stock "
             "symbols in scan results — it marks a 'VaNi Highlight', a stock "
-            "whose current reward-to-risk structure, measured against its "
-            "own average true range, sits in a favorable zone. State "
-            "plainly this is a measurement, not a recommendation to act. Do "
-            "not reference any specific stock, screener, or date."
+            "that additionally cleared this particular screener's own extra "
+            "quality bar (commonly unusual volume conviction near a "
+            "meaningful price level; the exact combination varies by "
+            "screener — do not assert one specific formula as universal). "
+            "State plainly this is a measurement, not a recommendation to "
+            "act. Do not reference any specific stock, screener, or date."
+        )
+
+    if intent_id == 'scanner.why_highlighted':
+        f = ctx.get('highlight_facts') or {}
+        count = f.get('count', 0)
+        if not count:
+            return (
+                f"Screener: {p['name']}\n"
+                f"Highlighted today: 0\n"
+                f"\nInstructions: In ONE line, say plainly that nothing is "
+                f"highlighted on this screener today — no bullets needed."
+            )
+        avg_rvol = f.get('avg_rvol')
+        avg_pct = f.get('avg_pct_of_52w_high')
+        avg_rs = f.get('avg_magic_rs')
+        examples = f.get('examples') or []
+        ex_lines = '\n'.join(
+            f"  {e['symbol']}: RVOL {e['rvol']:.1f}x normal, "
+            f"{e['pct_of_52w_high']:.0f}% of its 52-week high"
+            + (f", Magic RS {e['magic_rs']:.0f}" if e.get('magic_rs') is not None else '')
+            for e in examples if e.get('rvol') is not None and e.get('pct_of_52w_high') is not None
+        ) or '  (no example detail available)'
+        return (
+            f"Screener: {p['name']}\n"
+            f"Highlighted today: {count} stocks\n"
+            f"Average RVOL among them: "
+            f"{f'{avg_rvol:.1f}x normal' if avg_rvol is not None else 'not available'}\n"
+            f"Average closeness to their own 52-week high: "
+            f"{f'{avg_pct:.0f}%' if avg_pct is not None else 'not available'}\n"
+            f"Average Magic RS: {f'{avg_rs:.0f}' if avg_rs is not None else 'not available'}\n"
+            f"\n--- Named examples (use ONLY these, at most these 2) ---\n"
+            f"{ex_lines}\n"
+            f"\nInstructions: Write ONE opening line stating the count and "
+            f"the shared shape (elevated volume near a fresh high), then 2 "
+            f"bullet points (each starting with '• ', each one short line): "
+            f"(1) name the example(s) above with their own RVOL and "
+            f"closeness-to-high numbers; (2) state plainly this is a "
+            f"measurement of unusual participation, not a signal to buy. "
+            f"Never name a stock not listed above."
         )
 
     if intent_id == 'scanner.your_view':
