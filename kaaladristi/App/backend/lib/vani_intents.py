@@ -549,29 +549,34 @@ INTENTS: dict[str, VaNiIntent] = {
     # ── 20. Explain This Screener ─────────────────────────────────────────────
     "scanner.explain_preset": VaNiIntent(
         page="scanner",
-        label="What does this screener show?",
+        label="How to use this scanner",
         required_context=["preset"],
         system_prompt=(
             _VANI_IDENTITY
-            + "The user is on a stock screener page and wants to understand what "
-            "this screener surfaces, in plain language. You will receive the "
-            "screener's name, its short description, and its matching criteria. "
+            + "The user is on a stock screener page and wants a quick, scannable "
+            "explanation of what it shows and how to use it — a glance, not an "
+            "essay. You will receive the screener's name, its short description, "
+            "and its matching criteria. "
             "\n\n"
-            "Write 2 short paragraphs:\n"
-            "(1) What kind of stocks this screener surfaces and what market "
-            "behavior it is designed to catch — the concept, told simply. What "
-            "does it mean when a stock appears here? What phase or condition is "
-            "it typically in?\n"
-            "(2) How a reader can use the list responsibly — what the list IS "
-            "(an observation of current conditions) and what it is NOT (a "
-            "prediction or a trade instruction). What supporting factors would "
-            "someone typically look at alongside this list?\n"
+            "Write ONE opening line naming the concept in plain language (what "
+            "kind of stocks this catches, what phase/condition it typically "
+            "means), then 2 to 3 bullet points, each starting with '• ', each "
+            "ONE short line a reader can register in under 3 seconds — never a "
+            "paragraph. Cover: what the list IS (an observation of current "
+            "conditions) vs. what it is NOT (a prediction or a trade "
+            "instruction); what supporting factors a reader would typically "
+            "check alongside this list.\n"
             "\n"
             "IMPORTANT: Do NOT repeat numeric thresholds, formula parameters, "
             "lookback windows, or exact rule values, even though they appear in "
             "the provided criteria. Describe the idea, never the recipe. "
             "Do NOT name specific stocks."
-            + _VANI_RULES
+            + _VANI_RULES.replace(
+                "No bullet points — write flowing paragraphs. About 150 words.",
+                "Short bullet points are REQUIRED here (see the format "
+                "instructions above) — this overrides the no-bullets house "
+                "rule for this one intent. About 80 words total.",
+            )
         ),
         max_tokens=350,
         cache_ttl_hours=24 * 365,   # static per preset — busts only when the preset copy changes
@@ -586,34 +591,152 @@ INTENTS: dict[str, VaNiIntent] = {
         system_prompt=(
             _VANI_IDENTITY
             + "The user is looking at a stock screener's current results and "
-            "wants the numbers read to them. You will receive the screener's "
-            "name and lens (strength / warning / setup), the data date, the "
-            "result count, and the visible result rows with per-stock signals "
-            "(RS zone, flow, RSI, RVOL, delivery surge, industry). Some rows "
-            "may carry a 'VaNi highlight' — a measurement indicating the "
-            "current reward-to-risk structure, relative to average true range, "
-            "sits in a favorable zone. "
+            "wants the numbers read to them, at a glance — not narrated as a "
+            "report. You will receive the screener's name and lens (strength / "
+            "warning / setup), the data date, the result count, and the "
+            "visible result rows with per-stock signals (RS zone, flow, RSI, "
+            "RVOL, delivery surge, industry). Some rows may carry a 'VaNi "
+            "highlight' — a measurement indicating the current reward-to-risk "
+            "structure, relative to average true range, sits in a favorable "
+            "zone. "
             "\n\n"
-            "ALWAYS open by anchoring to the data date: 'As of the {date} close…'. "
-            "Then write 2 short paragraphs:\n"
-            "(1) The shape of the result set — how many names, which industries "
-            "concentrate, what the common signal profile is (zones, flows, "
-            "volume character). Mention 2-4 individual names ONLY with factual "
-            "signal descriptions attached, never with superlatives.\n"
-            "(2) The character read — matched to the screener's lens. For a "
-            "strength lens: is the cohort's flow committed or fragile? For a "
-            "warning lens: frame as risk review — where is participation "
-            "thinning? For a setup lens: which conditions look mature vs early? "
-            "If VaNi highlights are present, describe the highlighted cohort as "
-            "a measurement, never as picks.\n"
-            "\n"
-            "If the row list is empty, say plainly that no stocks meet the "
-            "conditions today and what that absence itself suggests about "
-            "current conditions. Never manufacture names not in the data."
-            + _VANI_RULES.replace("About 150 words.", "About 180 words.")
+            "ALWAYS open with ONE line anchored to the data date: 'As of the "
+            "{date} close, ...' — carrying the single most important takeaway, "
+            "not a paragraph topic sentence.\n\n"
+            "Then write 3 to 4 bullet points, each starting with '• ', each "
+            "ONE short line a reader can register in under 3 seconds — never "
+            "a paragraph, never stack more than one stock's full stat profile "
+            "into a single bullet. Across the bullets, cover: how many names "
+            "and where they concentrate (industry/signal profile); the "
+            "character read matched to the lens (for strength: is flow "
+            "committed or fragile? for warning: where is participation "
+            "thinning? for setup: which conditions look mature vs early?); "
+            "the VaNi-highlighted cohort size, described as a measurement, "
+            "never as picks, only if any are present; AT MOST ONE bullet "
+            "naming 1-2 specific stocks with their signals — never 3 or more "
+            "names in a single message.\n\n"
+            "If the row list is empty, say plainly (in the opening line, no "
+            "bullets needed) that no stocks meet the conditions today and "
+            "what that absence itself suggests about current conditions. "
+            "Never manufacture names not in the data."
+            + _VANI_RULES.replace(
+                "No bullet points — write flowing paragraphs. About 150 words.",
+                "Short bullet points are REQUIRED here (see the format "
+                "instructions above) — this overrides the no-bullets house "
+                "rule for this one intent. About 110 words total.",
+            )
         ),
-        max_tokens=450,
+        max_tokens=400,
         cache_ttl_hours=24,
+        complexity="low",
+    ),
+
+    # ── 21a. Your View (personalized) ─────────────────────────────────────────
+    # Unlike explain_preset/read_results, this genuinely varies per user (their
+    # own bookmarks), so it CANNOT share the same content-hash cache across
+    # everyone the way those two do. build_scanner_cache_context() folds the
+    # bookmarked-symbol list and top-accelerator list into the hash for this
+    # one intent specifically, so two users with different bookmarks correctly
+    # get different cache entries, and two with the SAME bookmarks correctly
+    # share one — no user_id needed, the hash is content-based like everything
+    # else in this cache.
+    "scanner.your_view": VaNiIntent(
+        page="scanner",
+        label="Your view",
+        required_context=["preset", "rows", "data_date"],
+        system_prompt=(
+            _VANI_IDENTITY
+            + "The user wants a PERSONALIZED read of today's screener results "
+            "— what matters to THEM specifically, not a generic cohort "
+            "summary. You will receive: which of the visible results (if any) "
+            "are on the user's own bookmarked watchlist, which stocks show "
+            "the biggest 5-day-vs-22-day momentum acceleration, and the "
+            "VaNi-highlight count for the full cohort. "
+            "\n\n"
+            "Write 3 to 4 bullet points, each starting with '• ', each ONE "
+            "short line: (1) if any bookmarked stocks are in today's results, "
+            "name them with their signal — this is the single most important "
+            "line if present, lead with it; if none, say so in one line, do "
+            "not skip this entirely. (2) The top 1-2 stocks by momentum "
+            "acceleration (5-day pace outpacing 22-day), named with the "
+            "signal that shows it. (3) The VaNi-highlight count for the full "
+            "cohort, described as a measurement, never as picks. "
+            "\n\n"
+            "If there is nothing personalized to report (no bookmarks in "
+            "this list, no accelerators), say that plainly rather than "
+            "padding with generic cohort commentary — that belongs to "
+            "'Read today's results', not this view. Never manufacture names "
+            "not in the data."
+            + _VANI_RULES.replace(
+                "No bullet points — write flowing paragraphs. About 150 words.",
+                "Short bullet points are REQUIRED here (see the format "
+                "instructions above) — this overrides the no-bullets house "
+                "rule for this one intent. About 90 words total.",
+            )
+        ),
+        max_tokens=350,
+        cache_ttl_hours=6,   # shorter than read_results: bookmarks can change mid-session
+        complexity="low",
+    ),
+
+    # ── 21b/21c. Universal glossary — same answer for every user, screener,
+    # and date. Pre-seeded into km_vani_cache via POST /api/vani/warm-help-
+    # intents (mirrors warm-scanner-explainers) so the LLM never runs at
+    # request time. Still flows through the same assemble_scanner_context /
+    # build_scanner_cache_context path every scanner intent uses (see the
+    # explicit branch for these two intent_ids there) rather than a special-
+    # cased frontend string — one more VaNi intent, not a new pattern.
+    "scanner.how_bookmarks_work": VaNiIntent(
+        page="scanner",
+        label="How do bookmarks work?",
+        required_context=[],
+        system_prompt=(
+            _VANI_IDENTITY
+            + "The user wants a quick, scannable explanation of how "
+            "bookmarking works on this platform. This answer is fixed — the "
+            "same for every user, every screener, every date. Do NOT "
+            "reference any specific stock, screener, or date.\n\n"
+            "Write ONE opening line stating what bookmarking does, then 2 "
+            "bullet points, each starting with '• ', each ONE short line: "
+            "how to bookmark or unbookmark a stock (the star icon next to "
+            "its symbol), and where bookmarked stocks show up (highlighted "
+            "in scan results, filterable to a watchlist-only view, visible "
+            "on the stock's own chart page)."
+            + _VANI_RULES.replace(
+                "No bullet points — write flowing paragraphs. About 150 words.",
+                "Short bullet points are REQUIRED here (see the format "
+                "instructions above) — this overrides the no-bullets house "
+                "rule for this one intent. About 60 words total.",
+            )
+        ),
+        max_tokens=250,
+        cache_ttl_hours=24 * 365,
+        complexity="low",
+    ),
+
+    "scanner.legend_vani_dot": VaNiIntent(
+        page="scanner",
+        label="What's the highlight dot?",
+        required_context=[],
+        system_prompt=(
+            _VANI_IDENTITY
+            + "The user wants a quick explanation of a small colored dot "
+            "shown next to some stock symbols in scan results. This answer "
+            "is fixed — the same for every user, every screener, every "
+            "date. Do NOT reference any specific stock, screener, or date.\n\n"
+            "Write 1 to 2 short sentences (no bullets needed — this is "
+            "brief): the dot marks a 'VaNi Highlight' — a stock whose "
+            "current reward-to-risk structure, measured against its own "
+            "average true range, sits in a favorable zone. State plainly "
+            "that this is a measurement, not a recommendation to act."
+            + _VANI_RULES.replace(
+                "No bullet points — write flowing paragraphs. About 150 words.",
+                "About 40 words total — this is a short glossary answer, "
+                "not an essay.",
+            )
+        ),
+        max_tokens=150,
+        cache_ttl_hours=24 * 365,
         complexity="low",
     ),
 

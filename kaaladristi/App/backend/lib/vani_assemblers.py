@@ -1235,6 +1235,8 @@ def assemble_scanner_context(
     exchange: str = 'combined',
     total_count: int | None = None,
     cohort_stats: dict | None = None,
+    bookmarked_symbols: list | None = None,
+    top_accelerators: list | None = None,
 ) -> dict | None:
     """Build scanner intent context. Returns None if the preset is unknown.
 
@@ -1243,7 +1245,18 @@ def assemble_scanner_context(
     highlight count, % accelerating, % on real volume, leading industry.
     None for any page that hasn't wired this yet; format_scanner_user_message
     falls back to the old sample-derived vani_count in that case.
+
+    bookmarked_symbols / top_accelerators (scanner.your_view only): computed
+    client-side from data the page already has (the user's own watchlist,
+    score_5d - score_22d over the visible rows) and passed straight through —
+    no new DB query on this path. Both None for every intent except
+    scanner.your_view, which requires them.
     """
+    # The two universal glossary intents (scanner.how_bookmarks_work,
+    # scanner.legend_vani_dot) still require a preset_id at the API layer
+    # (every scanner.* intent does) but their content is preset-independent —
+    # they're seeded once per active preset by warm-help-intents and served
+    # from cache, never re-derived from preset copy.
     try:
         preset_rows = db.select(
             'kd_scan_presets', 'id,name,description,tooltip,vani_rule,is_active',
@@ -1270,6 +1283,11 @@ def assemble_scanner_context(
         'rows': _clean_scanner_rows(rows or [], hide_vani),
         'total_count': total_count if total_count is not None else len(rows or []),
         'cohort_stats': cohort_stats,
+        'bookmarked_symbols': [str(s)[:40] for s in (bookmarked_symbols or [])][:20],
+        'top_accelerators': [
+            {'symbol': str(a.get('symbol', ''))[:40], 'delta': _safe_float(a.get('delta'))}
+            for a in (top_accelerators or []) if isinstance(a, dict) and a.get('symbol')
+        ][:5],
     }
 
 
@@ -1279,16 +1297,32 @@ def build_scanner_cache_context(intent_id: str, ctx: dict) -> dict:
     explain_preset hashes ONLY the preset copy — the entry lives until the
     screener's name/description/tooltip changes (the 'no change of state,
     no LLM invoke' rule). read_results hashes the visible result identity.
+    your_view hashes the PERSONALIZATION inputs only (not the shared row
+    list) — two users with the same bookmarks/accelerators correctly share
+    a cache entry, two with different ones correctly don't. The two glossary
+    intents hash to a constant (ignoring preset/date/rows entirely) since
+    their answer is universal — seeded once per active preset by
+    warm-help-intents, but content-identical across every preset.
     """
     # 'v' is a prompt-version marker: bump it whenever the scanner prompt or
     # message format changes so stale cached responses can never be served.
-    # v3: format_scanner_user_message now inserts a cohort_stats block —
-    # bumped even though the byte output is unchanged when cohort_stats is
-    # absent, since the hash below now includes that key.
+    # v4: bullet-format rewrite of explain_preset/read_results + 3 new
+    # intents (your_view, how_bookmarks_work, legend_vani_dot).
     if intent_id == 'scanner.explain_preset':
-        return {'v': 2, 'preset_id': ctx['preset_id'], **ctx['preset']}
+        return {'v': 3, 'preset_id': ctx['preset_id'], **ctx['preset']}
+    if intent_id in ('scanner.how_bookmarks_work', 'scanner.legend_vani_dot'):
+        return {'v': 1, 'intent': intent_id}
+    if intent_id == 'scanner.your_view':
+        return {
+            'v': 1,
+            'preset_id': ctx['preset_id'],
+            'date': ctx['data_date'],
+            'bookmarked': sorted(ctx.get('bookmarked_symbols') or []),
+            'accelerators': [a['symbol'] for a in (ctx.get('top_accelerators') or [])],
+            'vani_count': sum(1 for r in ctx['rows'] if r['vani']),
+        }
     return {
-        'v': 3,
+        'v': 4,
         'preset_id': ctx['preset_id'],
         'date': ctx['data_date'],
         'timeframe': ctx['timeframe'],
@@ -1324,12 +1358,61 @@ def format_scanner_user_message(intent_id: str, ctx: dict) -> str:
             f"Description: {_mask_numbers(p['description'])}\n"
             f"Matching criteria (do NOT repeat thresholds or exact values): "
             f"{_mask_numbers(p['tooltip']) if p['tooltip'] else 'not documented'}\n"
-            f"\nInstructions: Explain what this screener shows in 2 short "
-            f"paragraphs — first the concept (what market behavior it catches, "
-            f"what it means when a stock appears here), then how to read the "
-            f"list responsibly (an observation of current conditions, not a "
-            f"prediction). Never mention any number, price level, percentage, "
-            f"or lookback length. Do not name specific stocks."
+            f"\nInstructions: Write ONE opening line naming the concept in "
+            f"plain language, then 2 to 3 bullet points (each starting with "
+            f"'• ', each one short line) covering what the list IS (an "
+            f"observation of current conditions) vs. what it is NOT (a "
+            f"prediction or trade instruction), and what supporting factors "
+            f"a reader would typically check alongside it. Never mention any "
+            f"number, price level, percentage, or lookback length. Do not "
+            f"name specific stocks."
+        )
+
+    if intent_id == 'scanner.how_bookmarks_work':
+        return (
+            "Instructions: Write ONE opening line stating what bookmarking "
+            "does, then 2 bullet points (each starting with '• ', each one "
+            "short line): how to bookmark or unbookmark a stock, and where "
+            "bookmarked stocks show up across the product. Do not reference "
+            "any specific stock, screener, or date."
+        )
+
+    if intent_id == 'scanner.legend_vani_dot':
+        return (
+            "Instructions: Write 1 to 2 short sentences (no bullets) "
+            "explaining the small colored dot shown next to some stock "
+            "symbols in scan results — it marks a 'VaNi Highlight', a stock "
+            "whose current reward-to-risk structure, measured against its "
+            "own average true range, sits in a favorable zone. State "
+            "plainly this is a measurement, not a recommendation to act. Do "
+            "not reference any specific stock, screener, or date."
+        )
+
+    if intent_id == 'scanner.your_view':
+        bm = ctx.get('bookmarked_symbols') or []
+        bm_str = ', '.join(bm) if bm else 'None of the visible results are on the user\'s watchlist'
+        acc = ctx.get('top_accelerators') or []
+        acc_lines = '\n'.join(
+            f"  {a['symbol']}: 5-day score {a['delta']:+.1f} ahead of 22-day score" for a in acc
+        ) if acc else '  No meaningful acceleration in this result set'
+        cohort = ctx.get('cohort_stats')
+        vani_count = cohort['vani_highlight_count'] if cohort else sum(1 for r in ctx['rows'] if r['vani'])
+        return (
+            f"Screener: {p['name']}\n"
+            f"Data date: {ctx['data_date']}\n"
+            f"\n--- User's bookmarked stocks in today's results ---\n{bm_str}\n"
+            f"\n--- Biggest 5-day vs 22-day momentum acceleration ---\n{acc_lines}\n"
+            f"\n--- Full cohort ---\nVaNi highlights: {vani_count} of {ctx['total_count']} total results\n"
+            f"\nInstructions: Write 3 to 4 bullet points (each starting with "
+            f"'• ', each one short line): lead with the bookmarked stocks if "
+            f"any are present (name them with their signal), otherwise say "
+            f"plainly that none of today's results are on the watchlist; "
+            f"then the top 1-2 acceleration stocks by name; then the VaNi-"
+            f"highlight count as a measurement, never as picks. If both the "
+            f"bookmark and acceleration sections are empty, say there is "
+            f"nothing personalized to report today rather than padding with "
+            f"generic commentary. Use only the stocks and numbers listed "
+            f"above — never manufacture names."
         )
 
     # scanner.read_results — plain-English field labels so the model never
@@ -1377,13 +1460,15 @@ def format_scanner_user_message(intent_id: str, ctx: dict) -> str:
         f"(showing top {len(ctx['rows'])}, VaNi highlights: {vani_count})\n"
         f"{cohort_facts}"
         f"\n--- Results ---\n{rows_str}\n"
-        f"\nInstructions: Begin your response with the exact words "
-        f"'As of the {ctx['data_date']} close'. Write 2 short paragraphs: "
-        f"first the shape of the result set (count, industry concentration, "
-        f"common signal profile, 2-4 names with their factual signals), then "
-        f"the character read through the '{ctx['lens']}' lens"
+        f"\nInstructions: Open with ONE line starting with the exact words "
+        f"'As of the {ctx['data_date']} close' carrying the single most "
+        f"important takeaway. Then write 3 to 4 bullet points (each "
+        f"starting with '• ', each one short line): how many names and "
+        f"where they concentrate; the character read through the "
+        f"'{ctx['lens']}' lens"
         + (", grounded in the full-cohort facts above rather than guessed from the shown rows" if cohort else "")
-        + f". Mention the "
-        f"VaNi-highlight count only if greater than zero. Use only the stocks "
-        f"and numbers listed above."
+        + f"; the VaNi-highlight count as a measurement, only if greater "
+        f"than zero; AT MOST ONE bullet naming 1-2 specific stocks — never "
+        f"3 or more names in the message. Use only the stocks and numbers "
+        f"listed above."
     )
