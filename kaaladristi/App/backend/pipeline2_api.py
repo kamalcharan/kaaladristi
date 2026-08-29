@@ -269,6 +269,11 @@ class VaNiAskRequest(BaseModel):
     # count, % accelerating, % on real volume, leading industry. Optional;
     # pages that don't send it get the old sample-derived narration.
     cohort_stats: Optional[dict] = None
+    # scanner.your_view only — computed client-side from data the page
+    # already has (the user's own watchlist store, score_5d - score_22d
+    # over the visible rows). Both optional/empty for every other intent.
+    bookmarked_symbols: Optional[list] = None
+    top_accelerators: Optional[list] = None   # [{symbol, delta}, ...]
 
 
 # Dependency order for the 'all' backfill — DERIVED from the daily run's own
@@ -4892,6 +4897,8 @@ def vani_ask(req: VaNiAskRequest):
                 exchange=req.exchange or 'combined',
                 total_count=req.total_count,
                 cohort_stats=req.cohort_stats,
+                bookmarked_symbols=req.bookmarked_symbols,
+                top_accelerators=req.top_accelerators,
             )
             if not ctx:
                 return {
@@ -5137,6 +5144,81 @@ def vani_warm_scanner_explainers(_uid: str = Depends(_get_current_user_id)):
         except Exception as e:
             log.error(f'warm explainer failed for {pid}: {e}')
             failed.append({'preset': pid, 'reason': str(e)[:120]})
+
+    return {'generated': generated, 'skipped': skipped, 'failed': failed}
+
+
+@app.post('/api/vani/warm-help-intents')
+def vani_warm_help_intents(_uid: str = Depends(_get_current_user_id)):
+    """Admin: pre-seed the two universal scanner glossary intents
+    (scanner.how_bookmarks_work, scanner.legend_vani_dot) into km_vani_cache
+    so the LLM is never invoked at user click time.
+
+    Unlike warm-scanner-explainers, these two intents' cache context hashes
+    to a CONSTANT (see build_scanner_cache_context) — the answer doesn't
+    vary by preset, screener, or date. assemble_scanner_context() still
+    needs *a* valid preset_id to build context (every scanner.* intent
+    requires one at the API layer), so this loops over active presets only
+    to find one that assembles cleanly; the cache key is identical across
+    all of them, so the first successful generation seeds the single global
+    entry and every subsequent preset (and every real user request
+    afterward) just hits that same cache row. Idempotent — re-running skips
+    once seeded."""
+    db = _db()
+    generated, skipped, failed = [], [], []
+    glossary_intent_ids = ['scanner.how_bookmarks_work', 'scanner.legend_vani_dot']
+
+    presets = db.select('kd_scan_presets', 'id,is_active', limit=100) or []
+    active_preset_ids = [r['id'] for r in presets if r.get('is_active')]
+    if not active_preset_ids:
+        raise HTTPException(status_code=500, detail='no active scan presets found')
+
+    for intent_id in glossary_intent_ids:
+        intent = _VANI_INTENTS.get(intent_id)
+        if not intent:
+            failed.append({'intent': intent_id, 'reason': 'intent not registered'})
+            continue
+        seeded = False
+        for pid in active_preset_ids:
+            try:
+                ctx = assemble_scanner_context(db, preset_id=pid)
+                if not ctx:
+                    continue
+                key = _vani_pcache_key(intent_id, build_scanner_cache_context(intent_id, ctx))
+                if key and _vani_pcache_get(db, key):
+                    skipped.append(intent_id)
+                    seeded = True
+                    break
+                system = intent.system_prompt + (
+                    "\n\nABSOLUTE GROUNDING RULES: Use ONLY the data provided between "
+                    "[DATA START] and [DATA END]. Never invent, assume, or extrapolate "
+                    "stock names, numbers, industries, or dates not explicitly stated."
+                )
+                text = _ai_complete(
+                    system=system,
+                    user=_wrap_vani_user_msg(format_scanner_user_message(intent_id, ctx)),
+                    max_tokens=intent.max_tokens,
+                    temperature=0.4,
+                    no_think=True,
+                )
+                text, rejected = _sebi_post_filter(text)
+                if rejected or not text or re.search(r'\d', text):
+                    failed.append({'intent': intent_id, 'reason': 'compliance filter rejected output'})
+                    break
+                text = _append_disclaimer(text)
+                _vani_pcache_set(
+                    db, key, intent_id, key.rsplit(':', 1)[-1],
+                    text, intent.cache_ttl_hours,
+                    llm_provider=os.getenv('AI_PROVIDER', 'local'), llm_model=_AI_MODEL,
+                )
+                generated.append(intent_id)
+                seeded = True
+                break
+            except Exception as e:
+                log.error(f'warm help-intent failed for {intent_id}/{pid}: {e}')
+                failed.append({'intent': intent_id, 'preset': pid, 'reason': str(e)[:120]})
+        if not seeded:
+            failed.append({'intent': intent_id, 'reason': 'no active preset produced usable context'})
 
     return {'generated': generated, 'skipped': skipped, 'failed': failed}
 

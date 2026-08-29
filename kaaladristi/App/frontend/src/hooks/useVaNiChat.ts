@@ -52,6 +52,10 @@ export interface VaNiAskRequest {
     leading_industry: string | null;
     leading_industry_count: number | null;
   };
+  // scanner.your_view only — computed client-side (the user's own watchlist
+  // store, score_5d - score_22d over the visible rows). Optional.
+  bookmarked_symbols?: string[];
+  top_accelerators?: Array<{ symbol: string; delta: number }>;
 }
 
 export interface VaNiAskResponse {

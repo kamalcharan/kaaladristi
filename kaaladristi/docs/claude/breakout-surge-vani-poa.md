@@ -506,3 +506,88 @@ directly).
   `useVaNiAsk()` instances + local `activeIntent` state added instead;
   `collapsible collapsedHeight={110}` added to the `<VaNiInsight>` call
   that was missing it; "Ask a follow-up →" pill removed.
+
+**v13 — owner-specified VaNi intent set (2026-08-29).** Two rounds of owner
+feedback on v12's actual rendered output ("i still see long paragraph...what
+does the user gain from this message?") landed on a full redesign of what
+VaNi says on this page, not another rendering fix:
+
+1. **Bullet-format rewrite, `scanner.explain_preset` + `scanner.read_results`
+   (`vani_intents.py` system prompts, `vani_assemblers.py`
+   `format_scanner_user_message()` instruction text — both had to change in
+   lockstep, since the LLM sees the system prompt's format rule AND the user
+   message's own "write N paragraphs" instruction, and only the system
+   prompt had been touched in the first pass).** Both intents now require 1
+   opening line + short bullet points (`'• '`-prefixed) instead of "2 short
+   paragraphs," with `read_results` capped at **AT MOST ONE bullet naming
+   1-2 stocks** (was "2-4 individual names," part of what made responses
+   read dense). `explain_preset` relabeled `"What does this screener show?"`
+   → `"How to use this scanner"`. Overrides `_VANI_RULES`' house-wide
+   "no bullet points" rule per-intent via `.replace(...)`, the same pattern
+   `read_results` already used to bump its word count — not a new mechanism.
+   Cache-context `'v'` bumped 2→3 (explain_preset) / 3→4 (read_results) so
+   old paragraph-shaped cache entries can never be served under the new format.
+
+2. **Owner's explicit intent list, built as real registered VaNi intents —
+   corrected mid-design after the owner rejected a "static" shortcut.** I
+   initially proposed making the two glossary questions hardcoded frontend
+   strings, bypassing VaNi entirely for speed. Owner, verbatim: **"there is
+   nothing called static......static is actually handled by inserting the
+   record into the DB, so that LLM is never invoked and cache is used."**
+   Rebuilt around the existing `km_vani_cache` / `warm-scanner-explainers`
+   seed pattern instead:
+   - **`scanner.your_view`** ("Your View", owner's 1st-priority intent) —
+     personalized: bookmarked stocks in today's results (lead item, or
+     "none" stated plainly — never skipped), the top 1-2 stocks by 5D-vs-22D
+     momentum acceleration, and the VaNi-highlight count for the full
+     cohort. Genuinely varies per user, so `build_scanner_cache_context()`
+     hashes the bookmarked-symbol list + accelerator list (not the shared
+     row list) — two users with the same bookmarks correctly share a cache
+     entry, two with different ones correctly don't, no `user_id` needed.
+     `cache_ttl_hours=6` (shorter than `read_results`'s 24 — bookmarks can
+     change mid-session). Bookmarks/acceleration are computed **client-side**
+     in `BreakoutSurgeStudio.tsx` from data the page already has
+     (`useBookmarkStore()` + `score_5d`/`score_22d` already on every row,
+     mirroring `ScanFilterBar`'s own `accelerating` gate) — no new fetch.
+   - **`scanner.how_bookmarks_work`** / **`scanner.legend_vani_dot`** —
+     universal glossary answers (owner's 3rd/4th intents), same for every
+     user/screener/date. `build_scanner_cache_context()` hashes these to a
+     **constant** (`{'v': 1, 'intent': intent_id}`), ignoring preset/date/
+     rows entirely — turns out genuinely global, not "duplicated once per
+     preset" as first assumed, since the cache key collapses to one row
+     regardless of which preset's context was used to build the message.
+     New admin endpoint `POST /api/vani/warm-help-intents` seeds both:
+     loops active presets only to find one that assembles cleanly (every
+     `scanner.*` intent still requires *a* `preset_id` at the API layer),
+     generates once, and every subsequent preset/request hits that same
+     cache row. Mirrors `warm-scanner-explainers`'s LLM-call +
+     `_sebi_post_filter` + digit-rejection + `_vani_pcache_set` pattern
+     exactly — no new seeding mechanism invented.
+   - **Deliberately deferred, not built this round:** "new items since
+     yesterday" (owner's 2nd sub-item under "Your View") needs Tier B
+     (`scannerenhancement.md`) — day-over-day scan-membership tracking via a
+     scheduled job + membership table — which does not exist yet; faking it
+     from a single day's snapshot would be worse than omitting it. The
+     owner's open 5th-intent invitation ("any other which you can
+     recommend") was left for a future round rather than guessed at here.
+- Files touched: `App/backend/lib/vani_intents.py` (prompt rewrites + 3 new
+  `VaNiIntent` definitions), `App/backend/lib/vani_assemblers.py`
+  (`assemble_scanner_context()` gains `bookmarked_symbols`/
+  `top_accelerators` params; `build_scanner_cache_context()` gains 3 new
+  branches; `format_scanner_user_message()` gains 3 new branches + aligned
+  instruction text for the 2 rewritten intents), `App/backend/pipeline2_api.py`
+  (`VaNiAskRequest` gains `bookmarked_symbols`/`top_accelerators`; new
+  `POST /api/vani/warm-help-intents` endpoint), `App/frontend/src/hooks/
+  useVaNiChat.ts` (matching optional fields on the TS `VaNiAskRequest`),
+  `App/frontend/src/views/BreakoutSurgeStudio.tsx` (`ScannerVaNiCard`:
+  3 more `useVaNiAsk()` instances, `ScannerIntentKey` union widened,
+  client-side bookmark/accelerator computation, new pills — "Your View",
+  relabeled "How to use this scanner", a small help cluster for the 2
+  glossary pills).
+- `npm run typecheck` and `npm run build` (theme-standard ratchet
+  unaffected: 371 hex + 276 rgba, unchanged) both pass clean.
+- **Not yet run:** the `warm-help-intents` seed call itself, and a live
+  click-through of all 5 pills against the deployed backend — this
+  environment has no way to execute Python or hit the running FastAPI/LLM
+  service; owner to run the seed call and verify on the VPS deployment, the
+  same verification path used for every prior round of this doc.

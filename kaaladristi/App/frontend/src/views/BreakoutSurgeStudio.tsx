@@ -247,16 +247,32 @@ export default function BreakoutSurgeStudio() {
  * `vani-common-component.md` was live in the component but never wired up
  * here — both fixed now.
  *
- * Two intents both render in THIS card, swapped in place by local state —
- * no drawer involved for either. Each intent gets its own `useVaNiAsk()`
- * instance so switching back and forth doesn't refetch or lose the other's
- * answer. `scanner.explain_preset` fires lazily, on first click.
+ * v13 (owner-specified intent set): five intents now render in THIS card,
+ * swapped in place by local state — no drawer involved for any of them.
+ * Each gets its own `useVaNiAsk()` instance so switching back and forth
+ * never refetches or drops a sibling's already-fetched answer.
+ *   - `scanner.read_results` ("Today's Results") — fires eagerly, unchanged.
+ *   - `scanner.your_view` ("Your View") — the owner's 1st-priority intent:
+ *     the user's own bookmarked stocks in today's results (lead item),
+ *     the biggest 5D-vs-22D acceleration names, and the VaNi-highlight
+ *     count. Bookmarks/accelerators are computed client-side from data this
+ *     page already has (bookmarkStore + score_5d/score_22d) — no new fetch.
+ *     Fires lazily on first click, like explain_preset.
+ *   - `scanner.explain_preset` ("How to use this scanner", relabeled from
+ *     "What does this screener show?") — unchanged mechanics.
+ *   - `scanner.how_bookmarks_work` / `scanner.legend_vani_dot` — universal
+ *     glossary answers, pre-seeded into km_vani_cache via the admin
+ *     `POST /api/vani/warm-help-intents` endpoint so these never invoke the
+ *     LLM live; still real intents through the same ask/cache path.
  *
- * Still deliberately missing: "Why so many breakouts?" / "Which to skip?" /
- * "What changed vs yesterday?" from the reference mockup, and free-form
- * follow-up questions — none of those have a real backend intent yet, and a
- * pill that doesn't do anything real is worse than no pill.
+ * Deliberately NOT built this round (see docs/claude/breakout-surge-vani-poa.md
+ * v13): "new since yesterday" — day-over-day scan-membership tracking
+ * (Tier B, scannerenhancement.md) doesn't exist yet, so "Your View" can't
+ * surface newly-appeared stocks; and a 5th/6th intent beyond the owner's
+ * four were left for a future round rather than guessed at.
  */
+type ScannerIntentKey = 'read_results' | 'your_view' | 'explain_preset' | 'how_bookmarks_work' | 'legend_vani_dot'
+
 function ScannerVaNiCard({
   presetId, meta, rowsForContext, totalCount, dataDate, exchangeFilter, cohortStats, onApplyHighlights, onApplyWatchlist,
 }: {
@@ -270,15 +286,43 @@ function ScannerVaNiCard({
   onApplyHighlights: () => void
   onApplyWatchlist: () => void
 }) {
+  // One useVaNiAsk() instance per intent so switching pills never refetches
+  // or loses a sibling intent's already-fetched answer.
   const readMutation = useVaNiAsk()
+  const yourViewMutation = useVaNiAsk()
   const explainMutation = useVaNiAsk()
+  const bookmarksHelpMutation = useVaNiAsk()
+  const dotHelpMutation = useVaNiAsk()
   const firedForDate = useRef<string | null>(null)
-  const [activeIntent, setActiveIntent] = useState<'read_results' | 'explain_preset'>('read_results')
+  const [activeIntent, setActiveIntent] = useState<ScannerIntentKey>('read_results')
+  const { bookmarkedIds } = useBookmarkStore()
+
+  const hideVani = meta.vani_rule === 'always_true'
+
+  // Personalization inputs for "Your view" — computed from data the page
+  // already has (bookmark store + score_5d/score_22d already on every row),
+  // no new fetch. Acceleration mirrors ScanFilterBar's own `accelerating`
+  // gate: 5-day score positive AND ahead of the 22-day score.
+  const bookmarkedSymbols = rowsForContext
+    .filter((r) => bookmarkedIds.has(r.equity_id))
+    .map((r) => displaySymbol(r))
+  const topAccelerators = [...rowsForContext]
+    .filter((r) => (r.score_5d ?? 0) > 0 && (r.score_5d ?? 0) > (r.score_22d ?? 0))
+    .map((r) => ({ symbol: displaySymbol(r), delta: (r.score_5d ?? 0) - (r.score_22d ?? 0) }))
+    .sort((a, b) => b.delta - a.delta)
+    .slice(0, 3)
+
+  const cohortStatsPayload = hideVani ? undefined : {
+    vani_highlight_count: cohortStats.highlightCount,
+    accelerating_pct: cohortStats.acceleratingPct,
+    real_volume_pct: cohortStats.realVolumePct,
+    leading_industry: cohortStats.leadingIndustry?.name ?? null,
+    leading_industry_count: cohortStats.leadingIndustry?.count ?? null,
+  }
 
   useEffect(() => {
     if (!dataDate || firedForDate.current === dataDate) return
     firedForDate.current = dataDate
-    const hideVani = meta.vani_rule === 'always_true'
     const rows = toVaNiScanRows(rowsForContext, hideVani)
     readMutation.mutate({
       intent_id: 'scanner.read_results',
@@ -291,15 +335,7 @@ function ScannerVaNiCard({
         symbol: r.symbol, industry: r.industry, zone: r.zone, flow: r.flow,
         rsi: r.rsi, rvol: r.rvol, pct_chng: r.pctChng, surge: r.surge, vani: r.vani,
       })),
-      ...(hideVani ? {} : {
-        cohort_stats: {
-          vani_highlight_count: cohortStats.highlightCount,
-          accelerating_pct: cohortStats.acceleratingPct,
-          real_volume_pct: cohortStats.realVolumePct,
-          leading_industry: cohortStats.leadingIndustry?.name ?? null,
-          leading_industry_count: cohortStats.leadingIndustry?.count ?? null,
-        },
-      }),
+      ...(cohortStatsPayload ? { cohort_stats: cohortStatsPayload } : {}),
     })
     // rowsForContext/cohortStats/etc. intentionally excluded — fires once
     // per new trading day's data, not on every filter/sort change.
@@ -307,6 +343,28 @@ function ScannerVaNiCard({
   }, [dataDate])
 
   if (!dataDate) return null
+
+  const showYourView = () => {
+    setActiveIntent('your_view')
+    if (!yourViewMutation.data && !yourViewMutation.isPending) {
+      const rows = toVaNiScanRows(rowsForContext, hideVani)
+      yourViewMutation.mutate({
+        intent_id: 'scanner.your_view',
+        preset_id: presetId,
+        data_date: dataDate,
+        timeframe: 'daily',
+        exchange: exchangeFilter,
+        total_count: totalCount,
+        rows: rows.map((r) => ({
+          symbol: r.symbol, industry: r.industry, zone: r.zone, flow: r.flow,
+          rsi: r.rsi, rvol: r.rvol, pct_chng: r.pctChng, surge: r.surge, vani: r.vani,
+        })),
+        bookmarked_symbols: bookmarkedSymbols,
+        top_accelerators: topAccelerators,
+        ...(cohortStatsPayload ? { cohort_stats: cohortStatsPayload } : {}),
+      })
+    }
+  }
 
   const showExplain = () => {
     setActiveIntent('explain_preset')
@@ -321,7 +379,44 @@ function ScannerVaNiCard({
     }
   }
 
-  const active = activeIntent === 'read_results' ? readMutation : explainMutation
+  // How-bookmarks-work / What's-the-dot are universal glossary answers,
+  // pre-seeded into km_vani_cache (POST /api/vani/warm-help-intents) so
+  // these calls hit cache, not the LLM — still a real intent_id/rows-through
+  // request, just answered from a pre-baked row (see vani_intents.py).
+  const showBookmarksHelp = () => {
+    setActiveIntent('how_bookmarks_work')
+    if (!bookmarksHelpMutation.data && !bookmarksHelpMutation.isPending) {
+      bookmarksHelpMutation.mutate({
+        intent_id: 'scanner.how_bookmarks_work',
+        preset_id: presetId,
+        data_date: dataDate,
+        timeframe: 'daily',
+        exchange: exchangeFilter,
+      })
+    }
+  }
+
+  const showDotHelp = () => {
+    setActiveIntent('legend_vani_dot')
+    if (!dotHelpMutation.data && !dotHelpMutation.isPending) {
+      dotHelpMutation.mutate({
+        intent_id: 'scanner.legend_vani_dot',
+        preset_id: presetId,
+        data_date: dataDate,
+        timeframe: 'daily',
+        exchange: exchangeFilter,
+      })
+    }
+  }
+
+  const mutationByIntent: Record<ScannerIntentKey, ReturnType<typeof useVaNiAsk>> = {
+    read_results: readMutation,
+    your_view: yourViewMutation,
+    explain_preset: explainMutation,
+    how_bookmarks_work: bookmarksHelpMutation,
+    legend_vani_dot: dotHelpMutation,
+  }
+  const active = mutationByIntent[activeIntent]
   const readDone = !readMutation.isPending && !!readMutation.data?.response
 
   const pillStyle: React.CSSProperties = {
@@ -331,6 +426,8 @@ function ScannerVaNiCard({
   }
   const activePillStyle: React.CSSProperties = { ...pillStyle, background: 'var(--indigo-bg)', fontWeight: 700 }
   const primaryPillStyle: React.CSSProperties = { ...pillStyle, background: 'var(--indigo)', border: 'none', fontWeight: 600 }
+  const helpPillStyle: React.CSSProperties = { ...pillStyle, fontSize: 11.5, opacity: 0.85 }
+  const activeHelpPillStyle: React.CSSProperties = { ...activePillStyle, fontSize: 11.5 }
 
   return (
     <div style={{ marginBottom: 18 }}>
@@ -352,10 +449,20 @@ function ScannerVaNiCard({
           <button onClick={() => setActiveIntent('read_results')} style={activeIntent === 'read_results' ? activePillStyle : pillStyle}>
             Today's Results
           </button>
+          <button onClick={showYourView} style={activeIntent === 'your_view' ? activePillStyle : pillStyle}>
+            Your View
+          </button>
           <button onClick={showExplain} style={activeIntent === 'explain_preset' ? activePillStyle : pillStyle}>
-            What does this screener show?
+            How to use this scanner
           </button>
           <button onClick={onApplyWatchlist} style={pillStyle}>My Watchlist</button>
+          <span style={{ width: 1, alignSelf: 'stretch', background: 'var(--border)', margin: '2px 2px' }} />
+          <button onClick={showBookmarksHelp} style={activeIntent === 'how_bookmarks_work' ? activeHelpPillStyle : helpPillStyle}>
+            How do bookmarks work?
+          </button>
+          <button onClick={showDotHelp} style={activeIntent === 'legend_vani_dot' ? activeHelpPillStyle : helpPillStyle}>
+            What's the highlight dot?
+          </button>
         </div>
       )}
     </div>
