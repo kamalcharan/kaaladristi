@@ -297,6 +297,33 @@ scanner.
     literal usage caught it). Also introduced two `#fff` literals fixed to
     Tailwind's `text-white` class (same pattern `Layout.tsx`'s own VaNi
     button already uses) to keep the theme-standard ratchet clean.
+    **Revised again (v9) — deployed to the VPS, owner reviewed the live
+    "VaNi Read" block and flagged 3 gaps against what production already
+    has:**
+    - **Feedback (thumbs up/down) was missing.** `VaNiFeedback.tsx` already
+      exists (self-contained, `logId` prop, posts to `/api/vani/feedback`,
+      remembers the vote in `localStorage`) and is what `VaNiChatPanel.tsx`
+      uses per-message — `VaNiReadPanel` just never rendered it. Added,
+      gated on `askMutation.data.log_id` being present.
+    - **No follow-up ("also ask") intents.** `VaNiChatPanel.tsx` has its own
+      "also ask" section (`remainingIntents`) below each answer. Added the
+      same idea here, scoped to two real, low-effort actions rather than
+      reimplementing the full intent list: "What does this screener show?"
+      calls `useVaNiStore().openWithIntent('scanner.explain_preset')`
+      (opens the real global panel with that intent queued — the exact
+      mechanism the header pill's own intents already use), and "Ask VaNi
+      about a stock in this scan" just opens the panel
+      (`useVaNiStore().toggle()`) for free-form follow-up.
+    - **Collapse/truncate.** The full two-paragraph response was always
+      shown in full — a genuinely long block for a stat-strip page. Added
+      `expanded` state defaulting to closed, `-webkit-line-clamp: 3` when
+      collapsed, "Show more ▼ / Show less ▲" toggle. Right instinct on its
+      own terms (real length, this page's own density) — checked
+      `VaNiInsight.tsx` (the Skills-system's own reusable insight panel,
+      dashboard/panchang/breadth cards) hoping to point at an existing
+      precedent to match, but it does **not** truncate anywhere; this is a
+      new pattern for the product, not copied from elsewhere, worth knowing
+      if `VaNiInsight.tsx`'s own long responses get the same complaint later.
   - **Tier B (real backend work, own timeline):** "up from N yesterday",
     "new today", "sustaining N sessions" — needs the scheduled job +
     membership table `scannerenhancement.md` already designed. Ship without
@@ -356,3 +383,10 @@ table-only — see above). Everything else about it, including
 - `App/frontend/src/services/scanEngine.ts` — separately, fixed the
   `fetchBreakoutSurge()` universe leak found while verifying Tier A against
   live data (see the ⚠ note near the top of this doc)
+
+**v9 additions** — all inside `VaNiReadPanel` in `BreakoutSurgeStudio.tsx`,
+plus reusing (not modifying) two existing components:
+- `VaNiFeedback` (`components/domain/VaNi/VaNiFeedback.tsx`) — imported and
+  rendered as-is
+- `useVaNiStore().openWithIntent` / `.toggle()` — used to route the two
+  follow-up buttons into the existing global panel, no store changes needed

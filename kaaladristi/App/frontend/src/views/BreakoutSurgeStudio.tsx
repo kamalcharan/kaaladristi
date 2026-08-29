@@ -12,6 +12,8 @@ import ScanTable from '@/components/domain/ScanTable'
 import BreakoutSurgeCards from '@/components/domain/BreakoutSurgeTable'
 import ScanVaNiPublisher, { toVaNiScanRows } from '@/components/domain/ScanVaNiPublisher'
 import { useVaNiAsk } from '@/hooks/useVaNiChat'
+import { useVaNiStore } from '@/stores/vaniStore'
+import VaNiFeedback from '@/components/domain/VaNi/VaNiFeedback'
 import type { ScanStock, ScanDefinition } from '@/types'
 
 type QuickFilterKey = 'hl' | 'ob' | 'watch'
@@ -260,6 +262,8 @@ function VaNiReadPanel({
 }) {
   const askMutation = useVaNiAsk()
   const firedForDate = useRef<string | null>(null)
+  const [expanded, setExpanded] = useState(false)
+  const { openWithIntent, toggle: toggleVaniPanel } = useVaNiStore()
 
   useEffect(() => {
     if (!dataDate || firedForDate.current === dataDate) return
@@ -316,18 +320,44 @@ function VaNiReadPanel({
         )}
         {!askMutation.isPending && askMutation.data?.response && (
           <>
-            <p style={{ margin: '7px 0 0', fontSize: 14, lineHeight: 1.62, color: 'var(--text-primary)', whiteSpace: 'pre-wrap' }}>
+            <p style={{
+              margin: '7px 0 0', fontSize: 14, lineHeight: 1.62, color: 'var(--text-primary)', whiteSpace: 'pre-wrap',
+              ...(expanded ? {} : {
+                display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden',
+              }),
+            }}>
               {askMutation.data.response}
             </p>
-            {cohortStats.highlightCount > 0 && (
-              <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+            <button onClick={() => setExpanded((e) => !e)} style={{
+              background: 'none', border: 'none', padding: '5px 0 0', cursor: 'pointer',
+              fontFamily: 'var(--font-mono)', fontSize: 11.5, color: 'var(--indigo)', fontWeight: 600,
+            }}>{expanded ? 'Show less ▲' : 'Show more ▼'}</button>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginTop: 12 }}>
+              {cohortStats.highlightCount > 0 && (
                 <button onClick={onApplyHighlights} className="text-white" style={{
                   background: 'var(--indigo)', border: 'none',
                   borderRadius: 100, padding: '7px 14px', fontSize: 12.5, fontWeight: 500,
                   cursor: 'pointer', fontFamily: 'var(--font-body)',
                 }}>Apply VaNi Highlights</button>
-              </div>
-            )}
+              )}
+              {askMutation.data.log_id && <VaNiFeedback logId={askMutation.data.log_id} />}
+            </div>
+
+            {/* Follow-up intents — same "also ask" idea VaNiChatPanel.tsx uses,
+                just surfaced here instead of requiring the header pill first. */}
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--border-indigo)' }}>
+              <button onClick={() => openWithIntent('scanner.explain_preset')} style={{
+                background: 'transparent', border: '1px solid var(--border-indigo)', color: 'var(--indigo)',
+                borderRadius: 100, padding: '6px 13px', fontSize: 12, fontWeight: 500,
+                cursor: 'pointer', fontFamily: 'var(--font-body)',
+              }}>What does this screener show?</button>
+              <button onClick={toggleVaniPanel} style={{
+                background: 'transparent', border: '1px solid var(--border-indigo)', color: 'var(--indigo)',
+                borderRadius: 100, padding: '6px 13px', fontSize: 12, fontWeight: 500,
+                cursor: 'pointer', fontFamily: 'var(--font-body)',
+              }}>Ask VaNi about a stock in this scan</button>
+            </div>
           </>
         )}
         {!askMutation.isPending && askMutation.data?.error && (
