@@ -1205,6 +1205,22 @@ SCANNER_LENS: dict[str, str] = {
 
 _SCANNER_MAX_ROWS = 25
 
+# Fixed, closed list of real on-page tools every scanner page in this shell
+# offers — same shape across presets, so this is prose, not per-preset data.
+# explain_preset's system prompt requires the model pick ONLY from this list
+# for "what to check next," rather than freelancing generic screening-theory
+# vocabulary (relative volume, sector rotation, support levels) that isn't
+# clickable on this page. Keep this in sync with the actual stat tiles/pills
+# rendered in BreakoutSurgeStudio.tsx (and any later scanner page reusing
+# this shell) — if a tile's label changes there, update it here too.
+_SCANNER_ONPAGE_TOOLS = (
+    "the 'Accelerating' filter (5-day momentum pace vs. 22-day pace), "
+    "'Real Volume Behind' (delivery volume vs. its own recent norm), "
+    "'Leading Industry' (which industry the day's results concentrate in), "
+    "and the VaNi Highlight dot (a reward-to-risk screen shown next to "
+    "some symbols)"
+)
+
 
 def _clean_scanner_rows(rows: list, hide_vani: bool) -> list[dict]:
     """Cap + sanitize payload rows; re-translate vocabulary defensively."""
@@ -1308,8 +1324,11 @@ def build_scanner_cache_context(intent_id: str, ctx: dict) -> dict:
     # message format changes so stale cached responses can never be served.
     # v4: bullet-format rewrite of explain_preset/read_results + 3 new
     # intents (your_view, how_bookmarks_work, legend_vani_dot).
+    # explain_preset v4: onboarding rewrite — grounds the "what to check
+    # next" bullet in this page's real on-page tools instead of letting the
+    # model invent generic screening-theory vocabulary.
     if intent_id == 'scanner.explain_preset':
-        return {'v': 3, 'preset_id': ctx['preset_id'], **ctx['preset']}
+        return {'v': 4, 'preset_id': ctx['preset_id'], **ctx['preset']}
     if intent_id in ('scanner.how_bookmarks_work', 'scanner.legend_vani_dot'):
         return {'v': 1, 'intent': intent_id}
     if intent_id == 'scanner.your_view':
@@ -1358,14 +1377,21 @@ def format_scanner_user_message(intent_id: str, ctx: dict) -> str:
             f"Description: {_mask_numbers(p['description'])}\n"
             f"Matching criteria (do NOT repeat thresholds or exact values): "
             f"{_mask_numbers(p['tooltip']) if p['tooltip'] else 'not documented'}\n"
+            f"\nReal on-page tools (use ONLY these when naming what to check "
+            f"next — do not invent or substitute generic concepts not in "
+            f"this list): {_SCANNER_ONPAGE_TOOLS}. Separately, 'Your View' "
+            f"gives a personalized read: the user's own bookmarked stocks in "
+            f"this list, plus which names are accelerating fastest.\n"
             f"\nInstructions: Write ONE opening line naming the concept in "
-            f"plain language, then 2 to 3 bullet points (each starting with "
-            f"'• ', each one short line) covering what the list IS (an "
+            f"plain language, then 3 bullet points (each starting with "
+            f"'• ', each one short line): (1) what the list IS (an "
             f"observation of current conditions) vs. what it is NOT (a "
-            f"prediction or trade instruction), and what supporting factors "
-            f"a reader would typically check alongside it. Never mention any "
-            f"number, price level, percentage, or lookback length. Do not "
-            f"name specific stocks."
+            f"prediction or trade instruction); (2) name 2-3 of the real "
+            f"on-page tools above by their exact label as what to check "
+            f"next; (3) that 'Your View' gives a personalized read of their "
+            f"bookmarks and acceleration. Never mention any number, price "
+            f"level, percentage, or lookback length. Do not name specific "
+            f"stocks."
         )
 
     if intent_id == 'scanner.how_bookmarks_work':

@@ -419,10 +419,20 @@ function ScannerVaNiCard({
   const active = mutationByIntent[activeIntent]
   const readDone = !readMutation.isPending && !!readMutation.data?.response
 
+  // `whiteSpace: 'nowrap'` here used to force every pill onto one line —
+  // harmless on desktop, but on a narrow viewport a single long label (e.g.
+  // "How do bookmarks work?") can be wider than the row itself. flex-wrap
+  // only wraps BETWEEN items, so a too-wide nowrap item overflows its row —
+  // and since `body { overflow-x: hidden }` is a global reset with no local
+  // scroll affordance here, that overflow was invisibly clipped rather than
+  // scrollable (the "Toda[y's Results]" cut-off bug). `maxWidth: '100%'`
+  // caps a pill at its row's own width; normal whiteSpace lets a label that
+  // doesn't fit wrap onto a second line inside the pill instead of vanishing
+  // off the edge — worse-looking in the rare case, but text is never lost.
   const pillStyle: React.CSSProperties = {
     border: '1px solid var(--border-indigo)', color: 'var(--indigo)', background: 'transparent',
     borderRadius: 100, padding: '6px 13px', fontSize: 12, fontWeight: 500,
-    cursor: 'pointer', fontFamily: 'var(--font-body)', whiteSpace: 'nowrap',
+    cursor: 'pointer', fontFamily: 'var(--font-body)', maxWidth: '100%',
   }
   const activePillStyle: React.CSSProperties = { ...pillStyle, background: 'var(--indigo-bg)', fontWeight: 700 }
   const primaryPillStyle: React.CSSProperties = { ...pillStyle, background: 'var(--indigo)', border: 'none', fontWeight: 600 }
