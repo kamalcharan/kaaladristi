@@ -28,6 +28,7 @@ export interface VaNiAskRequest {
   // Scanner intents (scanner.*) — display context: the exact filtered
   // result view the user sees. Rows use on-screen vocabulary only.
   preset_id?: string;
+  total_count?: number;
   rows?: Array<{
     symbol: string;
     industry: string | null;

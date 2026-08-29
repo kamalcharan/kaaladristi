@@ -274,6 +274,29 @@ scanner.
       output — typechecked, built (theme-standard clean), and Python
       syntax-checked (`ast.parse`), but the real prompt/response round-trip
       is unverified. Worth a manual check on the deployed page.
+    **Revised (v8) — Tier A's plumbing was invisible on the page itself.**
+    Owner asked "I don't see VaNi on the page, how did you put it?" — fair:
+    `ScanVaNiPublisher` renders `null`; the only VaNi entry point was the
+    small global "Ask VaNi" pill in `Layout.tsx`'s header, shared by every
+    route. Production's own `/scanner/breakout_surge` additionally has
+    on-page VaNi elements (the "✦ VaNi Highlight 15" pill, "✦ VaNi explains
+    this screener" button) that this preview never had. Went back to the
+    original reference (`VaNi_Scanner.html`, the prototype reviewed earlier
+    this session) and found a second agreed piece not yet built: a
+    **`vaniBlock` — an inline "VaNi read" summary sitting directly on the
+    page**, not one click away, with a short paragraph plus a quick-action
+    button ("Apply highlights"). Added as `VaNiReadPanel` (local component,
+    `BreakoutSurgeStudio.tsx`) — fires `scanner.read_results` once per
+    trading date via `useVaNiAsk()`, using the exact same Tier A
+    `cohort_stats` wired in above, renders directly below the cohort stat
+    strip. Includes an "Apply VaNi Highlights" button wired to the existing
+    `quick.hl` toggle. Found and fixed one real pre-existing type gap along
+    the way: `VaNiAskRequest` (`useVaNiChat.ts`) was missing `total_count?:
+    number` even though `VaNiChatPanel.tsx` already sent it (via object
+    spread, which skips TS's excess-property check on a literal — my direct
+    literal usage caught it). Also introduced two `#fff` literals fixed to
+    Tailwind's `text-white` class (same pattern `Layout.tsx`'s own VaNi
+    button already uses) to keep the theme-standard ratchet clean.
   - **Tier B (real backend work, own timeline):** "up from N yesterday",
     "new today", "sustaining N sessions" — needs the scheduled job +
     membership table `scannerenhancement.md` already designed. Ship without
@@ -322,3 +345,14 @@ table-only — see above). Everything else about it, including
   `cohort_stats` param; `format_scanner_user_message()` uses the true count
   + appends a full-cohort-facts block when present; cache-context `'v'`
   bumped 2→3
+
+**v8 additions:**
+- `App/frontend/src/views/BreakoutSurgeStudio.tsx` — new local
+  `VaNiReadPanel` component, the inline on-page "VaNi read" summary from
+  `VaNi_Scanner.html`'s `vaniBlock` pattern
+- `App/frontend/src/hooks/useVaNiChat.ts` — added `total_count?: number` to
+  `VaNiAskRequest` (pre-existing type gap; the field was already sent by
+  `VaNiChatPanel.tsx`, just never declared on the type)
+- `App/frontend/src/services/scanEngine.ts` — separately, fixed the
+  `fetchBreakoutSurge()` universe leak found while verifying Tier A against
+  live data (see the ⚠ note near the top of this doc)
