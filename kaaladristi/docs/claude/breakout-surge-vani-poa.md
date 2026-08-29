@@ -376,6 +376,43 @@ scanner.
     (`flexWrap: 'wrap'`), no fixed widths anywhere in the card — reasonable
     on paper, genuinely unverified from this environment (no device to
     check on), same open item as Phase 3 below.
+    **Revised again (v12) — real deployed-page review, four findings, one
+    of them a repeat of the exact thing v10 was supposed to fix:**
+    - **Wall of text.** `format_scanner_user_message()`'s prompt asks for
+      "2 short paragraphs" (`vani_assemblers.py`), and the model was
+      producing that structure — but `VaNiInsight.tsx`'s `<p>` had no
+      `whitespace-pre-line`, so plain HTML collapsed the `\n\n` between
+      paragraphs into one unbroken block. Fixed in `VaNiInsight.tsx` itself
+      (one Tailwind class) — benefits every existing usage
+      (ChartView/Dashboard/Panchang/Breadth), not just this page, since
+      they'd have had the identical silent flattening.
+    - **Collapsible wasn't visible.** v11's rewrite of `ScannerVaNiCard`
+      called `<VaNiInsight insight={...} isLoading={...} logId={...} />`
+      without the `collapsible`/`collapsedHeight` props — the feature
+      built into `VaNiInsight` for exactly this (`vani-common-component.md`
+      v7) was simply never wired up here. Added
+      `collapsible collapsedHeight={110}`.
+    - **"Selected intent text not visible" + "right drawer opens again."**
+      One root cause: "What does this screener show?" still called
+      `useVaNiStore().openWithIntent('scanner.explain_preset')` — v11's own
+      doc comment claimed the pill route was fixed, but only "Ask a
+      follow-up" was actually reconsidered; the explain pill still opened
+      the drawer, the exact thing flagged in v10 as the problem. Owner,
+      verbatim: "existing VaNi space should be used rather than right
+      draw." Rebuilt: `ScannerVaNiCard` now holds two independent
+      `useVaNiAsk()` instances (`scanner.read_results`,
+      `scanner.explain_preset`) and a local `activeIntent` toggle — both
+      intents render in the SAME `<VaNiInsight>` slot, swapped in place,
+      no drawer for either. `scanner.explain_preset` fires lazily on first
+      click, not eagerly. The two toggle pills ("Today's Results" / "What
+      does this screener show?") now have a distinct filled `activePillStyle`
+      so which one is currently shown is visually unambiguous — likely what
+      "selected intent text is not visible" was actually pointing at:
+      there was no active-state styling at all before, drawer or not.
+      "Ask a follow-up →" is **removed** — it only ever routed to the
+      drawer too, and there's no honest inline alternative for genuinely
+      free-form questions without a text-input UI, which is real, separate
+      scope, not something to fake here.
   - **Tier B (real backend work, own timeline):** "up from N yesterday",
     "new today", "sustaining N sessions" — needs the scheduled job +
     membership table `scannerenhancement.md` already designed. Ship without
@@ -458,3 +495,14 @@ reinvented. `useVaNiAsk`, `toVaNiScanRows`, `useVaNiStore`, `ScanDefinition`,
 `CohortStats` imports return; `VaNiFeedback` does not (`VaNiInsight` renders
 it internally via its own `logId` prop, so this file never imports it
 directly).
+
+**v12:**
+- `App/frontend/src/components/domain/VaNiInsight.tsx` — added
+  `whitespace-pre-line` to the body `<p>` (paragraph-break fix, benefits
+  every usage, not just this page)
+- `App/frontend/src/views/BreakoutSurgeStudio.tsx` — `ScannerVaNiCard`
+  rewritten: `useVaNiStore` import and `openWithIntent`/`toggle` usage
+  removed entirely (no more drawer routing from this card); two
+  `useVaNiAsk()` instances + local `activeIntent` state added instead;
+  `collapsible collapsedHeight={110}` added to the `<VaNiInsight>` call
+  that was missing it; "Ask a follow-up →" pill removed.
