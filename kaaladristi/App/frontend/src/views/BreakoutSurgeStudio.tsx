@@ -289,12 +289,53 @@ export default function BreakoutSurgeStudio() {
  * proximity + RS, see backfill_vani_flags.py). Caps at 1-2 named stocks,
  * same convention as every other intent on this page.
  *
+ * v17 — "My Watchlist" had the same filter-only gap "Start with the N
+ * Highlights" had before v16: it applied the `watch` filter and scrolled,
+ * but fired nothing VaNi. Fixed the same way — its `onClick` now also calls
+ * `showYourView()`, reusing the EXISTING `scanner.your_view` intent (it
+ * already covers "your bookmarked stocks in today's results" precisely, so
+ * no new intent was needed). v17 also adds `useMinVaNiLoading()`: floors
+ * the "Consulting VaNi…" spinner at `MIN_VANI_LOADING_MS` (700ms)
+ * regardless of how fast the real response arrives, so a cache hit
+ * (near-instant) and a live LLM call (a couple of seconds) both feel like a
+ * deliberate pause instead of one popping content in abruptly. Content is
+ * withheld while the floor is still holding, not just the spinner shown
+ * early — otherwise text could flash in before the hold period ends.
+ *
  * Deliberately NOT built this round (see docs/claude/breakout-surge-vani-poa.md
  * v13): "new since yesterday" — day-over-day scan-membership tracking
  * (Tier B, scannerenhancement.md) doesn't exist yet, so "Your View" can't
  * surface newly-appeared stocks.
  */
 type ScannerIntentKey = 'read_results' | 'your_view' | 'explain_preset' | 'why_highlighted' | 'how_bookmarks_work' | 'legend_vani_dot'
+
+/**
+ * Floors how long the "Consulting VaNi…" spinner shows at MIN_VANI_LOADING_MS,
+ * regardless of how fast the real request resolves. A cache hit (the two
+ * glossary intents, or any repeat ask) can come back in well under 100ms —
+ * with no floor, the spinner would flash or not appear at all while a live
+ * LLM call takes a couple of seconds, an inconsistent feel depending on
+ * something the user has no way to know (cached vs. freshly generated).
+ * Genuinely slow calls are unaffected: if `isPending` is still true once
+ * MIN_VANI_LOADING_MS has passed, this just reflects that real state.
+ */
+const MIN_VANI_LOADING_MS = 700
+
+function useMinVaNiLoading(isPending: boolean): boolean {
+  const [holding, setHolding] = useState(isPending)
+  const startedAt = useRef(0)
+  useEffect(() => {
+    if (isPending) {
+      startedAt.current = Date.now()
+      setHolding(true)
+      return
+    }
+    const remaining = Math.max(0, MIN_VANI_LOADING_MS - (Date.now() - startedAt.current))
+    const t = setTimeout(() => setHolding(false), remaining)
+    return () => clearTimeout(t)
+  }, [isPending])
+  return holding
+}
 
 function ScannerVaNiCard({
   presetId, meta, rowsForContext, allStocks, totalCount, dataDate, exchangeFilter, cohortStats, onApplyHighlights, onApplyWatchlist,
@@ -475,7 +516,16 @@ function ScannerVaNiCard({
     legend_vani_dot: dotHelpMutation,
   }
   const active = mutationByIntent[activeIntent]
-  const readDone = !readMutation.isPending && !!readMutation.data?.response
+  // Floors the spinner at MIN_VANI_LOADING_MS so a cache hit doesn't pop
+  // content in instantly while a live LLM call visibly takes longer — see
+  // useMinVaNiLoading's own comment. Content is withheld while holding so
+  // it can't flash in before the floor elapses. readMutation gets its own
+  // call (rather than reusing `showLoading` below) since it fires eagerly
+  // on load regardless of which intent is currently selected — the action
+  // pills below should wait for that same floor too, not just the card.
+  const readShowLoading = useMinVaNiLoading(readMutation.isPending)
+  const readDone = !readShowLoading && !!readMutation.data?.response
+  const showLoading = useMinVaNiLoading(active.isPending)
 
   // `whiteSpace: 'nowrap'` here used to force every pill onto one line —
   // harmless on desktop, but on a narrow viewport a single long label (e.g.
@@ -508,9 +558,9 @@ function ScannerVaNiCard({
   return (
     <div style={{ marginBottom: 18 }}>
       <VaNiInsight
-        insight={active.data?.response}
-        isLoading={active.isPending}
-        logId={active.data?.log_id ?? undefined}
+        insight={showLoading ? undefined : active.data?.response}
+        isLoading={showLoading}
+        logId={showLoading ? undefined : (active.data?.log_id ?? undefined)}
         collapsible
         collapsedHeight={110}
         className="mt-0"
@@ -531,7 +581,13 @@ function ScannerVaNiCard({
           <button onClick={showExplain} style={activeIntent === 'explain_preset' ? activePillStyle : pillStyle}>
             How to use this scanner
           </button>
-          <button onClick={onApplyWatchlist} style={pillStyle}>My Watchlist</button>
+          {/* Was filter-only (same gap the Highlights button had before
+              why_highlighted) — now also fires scanner.your_view, which
+              already covers exactly this: the user's own bookmarked stocks
+              in today's results. No new intent needed, it already existed. */}
+          <button onClick={() => { onApplyWatchlist(); showYourView() }} style={activeIntent === 'your_view' ? activePillStyle : pillStyle}>
+            My Watchlist
+          </button>
           <span style={{ width: 1, alignSelf: 'stretch', background: 'var(--border)', margin: '2px 2px' }} />
           <button onClick={showBookmarksHelp} style={activeIntent === 'how_bookmarks_work' ? activeHelpPillStyle : helpPillStyle}>
             How do bookmarks work?
