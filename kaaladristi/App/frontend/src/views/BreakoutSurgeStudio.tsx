@@ -50,6 +50,14 @@ export default function BreakoutSurgeStudio() {
   const [viewMode, setViewMode] = useState<'table' | 'cards'>('table')
   const [filters, setFilters] = useState<ScanFilters>(DEFAULT_FILTERS)
   const [quick, setQuick] = useState<Record<QuickFilterKey, boolean>>(DEFAULT_QUICK)
+  // The results table sits well below the VaNi card (past the stat-tile
+  // grid + the card itself). Clicking "Start with the N Highlights →"
+  // applies the filter correctly, but with no visible change anywhere near
+  // the click — reads as "nothing happens" unless the user scrolls down on
+  // their own. Scroll the results section into view on click so the
+  // (now-filtered) table is what they see next.
+  const resultsRef = useRef<HTMLDivElement>(null)
+  const scrollToResults = () => resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 
   const { data: rows, isLoading, error } = useScan('breakout_surge', exchangeFilter)
   const { bookmarkedIds, load: loadBookmarks } = useBookmarkStore()
@@ -191,13 +199,15 @@ export default function BreakoutSurgeStudio() {
               dataDate={all[0]?.trade_date ?? null}
               exchangeFilter={exchangeFilter}
               cohortStats={stats}
-              onApplyHighlights={() => setQuick((p) => ({ ...p, hl: true }))}
-              onApplyWatchlist={() => setQuick((p) => ({ ...p, watch: true }))}
+              onApplyHighlights={() => { setQuick((p) => ({ ...p, hl: true })); scrollToResults() }}
+              onApplyWatchlist={() => { setQuick((p) => ({ ...p, watch: true })); scrollToResults() }}
             />
           )}
 
           {/* ── Exchange + quick toggles (no ScanFilterBar equivalent) + real filter bar + view toggle ── */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
+          {/* scrollMarginTop clears Layout.tsx's sticky topbar (~76px tall)
+              so scrollIntoView doesn't land this row underneath it. */}
+          <div ref={resultsRef} style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 8, scrollMarginTop: 88 }}>
             <ExchangeTabs value={exchangeFilter} onChange={setExchangeFilter} disabledOptions={meta?.universe === 'NSE_ONLY' ? ['BSE'] : []} />
             <button onClick={() => toggleQuick('ob')} style={{
               padding: '6px 13px', borderRadius: 100, fontSize: 12.5, fontWeight: 500, cursor: 'pointer',
@@ -435,7 +445,15 @@ function ScannerVaNiCard({
     cursor: 'pointer', fontFamily: 'var(--font-body)', maxWidth: '100%',
   }
   const activePillStyle: React.CSSProperties = { ...pillStyle, background: 'var(--indigo-bg)', fontWeight: 700 }
-  const primaryPillStyle: React.CSSProperties = { ...pillStyle, background: 'var(--indigo)', border: 'none', fontWeight: 600 }
+  // Omit `color` from the spread here (destructured out, not overridden):
+  // pillStyle sets `color: var(--indigo)` inline, and an inline `style`
+  // prop always wins over a class for the same CSS property no matter the
+  // class — so the button's `className="text-white"` was silently losing
+  // to this inherited color, rendering indigo text on an indigo background
+  // (invisible label, not a missing or clipped one). Dropping the inherited
+  // color lets `text-white` actually apply instead of fighting it.
+  const { color: _pillTextColor, ...pillShape } = pillStyle
+  const primaryPillStyle: React.CSSProperties = { ...pillShape, background: 'var(--indigo)', border: 'none', fontWeight: 600 }
   const helpPillStyle: React.CSSProperties = { ...pillStyle, fontSize: 11.5, opacity: 0.85 }
   const activeHelpPillStyle: React.CSSProperties = { ...activePillStyle, fontSize: 11.5 }
 
