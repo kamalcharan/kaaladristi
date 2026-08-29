@@ -5,6 +5,7 @@ import { signIn, signUp, forgotPassword } from '@/services/auth';
 import { resolveSpotlightIntent } from '@/services/spotlight';
 import { useAuthStore } from '@/stores/authStore';
 import { trackEvent } from '@/lib/analytics';
+import { errMessage } from '@/lib/errorMessages';
 import { LogoMark, Starfield } from './landing/shared';
 
 // Theme-aware tokens (routes through the app's real theme system —
@@ -89,8 +90,14 @@ export default function LoginPage() {
           navigate(dest ?? '/workspace');
         }
       }
-    } catch (err: any) {
-      const message = err.message || 'Something went wrong';
+    } catch (err) {
+      const action = authMode === 'register' ? 'create your account'
+        : authMode === 'login' ? 'sign you in'
+        : 'send the reset';
+      const message = errMessage(err, {
+        networkMessage: `Couldn't reach the server to ${action}. Check your connection and try again.`,
+        fallbackMessage: `Something went wrong trying to ${action}. Please try again.`,
+      });
       setError(message);
       trackEvent('error_shown', { context: `auth_${authMode}`, message });
     } finally {
