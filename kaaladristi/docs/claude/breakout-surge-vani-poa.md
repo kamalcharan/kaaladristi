@@ -690,3 +690,72 @@ VaNi says on this page, not another rendering fix:
   rgba, confirming the destructure approach avoids the literal) pass clean.
   `npm run lint` errors on a pre-existing missing `eslint.config.js` in this
   repo, unrelated to this change.
+
+**v16 — `scanner.why_highlighted`: a real explanation, not just a filter
+(2026-08-29).** Owner push-back, verbatim: "you are using this as a
+filter.........VaNi intent is for explanation -- tell why those 15 (each
+stock name or something else) are picked to be highlighted." Confirmed via
+`AskUserQuestion`: aggregate stats + 1-2 named examples (not all 15 — stays
+inside the same 1-2-name convention every other intent on this page already
+uses, to avoid reading as a curated stock list), as a NEW intent fired by
+the Highlights button itself (in addition to, not instead of, its existing
+filter-apply + scroll).
+
+**Bug found while building it: `legend_vani_dot`'s glossary answer was
+factually wrong, not just vague.** It claimed the highlight dot means "a
+stock whose reward-to-risk structure, measured against its own ATR, sits in
+a favorable zone." Tracing `computeVaniOpportunity()` in `scanEngine.ts`
+shows that's a different, unrelated mechanism (the `reward`/`rewardPct`
+fields used elsewhere, e.g. Visual Pulse) — the REAL gate is keyed per
+preset by `vani_rule`, and there are ~10 different rules across presets
+(RVOL + 52-week-high proximity, SVD + delivery conviction, a Golden Line
+event, oversold, etc. — see `computeVaniOpportunity`'s switch and
+`backfill_vani_flags.py`'s SQL). For `breakout_surge` specifically the rule
+is `is_vani_surge_or_breakout`: RVOL surge + closeness to the 52-week high +
+healthy RS, nothing to do with ATR. Fixed `legend_vani_dot` (system prompt
+in `vani_intents.py` AND the matching instruction text in
+`format_scanner_user_message()` — both had the same wrong claim, so both
+needed fixing) to describe the SHAPE honestly ("an extra, screener-specific
+quality bar... the exact combination varies by screener") instead of
+asserting one mechanism universally. Cache-context bumped to `v: 2` for this
+intent specifically (not `how_bookmarks_work`, which was never wrong) so the
+old incorrect cached answer can never be served again.
+
+**`scanner.why_highlighted` implementation:**
+- `computeHighlightExplainFacts()` (new, `breakoutSurgeInsights.ts`) — over
+  the FULL day's cohort (`all`, matching `computeCohortStats()`'s scope, not
+  whatever's currently filtered into view): count, average RVOL, average
+  closeness to each stock's own 52-week high, average Magic RS, and up to 2
+  named examples ranked by RVOL. Pure client-side computation, no new fetch,
+  same "compute in code, narrate in prose" principle this file's docstring
+  already states.
+- `ScannerVaNiCard` gains a 6th `useVaNiAsk()` instance
+  (`whyHighlightedMutation`) and a `showWhyHighlighted()` handler; the
+  "Start with the N Highlights →" button's `onClick` now calls BOTH
+  `onApplyHighlights()` (existing filter+scroll) AND `showWhyHighlighted()`
+  — one click, two effects, both real. `allStocks` (the full unfiltered
+  cohort) threads down from `BreakoutSurgeStudio` as a new prop alongside
+  the already-filtered `rowsForContext`.
+- New intent `scanner.why_highlighted` (`vani_intents.py`): opening line +
+  count/shape, then 2 bullets — name the 1-2 given examples with their real
+  RVOL/closeness-to-high numbers, then state plainly this is a measurement
+  of unusual participation, never a buy signal. `cache_ttl_hours=24` (daily
+  facts, not personalized, not universal).
+- `assemble_scanner_context()` gains `highlight_facts` param +
+  `_clean_highlight_facts()` sanitizer; `build_scanner_cache_context()` and
+  `format_scanner_user_message()` get matching branches, including a
+  zero-count path ("nothing highlighted today") instead of describing
+  criteria in the abstract when the cohort is empty.
+- `VaNiAskRequest` (both `pipeline2_api.py` and `useVaNiChat.ts`) gains a
+  matching optional `highlight_facts` field.
+- Not pre-seeded via `warm-help-intents` — unlike the two glossary intents,
+  this one's answer genuinely changes every trading day (real per-day
+  facts), so it stays on the normal 24h cache path like `read_results`.
+- Files touched: `App/frontend/src/services/breakoutSurgeInsights.ts`,
+  `App/frontend/src/views/BreakoutSurgeStudio.tsx`,
+  `App/frontend/src/hooks/useVaNiChat.ts`, `App/backend/lib/vani_intents.py`,
+  `App/backend/lib/vani_assemblers.py`, `App/backend/pipeline2_api.py`.
+- `python3 -c "import ast; ast.parse(...)"` on all 3 backend files,
+  `npm run typecheck`, and `npm run build` (ratchet unchanged: 371 hex + 276
+  rgba) all pass clean. Not verified live — same standing gap as every prior
+  round: this environment can't run the backend or hit the LLM.

@@ -56,6 +56,15 @@ export interface VaNiAskRequest {
   // store, score_5d - score_22d over the visible rows). Optional.
   bookmarked_symbols?: string[];
   top_accelerators?: Array<{ symbol: string; delta: number }>;
+  // scanner.why_highlighted only — real facts over the full day's
+  // VaNi-highlighted cohort (computeHighlightExplainFacts, breakoutSurgeInsights.ts).
+  highlight_facts?: {
+    count: number;
+    avg_rvol: number | null;
+    avg_pct_of_52w_high: number | null;
+    avg_magic_rs: number | null;
+    examples: Array<{ symbol: string; rvol: number | null; pct_of_52w_high: number | null; magic_rs: number | null }>;
+  };
 }
 
 export interface VaNiAskResponse {
