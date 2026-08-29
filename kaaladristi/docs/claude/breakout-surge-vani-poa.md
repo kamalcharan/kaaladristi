@@ -591,3 +591,64 @@ VaNi says on this page, not another rendering fix:
   environment has no way to execute Python or hit the running FastAPI/LLM
   service; owner to run the seed call and verify on the VPS deployment, the
   same verification path used for every prior round of this doc.
+
+**v14 — two owner-reported bugs from a live v13 screenshot (2026-08-29).**
+
+1. **Pill text getting clipped ("Toda[y's Results]" cut off mid-word).**
+   Root cause: `pillStyle` set `whiteSpace: 'nowrap'` on every pill button.
+   `flexWrap: 'wrap'` on the row only wraps BETWEEN items — a single item
+   with `nowrap` text that's wider than the row's available width (a real
+   risk now that the row holds 7 pills, several with long labels like "How
+   do bookmarks work?") simply overflows its row. This page has no local
+   scroll affordance to recover that overflow, and `globals.css` sets
+   `body { overflow-x: hidden }` as a site-wide reset — so the overflowing
+   part of the button was invisibly clipped, not scrollable-but-hidden. Not
+   a screenshot crop; a real layout bug. Fixed in `BreakoutSurgeStudio.tsx`:
+   `pillStyle` drops `whiteSpace: 'nowrap'` and adds `maxWidth: '100%'` — a
+   label that doesn't fit now wraps onto a second line inside its own pill
+   instead of extending past the row edge. Worse-looking in the rare case a
+   pill wraps, but text can no longer silently vanish.
+
+2. **`scanner.explain_preset` reads as generic screening theory, not
+   onboarding.** Owner, verbatim, quoting the live response ("Pair this
+   with: relative volume..., sector rotation..., prior support levels..."):
+   "is wrong..........highest 22D to 5D intent is not available..........we
+   have to tell user how to understand this scanner.......like an
+   onboarding, this is not sufficient." Root cause: the v13 prompt told the
+   model to name "supporting factors a reader would typically check
+   alongside this list" with no constraint on WHAT those factors could be —
+   so it filled the slot with textbook vocabulary (relative volume, sector
+   rotation, prior support levels) that isn't anything a reader can actually
+   click on this page, while the real tool that answers exactly that
+   question — the Accelerating filter (5-day vs 22-day pace, i.e. the "22D
+   to 5D" the owner is asking for) — went unmentioned, alongside Real Volume
+   Behind, Leading Industry, and the VaNi Highlight dot. Fixed by handing
+   the model a FIXED, closed list of this page's real on-page tools (new
+   `_SCANNER_ONPAGE_TOOLS` constant, `vani_assemblers.py`) and instructing
+   it to name 2-3 of THOSE by their exact on-page label, never a generic
+   substitute — plus a new bullet pointing at "Your View" (the v13 addition)
+   as the personalized next step. This is genuinely onboarding now: it
+   walks the reader to the actual clickable tools on the page, not abstract
+   screening concepts. `_SCANNER_ONPAGE_TOOLS` is written as shell-wide prose
+   (not preset-specific) since these stat tiles/pills are the same shape
+   across any scanner page reusing this component — flagged in its own
+   comment to keep in sync if a tile's label ever changes.
+- Files touched: `App/frontend/src/views/BreakoutSurgeStudio.tsx` (pill
+  style fix), `App/backend/lib/vani_intents.py` (`scanner.explain_preset`
+  system prompt rewritten, `max_tokens` 350→380, word target 80→100),
+  `App/backend/lib/vani_assemblers.py` (new `_SCANNER_ONPAGE_TOOLS`
+  constant; `format_scanner_user_message()`'s explain_preset branch sends
+  the tools list + a 3rd bullet instruction; cache-context `'v'` for
+  explain_preset bumped 3→4).
+- `python3 -c "import ast; ast.parse(...)"` on both backend files,
+  `npm run typecheck`, and `npm run build` (ratchet unchanged: 371 hex + 276
+  rgba) all pass clean.
+- **Still not verified live** — same gap as v13: this environment can't run
+  the backend or hit the LLM. `explain_preset`'s cache-context `'v'` bump
+  means its old seeded answer is dead on the content hash; the very next
+  "How to use this scanner" ask (from any user) regenerates it live and
+  re-caches — no manual seed re-run needed for this one (that's only what
+  `warm-scanner-explainers` is for, and it's naturally idempotent-safe to
+  re-run too). Owner to confirm both fixes: a real narrow-viewport
+  screenshot for the pill fix, and a fresh "How to use this scanner" click
+  for the onboarding rewrite.

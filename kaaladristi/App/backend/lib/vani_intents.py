@@ -547,6 +547,19 @@ INTENTS: dict[str, VaNiIntent] = {
     # ══════════════════════════════════════════════════════════════════════════
 
     # ── 20. Explain This Screener ─────────────────────────────────────────────
+    # This is a genuine ONBOARDING intent, not a screening-theory lecture: a
+    # first pass let the model freelance the "what to check alongside this
+    # list" bullet, and it filled it with generic textbook vocabulary
+    # (relative volume, sector rotation, prior support levels) that isn't
+    # anything a reader can actually click on this page — while the real
+    # on-page tool for exactly that question (the Accelerating filter, 5-day
+    # vs 22-day pace) went unmentioned. Owner feedback, verbatim: "highest
+    # 22D to 5D intent is not available...we have to tell user how to
+    # understand this scanner...like an onboarding, this is not sufficient."
+    # Fix: hand the model a FIXED, closed list of this product's real on-page
+    # tools (same shell across every scanner page) and forbid inventing
+    # anything outside it — see the matching "Real on-page tools" block
+    # format_scanner_user_message() now sends for this intent.
     "scanner.explain_preset": VaNiIntent(
         page="scanner",
         label="How to use this scanner",
@@ -554,31 +567,42 @@ INTENTS: dict[str, VaNiIntent] = {
         system_prompt=(
             _VANI_IDENTITY
             + "The user is on a stock screener page and wants a quick, scannable "
-            "explanation of what it shows and how to use it — a glance, not an "
-            "essay. You will receive the screener's name, its short description, "
-            "and its matching criteria. "
+            "ONBOARDING — a glance, not an essay — that tells them how to use "
+            "THIS ACTUAL PAGE, not generic screening theory. You will receive "
+            "the screener's name, its short description, its matching "
+            "criteria, and a fixed list of the real tools present on this "
+            "page (stat tiles, filters, and other VaNi views). "
             "\n\n"
             "Write ONE opening line naming the concept in plain language (what "
             "kind of stocks this catches, what phase/condition it typically "
-            "means), then 2 to 3 bullet points, each starting with '• ', each "
-            "ONE short line a reader can register in under 3 seconds — never a "
-            "paragraph. Cover: what the list IS (an observation of current "
-            "conditions) vs. what it is NOT (a prediction or a trade "
-            "instruction); what supporting factors a reader would typically "
-            "check alongside this list.\n"
+            "means), then 3 bullet points, each starting with '• ', each ONE "
+            "short line a reader can register in under 3 seconds — never a "
+            "paragraph. Cover: (1) what the list IS (an observation of "
+            "current conditions) vs. what it is NOT (a prediction or a trade "
+            "instruction); (2) which 2-3 of the page's OWN listed tools to "
+            "check next, naming them by their exact on-page label; (3) that "
+            "'Your View' gives a personalized read — their own bookmarked "
+            "stocks in this list, and which names are accelerating fastest — "
+            "one click away.\n"
             "\n"
-            "IMPORTANT: Do NOT repeat numeric thresholds, formula parameters, "
-            "lookback windows, or exact rule values, even though they appear in "
-            "the provided criteria. Describe the idea, never the recipe. "
-            "Do NOT name specific stocks."
+            "IMPORTANT: For bullet 2, choose ONLY from the tools list you are "
+            "given. Do NOT invent or suggest generic concepts that aren't on "
+            "that list (e.g. do not say 'check relative volume' or 'sector "
+            "rotation' or 'prior support levels' unless those exact tools "
+            "appear in the list) — every recommendation must name something "
+            "the reader can actually click on this page. Do NOT repeat "
+            "numeric thresholds, formula parameters, lookback windows, or "
+            "exact rule values, even though they appear in the provided "
+            "criteria. Describe the idea, never the recipe. Do NOT name "
+            "specific stocks."
             + _VANI_RULES.replace(
                 "No bullet points — write flowing paragraphs. About 150 words.",
                 "Short bullet points are REQUIRED here (see the format "
                 "instructions above) — this overrides the no-bullets house "
-                "rule for this one intent. About 80 words total.",
+                "rule for this one intent. About 100 words total.",
             )
         ),
-        max_tokens=350,
+        max_tokens=380,
         cache_ttl_hours=24 * 365,   # static per preset — busts only when the preset copy changes
         complexity="low",
     ),
