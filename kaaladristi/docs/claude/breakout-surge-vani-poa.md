@@ -43,9 +43,20 @@ pattern here first is the point.
   holds the cohort-stat math and `buildWhyTags()` — deterministic, no LLM
   call yet; `buildWhyTags()` mirrors the same boolean logic
   `backfill_vani_flags.py` uses for `is_vani_surge`/`is_vani_breakout`.
-  Mobile field curation for the Cards view (a genuinely trimmed field set,
-  not just the table restacked) is still owed — current Cards view shows
-  close/1D%/score only, not yet reviewed on a real phone.
+  **Revised after a real review pass on the deployed page**: added a real
+  header row + click-to-sort (was unlabeled columns, fixed sort only),
+  filter chips (was missing entirely), a bookmark toggle wired to
+  `useBookmarkStore.toggle` (was read-only status, no action), XLS/TV
+  export (`components/domain/ScannerExportButtons.tsx`, extracted from
+  ScanView.tsx's private buttons rather than modifying that file), and a
+  Cards view that's an actual grid with vertically-stacked fields (was the
+  table restacked with fewer fields — the exact "not curated, just
+  restacked" anti-pattern found in the real `StockCard.tsx` earlier this
+  session, reproduced by accident). Field list also reconsidered around
+  interpretation, not copied from a generic set: added `pct_from_breakout`
+  (the scanner's own signature metric, previously missing) and `score_22d`
+  alongside `score_5d`. Still owed: real mobile device check (not yet done
+  from this session — no way to verify on an actual phone here).
 - **Phase 2 — stabilise VaNi, two tiers:**
   - **Tier A (no new backend):** cohort stats (% accelerating, % RVOL>3,
     leading industry, VaNi Highlight count) computed client-side from the
