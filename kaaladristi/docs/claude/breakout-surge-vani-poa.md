@@ -86,6 +86,35 @@ scanner.
     `ScanCardWrapper`/`ScanTable` components themselves (touching code the
     other ~19 scanners depend on) — a decision for the owner, not something
     to smuggle into this page's fork. **Open question for the owner.**
+  **Revised again (v4) — real bug fix + real ScanFilterBar, after an owner
+  review of the deployed v3 page against the production Scanner:**
+  - **Bug: VaNi Highlights read 0 instead of the real 15.**
+    `isHighlight()` checked `r.is_vani_surge || r.is_vani_breakout` — raw DB
+    columns `scanEngine.ts`'s breakout_surge query fetches only to compute
+    `vaniOpportunity` internally; they're never copied onto the returned
+    `ScanStock`, so the check always read `undefined`. Fixed to read
+    `r.vaniOpportunity` (`breakoutSurgeInsights.ts`), the field that's
+    actually populated by the same underlying rule. `buildWhyTags()` had
+    the identical latent bug on `r.is_vani_breakout` — fixed by re-deriving
+    the same condition from real `sma_50`/`sma_150` columns instead.
+  - **Missing user-adjustable filters, and the 252-vs-243 count gap — one
+    root cause.** v1–v3 had only quick toggle chips; production's real
+    `ScanFilterBar` (MCap min/max, industry multi-select, Score 5D/22D min,
+    Accelerating, RVOL min, %-from-breakout min/max, 5D move cap) plus its
+    `applyFilters()`/`DEFAULT_FILTERS` (`{ mcapMin: 100 }`, applied on load)
+    is now wired in exactly as `ScanView.tsx` uses it. The count gap was
+    never a bug — 252 is the true unfiltered cohort (unchanged, still what
+    "Broke Out Today" shows), 243 is production's *filtered* view under its
+    default ₹100 Cr floor, which this page now also applies by default.
+  - The hand-built `IndustryFilterTile` from the last note is **deleted** —
+    `ScanFilterBar`'s own industry multi-select already does this, over
+    every industry, not just the top one. "Leading Industry" is now a plain
+    stat tile again, with a click-to-filter shortcut into that same
+    `filters.industries` field. "Accelerating" and "Real Volume Behind"
+    tiles were also rewired off a second local boolean onto the shared
+    `filters.accelerating`/`filters.rvolMin` fields — clicking the tile and
+    typing into the filter panel now drive the identical state, not two
+    competing filter systems.
 - **Phase 2 — stabilise VaNi, two tiers:**
   - **Tier A (no new backend):** cohort stats (% accelerating, % RVOL>3,
     leading industry, VaNi Highlight count) computed client-side from the
@@ -106,7 +135,8 @@ scanner.
 ## Files touched so far (Phase 0 + 1)
 
 - `App/frontend/src/views/BreakoutSurgeStudio.tsx` (new; rewritten in v3 to
-  use `ScanTable` + `BreakoutSurgeCards`)
+  use `ScanTable` + `BreakoutSurgeCards`; rewritten again in v4 to use the
+  real `ScanFilterBar`/`applyFilters`/`DEFAULT_FILTERS`)
 - `App/frontend/src/services/breakoutSurgeInsights.ts` (new, Phase 1 —
   cohort stats + `isHighlight()`; `buildWhyTags()` currently unused since
   the why-expand panel was dropped in v3, kept for possible Phase 2 reuse)

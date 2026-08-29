@@ -5,38 +5,47 @@ import { displaySymbol } from '@/lib/symbolUtils'
 import { useBookmarkStore } from '@/stores/bookmarkStore'
 import { getPresetMeta, type ExchangeFilter } from '@/services/scanEngine'
 import { DownloadXlsButton, TradingViewExportButton } from '@/components/domain/ScannerExportButtons'
+import { ScanFilterBar, applyFilters, DEFAULT_FILTERS, hasActiveFilters, type ScanFilters } from '@/components/domain/ScanFilterBar'
 import { computeCohortStats, isHighlight } from '@/services/breakoutSurgeInsights'
 import ScanTable from '@/components/domain/ScanTable'
 import BreakoutSurgeCards from '@/components/domain/BreakoutSurgeTable'
 import type { ScanStock } from '@/types'
 
-type FilterKey = 'hl' | 'rvol' | 'ob' | 'watch'
+type QuickFilterKey = 'hl' | 'ob' | 'watch'
+const DEFAULT_QUICK: Record<QuickFilterKey, boolean> = { hl: false, ob: false, watch: false }
 
 /**
- * Phase 1 (v3) — now reuses the REAL production row-rendering components
- * instead of hand-rolled ones: ScanTable (sort, column-visibility gear,
- * proven interaction) and BreakoutSurgeCards (already exists, already
- * splits VaNi tier vs rest, already correct — a v2 mistake was building a
- * parallel Cards view when this was sitting in the codebase unused by this
- * page). This page still owns only what's genuinely new: the cohort stat
- * strip, filter chips, and XLS/TV export — page-level additions, not row
- * rendering.
+ * Phase 1 (v4) — filtering now goes through the REAL ScanFilterBar
+ * (MCap, Industry multi-select, Score 5D/22D min, Accelerating, RVOL Min,
+ * % From Breakout Min/Max, 5D Move<) + its `applyFilters`/`DEFAULT_FILTERS`,
+ * same as ScanTable/BreakoutSurgeCards in v3. A prior version hand-built an
+ * "Industry" dropdown and stat-tile toggles for Accelerating/RVOL — both
+ * duplicated controls ScanFilterBar already has. Those are gone; the stat
+ * tiles for Accelerating and Real Volume Behind now drive the SAME
+ * `filters.accelerating` / `filters.rvolMin` fields ScanFilterBar's own
+ * inputs write to (one state, two affordances — not a second filter
+ * mechanism). Only VaNi Highlights / Not overbought / Watchlist-only stay
+ * as page-specific quick toggles, since none of those exist in
+ * ScanFilterBar (bookmarks especially: real personalization, not something
+ * to retrofit into the shared component).
  *
- * Trade-off worth knowing (see docs/claude/breakout-surge-vani-poa.md):
- * neither ScanTable nor BreakoutSurgeCards support a bookmark-star toggle
- * or an inline "why" expand per row — both v2 features are dropped here
- * rather than forked into a second, unproven copy of row rendering. Row
- * click now navigates to the real stock chart page (matching the exact
- * convention ScanView.tsx uses), same as the production Scanner page.
- * Adding the star/expand back means a deliberate, reviewed change to the
- * shared ScanCardWrapper/ScanTable components themselves — worth doing,
- * but as its own decision, not smuggled into this page's fork.
+ * `DEFAULT_FILTERS` (`{ mcapMin: 100 }`) is what the real Scanner page also
+ * opens with — this is why the real page reads ~243 rows, not 252: 252 is
+ * the full unfiltered cohort (this page's "Broke Out Today" stat, which
+ * intentionally always reflects the whole day, not the filtered view).
+ *
+ * v3→v4 also fixed a real bug: `isHighlight()` was reading
+ * `r.is_vani_surge`/`r.is_vani_breakout`, raw DB flags scanEngine.ts never
+ * copies onto the returned row (see breakoutSurgeInsights.ts) — VaNi
+ * Highlights read 0 instead of the real ~15. Fixed to read
+ * `r.vaniOpportunity`, the field that's actually populated.
  */
 export default function BreakoutSurgeStudio() {
   const navigate = useNavigate()
   const [exchangeFilter] = useState<ExchangeFilter>('combined')
   const [viewMode, setViewMode] = useState<'table' | 'cards'>('table')
-  const [filters, setFilters] = useState<Record<FilterKey, boolean>>({ hl: false, rvol: false, ob: false, watch: false })
+  const [filters, setFilters] = useState<ScanFilters>(DEFAULT_FILTERS)
+  const [quick, setQuick] = useState<Record<QuickFilterKey, boolean>>(DEFAULT_QUICK)
 
   const { data: rows, isLoading, error } = useScan('breakout_surge', exchangeFilter)
   const { bookmarkedIds, load: loadBookmarks } = useBookmarkStore()
@@ -46,21 +55,18 @@ export default function BreakoutSurgeStudio() {
   const all = rows ?? []
   const stats = computeCohortStats(all)
 
-  let filtered = all
-  if (filters.hl) filtered = filtered.filter(isHighlight)
-  if (filters.rvol) filtered = filtered.filter((r) => (r.rvol ?? 0) > 3)
-  if (filters.ob) filtered = filtered.filter((r) => (r.rsi_14 ?? 0) < 70)
-  if (filters.watch) filtered = filtered.filter((r) => bookmarkedIds.has(r.equity_id))
+  let filtered = applyFilters(all, filters)
+  if (quick.hl) filtered = filtered.filter(isHighlight)
+  if (quick.ob) filtered = filtered.filter((r) => (r.rsi_14 ?? 0) < 70)
+  if (quick.watch) filtered = filtered.filter((r) => bookmarkedIds.has(r.equity_id))
+
+  const toggleQuick = (key: QuickFilterKey) => setQuick((p) => ({ ...p, [key]: !p[key] }))
+  const quickActiveCount = Object.values(quick).filter(Boolean).length
+  const anyFilterActive = hasActiveFilters(filters) || quickActiveCount > 0
+  const clearAll = () => { setFilters(DEFAULT_FILTERS); setQuick(DEFAULT_QUICK) }
 
   const onRowClick = (s: ScanStock) =>
     navigate(`/chart/equity/${s.equity_id}?name=${encodeURIComponent(displaySymbol(s))}&tab=chart&setup=breakout_surge`)
-
-  const FILTER_CHIPS: { key: FilterKey; label: string }[] = [
-    { key: 'hl', label: 'VaNi Highlights' },
-    { key: 'rvol', label: 'RVOL > 3×' },
-    { key: 'ob', label: 'Not overbought' },
-    { key: 'watch', label: 'Watchlist only' },
-  ]
 
   return (
     <div style={{ padding: '28px 32px 48px', maxWidth: 1200 }}>
@@ -85,29 +91,75 @@ export default function BreakoutSurgeStudio() {
 
       {!isLoading && !error && (
         <>
-          {/* ── Cohort summary strip ── */}
+          {/* ── Cohort summary strip — always reflects the FULL day's cohort (all
+              252), not the filtered subset. Several tiles double as filter
+              shortcuts into the shared filter state below. ── */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 10, marginBottom: 18 }}>
-            <StatTile label="Broke Out Today" value={String(stats.brokeOutCount)} />
-            <StatTile label="VaNi Highlights" value={String(stats.highlightCount)} accent="gold" sub={`of ${stats.brokeOutCount}`} />
-            <StatTile label="Accelerating" value={`${stats.acceleratingPct}%`} sub="5D ≥ 22D pace" />
-            <StatTile label="Real Volume Behind" value={`${stats.realVolumePct}%`} sub="RVOL > 3×" />
-            <StatTile label="Leading Industry" value={stats.leadingIndustry?.name ?? '—'} sub={stats.leadingIndustry ? `${stats.leadingIndustry.count} names` : undefined} />
-            <StatTile label="Your Watchlist" value={String(all.filter((r) => bookmarkedIds.has(r.equity_id)).length)} accent="green" sub="already tracking" />
+            <StatTile
+              label="Broke Out Today"
+              value={String(stats.brokeOutCount)}
+              onClick={anyFilterActive ? clearAll : undefined}
+              title={anyFilterActive ? 'Click to clear all filters' : undefined}
+            />
+            <StatTile
+              label="VaNi Highlights"
+              value={String(stats.highlightCount)}
+              accent="gold"
+              sub={`of ${stats.brokeOutCount}`}
+              active={quick.hl}
+              onClick={() => toggleQuick('hl')}
+            />
+            <StatTile
+              label="Accelerating"
+              value={`${stats.acceleratingPct}%`}
+              sub="5D ≥ 22D pace"
+              active={!!filters.accelerating}
+              onClick={() => setFilters((f) => ({ ...f, accelerating: f.accelerating ? undefined : true }))}
+            />
+            <StatTile
+              label="Real Volume Behind"
+              value={`${stats.realVolumePct}%`}
+              sub="RVOL > 3×"
+              active={filters.rvolMin != null}
+              onClick={() => setFilters((f) => ({ ...f, rvolMin: f.rvolMin != null ? undefined : 3 }))}
+            />
+            <StatTile
+              label="Leading Industry"
+              value={stats.leadingIndustry?.name ?? '—'}
+              sub={stats.leadingIndustry ? `${stats.leadingIndustry.count} names` : undefined}
+              active={!!stats.leadingIndustry && (filters.industries?.length === 1) && filters.industries?.[0] === stats.leadingIndustry.name}
+              onClick={stats.leadingIndustry ? () => {
+                const name = stats.leadingIndustry!.name
+                setFilters((f) => ({
+                  ...f,
+                  industries: f.industries?.length === 1 && f.industries[0] === name ? undefined : [name],
+                }))
+              } : undefined}
+              title="Click to filter to this industry — or pick any industry from Filters below"
+            />
+            <StatTile
+              label="Your Watchlist"
+              value={String(all.filter((r) => bookmarkedIds.has(r.equity_id)).length)}
+              accent="green"
+              sub="already tracking"
+              active={quick.watch}
+              onClick={() => toggleQuick('watch')}
+            />
           </div>
 
-          {/* ── Filters ── */}
+          {/* ── Quick toggles (no ScanFilterBar equivalent) + real filter bar + view toggle ── */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--text-faint)' }}>Filters</span>
-            {FILTER_CHIPS.map((f) => (
-              <button key={f.key} onClick={() => setFilters((p) => ({ ...p, [f.key]: !p[f.key] }))} style={{
-                padding: '6px 13px', borderRadius: 100, fontSize: 12.5, fontWeight: 500, cursor: 'pointer',
-                border: `1px solid ${filters[f.key] ? 'var(--accent)' : 'var(--border)'}`,
-                background: filters[f.key] ? 'var(--accent-glow)' : 'transparent',
-                color: filters[f.key] ? 'var(--accent)' : 'var(--text-muted)',
-              }}>{f.label}</button>
-            ))}
+            <button onClick={() => toggleQuick('ob')} style={{
+              padding: '6px 13px', borderRadius: 100, fontSize: 12.5, fontWeight: 500, cursor: 'pointer',
+              border: `1px solid ${quick.ob ? 'var(--accent)' : 'var(--border)'}`,
+              background: quick.ob ? 'var(--accent-glow)' : 'transparent',
+              color: quick.ob ? 'var(--accent)' : 'var(--text-muted)',
+            }}>Not overbought</button>
+
+            <ScanFilterBar presetId="breakout_surge" stocks={all} filters={filters} onFiltersChange={setFilters} />
+
             <span style={{ marginLeft: 'auto', fontFamily: 'var(--font-mono)', fontSize: 11.5, color: 'var(--text-faint)' }}>
-              {filtered.length} shown{Object.values(filters).some(Boolean) ? ` · ${Object.values(filters).filter(Boolean).length} filters` : ''}
+              {filtered.length} shown
             </span>
             <div style={{ display: 'flex', gap: 4 }}>
               {(['table', 'cards'] as const).map((m) => (
@@ -133,16 +185,30 @@ export default function BreakoutSurgeStudio() {
   )
 }
 
-function StatTile({ label, value, sub, accent }: { label: string; value: string; sub?: string; accent?: 'gold' | 'green' }) {
+function StatTile({ label, value, sub, accent, active, onClick, title }: {
+  label: string; value: string; sub?: string; accent?: 'gold' | 'green'; active?: boolean; onClick?: () => void; title?: string
+}) {
   const accentColor = accent === 'gold' ? 'var(--gold)' : accent === 'green' ? 'var(--bull)' : undefined
   return (
-    <div style={{
-      background: accent ? `linear-gradient(135deg, color-mix(in srgb, ${accentColor} 8%, transparent) 0%, var(--card) 60%)` : 'var(--card)',
-      border: `1px solid ${accent ? `color-mix(in srgb, ${accentColor} 35%, transparent)` : 'var(--border)'}`,
-      borderLeft: accent ? `3px solid ${accentColor}` : '1px solid var(--border)',
-      borderRadius: 12, padding: '13px 15px',
-    }}>
-      <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9.5, letterSpacing: '.07em', textTransform: 'uppercase', color: accent ? accentColor : 'var(--text-faint)', marginBottom: 6 }}>{label}</div>
+    <div
+      onClick={onClick}
+      role={onClick ? 'button' : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onKeyDown={onClick ? (e) => (e.key === 'Enter' || e.key === ' ') && onClick() : undefined}
+      title={title}
+      style={{
+        background: accent ? `linear-gradient(135deg, color-mix(in srgb, ${accentColor} 8%, transparent) 0%, var(--card) 60%)` : 'var(--card)',
+        border: `1px solid ${active ? 'var(--accent)' : accent ? `color-mix(in srgb, ${accentColor} 35%, transparent)` : 'var(--border)'}`,
+        borderLeft: accent ? `3px solid ${accentColor}` : active ? '3px solid var(--accent)' : '1px solid var(--border)',
+        borderRadius: 12, padding: '13px 15px', cursor: onClick ? 'pointer' : undefined,
+        boxShadow: active ? '0 0 0 1px var(--accent)' : undefined,
+        transition: 'border-color 0.15s, box-shadow 0.15s',
+      }}
+    >
+      <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9.5, letterSpacing: '.07em', textTransform: 'uppercase', color: accent ? accentColor : active ? 'var(--accent)' : 'var(--text-faint)', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 5 }}>
+        {label}
+        {active && <span style={{ color: 'var(--accent)' }}>●</span>}
+      </div>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
         <span style={{ fontFamily: 'var(--font-display)', fontSize: 20, fontWeight: 500, color: 'var(--text-primary)' }}>{value}</span>
         {sub && <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, color: 'var(--text-faint)' }}>{sub}</span>}
