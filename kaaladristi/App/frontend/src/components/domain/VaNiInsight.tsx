@@ -127,7 +127,11 @@ export default function VaNiInsight({
             className={collapsible ? 'relative overflow-hidden' : undefined}
             style={collapsed ? { maxHeight: collapsedHeight } : undefined}
           >
-            <p className="text-[11px] text-[var(--text-secondary)] leading-relaxed">
+            {/* whitespace-pre-line: prompts ask for "2 short paragraphs"
+                (\n\n-separated) but plain HTML collapses that into one
+                unbroken block — the paragraph structure was always being
+                generated, just never rendered. */}
+            <p className="text-[11px] text-[var(--text-secondary)] leading-relaxed whitespace-pre-line">
               {highlightChips && insight ? renderWithChips(insight) : insight}
             </p>
             {collapsed && (

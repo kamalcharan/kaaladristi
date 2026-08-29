@@ -13,7 +13,6 @@ import BreakoutSurgeCards from '@/components/domain/BreakoutSurgeTable'
 import ScanVaNiPublisher, { toVaNiScanRows } from '@/components/domain/ScanVaNiPublisher'
 import VaNiInsight from '@/components/domain/VaNiInsight'
 import { useVaNiAsk } from '@/hooks/useVaNiChat'
-import { useVaNiStore } from '@/stores/vaniStore'
 import type { ScanStock, ScanDefinition } from '@/types'
 
 type QuickFilterKey = 'hl' | 'ob' | 'watch'
@@ -238,27 +237,25 @@ export default function BreakoutSurgeStudio() {
 }
 
 /**
- * On-page VaNi card — third attempt at this, and the difference from the
- * first two matters: v8/v9 built a fully bespoke card (own header, own
- * loading state, own feedback wiring) that duplicated VaNiInsight; v10
- * deleted it entirely in favor of the header drawer only. Owner's actual
- * ask, once the "two kinds of UX" confusion got sorted out: an always-
- * visible on-page card IS wanted (users should see it, not click to open
- * it) — the fix was never "delete the card," it was "don't reinvent the
- * card's rendering." This component owns only the fetch (fires
- * `scanner.read_results` once per trading date, same Tier A `cohort_stats`
- * wired in earlier) and the pill row's page-specific actions (apply a
- * filter, or hand off to the drawer). All rendering — header, loading
- * state, body text, feedback — is `VaNiInsight`, unmodified.
+ * On-page VaNi card — fourth pass. v8/v9 reinvented VaNiInsight's rendering;
+ * v10 deleted the card entirely; v11 restored it correctly (rendering-wise)
+ * but still routed "What does this screener show?" through
+ * `openWithIntent()`, which opens the header drawer — exactly the thing the
+ * owner said not to do ("existing VaNi space should be used rather than
+ * right draw"). v11 also silently dropped the `collapsible` prop while
+ * rebuilding this file, so the long-response truncation from
+ * `vani-common-component.md` was live in the component but never wired up
+ * here — both fixed now.
  *
- * The pill row deliberately does NOT include "Why so many breakouts?" /
- * "Which to skip?" / "What changed vs yesterday?" from the reference
- * mockup — those need new backend VaNi intents (prompts, registration in
- * vani_intents.py) that don't exist yet. Faking buttons that don't do
- * anything real would be worse than not having them; real ones only:
- * apply the highlights filter, apply the watchlist filter, the one real
- * registered "explain this screener" intent (via the drawer), and a plain
- * hand-off to the drawer for anything else.
+ * Two intents both render in THIS card, swapped in place by local state —
+ * no drawer involved for either. Each intent gets its own `useVaNiAsk()`
+ * instance so switching back and forth doesn't refetch or lose the other's
+ * answer. `scanner.explain_preset` fires lazily, on first click.
+ *
+ * Still deliberately missing: "Why so many breakouts?" / "Which to skip?" /
+ * "What changed vs yesterday?" from the reference mockup, and free-form
+ * follow-up questions — none of those have a real backend intent yet, and a
+ * pill that doesn't do anything real is worse than no pill.
  */
 function ScannerVaNiCard({
   presetId, meta, rowsForContext, totalCount, dataDate, exchangeFilter, cohortStats, onApplyHighlights, onApplyWatchlist,
@@ -273,16 +270,17 @@ function ScannerVaNiCard({
   onApplyHighlights: () => void
   onApplyWatchlist: () => void
 }) {
-  const askMutation = useVaNiAsk()
+  const readMutation = useVaNiAsk()
+  const explainMutation = useVaNiAsk()
   const firedForDate = useRef<string | null>(null)
-  const { openWithIntent, toggle: toggleVaniPanel } = useVaNiStore()
+  const [activeIntent, setActiveIntent] = useState<'read_results' | 'explain_preset'>('read_results')
 
   useEffect(() => {
     if (!dataDate || firedForDate.current === dataDate) return
     firedForDate.current = dataDate
     const hideVani = meta.vani_rule === 'always_true'
     const rows = toVaNiScanRows(rowsForContext, hideVani)
-    askMutation.mutate({
+    readMutation.mutate({
       intent_id: 'scanner.read_results',
       preset_id: presetId,
       data_date: dataDate,
@@ -310,31 +308,54 @@ function ScannerVaNiCard({
 
   if (!dataDate) return null
 
-  const done = !askMutation.isPending && !!askMutation.data?.response
+  const showExplain = () => {
+    setActiveIntent('explain_preset')
+    if (!explainMutation.data && !explainMutation.isPending) {
+      explainMutation.mutate({
+        intent_id: 'scanner.explain_preset',
+        preset_id: presetId,
+        data_date: dataDate,
+        timeframe: 'daily',
+        exchange: exchangeFilter,
+      })
+    }
+  }
+
+  const active = activeIntent === 'read_results' ? readMutation : explainMutation
+  const readDone = !readMutation.isPending && !!readMutation.data?.response
+
   const pillStyle: React.CSSProperties = {
     border: '1px solid var(--border-indigo)', color: 'var(--indigo)', background: 'transparent',
     borderRadius: 100, padding: '6px 13px', fontSize: 12, fontWeight: 500,
     cursor: 'pointer', fontFamily: 'var(--font-body)', whiteSpace: 'nowrap',
   }
+  const activePillStyle: React.CSSProperties = { ...pillStyle, background: 'var(--indigo-bg)', fontWeight: 700 }
+  const primaryPillStyle: React.CSSProperties = { ...pillStyle, background: 'var(--indigo)', border: 'none', fontWeight: 600 }
 
   return (
     <div style={{ marginBottom: 18 }}>
       <VaNiInsight
-        insight={askMutation.data?.response}
-        isLoading={askMutation.isPending}
-        logId={askMutation.data?.log_id ?? undefined}
+        insight={active.data?.response}
+        isLoading={active.isPending}
+        logId={active.data?.log_id ?? undefined}
+        collapsible
+        collapsedHeight={110}
         className="mt-0"
       />
-      {done && (
+      {readDone && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
           {cohortStats.highlightCount > 0 && (
-            <button onClick={onApplyHighlights} className="text-white" style={{ ...pillStyle, background: 'var(--indigo)', border: 'none', fontWeight: 600 }}>
+            <button onClick={onApplyHighlights} className="text-white" style={primaryPillStyle}>
               Start with the {cohortStats.highlightCount} Highlights →
             </button>
           )}
-          <button onClick={() => openWithIntent('scanner.explain_preset')} style={pillStyle}>What does this screener show?</button>
+          <button onClick={() => setActiveIntent('read_results')} style={activeIntent === 'read_results' ? activePillStyle : pillStyle}>
+            Today's Results
+          </button>
+          <button onClick={showExplain} style={activeIntent === 'explain_preset' ? activePillStyle : pillStyle}>
+            What does this screener show?
+          </button>
           <button onClick={onApplyWatchlist} style={pillStyle}>My Watchlist</button>
-          <button onClick={toggleVaniPanel} style={pillStyle}>Ask a follow-up →</button>
         </div>
       )}
     </div>
