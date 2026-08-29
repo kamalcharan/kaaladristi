@@ -652,3 +652,41 @@ VaNi says on this page, not another rendering fix:
   re-run too). Owner to confirm both fixes: a real narrow-viewport
   screenshot for the pill fix, and a fresh "How to use this scanner" click
   for the onboarding rewrite.
+
+**v15 — two more bugs from a follow-up screenshot, both on the primary
+"Start with the N Highlights →" pill (2026-08-29).**
+
+1. **Invisible button text, not clipped text.** The screenshot showed a
+   solid pill with genuinely NO visible label (not even a partial letter) —
+   different from v14's cut-off-mid-word symptom. Root cause: `pillStyle`
+   sets `color: 'var(--indigo)'` inline; `primaryPillStyle` spread it and
+   only overrode `background`/`border`/`fontWeight`, so it still carried
+   that inline `color`. The button separately had `className="text-white"`
+   — but an inline `style` prop always wins over a class for the same CSS
+   property, no matter the class, so `text-white` was silently losing.
+   Result: indigo text on an indigo background, perfectly invisible. First
+   fix attempt hardcoded `color: '#fff'` into the style object — reverted
+   before shipping, since it tripped the theme-standard ratchet (a NEW hex
+   literal line, even though `'#fff'` already exists elsewhere for the
+   identical case in `Layout.tsx`'s "Ask VaNi" button — the ratchet counts
+   matching *lines*, not unique values, so every new line pays regardless
+   of precedent). Real fix: destructure `color` OUT of the spread
+   (`const { color: _pillTextColor, ...pillShape } = pillStyle`) so nothing
+   inline competes with `className="text-white"` any more — no new literal,
+   and it uses the Tailwind utility as originally intended instead of
+   fighting it.
+2. **"Nothing happens when clicked."** The click itself was always wired
+   correctly (`onApplyHighlights` sets `quick.hl = true`, which the `filtered`
+   `useMemo`-equivalent chain already read) — but the VaNi card sits well
+   above the actual results table (past the stat-tile grid), so applying the
+   filter produced zero visible change anywhere near the click. Fixed by
+   adding a `resultsRef` on the filter-bar/table row and calling
+   `scrollIntoView({ behavior: 'smooth', block: 'start' })` from both
+   `onApplyHighlights` and `onApplyWatchlist` — `scrollMarginTop: 88` clears
+   `Layout.tsx`'s sticky topbar so the scrolled-to row doesn't land
+   underneath it.
+- Files touched: `App/frontend/src/views/BreakoutSurgeStudio.tsx` only.
+- `npm run typecheck` and `npm run build` (ratchet unchanged: 371 hex + 276
+  rgba, confirming the destructure approach avoids the literal) pass clean.
+  `npm run lint` errors on a pre-existing missing `eslint.config.js` in this
+  repo, unrelated to this change.
