@@ -69,7 +69,10 @@ export default function BreakoutSurgeStudio() {
     navigate(`/chart/equity/${s.equity_id}?name=${encodeURIComponent(displaySymbol(s))}&tab=chart&setup=breakout_surge`)
 
   return (
-    <div style={{ padding: '28px 32px 48px', maxWidth: 1200 }}>
+    // No maxWidth cap — ScanView.tsx's content area is unconstrained (just
+    // `flex: 1` + padding). A 1200px cap here made the table hit horizontal
+    // overflow far more often than production for the same column set.
+    <div style={{ padding: '28px 32px 48px' }}>
       <div style={{ marginBottom: 8, fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--text-faint)' }}>
         Preview · Phase 1
       </div>

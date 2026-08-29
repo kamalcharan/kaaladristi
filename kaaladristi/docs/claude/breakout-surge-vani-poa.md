@@ -115,6 +115,40 @@ scanner.
     `filters.accelerating`/`filters.rvolMin` fields — clicking the tile and
     typing into the filter panel now drive the identical state, not two
     competing filter systems.
+  **Revised again (v5) — one deliberate shared-component change, plus a
+  page-local fix, plus one investigated-and-not-a-bug:**
+  - **VaNi Highlight rows now get a distinct background in table view**
+    (`color-mix(in srgb, var(--gold) 7%, var(--card))`, mixed against
+    `--card` rather than transparent so the sticky symbol column stays
+    opaque under horizontally-scrolled cells). This is a change to the
+    **shared** `ScanTable.tsx` — every scanner using the table view gets it,
+    not just Breakout Surge. Low-risk (purely additive background, matches
+    the gold tint `BreakoutSurgeCards` already uses for its own VaNi tier),
+    but flagging it as shared-file scope per this doc's own convention.
+  - **Horizontal scroll forcing a full vertical scroll first**: traced to
+    this *page's* own `maxWidth: 1200` container — `ScanView.tsx`'s content
+    area has no width cap (`flex: 1` + padding only), so the same column set
+    hits horizontal overflow far more on this preview page than on
+    production. The cap is removed. `ScanTable.tsx` already ships a
+    `FloatingHScrollbar` (portaled, pinned to the viewport bottom, shown
+    only while the table's own scrollbar is off-screen) — that mechanism
+    was not touched, since nothing in it looked broken; the fix is that
+    this page was making it work harder than necessary.
+  - **MagicRS sort ("+29 then -27 back to back") — investigated, no bug
+    found.** `ScanTable.tsx`'s `compareValues()` already coerces both sides
+    with `Number()` and does a numeric subtraction before ever falling back
+    to string comparison — this is itself a documented fix for exactly this
+    failure class, and `magic_rs` arrives as a real `number` (via
+    scanEngine.ts's `toNum()`) for this preset, not a formatted string. Ran
+    the comparator standalone against `[29, 18, 15, 7, 2, -3, -27, 0, null]`
+    descending: correct output, sign-aware, nulls last. Most likely
+    explanation for what was seen: Breakout Surge's ~243-stock cohort is
+    selected *for* a bullish price event, so genuinely few of them carry a
+    negative MagicRS — a real gap between the last positive stragglers and
+    the rare negative outliers is plausible, not a sort defect. No DB
+    access from this environment to fetch the actual day's values and
+    confirm the gap directly — flagged back to the owner rather than
+    guessing at a fix for code that already tests correct.
 - **Phase 2 — stabilise VaNi, two tiers:**
   - **Tier A (no new backend):** cohort stats (% accelerating, % RVOL>3,
     leading industry, VaNi Highlight count) computed client-side from the
@@ -146,7 +180,7 @@ scanner.
 - `App/frontend/src/services/breakoutSurgeSpec.ts` — created in v1/v2,
   **deleted in v3** (superseded by `fieldAvailability.ts`, see above)
 
-Nothing in `ScanTable.tsx`, `ScanFilterBar.tsx`, `ScanView.tsx`, or
-`Sidebar.tsx` was touched — `BreakoutSurgeStudio.tsx` imports `ScanTable`
-and `BreakoutSurgeCards` (`components/domain/BreakoutSurgeTable.tsx`) as-is,
-read-only.
+`ScanFilterBar.tsx`, `ScanView.tsx`, and `Sidebar.tsx` remain untouched.
+`ScanTable.tsx` got one small, deliberate shared change in v5 (VaNi
+Highlight row background, see above) — everything else about it, including
+`FloatingHScrollbar.tsx`, is still used as-is, read-only.

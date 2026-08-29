@@ -412,11 +412,18 @@ export default function ScanTable({ stocks, presetId, onRowClick }: ScanTablePro
             </tr>
           </thead>
           <tbody>
-            {sorted.map(stock => (
+            {sorted.map(stock => {
+              // Same gold tint BreakoutSurgeCards already uses for its VaNi
+              // tier — mixed with --card (not transparent) so the sticky
+              // symbol column stays opaque over horizontally-scrolled cells.
+              const rowBg = stock.vaniOpportunity
+                ? 'color-mix(in srgb, var(--gold) 7%, var(--card))'
+                : 'transparent'
+              return (
               <tr
                 key={stock.equity_id}
                 onClick={() => onRowClick(stock)}
-                style={{ cursor: 'pointer', height: 40 }}
+                style={{ cursor: 'pointer', height: 40, background: rowBg }}
                 onMouseEnter={e => {
                   const row = e.currentTarget as HTMLElement
                   row.style.background = 'var(--accent-glow)'
@@ -425,9 +432,9 @@ export default function ScanTable({ stocks, presetId, onRowClick }: ScanTablePro
                 }}
                 onMouseLeave={e => {
                   const row = e.currentTarget as HTMLElement
-                  row.style.background = 'transparent'
+                  row.style.background = rowBg
                   const sticky = row.querySelector<HTMLElement>('[data-sticky]')
-                  if (sticky) sticky.style.background = 'var(--card)'
+                  if (sticky) sticky.style.background = rowBg
                 }}
               >
                 {activeCols.map(colKey => {
@@ -444,7 +451,7 @@ export default function ScanTable({ stocks, presetId, onRowClick }: ScanTablePro
                         data-sticky
                         style={{
                           position: 'sticky', left: 0, zIndex: 2,
-                          background: 'var(--card)',
+                          background: rowBg === 'transparent' ? 'var(--card)' : rowBg,
                           padding: '0 10px',
                           width: 158, minWidth: 158,
                           borderBottom: '1px solid color-mix(in srgb, var(--border) 55%, transparent)',
@@ -564,7 +571,8 @@ export default function ScanTable({ stocks, presetId, onRowClick }: ScanTablePro
                   )
                 })}
               </tr>
-            ))}
+              )
+            })}
           </tbody>
         </table>
 
