@@ -4,6 +4,7 @@ import { Loader2 } from 'lucide-react';
 import { signIn, signUp, forgotPassword } from '@/services/auth';
 import { resolveSpotlightIntent } from '@/services/spotlight';
 import { useAuthStore } from '@/stores/authStore';
+import { trackEvent } from '@/lib/analytics';
 import { LogoMark, Starfield } from './landing/shared';
 
 // Theme-aware tokens (routes through the app's real theme system —
@@ -74,10 +75,12 @@ export default function LoginPage() {
         // onboarding redirect never fires. A fresh account is never onboarded,
         // so go straight to the wizard.
         await useAuthStore.getState().refreshProfile();
+        trackEvent('user_registered');
         navigate('/setup');
       } else {
         await signIn(email, password);
         await useAuthStore.getState().refreshProfile();
+        trackEvent('user_login');
         const prof = useAuthStore.getState().profile;
         if (!prof?.onboarded) {
           navigate('/setup'); // intent survives — ProfileSetup's exits consume it
@@ -87,7 +90,9 @@ export default function LoginPage() {
         }
       }
     } catch (err: any) {
-      setError(err.message || 'Something went wrong');
+      const message = err.message || 'Something went wrong';
+      setError(message);
+      trackEvent('error_shown', { context: `auth_${authMode}`, message });
     } finally {
       setIsSubmitting(false);
     }

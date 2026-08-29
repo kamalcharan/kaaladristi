@@ -4,6 +4,7 @@ import { useAuthStore, isAuthError } from '@/stores/authStore'
 import { useFrameworkStore } from '@/stores/frameworkStore'
 import { updateProfile, signOut } from '@/services/auth'
 import { resolveSpotlightIntent } from '@/services/spotlight'
+import { trackEvent } from '@/lib/analytics'
 import { isValidIndianMobile, normalizeIndianMobile } from '@/lib/phone'
 import { PAID_TIERS } from '@/constants/frameworkConstants'
 import { getTemplateForICP } from '@/constants/frameworkTemplates'
@@ -672,6 +673,13 @@ export default function ProfileSetup() {
     if (profile.icp_mode && step < 4) setStep(4)
   }, [profile, step])
 
+  // Funnel visibility — which onboarding step a user actually reaches.
+  // The step 1 back-navigation gap found in review means this can only
+  // ever move forward today; this event is what will prove that once fixed.
+  useEffect(() => {
+    trackEvent('onboarding_step_viewed', { step })
+  }, [step])
+
   // Screen 2: typing animation — reveal question after 1.4s
   useEffect(() => {
     if (step !== 2) return
@@ -732,7 +740,9 @@ export default function ProfileSetup() {
   // user lands on the login page instead of retrying forever at "Your
   // framework" (the stuck-wizard bug, 2026-07-25).
   async function handleCommitError(e: unknown) {
-    setError(errMessage(e))
+    const message = errMessage(e)
+    setError(message)
+    trackEvent('error_shown', { context: `onboarding_step_${step}`, message })
     setCommitting(false)
     if (isAuthError(e)) {
       setTimeout(() => {
@@ -822,6 +832,7 @@ export default function ProfileSetup() {
       await handleCommitError(e)
       return
     }
+    trackEvent('onboarding_completed', { icp, icp_mode: icpMode })
     if (browseIntent) { navigate('/catalog', { replace: true }); return }
     const dest = await resolveSpotlightIntent()
     navigate(dest ?? '/workspace', { replace: true })
