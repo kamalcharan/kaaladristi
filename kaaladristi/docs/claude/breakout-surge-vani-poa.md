@@ -19,13 +19,15 @@ intentionally — this page reuses the real data path
 page calls) but owns its own presentation layer, so the other 19 scanners
 have zero blast radius while this is being proven out.
 
-This is also the first real instance of a pattern discussed but not yet
-retrofitted anywhere else: one declarative field spec per scanner
-(`services/breakoutSurgeSpec.ts`), instead of the four independent id-keyed
-lookups the real `ScanTable.tsx`/`ScanFilterBar.tsx`/`ScanView.tsx` currently
-each reinvent (`PRESET_COL_OVERRIDES`, `DEFAULT_SORT`, `getFilterGroup`, the
-per-preset card dispatch). Not retrofitting those files now — proving the
-pattern here first is the point.
+This was originally meant to also pilot a declarative-field-spec pattern
+(one spec per scanner, instead of the four independent id-keyed lookups
+`ScanTable.tsx`/`ScanFilterBar.tsx`/`ScanView.tsx` each reinvent) — that spec
+file (`services/breakoutSurgeSpec.ts`) was built in Phase 1 v1/v2 but
+**deleted in v3** once it turned out `fieldAvailability.ts`'s existing
+per-category column config already covers Breakout Surge correctly. The
+four-lookup duplication problem in the real scanner files is unchanged and
+still open; this page doesn't solve it, it just doesn't need to for one
+scanner.
 
 ## Phases
 
@@ -57,6 +59,33 @@ pattern here first is the point.
   (the scanner's own signature metric, previously missing) and `score_22d`
   alongside `score_5d`. Still owed: real mobile device check (not yet done
   from this session — no way to verify on an actual phone here).
+  **Revised again (v3) — row rendering now reuses real production
+  components instead of a hand-built table/cards.** The v2 fix above was
+  itself a partial miss: it rebuilt `TableView`/`CardView` from scratch
+  without checking whether the real `ScanTable.tsx` (sort, column-visibility
+  gear, proven interactions) and `BreakoutSurgeTable.tsx`'s
+  `BreakoutSurgeCards` (a component already purpose-built for this exact
+  scanner — VaNi tier vs. rest split, card layout) could just be imported.
+  They can, and now are. Two consequences:
+  - `services/breakoutSurgeSpec.ts` (the declarative field-spec file) is
+    **deleted** — `ScanTable` sources its columns from
+    `fieldAvailability.ts`'s `price_action` category default, which
+    *already* includes `pct_from_breakout` and `score_22d` alongside
+    `score_5d`/`rsi_14`/`magic_rs`. The "field rethink" in the v2 note above
+    had reinvented something already correctly designed in the real app —
+    no separate spec file needed. The "one spec per scanner" pattern
+    mentioned in the *Why a new page* section below is **not** what shipped
+    here; `fieldAvailability.ts`'s existing per-category config already
+    solves it.
+  - Two v1/v2 features are **dropped**, not ported: the per-row bookmark
+    star toggle and the inline "why" expand panel. Neither `ScanTable` nor
+    `BreakoutSurgeCards` support them. Row click now navigates to
+    `/chart/equity/:id?...&setup=breakout_surge`, matching the exact
+    convention the real `ScanView.tsx` uses. Adding the star/expand back
+    means a deliberate, reviewed change to the shared
+    `ScanCardWrapper`/`ScanTable` components themselves (touching code the
+    other ~19 scanners depend on) — a decision for the owner, not something
+    to smuggle into this page's fork. **Open question for the owner.**
 - **Phase 2 — stabilise VaNi, two tiers:**
   - **Tier A (no new backend):** cohort stats (% accelerating, % RVOL>3,
     leading industry, VaNi Highlight count) computed client-side from the
@@ -76,10 +105,18 @@ pattern here first is the point.
 
 ## Files touched so far (Phase 0 + 1)
 
-- `App/frontend/src/views/BreakoutSurgeStudio.tsx` (new)
-- `App/frontend/src/services/breakoutSurgeSpec.ts` (new)
-- `App/frontend/src/services/breakoutSurgeInsights.ts` (new, Phase 1)
+- `App/frontend/src/views/BreakoutSurgeStudio.tsx` (new; rewritten in v3 to
+  use `ScanTable` + `BreakoutSurgeCards`)
+- `App/frontend/src/services/breakoutSurgeInsights.ts` (new, Phase 1 —
+  cohort stats + `isHighlight()`; `buildWhyTags()` currently unused since
+  the why-expand panel was dropped in v3, kept for possible Phase 2 reuse)
+- `App/frontend/src/components/domain/ScannerExportButtons.tsx` (new —
+  `DownloadXlsButton`/`TradingViewExportButton`, extracted from ScanView.tsx)
 - `App/frontend/src/App.tsx` (added the one route, added the one import)
+- `App/frontend/src/services/breakoutSurgeSpec.ts` — created in v1/v2,
+  **deleted in v3** (superseded by `fieldAvailability.ts`, see above)
 
 Nothing in `ScanTable.tsx`, `ScanFilterBar.tsx`, `ScanView.tsx`, or
-`Sidebar.tsx` was touched.
+`Sidebar.tsx` was touched — `BreakoutSurgeStudio.tsx` imports `ScanTable`
+and `BreakoutSurgeCards` (`components/domain/BreakoutSurgeTable.tsx`) as-is,
+read-only.
