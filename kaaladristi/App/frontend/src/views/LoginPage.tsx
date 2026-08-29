@@ -6,20 +6,23 @@ import { resolveSpotlightIntent } from '@/services/spotlight';
 import { useAuthStore } from '@/stores/authStore';
 import { LogoMark, Starfield } from './landing/shared';
 
-// Design tokens matching DristiQ landing page
+// Theme-aware tokens (routes through the app's real theme system —
+// config/theme/index.ts — so this page respects light/dark like the rest
+// of the authenticated app, instead of the DristiQ landing page's
+// fixed-dark palette it was originally copied from).
 const C = {
-  bg:    '#0d0f14',
-  card:  '#13161d',
-  ink1:  '#e8e6e0',
-  ink2:  '#b7bcc9',
-  ink3:  '#7a8099',
-  ink4:  '#3a3f52',
-  g1:    '#f5a623',
+  bg:    'var(--bg)',
+  card:  'var(--card)',
+  ink1:  'var(--text-primary)',
+  ink2:  'var(--text-secondary)',
+  ink3:  'var(--text-muted)',
+  ink4:  'var(--text-faint)',
+  g1:    'var(--gold)',
   g2:    'var(--gold)',
-  g3:    '#8a7433',
-  rule:  'rgba(245,166,35,.18)',
-  rs:    'rgba(245,166,35,.08)',
-  glow:  'rgba(245,166,35,.22)',
+  g3:    'var(--gold-soft)',
+  rule:  'color-mix(in srgb, var(--gold) 18%, transparent)',
+  rs:    'color-mix(in srgb, var(--gold) 8%, transparent)',
+  glow:  'color-mix(in srgb, var(--gold) 22%, transparent)',
 };
 const SERIF = "'Cormorant Garamond','Playfair Display',serif";
 const MONO  = "'JetBrains Mono','Geist Mono',ui-monospace,monospace";

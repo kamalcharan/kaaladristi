@@ -591,10 +591,10 @@ function Screen3({ template, isFree: _isFree, onAccept, onBrowse, isCommitting, 
                 fontSize:12, color:'var(--text-muted)', lineHeight:1.6, flex:1 }}
                 dangerouslySetInnerHTML={{ __html: block.narration.replace(
                   /DristiQ's proprietary/g,
-                  "<strong style='color:#e8eaed'>DristiQ's proprietary</strong>"
+                  "<strong style='color:var(--text-primary)'>DristiQ's proprietary</strong>"
                 ).replace(
                   /(EMA 20\/50|Panchak|MagicRS|Conviction Flow|Breadth ROC|Six-Day Outlook|RSI 14|SMA 50)/g,
-                  "<strong style='color:#e8eaed'>$1</strong>"
+                  "<strong style='color:var(--text-primary)'>$1</strong>"
                 )}} />
             </div>
           ))}
@@ -609,7 +609,7 @@ function Screen3({ template, isFree: _isFree, onAccept, onBrowse, isCommitting, 
                 borderRadius:'3px 10px 10px 10px', padding:'10px 14px',
                 fontSize:12, color:'var(--text-muted)', lineHeight:1.6, flex:1 }}>
                 Done.{' '}
-                <strong style={{ color:'#e8eaed' }}>{total} blocks placed.</strong>
+                <strong style={{ color:'var(--text-primary)' }}>{total} blocks placed.</strong>
                 {' '}Hover any block to swap or remove it. Add more anytime from the Catalog.
               </div>
             </div>
