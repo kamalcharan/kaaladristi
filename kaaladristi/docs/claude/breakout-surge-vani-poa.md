@@ -759,3 +759,40 @@ old incorrect cached answer can never be served again.
   `npm run typecheck`, and `npm run build` (ratchet unchanged: 371 hex + 276
   rgba) all pass clean. Not verified live — same standing gap as every prior
   round: this environment can't run the backend or hit the LLM.
+
+**v17 — "My Watchlist" had the same gap "Start with the N Highlights" had
+before v16, plus a loading-consistency ask (2026-08-29).** Owner, verbatim:
+"'my watch listh' intent wont work -- and also put a nice loader for vani
+for sometime and then load the content, irrespective of cached or LLM."
+
+1. **"My Watchlist" was filter-only, same as Highlights used to be.** Its
+   `onClick` applied the `watch` quick-filter and scrolled, but never fired
+   any VaNi intent — reads as "won't work" once the Highlights button sets
+   the expectation that a highlight-adjacent action also explains itself.
+   Fixed the same way v16 fixed Highlights, but with less new code needed:
+   `scanner.your_view` already covers exactly "your bookmarked stocks in
+   today's results" as its lead bullet, so the fix is just wiring the
+   button's `onClick` to also call the existing `showYourView()` — no new
+   intent, no backend change. The pill also picks up `activePillStyle` when
+   `your_view` is the active intent, matching the "Your View" pill's own
+   highlighting (both trigger the same underlying intent).
+2. **Loading floor.** A cache hit (either glossary intent, or any repeat
+   ask) can resolve in well under 100ms; a live LLM call takes a couple of
+   seconds — with no floor, the spinner either flashes or doesn't appear at
+   all for a cache hit, an inconsistent feel with no visible cause to the
+   user. New `useMinVaNiLoading()` hook (`BreakoutSurgeStudio.tsx`) holds
+   `isLoading` true for at least `MIN_VANI_LOADING_MS` (700ms) from the
+   moment a mutation starts, independent of when it actually resolves — a
+   genuinely slow call is unaffected (if still pending once 700ms has
+   passed, that's just the real state). Content is withheld while holding
+   (`insight={showLoading ? undefined : ...}`), not just the spinner shown
+   early, so text can't flash in before the floor elapses. Applied to both
+   the main card (bound to whichever intent is currently `active`) and,
+   separately, to the action-pills-visible gate (`readDone`, bound
+   specifically to `readMutation` since it fires eagerly regardless of
+   which intent is selected) — otherwise the pills could pop in before the
+   card's own held content finishes its beat.
+- Files touched: `App/frontend/src/views/BreakoutSurgeStudio.tsx` only.
+- `npm run typecheck` and `npm run build` (ratchet unchanged: 371 hex + 276
+  rgba) pass clean. Not verified live — same standing gap as every prior
+  round.
