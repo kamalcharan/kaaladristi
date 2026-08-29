@@ -37,10 +37,8 @@ some mode", that's `ui-craft-review`, not this skill.
    path. Most real UX defects live in the states nobody demos.
 
 3. **Apply a heuristic pass** (condensed from Nielsen's usability
-   heuristics — deeper material in
-   `docs/skill-references/Claude-Skills/product-team/ux-researcher-designer/`
-   and `docs/skill-references/wondelaiskills/` if a fuller framework is
-   needed):
+   heuristics — search for a fuller persona/journey-mapping/research-
+   synthesis skill if a task genuinely needs that depth):
    - **Visibility of system state** — does the user always know what's
      happening (loading, saved, error, which step they're on)?
    - **Match with the real world** — does the language/order match how the
@@ -74,11 +72,11 @@ some mode", that's `ui-craft-review`, not this skill.
   research. If real research is needed, say so explicitly rather than
   fabricating personas or usability-test results.
 
-## Further reference (vendored, not required reading to use this skill)
+## Further reference
 
-`docs/skill-references/Claude-Skills/product-team/` has fuller toolkits:
-`ux-researcher-designer` (persona generation, journey mapping, usability
-test planning, research synthesis) and `product-designer` (broader
-UI/UX/prototyping toolkit). Consult them when a task genuinely needs formal
-research artifacts (personas, journey maps as deliverables) rather than a
-review-and-recommend pass.
+This skill was distilled from a broader product-design skill collection
+(persona generation, journey mapping, usability-test planning, research
+synthesis) that isn't vendored in this repo. Search for an equivalent
+published skill when a task genuinely needs formal research artifacts
+(personas, journey maps as deliverables) rather than a review-and-
+recommend pass.

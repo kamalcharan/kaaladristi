@@ -1,8 +1,0 @@
-# Never commit copyrighted book material or extracts
-*.pdf
-*-insights.md
-*-raw-extractions.json
-insights/
-
-# OS / editor noise
-.DS_Store

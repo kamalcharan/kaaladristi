@@ -89,12 +89,12 @@ token that happens to produce a similar-looking color today:
 - When in doubt, don't eyeball it — compute it, or ask the user to check the
   live page in both modes.
 
-## Further reference (vendored, not required reading to use this skill)
+## Further reference
 
-`docs/skill-references/` in this repo has fuller toolkits this skill draws
-on conceptually: `ui-ux-pro-max-skill/` (design-system token architecture,
-192 reasoning rules, contrast-aware style profiles), `impeccable/` (59
-deterministic AI-slop/accessibility detector rules, CLI-based), and
-`wondelaiskills/` (`ux-design` bundle — Refactoring UI, Web Typography,
-iOS HIG). Consult them for deeper craft judgment calls this skill's
-lightweight scanner doesn't cover (spacing rhythm, type pairing, motion).
+This skill was distilled from a handful of third-party UI/design skill
+collections (a design-system/token-architecture toolkit, a deterministic
+AI-slop/accessibility detector, and a "Refactoring UI"-style craft
+bundle) that aren't vendored in this repo. For deeper craft judgment
+calls this skill's lightweight scanner doesn't cover — spacing rhythm,
+type pairing, motion — search for an equivalent published skill/plugin
+rather than assuming one is bundled here.

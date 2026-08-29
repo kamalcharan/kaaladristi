@@ -1,4 +1,0 @@
-User-agent: *
-Allow: /
-
-Sitemap: https://borghei.github.io/Claude-Skills/sitemap.xml
