@@ -199,6 +199,15 @@ export default function VaNiChatPanel() {
               surge: r.surge,
               vani: r.vani,
             })),
+            ...(scanContext.cohortStats ? {
+              cohort_stats: {
+                vani_highlight_count: scanContext.cohortStats.vaniHighlightCount,
+                accelerating_pct: scanContext.cohortStats.acceleratingPct,
+                real_volume_pct: scanContext.cohortStats.realVolumePct,
+                leading_industry: scanContext.cohortStats.leadingIndustry,
+                leading_industry_count: scanContext.cohortStats.leadingIndustryCount,
+              },
+            } : {}),
           } : {}),
         } : {}),
       },

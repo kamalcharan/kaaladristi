@@ -42,6 +42,15 @@ export interface VaNiAskRequest {
   data_date?: string;
   timeframe?: string;
   exchange?: string;
+  // Tier A (scannerenhancement.md) — precomputed facts over the FULL result
+  // set, not the capped `rows` sample above. Optional.
+  cohort_stats?: {
+    vani_highlight_count: number;
+    accelerating_pct: number;
+    real_volume_pct: number;
+    leading_industry: string | null;
+    leading_industry_count: number | null;
+  };
 }
 
 export interface VaNiAskResponse {

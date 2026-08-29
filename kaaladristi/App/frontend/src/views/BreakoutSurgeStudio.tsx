@@ -10,6 +10,7 @@ import { ScanFilterBar, applyFilters, DEFAULT_FILTERS, hasActiveFilters, type Sc
 import { computeCohortStats, isHighlight } from '@/services/breakoutSurgeInsights'
 import ScanTable from '@/components/domain/ScanTable'
 import BreakoutSurgeCards from '@/components/domain/BreakoutSurgeTable'
+import ScanVaNiPublisher from '@/components/domain/ScanVaNiPublisher'
 import type { ScanStock } from '@/types'
 
 type QuickFilterKey = 'hl' | 'ob' | 'watch'
@@ -70,12 +71,35 @@ export default function BreakoutSurgeStudio() {
     navigate(`/chart/equity/${s.equity_id}?name=${encodeURIComponent(displaySymbol(s))}&tab=chart&setup=breakout_surge`)
 
   return (
-    // No maxWidth cap — ScanView.tsx's content area is unconstrained (just
-    // `flex: 1` + padding). A 1200px cap here made the table hit horizontal
-    // overflow far more often than production for the same column set.
+    <>
+      {/* Phase 2 Tier A: publishes real cohort-level facts (computed over
+          the FULL result set, not the 25-row sample scanner.read_results
+          otherwise falls back to) so VaNi's "Read today's results" doesn't
+          have to guess aggregate stats from a partial sample. This page had
+          no ScanVaNiPublisher at all before — VaNi's stock-lookup gate and
+          scanner intents had zero context here. */}
+      {meta && (
+        <ScanVaNiPublisher
+          preset={meta}
+          timeframe="daily"
+          exchange={exchangeFilter}
+          stocks={filtered}
+          isLoading={isLoading}
+          cohortStats={{
+            vaniHighlightCount: stats.highlightCount,
+            acceleratingPct: stats.acceleratingPct,
+            realVolumePct: stats.realVolumePct,
+            leadingIndustry: stats.leadingIndustry?.name ?? null,
+            leadingIndustryCount: stats.leadingIndustry?.count ?? null,
+          }}
+        />
+      )}
+    {/* No maxWidth cap — ScanView.tsx's content area is unconstrained (just
+        `flex: 1` + padding). A 1200px cap here made the table hit horizontal
+        overflow far more often than production for the same column set. */}
     <div style={{ padding: '28px 32px 48px' }}>
       <div style={{ marginBottom: 8, fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--text-faint)' }}>
-        Preview · Phase 1
+        Preview · Phase 2
       </div>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, marginBottom: 22 }}>
         <div>
@@ -187,6 +211,7 @@ export default function BreakoutSurgeStudio() {
         </>
       )}
     </div>
+    </>
   )
 }
 

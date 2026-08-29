@@ -1,7 +1,7 @@
 # Breakout Surge — VaNi-Led Scanner Redesign (Preview)
 
-**Status:** Phase 0 (scaffolding) and Phase 1 (structural UI) built. Phase 2
-(VaNi narration) and beyond not started.
+**Status:** Phase 0, Phase 1, and Phase 2 Tier A built. Phase 2 Tier B and
+Phase 3+ not started.
 **Route:** `/scanner-preview/breakout-surge` — direct-URL only, intentionally
 **not** in `Sidebar.tsx` nav. Reachable by a logged-in user who types the URL;
 invisible otherwise. Do not add a nav entry until Phase 3 QA passes.
@@ -185,12 +185,49 @@ scanner.
     `ScannerExportButtons.tsx`), wired with the same `universe === 'NSE_ONLY'
     → disable BSE` rule production uses for this preset.
 - **Phase 2 — stabilise VaNi, two tiers:**
-  - **Tier A (no new backend):** cohort stats (% accelerating, % RVOL>3,
-    leading industry, VaNi Highlight count) computed client-side from the
-    *full* fetched result set (not a sample), fed to VaNi only as
-    precomputed facts to phrase. Fixes `scannerenhancement.md`'s documented
-    failure mode (no comparison point, 25-of-270 sample mismatch) for free,
-    since there's no comparison point needed and no sampling.
+  - **Tier A — done.** This page had **zero** VaNi scanner functionality
+    before this round: `usePageContext.ts`'s route→page map happens to match
+    `/scanner-preview/...` to `'scanner'` (its `/^\/scanner/` regex has no
+    trailing boundary), but `VaNiChatPanel.tsx` hides every `scanner.*`
+    intent until a `scanContext` is published (`!i.intentId.startsWith
+    ('scanner.') || !!scanContext`) — and this page never rendered a
+    `ScanVaNiPublisher`, so "What does this screener show?" / "Read today's
+    results" were invisible, and the stock-lookup gate had nothing to check
+    membership against. Fixed by adding `ScanVaNiPublisher` (previously
+    completely missing — same "missing from this page" pattern as the
+    exchange filter above).
+    Separately, traced the actual `scanner.read_results` backend prompt
+    (`vani_assemblers.py`) and found the documented `scannerenhancement.md`
+    failure mode precisely: `format_scanner_user_message()`'s VaNi-highlight
+    count was `sum(1 for r in ctx['rows'] if r['vani'])` — counted only
+    within the 25-row sample `ScanVaNiPublisher`/`_SCANNER_MAX_ROWS` caps at,
+    not the true full-cohort count. For Breakout Surge that's a real ~15 vs.
+    whatever happens to fall in the top-25-by-score. Fixed end to end:
+    - `services/breakoutSurgeInsights.ts`'s `computeCohortStats()` (already
+      built for the stat strip) is now ALSO published as
+      `VaNiScanContext.cohortStats` (new optional field, `vaniStore.ts`) via
+      `ScanVaNiPublisher`'s new optional `cohortStats` prop.
+    - `VaNiChatPanel.tsx` forwards it as `cohort_stats` on `scanner.
+      read_results` asks; `useVaNiChat.ts`'s `VaNiAskRequest` type gained
+      the matching optional field.
+    - Backend: `VaNiAskRequest.cohort_stats` (pipeline2_api.py) →
+      `assemble_scanner_context(..., cohort_stats=...)` →
+      `format_scanner_user_message()` now uses the TRUE
+      `vani_highlight_count` when present, and appends a "Full-cohort facts"
+      block (% accelerating, % on real volume, leading industry) so the
+      model is GIVEN these facts instead of inferring them from the 25-row
+      sample — the other half of `scannerenhancement.md`'s "compute in
+      code, narrate in prose" principle, not just the count fix.
+    - Fully backward-compatible: `cohort_stats` is optional everywhere; when
+      absent (every scanner except this one, for now), the prompt text is
+      byte-identical to before. `build_scanner_cache_context()`'s `'v'`
+      marker bumped 2→3 since the persistent cache hash now includes
+      `cohort_stats` (busts existing 24h-TTL cache entries once on deploy,
+      harmless).
+    - No live DB/API access from this environment to verify the actual LLM
+      output — typechecked, built (theme-standard clean), and Python
+      syntax-checked (`ast.parse`), but the real prompt/response round-trip
+      is unverified. Worth a manual check on the deployed page.
   - **Tier B (real backend work, own timeline):** "up from N yesterday",
     "new today", "sustaining N sessions" — needs the scheduled job +
     membership table `scannerenhancement.md` already designed. Ship without
@@ -201,11 +238,12 @@ scanner.
   each subsequent scanner should be faster once the field-spec pattern from
   Phase 0 is proven.
 
-## Files touched so far (Phase 0 + 1)
+## Files touched so far
 
 - `App/frontend/src/views/BreakoutSurgeStudio.tsx` (new; rewritten in v3 to
   use `ScanTable` + `BreakoutSurgeCards`; rewritten again in v4 to use the
-  real `ScanFilterBar`/`applyFilters`/`DEFAULT_FILTERS`)
+  real `ScanFilterBar`/`applyFilters`/`DEFAULT_FILTERS`; v7 (Phase 2 Tier A)
+  adds `ScanVaNiPublisher` + `cohortStats`)
 - `App/frontend/src/services/breakoutSurgeInsights.ts` (new, Phase 1 —
   cohort stats + `isHighlight()`; `buildWhyTags()` currently unused since
   the why-expand panel was dropped in v3, kept for possible Phase 2 reuse)
@@ -222,3 +260,19 @@ scanner.
 row background) and v6 (MagicRS dot/text colored by sign instead of zone,
 table-only — see above). Everything else about it, including
 `FloatingHScrollbar.tsx`, is still used as-is, read-only.
+
+**Phase 2 Tier A additions** — all additive/optional, shared files included:
+- `App/frontend/src/stores/vaniStore.ts` — new optional
+  `VaNiScanCohortStats` type + `VaNiScanContext.cohortStats?` field
+- `App/frontend/src/components/domain/ScanVaNiPublisher.tsx` — new optional
+  `cohortStats` prop, forwarded into the store
+- `App/frontend/src/hooks/useVaNiChat.ts` — new optional `cohort_stats`
+  field on `VaNiAskRequest`
+- `App/frontend/src/components/domain/VaNiChatPanel.tsx` — forwards
+  `scanContext.cohortStats` as `cohort_stats` on `scanner.read_results` asks
+- `App/backend/pipeline2_api.py` — new optional `VaNiAskRequest.cohort_stats`,
+  passed through to `assemble_scanner_context`
+- `App/backend/lib/vani_assemblers.py` — `assemble_scanner_context()` gains
+  `cohort_stats` param; `format_scanner_user_message()` uses the true count
+  + appends a full-cohort-facts block when present; cache-context `'v'`
+  bumped 2→3

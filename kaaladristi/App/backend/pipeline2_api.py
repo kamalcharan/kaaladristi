@@ -264,6 +264,11 @@ class VaNiAskRequest(BaseModel):
     data_date: Optional[str] = None     # trade date of the data (not calendar date)
     timeframe: Optional[str] = None     # daily | weekly | monthly
     exchange: Optional[str] = None      # combined | NSE | BSE
+    # Tier A (scannerenhancement.md) — precomputed facts over the FULL
+    # result set (not the capped `rows` sample above): real VaNi highlight
+    # count, % accelerating, % on real volume, leading industry. Optional;
+    # pages that don't send it get the old sample-derived narration.
+    cohort_stats: Optional[dict] = None
 
 
 # Dependency order for the 'all' backfill — DERIVED from the daily run's own
@@ -4886,6 +4891,7 @@ def vani_ask(req: VaNiAskRequest):
                 timeframe=req.timeframe or 'daily',
                 exchange=req.exchange or 'combined',
                 total_count=req.total_count,
+                cohort_stats=req.cohort_stats,
             )
             if not ctx:
                 return {

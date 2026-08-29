@@ -11,7 +11,7 @@
  */
 
 import { useEffect } from 'react';
-import { useVaNiStore, type VaNiScanRow } from '@/stores/vaniStore';
+import { useVaNiStore, type VaNiScanRow, type VaNiScanCohortStats } from '@/stores/vaniStore';
 import { zoneLabel, flowLabel } from '@/constants/signalScale';
 import { displaySymbol } from '@/lib/symbolUtils';
 import type { ScanStock, ScanDefinition } from '@/types';
@@ -40,6 +40,7 @@ export default function ScanVaNiPublisher({
   exchange,
   stocks,
   isLoading = false,
+  cohortStats = null,
 }: {
   preset: ScanDefinition;
   timeframe: string;
@@ -48,6 +49,10 @@ export default function ScanVaNiPublisher({
   /** While the scan query is in flight, no context is published — an
    *  unsettled list must never be narrated as "today's results". */
   isLoading?: boolean;
+  /** Tier A cohort facts (see VaNiScanCohortStats) — computed over the full
+   *  unfiltered result set, independent of `stocks` (the filtered view).
+   *  Omit to keep the old sample-derived narration for this page. */
+  cohortStats?: VaNiScanCohortStats | null;
 }) {
   const setScanContext = useVaNiStore((s) => s.setScanContext);
   const clearScanContext = useVaNiStore((s) => s.clearScanContext);
@@ -65,9 +70,10 @@ export default function ScanVaNiPublisher({
       exchange,
       totalCount: stocks.length,
       rows: toVaNiScanRows(stocks, hideVani),
+      cohortStats: hideVani ? null : cohortStats,
     });
     return () => clearScanContext();
-  }, [preset.id, preset.name, preset.vani_rule, timeframe, exchange, stocks, isLoading, setScanContext, clearScanContext]);
+  }, [preset.id, preset.name, preset.vani_rule, timeframe, exchange, stocks, isLoading, cohortStats, setScanContext, clearScanContext]);
 
   return null;
 }
