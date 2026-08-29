@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cold Outbound Skills — Presentation</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --cream: #f6efdf;
+    --cream-dark: #ebe1c9;
+    --ink: #2a2420;
+    --ink-soft: #5a4e44;
+    --ink-mute: #8a7c70;
+    --accent: #a8652e;
+    --accent-dark: #7e4818;
+    --green: #3d6b4a;
+    --line: #d4c7a8;
+    --highlight: #f4de9a;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; overflow: hidden; }
+  body {
+    background: var(--cream);
+    color: var(--ink);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-size: 24px;
+    line-height: 1.55;
+  }
+
+  .slides { height: 100vh; overflow: hidden; position: relative; }
+  .slide {
+    position: absolute;
+    inset: 0;
+    padding: 6vh 8vw;
+    display: none;
+    flex-direction: column;
+    justify-content: center;
+    animation: fade 0.4s ease;
+  }
+  .slide.active { display: flex; }
+  @keyframes fade {
+    from { opacity: 0; transform: translateY(12px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  h1, h2, h3 {
+    font-family: 'Cormorant Garamond', Georgia, serif;
+    font-weight: 600;
+    color: var(--ink);
+    letter-spacing: -0.01em;
+  }
+  h1 { font-size: 96px; line-height: 1; }
+  h2 { font-size: 64px; line-height: 1.05; margin-bottom: 24px; }
+  h3 { font-size: 42px; line-height: 1.1; margin-bottom: 16px; }
+  p  { max-width: 1100px; }
+  p + p { margin-top: 16px; }
+
+  em.s { font-style: italic; color: var(--accent-dark); }
+  strong.e { color: var(--accent-dark); font-weight: 600; }
+  code { font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 0.85em; color: var(--accent-dark); background: var(--cream-dark); padding: 2px 8px; border-radius: 4px; }
+
+  .subtitle {
+    font-family: 'Cormorant Garamond', Georgia, serif;
+    font-style: italic;
+    font-size: 34px;
+    color: var(--ink-soft);
+    margin-top: 8px;
+  }
+  .meta {
+    position: absolute;
+    bottom: 32px;
+    left: 8vw;
+    color: var(--ink-mute);
+    font-size: 14px;
+    font-family: 'Inter', sans-serif;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .slide-num {
+    position: absolute;
+    bottom: 32px;
+    right: 8vw;
+    color: var(--ink-mute);
+    font-size: 14px;
+    font-family: 'Inter', sans-serif;
+  }
+
+  /* Title slide */
+  .title-slide { text-align: left; }
+  .title-slide h1 { font-size: 108px; }
+  .title-slide .subtitle { font-size: 42px; margin-top: 24px; max-width: 900px; }
+  .title-slide .line { height: 3px; background: var(--accent); width: 120px; margin: 40px 0 32px; }
+
+  /* Flow diagram */
+  .flow {
+    font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+    font-size: 19px;
+    line-height: 1.7;
+    color: var(--ink);
+    white-space: pre;
+    background: var(--cream-dark);
+    border-left: 4px solid var(--accent);
+    padding: 32px 40px;
+    border-radius: 0 8px 8px 0;
+    overflow-x: auto;
+    max-width: 1200px;
+  }
+
+  /* Track slide */
+  .track-header {
+    display: flex;
+    align-items: baseline;
+    gap: 24px;
+    margin-bottom: 32px;
+  }
+  .track-header .num {
+    font-family: 'Cormorant Garamond', Georgia, serif;
+    font-weight: 700;
+    font-size: 120px;
+    color: var(--accent);
+    line-height: 1;
+  }
+  .track-header .label {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 56px;
+    font-weight: 600;
+  }
+  .track-header .count {
+    font-family: 'Inter', sans-serif;
+    font-size: 22px;
+    color: var(--ink-mute);
+    margin-left: auto;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+  .skill-list { display: grid; grid-template-columns: 1fr 1fr; gap: 20px 40px; max-width: 1300px; }
+  .skill-item { padding: 14px 0; border-top: 1px solid var(--line); }
+  .skill-item .name {
+    font-family: ui-monospace, monospace;
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--accent-dark);
+  }
+  .skill-item .desc {
+    font-size: 18px;
+    color: var(--ink-soft);
+    margin-top: 4px;
+  }
+
+  /* Comparison / two-col slide */
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 64px; margin-top: 32px; }
+  .col h3 { margin-bottom: 20px; }
+  .col ul { list-style: none; }
+  .col li { padding: 10px 0; border-bottom: 1px solid var(--line); font-size: 22px; color: var(--ink-soft); }
+  .col li::before { content: '—  '; color: var(--accent); font-weight: 700; }
+
+  /* Big quote / key insight */
+  .insight {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 64px;
+    line-height: 1.1;
+    font-weight: 400;
+    max-width: 1400px;
+    color: var(--ink);
+  }
+  .insight .k { color: var(--accent-dark); font-style: italic; }
+
+  /* Key points list */
+  .key-points { margin-top: 32px; }
+  .key-points li {
+    list-style: none;
+    font-size: 26px;
+    padding: 20px 0;
+    border-bottom: 1px solid var(--line);
+    color: var(--ink);
+    display: flex;
+    align-items: baseline;
+    gap: 24px;
+  }
+  .key-points li::before {
+    content: counter(step, decimal-leading-zero);
+    counter-increment: step;
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 36px;
+    font-weight: 600;
+    color: var(--accent);
+    min-width: 60px;
+  }
+  .key-points { counter-reset: step; }
+
+  /* Command/code block */
+  .cmd {
+    background: var(--cream-dark);
+    border-left: 4px solid var(--accent);
+    padding: 24px 32px;
+    border-radius: 0 6px 6px 0;
+    font-family: ui-monospace, monospace;
+    font-size: 22px;
+    color: var(--ink);
+    margin-top: 28px;
+    max-width: 1100px;
+  }
+  .cmd .p { color: var(--accent-dark); }
+
+  /* Bullet intro */
+  .intro ul { list-style: none; margin-top: 28px; }
+  .intro li { font-size: 28px; padding: 12px 0; color: var(--ink-soft); }
+  .intro li strong { color: var(--ink); font-weight: 600; }
+
+  /* Progress bar */
+  .progress {
+    position: fixed;
+    top: 0; left: 0;
+    height: 3px;
+    background: var(--accent);
+    transition: width 0.3s ease;
+    z-index: 100;
+  }
+
+  /* Controls hint */
+  .hint {
+    position: fixed;
+    bottom: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 12px;
+    color: var(--ink-mute);
+    font-family: 'Inter', sans-serif;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+  .hint.show { opacity: 1; }
+</style>
+</head>
+<body>
+
+<div class="progress" id="progress"></div>
+<div class="hint" id="hint">← →  arrow keys to navigate  ·  f for fullscreen</div>
+
+<div class="slides" id="deck">
+
+<!-- 1. Title -->
+<section class="slide active title-slide">
+  <h1>Cold Outbound<br>Skills</h1>
+  <div class="line"></div>
+  <div class="subtitle">An AI-native, end-to-end cold email system.<br>28 skills. One guided flow. Zero copy-paste from ChatGPT.</div>
+  <div class="meta">A walkthrough</div>
+  <div class="slide-num">1</div>
+</section>
+
+<!-- 2. The problem -->
+<section class="slide">
+  <h2>The problem with cold email tooling</h2>
+  <p class="insight">You need <em class="k">a dozen tools</em> and a project manager's brain to run one campaign.</p>
+  <div class="two-col">
+    <div class="col">
+      <h3>What you need</h3>
+      <ul>
+        <li>Domains + inboxes</li>
+        <li>A real ICP</li>
+        <li>Lead lists (multiple sources)</li>
+        <li>List qualification</li>
+        <li>Good copy</li>
+        <li>Deliverability monitoring</li>
+        <li>Reply measurement</li>
+        <li>A weekly rhythm</li>
+      </ul>
+    </div>
+    <div class="col">
+      <h3>What you get from most tools</h3>
+      <ul>
+        <li>One of those, maybe two</li>
+        <li>A dashboard</li>
+        <li>An invoice</li>
+      </ul>
+    </div>
+  </div>
+  <div class="meta">the problem</div>
+  <div class="slide-num">2</div>
+</section>
+
+<!-- 3. The answer -->
+<section class="slide">
+  <h2>This repo is all of it, connected.</h2>
+  <p class="insight">28 Claude Code skills. Every one <em class="k">knows the next one</em>.</p>
+  <p style="margin-top:40px; font-size: 28px; color: var(--ink-soft); max-width: 1200px;">
+    You invoke one command. It orchestrates ICP onboarding, lead-magnet brainstorm, campaign strategy, copywriting, and upload. Every step hands off to the next with a specific recommendation.
+  </p>
+  <div class="cmd"><span class="p">$</span> /cold-email-kickoff</div>
+  <div class="meta">the answer</div>
+  <div class="slide-num">3</div>
+</section>
+
+<!-- 4. The full flow -->
+<section class="slide">
+  <h2>The full linear flow</h2>
+  <div class="flow">/cold-email-kickoff                     ← single entry point
+    ↓
+/icp-onboarding                         ← scrapes website + interview
+    ↓
+/lead-magnet-brainstorm                 ← pick the free offer
+    ↓
+/campaign-strategy                      ← 15-25 campaign angles
+    ↓
+/zapmail-domain-setup-public            ← (if no infra)
+/smartlead-inbox-manager                ← configure warmup / signatures / tags
+    ↓                                       ~ 2 week wait ~
+/prospeo  |  /disco-like  |  /google-maps  |  /blitz  |  /competitor-engagers
+    ↑ each one runs /icp-prompt-builder as a required qualification step
+    ↓
+/list-quality-scorecard                 ← grade the list A+ to F
+    ↓
+/campaign-copywriting                   ← stepwise: direction → subject → body → yaml
+    ↓
+/smartlead-campaign-upload-public       ← DRAFT only. You hit Start in the UI.
+    ↓                                       ~ 21 day wait ~
+/positive-reply-scoring                 ← measure
+    ↓
+/experiment-design                      ← iterate
+
+Ongoing:  /cold-email-weekly-rhythm</div>
+  <div class="meta">the flow</div>
+  <div class="slide-num">4</div>
+</section>
+
+<!-- 5. Track 1 -->
+<section class="slide">
+  <div class="track-header">
+    <span class="num">1</span>
+    <span class="label">Strategy</span>
+    <span class="count">5 skills · before you send anything</span>
+  </div>
+  <div class="skill-list">
+    <div class="skill-item">
+      <div class="name">/cold-email-kickoff</div>
+      <div class="desc">Single "start here" orchestrator. Asks infra status, then runs ICP + magnet + strategy.</div>
+    </div>
+    <div class="skill-item">
+      <div class="name">/icp-onboarding</div>
+      <div class="desc">Scrapes your website first, proposes an ICP anchor, then interviews you to sharpen it.</div>
+    </div>
+    <div class="skill-item">
+      <div class="name">/lead-magnet-brainstorm</div>
+      <div class="desc">10-archetype library + 4-criterion rubric → top 2-3 free offers to lead with.</div>
+    </div>
+    <div class="skill-item">
+      <div class="name">/campaign-strategy</div>
+      <div class="desc">15-25 campaign ideas, broad → niche, each with AI personalization + value prop.</div>
+    </div>
+    <div class="skill-item">
+      <div class="name">/campaign-copywriting</div>
+      <div class="desc">4-step conversational copy flow → markdown preview + variants.yaml for upload.</div>
+    </div>
+  </div>
+  <div class="meta">track 1</div>
+  <div class="slide-num">5</div>
+</section>
+
+<!-- 6. Track 2 -->
+<section class="slide">
+  <div class="track-header">
+    <span class="num">2</span>
+    <span class="label">Infrastructure</span>
+    <span class="count">4 skills · domains, inboxes, deliverability</span>
+  </div>
+  <div class="skill-list">
+    <div class="skill-item">
+      <div class="name">/zapmail-domain-setup-public</div>
+      <div class="desc">Dynadot purchase → Zapmail provisioning → platform export. .com / .co defaults.</div>
+    </div>
+    <div class="skill-item">
+      <div class="name">/smartlead-inbox-manager</div>
+      <div class="desc">Bulk warmup config, signature template (name / title / company / address), active vs insurance tags.</div>
+    </div>
+    <div class="skill-item">
+      <div class="name">/email-deliverability-audit</div>
+      <div class="desc">SPF / DKIM / DMARC checks, the 1% rule, optional real spam placement test.</div>
+    </div>
+    <div class="skill-item">
+      <div class="name">/deliverability-incident-response</div>
+      <div class="desc">Triage playbook when things break — 5 incident types, fix-time estimates, recovery steps.</div>
+    </div>
+  </div>
+  <div class="meta">track 2</div>
+  <div class="slide-num">6</div>
+</section>
+
+<!-- 7. Track 3 -->
+<section class="slide">
+  <div class="track-header">
+    <span class="num">3</span>
+    <span class="label">List building</span>
+    <span class="count">8 skills · find and qualify</span>
+  </div>
+  <div class="skill-list">
+    <div class="skill-item">
+      <div class="name">/prospeo-full-export</div>
+      <div class="desc">Title-first paginated export, 25K+ searches supported.</div>
+    </div>
+    <div class="skill-item">
+      <div class="name">/prospeo-search-api</div>
+      <div class="desc">Reference skill for Prospeo filter syntax.</div>
+    </div>
+    <div class="skill-item">
+      <div class="name">/blitz-list-builder</div>
+      <div class="desc">Domain-first: "find owners at these 5,000 companies."</div>
+    </div>
+    <div class="skill-item">
+      <div class="name">/google-maps-list-builder</div>
+      <div class="desc">Local SMB scraping: restaurants, clinics, gyms, contractors, etc.</div>
+    </div>
+    <div class="skill-item">
+      <div class="name">/disco-like</div>
+      <div class="desc">Lookalike discovery via 65M-domain database (seed domains or natural-language ICP).</div>
+    </div>
+    <div class="skill-item">
+      <div class="name">/competitor-engagers</div>
+      <div class="desc">LinkedIn post commenters + reactors on competitor pages.</div>
+    </div>
+    <div class="skill-item">
+      <div class="name">/icp-prompt-builder</div>
+      <div class="desc">Required qualification step invoked inside every list-building skill above.</div>
+    </div>
+    <div class="skill-item">
+      <div class="name">/list-quality-scorecard</div>
+      <div class="desc">8-dimension grade A+ to F. Don't upload a C-grade list.</div>
+    </div>
+  </div>
+  <div class="meta">track 3</div>
+  <div class="slide-num">7</div>
+</section>
+
+<!-- 8. Track 4 -->
+<section class="slide">
+  <div class="track-header">
+    <span class="num">4</span>
+    <span class="label">Copy &amp; send</span>
+    <span class="count">4 skills · writing and delivering</span>
+  </div>
+  <div class="skill-list">
+    <div class="skill-item">
+      <div class="name">/cold-email-starter-kit</div>
+      <div class="desc">14-step deep tutorial — the manual path for learners.</div>
+    </div>
+    <div class="skill-item">
+      <div class="name">/spam-word-checker</div>
+      <div class="desc">Auto-triggers on every copy draft. Banned words, deliverability red flags.</div>
+    </div>
+    <div class="skill-item">
+      <div class="name">/smartlead-spintax</div>
+      <div class="desc">Adds Smartlead-compatible spintax variations for deliverability.</div>
+    </div>
+    <div class="skill-item">
+      <div class="name">/smartlead-campaign-upload-public</div>
+      <div class="desc">Upload leads + variants.yaml to Smartlead. Always DRAFT. You hit Start manually in the UI.</div>
+    </div>
+  </div>
+  <p style="margin-top:48px; max-width: 1200px; color: var(--ink-soft); font-size: 22px;">
+    <strong class="e">/smartlead-api</strong> and <strong class="e">/smartlead-spintax</strong> sit alongside as references. The repo never auto-activates a live send. Every launch goes through your finger on the Start button.
+  </p>
+  <div class="meta">track 4</div>
+  <div class="slide-num">8</div>
+</section>
+
+<!-- 9. Track 5 -->
+<section class="slide">
+  <div class="track-header">
+    <span class="num">5</span>
+    <span class="label">Iterate &amp; automate</span>
+    <span class="count">6 skills · measure and scale</span>
+  </div>
+  <div class="skill-list">
+    <div class="skill-item">
+      <div class="name">/positive-reply-scoring</div>
+      <div class="desc">Classifies replies into 11 buckets. Computes positive reply rate — the north-star metric.</div>
+    </div>
+    <div class="skill-item">
+      <div class="name">/experiment-design</div>
+      <div class="desc">Single-variable experiment framework with confidence weighting + minimum sample sizes.</div>
+    </div>
+    <div class="skill-item">
+      <div class="name">/auto-research-public</div>
+      <div class="desc">Autonomous 8-phase campaign launcher. Target domain → live Smartlead DRAFT in ~20 min.</div>
+    </div>
+    <div class="skill-item">
+      <div class="name">/personalization-subagent-pattern</div>
+      <div class="desc">Reusable approval-loop pattern. Task-tool only. Never an external API key.</div>
+    </div>
+    <div class="skill-item">
+      <div class="name">/deliverability-test-public</div>
+      <div class="desc">Compares reply + bounce rates across Gmail / Outlook / SMTP.</div>
+    </div>
+    <div class="skill-item">
+      <div class="name">/cold-email-weekly-rhythm</div>
+      <div class="desc">Monday audit · Wednesday reply sweep · Friday retrospectives · monthly spam test. The ritual.</div>
+    </div>
+  </div>
+  <div class="meta">track 5</div>
+  <div class="slide-num">9</div>
+</section>
+
+<!-- 10. Key Innovations -->
+<section class="slide">
+  <h2>What makes it different</h2>
+  <ol class="key-points">
+    <li><span><strong class="e">One entry point.</strong>  <span style="color:var(--ink-soft)">/cold-email-kickoff asks your infra status and orchestrates the first 3 skills.</span></span></li>
+    <li><span><strong class="e">ICP qualification is required.</strong>  <span style="color:var(--ink-soft)">Every list-building skill calls /icp-prompt-builder. No more wasted enrichment spend on bad fits.</span></span></li>
+    <li><span><strong class="e">Copy has a schema.</strong>  <span style="color:var(--ink-soft)">/campaign-copywriting emits variants.yaml. /smartlead-campaign-upload-public reads it. No copy-paste.</span></span></li>
+    <li><span><strong class="e">Uploads are always DRAFT.</strong>  <span style="color:var(--ink-soft)">The script never auto-activates. You review in the Smartlead UI and hit Start.</span></span></li>
+    <li><span><strong class="e">Every skill knows the next.</strong>  <span style="color:var(--ink-soft)">Each SKILL.md ends with "What to do next." No "I ran this, now what?"</span></span></li>
+    <li><span><strong class="e">Weekly rhythm is part of the kit.</strong>  <span style="color:var(--ink-soft)">The difference between hobbyist and top 1% isn't tooling — it's showing up on schedule.</span></span></li>
+  </ol>
+  <div class="meta">innovations</div>
+  <div class="slide-num">10</div>
+</section>
+
+<!-- 11. The 1% Rule -->
+<section class="slide">
+  <p class="insight">
+    <em class="k">One number</em> separates a campaign worth running<br>from one that's burning your domains.
+  </p>
+  <p class="insight" style="margin-top: 40px; font-size: 48px;">
+    Overall reply rate, after 200 sends, must be <strong class="e">≥ 1%</strong>.
+  </p>
+  <p style="margin-top: 32px; color: var(--ink-soft); font-size: 24px; max-width: 1100px;">
+    Below that: your copy, list, or deliverability is broken. The audit enforces it. The incident-response playbook triages it. The weekly rhythm catches it before it compounds.
+  </p>
+  <div class="meta">the 1% rule</div>
+  <div class="slide-num">11</div>
+</section>
+
+<!-- 12. Getting started -->
+<section class="slide">
+  <h2>How to get started</h2>
+  <div class="intro">
+    <ul>
+      <li><strong>1.</strong> Clone the repo.</li>
+      <li><strong>2.</strong> Copy <code>.env.example</code> to <code>.env</code> and fill in the keys you have.<br>
+          <span style="font-size: 22px; color: var(--ink-mute);">&nbsp;&nbsp;&nbsp;&nbsp;Minimum: Smartlead + Prospeo + Dynadot + Zapmail.</span></li>
+      <li><strong>3.</strong> Invoke <code>/cold-email-kickoff</code> from Claude Code.</li>
+      <li><strong>4.</strong> Follow its menu. Every step recommends the next.</li>
+    </ul>
+  </div>
+  <div class="cmd">
+    <span class="p">$</span> git clone &lt;this-repo&gt; ~/cold-outbound-skills<br>
+    <span class="p">$</span> cd ~/cold-outbound-skills &amp;&amp; cp .env.example .env<br>
+    <span class="p">$</span> claude-code<br>
+    <span style="color: var(--ink-mute);">&gt;</span> /cold-email-kickoff
+  </div>
+  <div class="meta">getting started</div>
+  <div class="slide-num">12</div>
+</section>
+
+<!-- 13. Closing -->
+<section class="slide" style="justify-content: center; text-align: left;">
+  <p class="insight" style="font-size: 80px;">
+    Stop cobbling together tools.<br>
+    <em class="k">Clone the skills.</em>
+  </p>
+  <p style="margin-top: 40px; font-family: ui-monospace, monospace; font-size: 22px; color: var(--ink-soft);">
+    github.com/growthenginenowoslawski/coldoutboundskills
+  </p>
+  <div class="meta">— fin —</div>
+  <div class="slide-num">13</div>
+</section>
+
+</div>
+
+<script>
+  const slides = document.querySelectorAll('.slide');
+  const progress = document.getElementById('progress');
+  const hint = document.getElementById('hint');
+  let current = 0;
+
+  function show(i) {
+    slides.forEach((s, idx) => s.classList.toggle('active', idx === i));
+    progress.style.width = `${((i + 1) / slides.length) * 100}%`;
+  }
+
+  function next() { if (current < slides.length - 1) { current++; show(current); } }
+  function prev() { if (current > 0) { current--; show(current); } }
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown' || e.key === 'n') { e.preventDefault(); next(); }
+    else if (e.key === 'ArrowLeft' || e.key === 'PageUp' || e.key === 'p') { e.preventDefault(); prev(); }
+    else if (e.key === 'Home') { current = 0; show(current); }
+    else if (e.key === 'End') { current = slides.length - 1; show(current); }
+    else if (e.key === 'f') { if (!document.fullscreenElement) document.documentElement.requestFullscreen(); else document.exitFullscreen(); }
+  });
+
+  document.addEventListener('click', next);
+
+  // Show hint briefly on load
+  setTimeout(() => hint.classList.add('show'), 500);
+  setTimeout(() => hint.classList.remove('show'), 5000);
+
+  show(0);
+</script>
+
+</body>
+</html>

@@ -1,0 +1,79 @@
+# .worktreeinclude
+# Untracked/gitignored files to copy into new git worktrees (incl. isolated
+# subagent worktrees). Uses .gitignore pattern syntax. A file is copied only if
+# it is BOTH gitignored AND matches a pattern here; tracked files are never
+# touched, and a pattern that matches nothing is a harmless no-op. Safe to
+# commit: this lists which paths to carry over, not the secrets themselves.
+#
+# Deliberately NOT a copy of .gitignore: we want the small, irreplaceable local
+# state (secrets, local data, deploy links) and NOT node_modules, build caches,
+# or virtualenvs (huge, regenerable, and venvs break when moved to a new path).
+#
+# File patterns are depth-anchored on purpose: "/.env" + "*/.env" + "apps/*/.env"
+# rather than a bare ".env", so matching can't descend into node_modules/, dist/,
+# build/ or venv/ (a bare ".env" would also copy venv/.../certifi/cacert.pem).
+
+# ── Environment & secrets (root, one level down, and apps/packages workspaces) ─
+/.env
+/.env.*
+/*.env
+/.dev.vars
+/.dev.vars.*
+*/.env
+*/.env.*
+*/*.env
+*/.dev.vars
+*/.dev.vars.*
+apps/*/.env
+apps/*/.env.*
+apps/*/.dev.vars
+apps/*/.dev.vars.*
+packages/*/.env
+packages/*/.env.*
+packages/*/.dev.vars
+packages/*/.dev.vars.*
+# ...but never the committed templates, even if a repo gitignores them:
+!*.example
+!*.sample
+!*.template
+!*.dist
+
+# ── Cloudflare / Wrangler + deploy-tool state ────────────────────────────
+# Directory names (matched at any depth) — this intentionally catches nested
+# workers like apps/api/.wrangler/ and worker/.wrangler/. These hold local D1 /
+# KV / R2 data, so carrying them preserves your local dev database.
+.wrangler/
+.vercel/
+.alchemy/
+.sst/
+
+# ── Local databases (root + one level; bounded so we don't pull deps' fixtures) ─
+/*.db
+/*.sqlite
+/*.sqlite3
+/*.db-shm
+/*.db-wal
+*/*.db
+*/*.sqlite
+*/*.sqlite3
+
+# ── Local credentials, certificates & tokens (root + one level) ──────────
+/*.pem
+/*.key
+/*-tokens.json
+/*-credentials.json
+/service-account*.json
+/gha-creds-*.json
+/.npmrc
+*/*-tokens.json
+*/*-credentials.json
+*/service-account*.json
+
+# ── Machine-local agent / editor config (may hold per-machine keys) ──────
+/.mcp.json
+/.cursor/mcp.json
+.claude/settings.local.json
+
+# ── Generated type stubs (so a fresh worktree typechecks before first build) ─
+next-env.d.ts
+expo-env.d.ts
