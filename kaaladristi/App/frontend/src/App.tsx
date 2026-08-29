@@ -22,6 +22,7 @@ import { EquityVisualPulsePage } from '@/components/domain/VisualPulse/equity';
 import { IntradayPage } from '@/components/domain/Intraday';
 import ScanView from '@/views/ScanView';
 import MyBookmarksPage from '@/views/MyBookmarksPage';
+import BreakoutSurgeStudio from '@/views/BreakoutSurgeStudio';
 import ManipulationWatchView from '@/views/ManipulationWatchView';
 import IndustryTransitionView from '@/views/IndustryTransitionView';
 import DataPipelinePage from '@/pages/DataPipeline';
@@ -131,6 +132,8 @@ function AppRoutes() {
           <Route path="/scanner" element={<ScanView />} />
           <Route path="/bookmarks" element={<MyBookmarksPage />} />
           <Route path="/scanner/:presetId" element={<ScanView />} />
+          {/* Direct-URL-only preview — intentionally not in Sidebar nav (see docs/claude/breakout-surge-vani-poa.md) */}
+          <Route path="/scanner-preview/breakout-surge" element={<BreakoutSurgeStudio />} />
           <Route path="/manipulation-watch" element={<ManipulationWatchView />} />
           <Route path="/industry-transition" element={<IndustryTransitionView />} />
           <Route path="/settings" element={<SettingsView />} />
