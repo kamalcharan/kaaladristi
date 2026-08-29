@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import VaNiFeedback from './VaNi/VaNiFeedback';
@@ -16,6 +16,25 @@ interface VaNiInsightProps {
    * generation. Off by default so every other usage renders plain text.
    */
   highlightChips?: boolean;
+  /**
+   * Truncate the body to `collapsedHeight`px with a fade + a "Read full VaNi
+   * analysis" toggle, expanding to the full text on click. Promoted out of
+   * ChartView.tsx, which hand-rolled this exact wrapper locally — now any
+   * caller gets it for free instead of re-implementing it per page. Off by
+   * default so every other usage (Dashboard/Panchang/Breadth cards) is
+   * unaffected.
+   */
+  collapsible?: boolean;
+  /** Collapsed height in px. Only used when `collapsible` is true. */
+  collapsedHeight?: number;
+  /**
+   * Color the bottom fade-out fades TO — must match whatever's actually
+   * behind this card (the page background in most uses). Only used when
+   * `collapsible` is true.
+   */
+  fadeTo?: string;
+  /** Shows a small "⚡ cached" badge in the header — promoted out of RuleInsightCard.tsx. */
+  cached?: boolean;
 }
 
 // Heuristic chip highlighter — see highlightChips prop.
@@ -65,8 +84,15 @@ function renderWithChips(text: string): React.ReactNode[] {
   return out;
 }
 
-export default function VaNiInsight({ insight, isLoading, className, logId, highlightChips }: VaNiInsightProps) {
+export default function VaNiInsight({
+  insight, isLoading, className, logId, highlightChips,
+  collapsible, collapsedHeight = 130, fadeTo = 'var(--bg)', cached,
+}: VaNiInsightProps) {
+  const [expanded, setExpanded] = useState(false);
   if (!isLoading && !insight) return null;
+
+  const showToggle = collapsible && !isLoading && !!insight;
+  const collapsed = collapsible && !expanded;
 
   return (
     // Distinct "AI voice" treatment (owner decision 2026-07-05): a soft
@@ -86,6 +112,7 @@ export default function VaNiInsight({ insight, isLoading, className, logId, high
           VaNi
         </span>
         <span className="text-[8px] text-muted tracking-wide">· वाणी</span>
+        {cached && <span className="ml-auto text-[10px] text-muted">⚡ cached</span>}
       </div>
 
       {/* Body */}
@@ -96,9 +123,28 @@ export default function VaNiInsight({ insight, isLoading, className, logId, high
         </div>
       ) : (
         <>
-          <p className="text-[11px] text-[var(--text-secondary)] leading-relaxed">
-            {highlightChips && insight ? renderWithChips(insight) : insight}
-          </p>
+          <div
+            className={collapsible ? 'relative overflow-hidden' : undefined}
+            style={collapsed ? { maxHeight: collapsedHeight } : undefined}
+          >
+            <p className="text-[11px] text-[var(--text-secondary)] leading-relaxed">
+              {highlightChips && insight ? renderWithChips(insight) : insight}
+            </p>
+            {collapsed && (
+              <div
+                className="absolute inset-x-0 bottom-0 h-10 pointer-events-none"
+                style={{ background: `linear-gradient(transparent, ${fadeTo})` }}
+              />
+            )}
+          </div>
+          {showToggle && (
+            <button
+              onClick={() => setExpanded((e) => !e)}
+              className="mt-1 text-[10px] font-mono text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
+            >
+              {expanded ? '▴ Collapse' : '▾ Read full VaNi analysis'}
+            </button>
+          )}
           {logId && <VaNiFeedback logId={logId} />}
         </>
       )}

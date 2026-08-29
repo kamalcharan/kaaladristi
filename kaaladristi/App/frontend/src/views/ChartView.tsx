@@ -205,8 +205,8 @@ export default function ChartView() {
   };
   const [overlayDrawerOpen, setOverlayDrawerOpen] = useState(false);
   // Study reorg (2026-07-12): decision-band prose collapsed by default;
-  // Member-Of pills demoted to a closed accordion.
-  const [readExpanded, setReadExpanded] = useState(false);
+  // Member-Of pills demoted to a closed accordion. (Collapse/expand itself
+  // now lives inside VaNiInsight's `collapsible` prop, not here.)
   // Stock DeepDive tabs: Analysis | Chart & Replay | Thesis. Deep-linkable via
   // ?tab= so bookmarks / positions / scanners can land straight on Thesis.
   const tabParam = searchParams.get('tab');
@@ -1073,20 +1073,7 @@ export default function ChartView() {
                       <span className="text-muted"> — {snapshot.corrState.tagline}</span>
                     </div>
                   )}
-                  <div className="relative overflow-hidden" style={!readExpanded ? { maxHeight: 130 } : undefined}>
-                    <VaNiInsight insight={aiData?.insight} isLoading={aiLoading} highlightChips className="mt-0" />
-                    {!readExpanded && !aiLoading && (
-                      <div className="absolute inset-x-0 bottom-0 h-10 pointer-events-none" style={{ background: 'linear-gradient(transparent, var(--bg))' }} />
-                    )}
-                  </div>
-                  {!aiLoading && aiData?.insight && (
-                    <button
-                      onClick={() => setReadExpanded((e) => !e)}
-                      className="mt-1 text-[10px] font-mono text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
-                    >
-                      {readExpanded ? '▴ Collapse' : '▾ Read full VaNi analysis'}
-                    </button>
-                  )}
+                  <VaNiInsight insight={aiData?.insight} isLoading={aiLoading} highlightChips collapsible collapsedHeight={130} className="mt-0" />
                 </div>
               )}
             </div>
