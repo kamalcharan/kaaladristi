@@ -324,6 +324,31 @@ scanner.
       precedent to match, but it does **not** truncate anywhere; this is a
       new pattern for the product, not copied from elsewhere, worth knowing
       if `VaNiInsight.tsx`'s own long responses get the same complaint later.
+    **Reverted (v10) — `VaNiReadPanel` deleted entirely.** Owner's question
+    cut straight through v8/v9: "we already have VaNi space, intents are
+    opening the right drawer — why so many kinds of UX... they can come in
+    the same space right?" Correct call, and it undoes v8/v9's whole
+    premise. `VaNiReadPanel` was a second, parallel rendering surface —
+    its own loading state, its own response text, its own feedback buttons,
+    its own follow-up buttons — duplicating what `VaNiChatPanel.tsx` (the
+    one real, working VaNi surface, reached via `Layout.tsx`'s global "Ask
+    VaNi" pill on every route) already does correctly. The actual, narrower
+    problem this whole VaNi thread was solving — the drawer having nothing
+    real to answer from on this page — was already fixed back in v7's
+    `ScanVaNiPublisher` wiring (publishes `scanContext` + `cohortStats` to
+    `vaniStore.ts`) and v7's Tier A backend work (real full-cohort facts
+    reach `scanner.read_results`'s prompt). Once `scanContext` is published,
+    `VaNiChatPanel.tsx`'s own filter
+    (`!i.intentId.startsWith('scanner.') || !!scanContext`) already surfaces
+    `scanner.explain_preset` / `scanner.read_results` in the SAME drawer
+    every other page uses — feedback, follow-ups ("also ask"), everything,
+    for free, no page-specific code. `VaNiReadPanel` and its imports
+    (`useVaNiAsk`, `toVaNiScanRows`, `useVaNiStore`, `VaNiFeedback`) are
+    removed from `BreakoutSurgeStudio.tsx`; `ScanVaNiPublisher` (the real
+    fix) stays exactly as it was. Net effect: this page now behaves
+    identically to every other scanner page for VaNi — same entry point,
+    same drawer, same intents, same feedback — which is the correct,
+    boring, consistent answer, not a new pattern.
   - **Tier B (real backend work, own timeline):** "up from N yesterday",
     "new today", "sustaining N sessions" — needs the scheduled job +
     membership table `scannerenhancement.md` already designed. Ship without
@@ -390,3 +415,12 @@ plus reusing (not modifying) two existing components:
   rendered as-is
 - `useVaNiStore().openWithIntent` / `.toggle()` — used to route the two
   follow-up buttons into the existing global panel, no store changes needed
+
+**v10: `VaNiReadPanel` deleted.** `BreakoutSurgeStudio.tsx` reverted to
+Phase 2 Tier A's actual shape — `ScanVaNiPublisher` only, no on-page VaNi
+UI. The now-unused imports (`useEffect`'s `useRef` sibling, `useVaNiAsk`,
+`toVaNiScanRows`, `useVaNiStore`, `VaNiFeedback`, `ScanDefinition`,
+`CohortStats`) were removed with it. `useVaNiChat.ts`'s `total_count?`
+type-gap fix and `scanEngine.ts`'s universe-leak fix (both found as
+byproducts of building v8/v9) are unaffected — genuinely separate, real
+fixes kept as-is.
