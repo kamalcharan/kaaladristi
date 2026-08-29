@@ -1,3 +1,4 @@
+import type { StoryJourney } from './storyEvents';
 import { from } from './postgrest';
 import type { MarketSymbol, TimeRange } from '@/types';
 import { subMonths, subYears, format } from 'date-fns';
@@ -122,6 +123,17 @@ export interface IndicatorRow {
   ret_5d?: number | null;
   ret_22d?: number | null;
   ret_66d?: number | null;
+  // Weinstein stage + the Golden Line event trio. Equity-only (km_index_eod has
+  // none of them), and optional so resampled W/M bars still type.
+  stage?: string | null;
+  stage_confirmed?: string | null;
+  gl_event?: string | null;
+  gl_days_above?: number | null;
+  pct_from_gl?: number | null;
+  // Short Magic RS — the only Magic RS weekly and monthly can carry.
+  magic_rs_short?: number | null;
+  magic_rs_short_ma?: number | null;
+  magic_rs_short_zone?: string | null;
 }
 
 export async function fetchIndicatorData(
@@ -198,7 +210,13 @@ export async function fetchEquityTimeframeById(
 ): Promise<IndicatorRow[]> {
   const table = tf === 'weekly' ? 'km_equity_weekly' : 'km_equity_monthly';
   const { data, error } = await from(table)
-    .select('trade_date,open,high,low,close,volume,avg_deliv_pct')
+    // Short Magic RS (migration 081) — weekly and monthly carry ONLY this.
+    // Long MagicRS needs 145 bars, which 145 weeks is ~3 years and 145 months
+    // is ~12 years; the deepest monthly history is 80 bars, so the long series
+    // is structurally impossible there (the migration-169 lesson). Selecting
+    // OHLCV alone is why the Magic RS pane went blank on W/M.
+    .select('trade_date,open,high,low,close,volume,avg_deliv_pct,'
+      + 'magic_rs_short,magic_rs_short_ma,magic_rs_short_zone')
     .eq('equity_id', equityId)
     .order('trade_date', { ascending: true })
     .limit(3000)
@@ -327,7 +345,7 @@ export async function fetchEquityEodById(
   // Equity-only extras (NOT in shared INDICATOR_COLS — km_index_eod lacks the
   // delivery columns): the Study cockpit's stat strip + Delivery-vs-Traded
   // widget read these.
-  const EQUITY_EXTRA_COLS = 'pct_chng,value_cr,delivery_pct,delivery_qty,deliv_value_cr,ret_5d,ret_22d,ret_66d,w52_high,w52_low,delivery_surge_x,stage,is_vani_s2,is_vani_smart,is_vani_breakout,is_vani_surge,is_vani_distrib,is_vani_weakness,is_vani_oversold';
+  const EQUITY_EXTRA_COLS = 'pct_chng,value_cr,delivery_pct,delivery_qty,deliv_value_cr,ret_5d,ret_22d,ret_66d,w52_high,w52_low,delivery_surge_x,stage,stage_confirmed,gl_event,gl_days_above,pct_from_gl,is_vani_s2,is_vani_smart,is_vani_breakout,is_vani_surge,is_vani_distrib,is_vani_weakness,is_vani_oversold';
   const cols = `trade_date,open,high,low,close,volume,${INDICATOR_COLS},${EQUITY_EXTRA_COLS}`;
 
   let query = from('km_equity_eod')
@@ -344,4 +362,34 @@ export async function fetchEquityEodById(
   if (error) throw new Error(error.message);
 
   return (data ?? []) as IndicatorRow[];
+}
+
+/** The stock's Waking Giants journey row, if it is on one.
+ *
+ *  km_wg_journeys is a JOURNEY table — one row per stock describing a
+ *  multi-year sleep/wake arc — so unlike everything else the chart reads it is
+ *  not a time series. It contributes two dated markers (the turn and the wake)
+ *  to the story timeline. Most stocks are on no journey and get null. */
+export async function fetchStockJourney(
+  equityId: number,
+): Promise<StoryJourney | null> {
+  const { data, error } = await from('km_wg_journeys')
+    .select('state,wake_date,wake_close,turn_date,turn_close,base_years')
+    .eq('equity_id', equityId)
+    .is('is_current', 'true')
+    .limit(1)
+    .execute();
+  // Absent table (migration 177 not applied) or no journey are the same answer
+  // to the caller: this stock has nothing to mark.
+  if (error || !Array.isArray(data) || data.length === 0) return null;
+  const r = data[0] as Record<string, unknown>;
+  const num = (v: unknown) => (v == null ? null : Number(v));
+  return {
+    state: (r.state as string) ?? null,
+    wake_date: (r.wake_date as string) ?? null,
+    wake_close: num(r.wake_close),
+    turn_date: (r.turn_date as string) ?? null,
+    turn_close: num(r.turn_close),
+    base_years: num(r.base_years),
+  };
 }

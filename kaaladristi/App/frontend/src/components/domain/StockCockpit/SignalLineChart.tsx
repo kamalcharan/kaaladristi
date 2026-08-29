@@ -63,7 +63,11 @@ export default function SignalLineChart({
             strokeWidth={1.5}
             strokeDasharray={sr.dashed ? '4 3' : undefined}
             dot={false}
-            connectNulls
+            // NOT connectNulls. It bridges an interior gap with a straight
+            // segment that is indistinguishable from real data — on a stock
+            // whose indicator history has holes, that draws a trend nobody
+            // computed. A break in the line is the honest rendering of a break
+            // in the series.
           />
         ))}
       </LineChart>

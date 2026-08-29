@@ -9,6 +9,7 @@
  * Also fetches stock-level data for inline industry expansion.
  */
 
+import { ACTIVE_UNIVERSE_CAP } from './equityUniverse';
 import { from } from './postgrest';
 import type {
   IndustryEodRow,
@@ -528,13 +529,13 @@ export async function fetchIndustryTransitionStocks(): Promise<IndustryTransitio
     from('km_equity_symbols')
       .select('id,symbol,company_name,industry,exchange,is_active')
       .is('is_active', 'true')
-      .limit(8000)
+      .limit(ACTIVE_UNIVERSE_CAP)
       .execute(),
 
     from('km_equity_eod')
       .select('equity_id,close,pct_chng,rsi_14,magic_rs,magic_rs_zone,flow_type,accum_distrib,rvol,sniper_inst,rss_value,rss_spread,sma_150,volume_divergence_flag')
       .eq('trade_date', transition.latestDate)
-      .limit(8000)
+      .limit(ACTIVE_UNIVERSE_CAP)
       .execute(),
   ]);
 

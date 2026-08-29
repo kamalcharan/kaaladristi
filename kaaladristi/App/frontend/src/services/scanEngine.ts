@@ -15,6 +15,7 @@
  *   "Conditions Favorable"   — scan match
  */
 
+import { ACTIVE_UNIVERSE_CAP } from './equityUniverse';
 import { from } from './postgrest';
 import type {
   ScanStock,
@@ -164,13 +165,42 @@ export function fetchScanReadyDate(): Promise<string | null> {
   // fire the query before the first resolved.
   const value = (async (): Promise<string | null> => {
     try {
+      // The date the matview PREDOMINANTLY holds, not the newest one in it.
+      //
+      // MAX() looked right until two arms disagreed about what "latest" means.
+      // Every preset resolves it as MAX(trade_date) WHERE ema_20 IS NOT NULL,
+      // except flower_pot_burst, whose fpb_base carries no ema_20 filter and so
+      // takes the raw max. On 2026-08-28 the refresh landed after the bars were
+      // inserted and before ema_20 was written: 14 presets stamped 08-27, FPB
+      // stamped 08-28, and MAX() handed every scanner a date that 14 of them
+      // had no rows for. The GL tabs read km_equity_eod at that date directly
+      // and came back empty while 17 breakouts sat on 08-27.
+      //
+      // The mode cannot be moved by one arm out of fifteen. It is also the
+      // honest definition of the question being asked — "which session is the
+      // scan layer actually showing?" — where MAX() answers "which session has
+      // any row at all", a far weaker claim.
       const { data, error } = await from('km_scan_results')
         .select('trade_date')
         .order('trade_date', { ascending: false })
-        .limit(1)
+        .limit(4000)
         .execute();
       if (error || !Array.isArray(data) || data.length === 0) return null;
-      return (data[0] as { trade_date?: string }).trade_date ?? null;
+      const tally = new Map<string, number>();
+      for (const r of data as { trade_date?: string }[]) {
+        const d = r.trade_date;
+        if (d) tally.set(d, (tally.get(d) ?? 0) + 1);
+      }
+      let best: string | null = null;
+      let bestN = 0;
+      for (const [d, n] of tally) {
+        // Ties break to the OLDER date: a tie means the matview is split, and
+        // the older side is the one guaranteed to be fully computed.
+        if (n > bestN || (n === bestN && best !== null && d < best)) {
+          best = d; bestN = n;
+        }
+      }
+      return best;
     } catch {
       return null;
     }
@@ -2033,7 +2063,10 @@ async function fetchFlowerPotBurstClientSide(exchangeFilter: ExchangeFilter): Pr
     .select('id,symbol,company_name,industry,exchange,isin,mcap_cr')
     .is('is_active', 'true')
     .eq('exchange', 'NSE')
-    .limit(8000)
+    // NSE-only is 3,797 rows today, well inside the old 8,000 — but sizing it
+    // off the shared cap means the next expansion cannot make this the bug the
+    // full-universe fetches just were.
+    .limit(ACTIVE_UNIVERSE_CAP)
     .execute();
   const syms = (symRes.data ?? []) as EquitySymbolRow[];
   const symMap = new Map<number, EquitySymbolRow>();
@@ -2224,6 +2257,21 @@ const MATVIEW_BUNDLE_PRESETS: ReadonlySet<string> = new Set([
   'conviction_flow',
 ]);
 
+// Price-action presets served by the matview from migration 195. Kept separate
+// from MATVIEW_BUNDLE_PRESETS because these six still have a working direct
+// fetcher behind them: migration 195 is applied by hand, so a frontend deployed
+// first would otherwise blank six tabs until someone ran it. executeScan tries
+// the matview and falls back, and the fallback logs, so a permanently-unapplied
+// migration is noisy rather than invisible.
+const MATVIEW_PRICE_ACTION_PRESETS: ReadonlySet<string> = new Set([
+  'weekly_movers',
+  'monthly_movers',
+  'weekly_decliners',
+  'monthly_decliners',
+  'breakout_surge',
+  'breakdown_watch',
+]);
+
 // Waking Giants v4 (migration 177) — the three journey-state presets read the
 // km_wg_journeys state table (the km_fpb_active pattern on a multi-year
 // clock), NOT the scan matview. Map: preset id → journey state.
@@ -2312,6 +2360,7 @@ function wgJourneyRowToScanStock(r: any): ScanStock {
     turn_close: num(r.turn_close),
     pct_from_turn: num(r.pct_from_turn),
     gl_event: r.gl_event ?? null,
+    gl_event_date: r.gl_event_date ?? null,
     gl_days_above: num(r.gl_days_above),
     // The three clocks as one glyph. align_score weights them 1/2/3, so the
     // score alone cannot say WHICH turned — and the daily, the fastest and
@@ -2321,6 +2370,97 @@ function wgJourneyRowToScanStock(r: any): ScanStock {
       .join(''),
     gl_dist_pct: num(r.gl_dist_pct),
   };
+}
+
+/** The EOD columns km_wg_journeys does not carry.
+ *  km_wg_journeys is a JOURNEY table — it stores where a stock is in its
+ *  sleep/wake arc, plus the handful of display fields migration 193 copied
+ *  in. Everything else the scan table can render (RSI, flow, the avg-amount
+ *  family, delivery surge, the return columns, the sniper pair) lives only in
+ *  km_equity_eod, so those cells rendered blank on every Discovery tab.
+ *
+ *  Read-time join rather than more copied columns: the tabs are capped at a
+ *  few dozen rows, the lookup is on km_equity_eod's (trade_date, equity_id)
+ *  key, and a copy would need a migration, a backfill, and a nightly rewrite
+ *  that can go stale against the row it was copied from. */
+const WG_EOD_COLS = [
+  'equity_id', 'trade_date',
+  'open', 'high', 'low',
+  'rss_value', 'rss_spread', 'rsi_14', 'flow_type', 'supertrend_dir',
+  'sma_50', 'sma_150', 'sma_200', 'ema_20', 'atr_14',
+  'w52_high', 'w52_low', 'lifetime_high',
+  'avg_amt_5d', 'avg_amt_22d', 'avg_amt_66d', 'delivery_surge_x',
+  'sniper_inst', 'sniper_hot', 'accum_distrib',
+  'volume_divergence_flag', 'deliv_value_cr',
+  'stage', 'score_5d', 'score_22d',
+  'ret_5d', 'ret_22d', 'ret_66d', 'pct_below_52w_high',
+].join(',');
+
+/** Fill the EOD-only fields on already-mapped journey rows, in place.
+ *  Keyed on (equity_id, trade_date) and NOT on the latest session: a journey
+ *  whose stock stopped trading keeps its own last bar date, and joining those
+ *  rows to today would silently show another day's numbers. */
+async function enrichWgFromEod(rows: ScanStock[]): Promise<ScanStock[]> {
+  if (rows.length === 0) return rows;
+  const ids = Array.from(new Set(rows.map((r) => r.equity_id)));
+  const dates = Array.from(
+    new Set(rows.map((r) => r.trade_date).filter((d): d is string => !!d)),
+  );
+  if (ids.length === 0 || dates.length === 0) return rows;
+
+  const { data, error } = await from('km_equity_eod')
+    .select(WG_EOD_COLS)
+    .in('equity_id', ids)
+    .in('trade_date', dates)
+    .limit(ids.length * dates.length)
+    .execute();
+  // Enrichment is additive — a failure here leaves the journey fields intact
+  // rather than emptying the tab.
+  if (error || !Array.isArray(data)) return rows;
+
+  const key = (eid: any, d: any) => `${eid}|${String(d).slice(0, 10)}`;
+  const byKey = new Map<string, any>();
+  for (const e of data as any[]) byKey.set(key(e.equity_id, e.trade_date), e);
+
+  for (const r of rows) {
+    const e = byKey.get(key(r.equity_id, r.trade_date));
+    if (!e) continue;
+    const ema20 = toNum(e.ema_20);
+    const atr14 = toNum(e.atr_14);
+    r.open = toNum(e.open); r.high = toNum(e.high); r.low = toNum(e.low);
+    r.rss_value = toNum(e.rss_value); r.rss_spread = toNum(e.rss_spread);
+    r.rsi_14 = toNum(e.rsi_14);
+    r.flow_type = e.flow_type ?? null;
+    r.supertrend_dir = e.supertrend_dir ?? null;
+    r.sma_50 = toNum(e.sma_50); r.sma_150 = toNum(e.sma_150); r.sma_200 = toNum(e.sma_200);
+    r.ema_20 = ema20; r.atr_14 = atr14;
+    r.w52_high = toNum(e.w52_high); r.w52_low = toNum(e.w52_low);
+    r.lifetime_high = toNum(e.lifetime_high);
+    r.avg_amt_5d = toNum(e.avg_amt_5d);
+    r.avg_amt_22d = toNum(e.avg_amt_22d);
+    r.avg_amt_66d = toNum(e.avg_amt_66d);
+    r.delivery_surge_x = toNum(e.delivery_surge_x);
+    r.sniper_inst = toNum(e.sniper_inst); r.sniper_hot = toNum(e.sniper_hot);
+    r.accum_distrib = e.accum_distrib ?? null;
+    r.volume_divergence_flag = e.volume_divergence_flag ?? null;
+    r.deliv_value_cr = toNum(e.deliv_value_cr);
+    r.stage = e.stage ?? null;
+    r.ret_5d = toNum(e.ret_5d);
+    r.ret_22d = toNum(e.ret_22d);
+    r.ret_66d = toNum(e.ret_66d);
+    r.pctBelow52wHigh = toNum(e.pct_below_52w_high);
+    // Migration 193 copied these onto the journey row; the EOD row is the
+    // source they were copied from, so it wins when present.
+    r.score_5d = toNum(e.score_5d) ?? r.score_5d ?? null;
+    r.score_22d = toNum(e.score_22d) ?? r.score_22d ?? null;
+    // The reward pair is derived, so it only becomes computable now that
+    // ema_20 and atr_14 have arrived.
+    r.reward = ema20 && atr14 ? (ema20 + atr14) - Number(r.close) : null;
+    r.rewardPct = ema20 && atr14 && atr14 > 0
+      ? ((ema20 + atr14) - Number(r.close)) / atr14
+      : null;
+  }
+  return rows;
 }
 
 /** One journey-state tab = one indexed read of km_wg_journeys. */
@@ -2353,7 +2493,7 @@ async function fetchWgJourneys(presetId: string, exchangeFilter: ExchangeFilter)
   if (error || !Array.isArray(data)) {
     throw new Error(`km_wg_journeys unavailable for ${presetId} — run migration 177 + compute_wg_journeys.py`);
   }
-  return (data as any[]).map(wgJourneyRowToScanStock);
+  return enrichWgFromEod((data as any[]).map(wgJourneyRowToScanStock));
 }
 
 /** Counts for the three journey tabs (landing page). */
@@ -2401,6 +2541,17 @@ function scanRowToScanStock(r: any): ScanStock {
     open: null, high: null, low: null,
     pct_chng: num(r.pct_chng),
     rsi_14: num(r.rsi_14),
+    // Migration 195 — the price-action columns. Absent from the row until that
+    // migration runs, in which case they read undefined and num() gives null,
+    // which is what the column showed before anyway.
+    prev_week_close: num(r.prev_week_close),
+    pct_wtd: num(r.pct_wtd),
+    prev_month_close: num(r.prev_month_close),
+    pct_mtd: num(r.pct_mtd),
+    breakout_level: num(r.breakout_level),
+    pct_from_breakout: num(r.pct_from_breakout),
+    breakdown_level: num(r.breakdown_level),
+    pct_from_breakdown: num(r.pct_from_breakdown),
     magic_rs: num(r.magic_rs),
     magic_rs_zone: r.magic_rs_zone ?? null,
     flow_type: r.flow_type ?? null,
@@ -2522,8 +2673,12 @@ async function fetchAllScanCountsFromMatview(
   try {
     const { data, error } = await from('km_scan_results')
       .select('preset_id,exchange,isin,vani_flag,trade_date')
-      .in('preset_id', [...MATVIEW_BUNDLE_PRESETS])
-      .limit(2000)
+      .in('preset_id', [...MATVIEW_BUNDLE_PRESETS, ...MATVIEW_PRICE_ACTION_PRESETS])
+      // Raised from 2000 with the six price-action presets (migration 195):
+      // their caps alone are 4 x 500 + breakout/breakdown, so 2000 would have
+      // silently truncated the counts — the badge would read low with no error.
+      // Ceiling across every arm is ~3.4k; 10k leaves room for another preset.
+      .limit(10000)
       .execute();
     if (error || !Array.isArray(data)) {
       console.warn('[scan] matview counts unavailable, using bundle fallback', error);
@@ -2575,6 +2730,24 @@ export async function executeScan(
   if (scanId === 'stage_3_watch')        return fetchStage3Watch(exchangeFilter);
   if (scanId === 'vani_exit_watch')      return fetchVaNiExitWatch(exchangeFilter);
   // breakout_surge_daily merged into breakout_surge (kept as alias for stale links)
+  // The six price-action presets moved onto km_scan_results in migration 195.
+  // Each hand-written SELECT below is now a FALLBACK, not the path: a fetcher
+  // that names its own columns is exactly what left the Columns picker showing
+  // dashes, because fieldAvailability offers columns per category while each
+  // fetcher chose its own subset. A matview row carries all 81.
+  if (timeframe === 'daily' && MATVIEW_PRICE_ACTION_PRESETS.has(scanId)) {
+    const rows = await fetchFromScanMatview(scanId, exchangeFilter);
+    // Empty is the migration-195-not-applied signal: the arm emits no rows at
+    // all until the view is recreated, and these six carry hundreds on a normal
+    // day. On a genuinely empty day the fallback runs and returns the same
+    // empty answer, so the only cost of guessing wrong is one extra query.
+    if (rows && rows.length > 0) return rows;
+    // All six are universe='NSE_ONLY', so a BSE filter is legitimately empty —
+    // the fallback would return empty too. Don't run it, and don't blame the
+    // migration for it.
+    if (exchangeFilter === 'BSE') return [];
+    console.warn(`[scan] ${scanId}: no km_scan_results rows — run migration 195 and REFRESH MATERIALIZED VIEW km_scan_results. Using the direct-query fallback.`);
+  }
   if (scanId === 'breakout_surge' || scanId === 'breakout_surge_daily') return fetchBreakoutSurge(exchangeFilter);
   if (scanId === 'weekly_movers')        return fetchPeriodMovers('weekly_movers', 'pct_wtd', 'up', exchangeFilter);
   if (scanId === 'monthly_movers')       return fetchPeriodMovers('monthly_movers', 'pct_mtd', 'up', exchangeFilter);
@@ -2844,7 +3017,7 @@ async function loadManipulationData(lookbackDays: number): Promise<ManipulationW
     from('km_equity_symbols')
       .select('id,symbol,company_name,industry,exchange,isin,is_active,mcap_cr')
       .is('is_active', 'true')
-      .limit(8000)
+      .limit(ACTIVE_UNIVERSE_CAP)
       .execute(),
 
     from('km_equity_eod')

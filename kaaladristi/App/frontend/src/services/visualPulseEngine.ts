@@ -495,7 +495,7 @@ export function detectDivergence(
         type: 'RegularBullish',
         barsAgo,
         freshness: getFreshness(barsAgo),
-        label: 'Price making lower lows while RSI holds higher lows — bullish reversal signal.',
+        label: 'Price making lower lows while RSI holds higher lows — momentum diverging from price.',
       };
     }
 
@@ -528,7 +528,7 @@ export function detectDivergence(
         type: 'RegularBearish',
         barsAgo,
         freshness: getFreshness(barsAgo),
-        label: 'Price making higher highs while RSI declines — bearish reversal signal.',
+        label: 'Price making higher highs while RSI declines — momentum diverging from price.',
       };
     }
 

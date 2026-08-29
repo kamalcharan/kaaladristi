@@ -221,11 +221,19 @@ export const ALL_FIELDS: Record<string, FieldConfig> = {
   gl_event: {
     key: 'gl_event',
     label: 'GL Event',
-    tooltip: 'BREAKOUT — the close crossed from at-or-below the Golden Line to above it on a session printing SVD or SBD. RETEST — the low reached the line while the close held above it, on an SVD/SBD session, after ten or more sessions holding the line.',
+    tooltip: 'BREAKOUT — the close crossed from at-or-below the Golden Line to above it, with an SVD or SBD printing within five days either side of the cross. RETEST — the low reached the line while the close held above it, again with a dot within five days, after ten or more sessions holding the line. On the Discovery tabs the mark stays for 30 sessions after the event, so read GL AGE next to it.',
     type: 'category',
     width: 96,
     colorFn: (val: any) =>
       val === 'BREAKOUT' ? 'var(--bull)' : val === 'RETEST' ? 'var(--accent)' : 'var(--text-faint)',
+  },
+
+  gl_event_date: {
+    key: 'gl_event_date',
+    label: 'GL AGE',
+    tooltip: 'Sessions since the Golden Line event in GL Event fired. The mark stays lit for 30 sessions, so this is what separates a breakout from yesterday from one six weeks old.',
+    type: 'date',
+    width: 88,
   },
 
   pct_from_gl: {

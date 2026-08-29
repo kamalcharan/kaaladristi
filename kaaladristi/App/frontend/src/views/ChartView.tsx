@@ -1,18 +1,19 @@
-import { useState, useMemo, useEffect, useRef } from 'react';
+import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { TrendingUp, TrendingDown, BarChart3, AlertCircle, RefreshCw, ArrowLeft } from 'lucide-react';
-import { fetchIndicatorDataById, fetchEquityEodById, fetchEquityTimeframeById, resampleRows, type EquityTimeframe } from '@/services/indicatorData';
+import { fetchIndicatorDataById, fetchEquityEodById, fetchEquityTimeframeById, resampleRows, type EquityTimeframe, fetchStockJourney, type IndicatorRow } from '@/services/indicatorData';
 import TradingChart from '@/components/charts/TradingChart';
 import VaNiInsight from '@/components/domain/VaNiInsight';
 import { useInstrumentInsight } from '@/hooks';
 import StatStrip from '@/components/domain/StockCockpit/StatStrip';
 import VerdictHero from '@/components/domain/StockCockpit/VerdictHero';
 import ThesisTab from '@/components/domain/StockCockpit/ThesisTab';
+import DataTab from '@/components/domain/StockCockpit/DataTab';
 import type { ThesisBar } from '@/services/thesis';
 import StoryMode from '@/components/domain/StockCockpit/StoryMode';
 import ScannerArrivalView from '@/components/domain/StockCockpit/ScannerArrival/ScannerArrivalView';
-import { buildStoryEvents, KIND_COLORS, type StoryEvent } from '@/services/storyEvents';
+import { buildStoryEvents, KIND_COLORS, type StoryEvent, type StoryKind } from '@/services/storyEvents';
 import { fetchSectorSeries } from '@/services/sectorSeries';
 import DeliveryVsTraded from '@/components/domain/StockCockpit/DeliveryVsTraded';
 import SectorMembershipCard from '@/components/domain/StockCockpit/SectorMembershipCard';
@@ -209,8 +210,11 @@ export default function ChartView() {
   // Stock DeepDive tabs: Analysis | Chart & Replay | Thesis. Deep-linkable via
   // ?tab= so bookmarks / positions / scanners can land straight on Thesis.
   const tabParam = searchParams.get('tab');
-  const [dvTab, setDvTab] = useState<'analysis' | 'chart' | 'thesis'>(
-    tabParam === 'thesis' ? 'thesis' : tabParam === 'chart' ? 'chart' : 'analysis',
+  const [dvTab, setDvTab] = useState<'analysis' | 'chart' | 'thesis' | 'data'>(
+    tabParam === 'thesis' ? 'thesis'
+      : tabParam === 'chart' ? 'chart'
+      : tabParam === 'data' ? 'data'
+      : 'analysis',
   );
   // Scanner arrival — when the URL carries ?setup=<preset> the user came
   // from a scanner (e.g. Stage 2 Leaders). We land on Chart & Replay tab
@@ -487,12 +491,62 @@ export default function ChartView() {
   const smNarrative = snapshot ? buildSmNarrative(snapshot) : '';
 
   // Magic RS widget data (same shape EquityVisualPulsePage builds)
-  const magicRsData = useMemo(
-    () => pulseBars.map((b) => ({ trade_date: b.trade_date, magic_rs: b.magic_rs, magic_ma: b.magic_ma, magic_rs_zone: b.magic_rs_zone })),
-    [pulseBars],
+  // The price chart's VISIBLE window — pan and zoom, not just the range picker.
+  // TradingChart has exposed onVisibleRangeChange all along and nothing was
+  // listening, so Magic RS matched the range but not the viewport: zooming into
+  // three months of price left the subchart showing all five years underneath
+  // it. lightweight-charts already syncs its own sub-panes this way; this gives
+  // the canvas pane the same feed.
+  const [visibleRange, setVisibleRange] = useState<{ from: string; to: string } | null>(null);
+  const handleVisibleRange = useCallback(
+    (from: string, to: string) =>
+      setVisibleRange((p) => (p && p.from === from && p.to === to ? p : { from, to })),
+    [],
   );
+
+  // Magic RS follows the CHART's rows, not pulseBars.
+  //
+  // pulseBars is a hard .limit(130). The price chart is range-driven — 1Y, 5Y,
+  // MAX — so the two panes sat one above the other showing different spans, and
+  // changing the chart range left Magic RS identical. An x-axis that does not
+  // move with the chart above it is not a subchart, it is a second unrelated
+  // picture. rows carries magic_rs / magic_ma / magic_rs_zone already
+  // (INDICATOR_COLS), so this costs no extra fetch.
+  // Weekly and monthly carry ONLY the short series. Long MagicRS is a 144-bar
+  // lookback — 144 weeks is ~3 years and 144 months is ~12, against a deepest
+  // monthly history of 80 bars — so it is structurally absent there, not
+  // missing. Falling back to the short series is what those timeframes have;
+  // the alternative is the blank pane the daily-only columns produced.
+  const usingShortRs = tf !== 'daily';
+  const magicRsData = useMemo(
+    () => (rows as unknown as IndicatorRow[]).map((b) => ({
+      trade_date: b.trade_date,
+      magic_rs: (usingShortRs ? b.magic_rs_short : b.magic_rs) ?? null,
+      magic_ma: (usingShortRs ? b.magic_rs_short_ma : b.magic_ma) ?? null,
+      magic_rs_zone: (usingShortRs ? b.magic_rs_short_zone : b.magic_rs_zone) ?? null,
+    })),
+    [rows, usingShortRs],
+  );
+  // Clipped to the visible window when the user has panned or zoomed; the full
+  // range until then. Dates, not indices — the two panes hold different arrays.
+  const magicRsVisible = useMemo(() => {
+    if (!visibleRange) return magicRsData;
+    const clipped = magicRsData.filter(
+      (b) => b.trade_date >= visibleRange.from && b.trade_date <= visibleRange.to,
+    );
+    return clipped.length > 1 ? clipped : magicRsData;
+  }, [magicRsData, visibleRange]);
+  // The scrubber indexes pulseBars; rows is a different length, so the active
+  // bar is matched by DATE rather than by position. Falls back to the latest
+  // bar, which is what an unscrubbed chart is showing anyway.
+  const magicRsActiveIdx = useMemo(() => {
+    const d = pulseBars[effectiveIdx]?.trade_date;
+    if (!d) return Math.max(0, magicRsData.length - 1);
+    const i = magicRsVisible.findIndex((x) => x.trade_date === d);
+    return i >= 0 ? i : Math.max(0, magicRsVisible.length - 1);
+  }, [pulseBars, effectiveIdx, magicRsVisible]);
   // Magic RS is a pipeline column vs CNX500 — null for many BSE/thin stocks.
-  const hasRsData = useMemo(() => pulseBars.some((b) => b.magic_rs != null), [pulseBars]);
+  const hasRsData = useMemo(() => magicRsData.some((b) => b.magic_rs != null), [magicRsData]);
 
   // ── Equity-specific computations ──
   const rsChange1d = useMemo(() => rsChangeLookback(pulseBars, effectiveIdx, 1), [pulseBars, effectiveIdx]);
@@ -544,9 +598,17 @@ export default function ChartView() {
   // score/magic_rs/flow columns (conviction · magic-RS flip · flow flip fire);
   // equity-only signals (stage/scan/big-money/sector) simply don't trigger when
   // their columns are absent.
+  // The Waking Giants journey — one row, two dated markers (turn and wake).
+  // Equity-only: indices are on no journey.
+  const { data: journey } = useQuery({
+    queryKey: ['stock-journey', numId],
+    queryFn: () => fetchStockJourney(numId),
+    enabled: isEquity && !!numId,
+    staleTime: 300_000,
+  });
   const storyEvents = useMemo(
-    () => ((isEquity || isIndex) && tf === 'daily' ? buildStoryEvents(rows, bigMoneyDates, sectorByDate) : []),
-    [isEquity, isIndex, tf, rows, bigMoneyDates, sectorByDate],
+    () => ((isEquity || isIndex) && tf === 'daily' ? buildStoryEvents(rows, bigMoneyDates, sectorByDate, journey) : []),
+    [isEquity, isIndex, tf, rows, bigMoneyDates, sectorByDate, journey],
   );
 
   /** Full editorial overlay bundle passed to TradingChart. Combines the
@@ -589,7 +651,10 @@ export default function ChartView() {
     );
     const storyPins: Array<{
       trade_date: string;
-      kind: 'flow' | 'conviction' | 'stage' | 'magic_rs' | 'big_money' | 'rs_breakaway' | 'fpb' | 'scan' | 'sector';
+      // StoryKind itself, not a copy of it. This list was written out by hand
+      // and then fell behind the real union the moment a kind was added --
+      // the same two-lists-never-compared shape as the scanner select lists.
+      kind: StoryKind;
       title: string;
       tone: 'bull' | 'bear' | 'neutral';
       price: number;
@@ -765,6 +830,7 @@ export default function ChartView() {
               benchmarkIndexId={isIndex && id ? Number(id) : null}
               benchmarkName={isIndex ? name : null}
               storyBubble={storyBubble}
+              onVisibleRangeChange={handleVisibleRange}
               onZoneClick={handleZoneClick}
             />
             {zoneExplain && (
@@ -828,15 +894,38 @@ export default function ChartView() {
       <div id="study-chart" style={{ scrollMarginTop: 118 }} className="grid grid-cols-1 lg:grid-cols-[7fr_3fr] gap-3 mb-3">
         <div className="min-w-0">{chartArea}</div>
         <div className="flex flex-col gap-3 min-w-0">
-          {snapshot && (hasRsData ? (
+          {!isLoading && !isError && rows.length > 0 && tf === 'daily' && (
+            <CockpitIndicatorPanels rows={rows} />
+          )}
+          {snapshot && (
+            <DivergenceCard
+              divergence={snapshot.divergence}
+              rsiHistory={rsiHistory}
+              priceHistory={priceHistory}
+            />
+          )}
+        </div>
+      </div>
+
+      {/* ═══ Magic RS — directly under the price chart, in the SAME grid
+          template so its width matches the chart exactly. Spanning the page
+          put it wider than the thing it explains, which is worse than the rail
+          it came from: the x-axis no longer lines up with anything. ═══ */}
+      <div className="grid grid-cols-1 lg:grid-cols-[7fr_3fr] gap-3 mb-3">
+        <div className="min-w-0">
+    {snapshot && (hasRsData ? (
             <SignalFlipCard
               title="Magic RS"
-              minHeight={180}
-              widget={<MagicRsSubchart data={magicRsData} activeIndex={effectiveIdx} benchmarkLabel="NIFTY 500" />}
+              widget={<MagicRsSubchart
+                  data={magicRsVisible}
+                  activeIndex={magicRsActiveIdx}
+                  benchmarkLabel="NIFTY 500"
+                  variant={usingShortRs ? 'short' : 'long'}
+                />}
               chart={
                 <SignalLineChart
                   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                  data={pulseBars as any}
+                  data={magicRsVisible as any}
                   series={[
                     { key: 'magic_rs', color: 'var(--gold, #d4a84b)', label: 'Magic RS' },
                     { key: 'magic_ma', color: 'var(--text-faint, #64748b)', label: 'MA', dashed: true },
@@ -851,18 +940,10 @@ export default function ChartView() {
               <div className="text-[10px] text-muted leading-snug">Not computed (RS vs NIFTY 500 needs a benchmark series — absent for many BSE/thin names).</div>
             </div>
           ))}
-          {!isLoading && !isError && rows.length > 0 && tf === 'daily' && (
-            <CockpitIndicatorPanels rows={rows} />
-          )}
-          {snapshot && (
-            <DivergenceCard
-              divergence={snapshot.divergence}
-              rsiHistory={rsiHistory}
-              priceHistory={priceHistory}
-            />
-          )}
         </div>
+        <div className="hidden lg:block" />
       </div>
+
       {pulseBars.length > 0 && (
         <div className="mt-1">
           <TimelineSlider
@@ -1029,8 +1110,10 @@ export default function ChartView() {
             Slice 3). SHARED by equity + index. Data/Results are placeholders. ═══ */}
         {(isEquity || isIndex) && !isLoading && rows.length > 0 && (
           <div className="flex items-center gap-1 mb-3 border-b border-kd-border">
-            {([['analysis', 'Analysis'], ['chart', 'Chart & Replay'], ['thesis', 'Thesis']] as const)
-              .filter(([id]) => id !== 'thesis' || isEquity)
+            {([['analysis', 'Analysis'], ['chart', 'Chart & Replay'], ['thesis', 'Thesis'], ['data', 'Data']] as const)
+              // Thesis and Data are equity-only: both read km_equity_eod
+              // columns that km_index_eod does not carry.
+              .filter(([id]) => (id !== 'thesis' && id !== 'data') || isEquity)
               .map(([id, label]) => (
               <button
                 key={id}
@@ -1045,7 +1128,6 @@ export default function ChartView() {
                 {label}
               </button>
             ))}
-            <span className="px-3 py-2 text-sm text-[var(--text-faint)] cursor-default">Data · soon</span>
             <span className="px-3 py-2 text-sm text-[var(--text-faint)] cursor-default">Results · soon</span>
           </div>
         )}
@@ -1114,7 +1196,7 @@ export default function ChartView() {
                     </button>
                     {membershipOpen && (
                       <div className="px-1 pb-1">
-                        <SectorMembershipCard equityId={numId} />
+                        <SectorMembershipCard equityId={numId} exchange={equityPulse.meta?.exchange ?? null} />
                       </div>
                     )}
                   </div>
@@ -1283,12 +1365,18 @@ export default function ChartView() {
         {isEquity && dvTab === 'thesis' && !isLoading && rows.length > 0 && (
           <ThesisTab
             bars={rows as unknown as ThesisBar[]}
+            journey={journey}
             equityId={numId}
             name={name}
             currentClose={currentClose}
             autoOpenForm={wantPositionForm}
             onAutoOpened={() => setWantPositionForm(false)}
           />
+        )}
+
+        {/* ═══ Data — the raw record behind every other view. Equity-only. ═══ */}
+        {isEquity && dvTab === 'data' && !isLoading && rows.length > 0 && (
+          <DataTab equityId={numId} symbol={name} />
         )}
 
       </div>
@@ -1311,6 +1399,7 @@ export default function ChartView() {
           snapshot={snapshot}
           bigMoneyDates={bigMoneyDates}
           sectorByDate={sectorByDate}
+          journey={journey}
           breadthByDate={breadthByDate}
           mode={isIndex ? 'index' : 'equity'}
           breadthPct={breadthPct}

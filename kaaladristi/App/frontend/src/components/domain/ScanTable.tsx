@@ -125,7 +125,7 @@ const PRESET_COL_OVERRIDES: Partial<Record<string, string[]>> = {
     'symbol', 'close', 'pct_chng', 'base_years',
     'turn_date', 'turn_close', 'pct_from_turn',
     'wake_date', 'wake_close', 'pct_from_wake', 'journey_age_days',
-    'clocks', 'align_score', 'gl_dist_pct', 'gl_event',
+    'clocks', 'align_score', 'gl_dist_pct', 'gl_event', 'gl_event_date',
     'pct_from_3y_high', 'listing_age_years',
     'delivery_pct', 'magic_rs', 'mcap_cr',
   ],
@@ -133,7 +133,7 @@ const PRESET_COL_OVERRIDES: Partial<Record<string, string[]>> = {
     'symbol', 'close', 'pct_chng', 'clocks', 'align_score',
     'turn_date', 'turn_close', 'pct_from_turn',
     'wake_date', 'wake_close', 'pct_from_wake', 'journey_age_days',
-    'wg_resting', 'base_years', 'gl_dist_pct', 'gl_event', 'listing_age_years',
+    'wg_resting', 'base_years', 'gl_dist_pct', 'gl_event', 'gl_event_date', 'listing_age_years',
     'magic_rs', 'mcap_cr',
   ],
   // Stirring has no wake yet, so the TURN is the whole story here — a stock
@@ -142,7 +142,7 @@ const PRESET_COL_OVERRIDES: Partial<Record<string, string[]>> = {
   wg_stirring: [
     'symbol', 'close', 'pct_chng', 'gl_acc_days', 'base_years',
     'turn_date', 'turn_close', 'pct_from_turn',
-    'clocks', 'gl_dist_pct', 'gl_event',
+    'clocks', 'gl_dist_pct', 'gl_event', 'gl_event_date',
     'pct_from_3y_high', 'listing_age_years', 'delivery_pct', 'magic_rs', 'mcap_cr',
   ],
 }

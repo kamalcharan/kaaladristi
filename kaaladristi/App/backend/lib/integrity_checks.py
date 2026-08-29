@@ -404,49 +404,31 @@ def matview_served_presets() -> frozenset:
 #     floor applied upstream at final selection is CONFIRMED, not assumed.
 # A row with no measurable value at all is counted separately; folding it into
 # "below floor" would recreate the false positive this query exists to remove.
-_LIQUIDITY_SQL = """
-WITH latest AS (SELECT max(trade_date) AS d FROM km_equity_eod),
-row_amt AS (
-    SELECT r.preset_id,
-           CASE WHEN r.preset_id = ANY(%(wg)s) THEN (
-                    SELECT SUM(x.a)
-                    FROM km_equity_symbols tw
-                    JOIN LATERAL (
-                        SELECT AVG(v.value_cr) AS a FROM (
-                            SELECT e2.value_cr FROM km_equity_eod e2
-                            WHERE e2.equity_id = tw.id
-                              AND e2.trade_date <= (SELECT d FROM latest)
-                            ORDER BY e2.trade_date DESC LIMIT 22) v) x ON TRUE
-                    WHERE (s.isin IS NOT NULL AND tw.isin = s.isin) OR tw.id = s.id)
-                ELSE COALESCE(r.avg_amt_22d, e.avg_amt_22d)
-           END AS amt
-    FROM km_scan_results r
-    JOIN km_equity_symbols s ON s.id = r.equity_id
-    LEFT JOIN km_equity_eod e
-           ON e.equity_id = r.equity_id AND e.trade_date = (SELECT d FROM latest)
-)
-SELECT preset_id,
-       COUNT(*)                                              AS rows_n,
-       COUNT(*) FILTER (WHERE amt IS NOT NULL AND amt < %(floor)s) AS below_n,
-       COUNT(*) FILTER (WHERE amt IS NULL)                    AS unmeasured_n
-FROM row_amt
-GROUP BY preset_id
-"""
-
-
-def measure_liquidity(conn) -> dict:
-    """preset_id -> (rows, below_floor, unmeasured), each row scored on the
-    yardstick that preset's gate actually uses. Shared with
-    scripts/audit_scanner_contract.py so both report the same numbers."""
-    return {r[0]: (int(r[1]), int(r[2]), int(r[3]))
-            for r in _rows(conn, _LIQUIDITY_SQL,
-                           {'wg': WG_ADV_PRESETS, 'floor': MIN_AVG_AMT_22D_CR})}
+# The liquidity floor is GONE, and so is the check that measured it.
+#
+# Commit a24a8f9 reverted the Rs 1 Cr floor from the direct fetchers after
+# measuring it (Stage 2 Leaders 1,023 -> 414, VaNi-flagged 19 -> 6). Commit
+# d9398f5 then deleted MIN_AVG_AMT_22D_CR but left three references behind:
+# measure_liquidity() used it, check_scanner_contract() formatted it into a
+# finding, and scripts/audit_scanner_contract.py imported it.
+#
+# The import raised at module load, so the audit script has not run since. The
+# other two raised NameError the moment check_scanner_contract() called
+# measure_liquidity() -- which is the FIRST thing it does -- so the nightly
+# integrity_checks dimension has been dying on this every run.
+#
+# That is the guard meant to catch a preset serving columns it never populates,
+# which is exactly the bug migration 195 is fixing. It was blind for the whole
+# window in which that bug shipped. Removing the dead floor rather than
+# inventing a constant for it: the platform has no liquidity floor to report
+# rows as falling below.
 
 
 def check_scanner_contract(conn, run_date: date) -> list[Finding]:
     """Per matview preset: rendered columns exist and are populated, the
-    declared universe holds, the liquidity floor holds, and a declared
-    vani_rule actually produces flags."""
+    declared universe holds, and a declared vani_rule actually produces
+    flags. (The liquidity dimension is gone with the floor itself — see the
+    note above _LIQUIDITY_SQL's removal.)"""
     out: list[Finding] = []
 
     existing = {r[0] for r in _rows(conn, """
@@ -573,7 +555,6 @@ def check_scanner_contract(conn, run_date: date) -> list[Finding]:
                 detail={'preset': preset, 'all_null': dead, 'rows': int(total)}))
 
     # C2/C3/C4 — universe, liquidity, vani_rule, straight off the declared metadata
-    liq = measure_liquidity(conn)
     for preset, universe, vani_rule, rows_n, bse_n, vani_n in _rows(conn, """
         SELECT p.id, p.universe, p.vani_rule,
                (SELECT COUNT(*) FROM km_scan_results r WHERE r.preset_id = p.id),
@@ -590,14 +571,6 @@ def check_scanner_contract(conn, run_date: date) -> list[Finding]:
                 f'{preset} is declared {universe} in kd_scan_presets but returned {bse_n} BSE rows',
                 subject=preset, metric=bse_n, expected=0,
                 detail={'preset': preset, 'declared': universe, 'bse_rows': int(bse_n)}))
-        _, below_n, unmeasured_n = liq.get(preset, (rows_n, 0, 0))
-        if below_n:
-            out.append(Finding(
-                f'contract_liquidity_{preset}', 'invariant', 'warning',
-                f'{preset}: {below_n} of {rows_n} rows trade under Rs {MIN_AVG_AMT_22D_CR} Cr/day '
-                f'— below the platform liquidity floor',
-                subject=preset, metric=below_n, expected=0,
-                detail={'preset': preset, 'below_floor': int(below_n), 'rows': int(rows_n)}))
         if unmeasured_n:
             out.append(Finding(
                 f'contract_liquidity_unmeasured_{preset}', 'invariant', 'warning',

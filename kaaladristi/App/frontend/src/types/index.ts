@@ -622,6 +622,7 @@ export interface ScanStock {
   turn_close?: number | null;
   pct_from_turn?: number | null;
   gl_event?: string | null;
+  gl_event_date?: string | null;
   gl_days_above?: number | null;
   pct_from_gl?: number | null;
   clocks?: string | null;
