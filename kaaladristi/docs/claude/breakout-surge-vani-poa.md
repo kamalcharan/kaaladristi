@@ -2,6 +2,52 @@
 
 **Status:** Phase 0, Phase 1, and Phase 2 Tier A built. Phase 2 Tier B and
 Phase 3+ not started.
+
+## ⚠ Real bug found and fixed 2026-08-29: universe leak, NOT introduced by this preview
+
+`kaala-postgres` MCP (read-only, live prod DB) was used to verify the Phase
+2 Tier A work against real 2026-08-28 data, and surfaced a pre-existing bug
+in `scanEngine.ts`'s `fetchBreakoutSurge()` — the SAME fetcher the real
+production `/scanner/breakout_surge` page uses, so this was live before any
+of this preview-page work started, not something the preview introduced.
+
+**What was found:** `fetchBreakoutSurge()` never called `passesUniverse()`
+to enforce the preset's declared `NSE_ONLY` universe — unlike its sibling
+"direct query" fetchers (`fetchBreakdownWatch`, `fetchPeriodMovers`,
+`fetchGlEvents`), which all have this exact gate with a comment describing
+the identical failure mode found on `weekly_movers` on 2026-08-25 (139/500
+rows were BSE-only leakage). Verified live for 2026-08-28:
+- ISIN-deduped, `Combined` exchange tab: **386 rows** (275 NSE + 111 BSE)
+- `km_scan_results` matview (the source of the tab-count badge): **252**
+
+So the badge next to "Breakout Surge" and the actual rows rendered in the
+table under it have been showing two different numbers — the table included
+134 BSE-only stocks that don't belong in an NSE_ONLY-declared screener.
+**Fixed** in `scanEngine.ts` by adding the same `passesUniverse(sym.exchange,
+declaredUniverse)` gate its sibling fetchers already have.
+
+Separately verified: the VaNi Highlight count (15) reported in Phase 2 Tier
+A holds identically whether computed over the leaked 386-row cohort or the
+correct NSE-only 275-row one — none of the 15 highlighted rows were BSE
+duplicates, so the Tier A cohort-facts work above did not need correction.
+
+**Not yet resolved:** 275 (raw NSE, ISIN-deduped) vs. 252 (matview) is a
+smaller, second gap — likely an additional matview-side filter (mcap? an
+active-symbol flag? a different dedup rule?) not yet traced. Worth a follow-up.
+
+**Broader pattern flagged, not fixed here (scope discipline — this doc is
+Breakout Surge only):** grepping `scanEngine.ts` for `passesUniverse(sym.
+exchange` shows only 3 of ~10 direct-query fetchers call it
+(`fetchBreakdownWatch`, `fetchPeriodMovers`, `fetchGlEvents`).
+`fetchVolumeDrive`, `fetchStage2Leaders`, `fetchStage2Watch`,
+`fetchStage4Leaders`, `fetchStage3Watch`, `fetchVaNiExitWatch`,
+`fetchFlowerPotBurst`/`fetchFlowerPotBurstClientSide`, and `fetchWgJourneys`
+were not individually checked for whether their preset's declared universe
+actually needs the gate (some are `NSE_BSE`, no restriction needed) — but
+several (Stage family, VaNi Exit Watch, Flower Pot Burst, Waking Giants) are
+declared `NSE_ONLY` per `SCAN_PRESETS` and are worth auditing the same way.
+Flagging for the owner rather than fixing unilaterally across scanners this
+plan doesn't own.
 **Route:** `/scanner-preview/breakout-surge` — direct-URL only, intentionally
 **not** in `Sidebar.tsx` nav. Reachable by a logged-in user who types the URL;
 invisible otherwise. Do not add a nav entry until Phase 3 QA passes.
