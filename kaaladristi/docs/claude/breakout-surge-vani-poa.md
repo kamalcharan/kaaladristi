@@ -1,6 +1,7 @@
 # Breakout Surge — VaNi-Led Scanner Redesign (Preview)
 
-**Status:** Phase 0 (scaffolding) built. Phases 1-4 not started.
+**Status:** Phase 0 (scaffolding) and Phase 1 (structural UI) built. Phase 2
+(VaNi narration) and beyond not started.
 **Route:** `/scanner-preview/breakout-surge` — direct-URL only, intentionally
 **not** in `Sidebar.tsx` nav. Reachable by a logged-in user who types the URL;
 invisible otherwise. Do not add a nav entry until Phase 3 QA passes.
@@ -32,14 +33,19 @@ pattern here first is the point.
   `services/breakoutSurgeSpec.ts`. Renders real rows from `useScan()`, no
   cohort strip/VaNi/badges yet — just proves the real-data pipeline works
   end to end.
-- **Phase 1:** port the design canvas vision into real components — cohort
-  stat strip, VaNi Highlight tier (reusing the real `ScanCardWrapper` /
-  `VaniBadge` / `ScanSectionLabel` from `ScanCardShell.tsx`, not
-  reinventing them), watchlist/position badges (`useBookmarkStore`, already
-  globally available), Table/Cards toggle with genuinely curated mobile
-  fields, and the per-row inline "why" expand (the strongest idea from the
-  reference prototype `docs/claude/../VaNi_Scanner` walkthrough — cheaper
-  than a split-view or slide-over, no routing/state-architecture change).
+- **Phase 1 (done):** cohort stat strip, VaNi Highlight tier (reusing the
+  real `ScanCardWrapper` / `VaniBadge` / `ScanSectionLabel` from
+  `ScanCardShell.tsx`, not reinventing them), watchlist/position badges
+  (`useBookmarkStore`, already globally available), Table/Cards toggle, and
+  the per-row inline "why" expand (the strongest idea from the reference
+  prototype walkthrough — cheaper than a split-view or slide-over, no
+  routing/state-architecture change). `services/breakoutSurgeInsights.ts`
+  holds the cohort-stat math and `buildWhyTags()` — deterministic, no LLM
+  call yet; `buildWhyTags()` mirrors the same boolean logic
+  `backfill_vani_flags.py` uses for `is_vani_surge`/`is_vani_breakout`.
+  Mobile field curation for the Cards view (a genuinely trimmed field set,
+  not just the table restacked) is still owed — current Cards view shows
+  close/1D%/score only, not yet reviewed on a real phone.
 - **Phase 2 — stabilise VaNi, two tiers:**
   - **Tier A (no new backend):** cohort stats (% accelerating, % RVOL>3,
     leading industry, VaNi Highlight count) computed client-side from the
@@ -57,10 +63,11 @@ pattern here first is the point.
   each subsequent scanner should be faster once the field-spec pattern from
   Phase 0 is proven.
 
-## Files touched so far (Phase 0)
+## Files touched so far (Phase 0 + 1)
 
 - `App/frontend/src/views/BreakoutSurgeStudio.tsx` (new)
 - `App/frontend/src/services/breakoutSurgeSpec.ts` (new)
+- `App/frontend/src/services/breakoutSurgeInsights.ts` (new, Phase 1)
 - `App/frontend/src/App.tsx` (added the one route, added the one import)
 
 Nothing in `ScanTable.tsx`, `ScanFilterBar.tsx`, `ScanView.tsx`, or
