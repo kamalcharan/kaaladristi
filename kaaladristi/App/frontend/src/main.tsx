@@ -3,9 +3,13 @@ import ReactDOM from 'react-dom/client';
 import App from './App';
 import './styles/globals.css';
 import { initTheme } from '@/stores/themeStore';
+import { initAnalytics } from '@/lib/analytics';
 
 // Apply persisted theme + mode (dark/light/system) before React mounts — no flash.
 initTheme();
+
+// No-ops if VITE_POSTHOG_KEY isn't set (local dev, or any env without analytics configured).
+initAnalytics();
 
 // Service worker management.
 // A stale SW from a prior deployment can intercept /api/ and /db/ requests,

@@ -322,7 +322,7 @@ export default function ConfluenceDotGrid() {
                   boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
                 }}
               >
-                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700, color: '#e2e8f0', marginBottom: 6 }}>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 6 }}>
                   {tooltip.entry.trade_date}
                 </div>
                 {ROWS.map((row, i) => (

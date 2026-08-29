@@ -5,6 +5,7 @@ import type { LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/authStore';
 import { signOut } from '@/services/auth';
+import { trackEvent } from '@/lib/analytics';
 
 // ── Nav definition ──────────────────────────────────────────────────────────
 // Glyphs are Fraunces/Unicode characters, matching dashboard-LOCKED.html
@@ -120,11 +121,14 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
   };
 
   // ── A single nav row — shared by accordion (expanded) and icon-only modes ──
-  const renderItem = (item: NavItem) => (
+  // One instrumentation point covers every menu item, both sections, both
+  // collapsed and expanded rendering — nothing else needs to track this.
+  const renderItem = (item: NavItem, sectionHeading: string) => (
     <NavLink
       key={item.to}
       to={item.to}
       title={item.label}
+      onClick={() => trackEvent('nav_item_clicked', { label: item.label, path: item.to, section: sectionHeading })}
       style={({ isActive }) => ({
         position: 'relative',
         display: 'flex',
@@ -283,7 +287,7 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
           if (collapsed) {
             return (
               <div key={section.heading} style={{ marginTop: si > 0 ? '24px' : '0' }}>
-                {visibleItems.map(renderItem)}
+                {visibleItems.map(item => renderItem(item, section.heading))}
               </div>
             );
           }
@@ -292,7 +296,7 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
           if (section.flat) {
             return (
               <div key={section.heading} style={{ marginTop: si > 0 ? '18px' : '0' }}>
-                {visibleItems.map(renderItem)}
+                {visibleItems.map(item => renderItem(item, section.heading))}
               </div>
             );
           }
@@ -348,7 +352,7 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
               </button>
 
               {/* Group items */}
-              {isOpen && visibleItems.map(renderItem)}
+              {isOpen && visibleItems.map(item => renderItem(item, section.heading))}
             </div>
           );
         })}

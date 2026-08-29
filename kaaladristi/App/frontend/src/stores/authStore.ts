@@ -10,6 +10,7 @@ export function isAuthError(err: unknown): boolean {
   return /jwt|expired|unauthoriz|not authenticated|HTTP 401|\b401\b/i.test(msg);
 }
 import { useThemeStore, type ThemeId, type ThemeMode } from '@/stores/themeStore';
+import { identifyUser, resetAnalytics } from '@/lib/analytics';
 
 function applyProfileTheme(profile: KmProfile | null) {
   if (!profile) return
@@ -59,9 +60,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
             const profile = await getProfile();
             applyProfileTheme(profile)
             set({ profile, isAdmin: profile?.role === 'admin' });
+            if (profile) identifyUser(profile.id, { email: profile.email, role: profile.role });
           } catch { /* ignore */ }
         } else {
           set({ profile: null, isAdmin: false });
+          resetAnalytics();
         }
       });
 
@@ -113,6 +116,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
             isAdmin: profile?.role === 'admin',
             isLoading: false,
           });
+          if (profile) identifyUser(profile.id, { email: profile.email, role: profile.role });
         }
       } else {
         set({ isLoading: false });

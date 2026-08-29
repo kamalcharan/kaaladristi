@@ -35,6 +35,22 @@ export interface VaNiScanRow {
   vani: boolean;
 }
 
+/** Tier A (scannerenhancement.md) — precomputed facts over the FULL result
+ *  set, not the capped 25-row sample below. Fixes the documented "25-of-270
+ *  sample mismatch" narration failure: without this, scanner.read_results
+ *  can only guess aggregate facts (VaNi highlight count, % accelerating…)
+ *  from whatever happens to be in the visible sample. Optional — pages that
+ *  don't compute it (every scanner except this Breakout Surge preview, so
+ *  far) simply don't set it, and the backend falls back to the old
+ *  sample-derived count. */
+export interface VaNiScanCohortStats {
+  vaniHighlightCount: number;
+  acceleratingPct: number;
+  realVolumePct: number;
+  leadingIndustry: string | null;
+  leadingIndustryCount: number | null;
+}
+
 export interface VaNiScanContext {
   presetId: string;
   presetName: string;
@@ -42,6 +58,7 @@ export interface VaNiScanContext {
   exchange: string;
   totalCount: number;
   rows: VaNiScanRow[]; // capped at 25
+  cohortStats?: VaNiScanCohortStats | null;
 }
 
 interface VaNiState {

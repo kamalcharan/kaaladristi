@@ -4,6 +4,8 @@ import { useAuthStore, isAuthError } from '@/stores/authStore'
 import { useFrameworkStore } from '@/stores/frameworkStore'
 import { updateProfile, signOut } from '@/services/auth'
 import { resolveSpotlightIntent } from '@/services/spotlight'
+import { trackEvent } from '@/lib/analytics'
+import { errMessage as sharedErrMessage } from '@/lib/errorMessages'
 import { isValidIndianMobile, normalizeIndianMobile } from '@/lib/phone'
 import { PAID_TIERS } from '@/constants/frameworkConstants'
 import { getTemplateForICP } from '@/constants/frameworkTemplates'
@@ -591,10 +593,10 @@ function Screen3({ template, isFree: _isFree, onAccept, onBrowse, isCommitting, 
                 fontSize:12, color:'var(--text-muted)', lineHeight:1.6, flex:1 }}
                 dangerouslySetInnerHTML={{ __html: block.narration.replace(
                   /DristiQ's proprietary/g,
-                  "<strong style='color:#e8eaed'>DristiQ's proprietary</strong>"
+                  "<strong style='color:var(--text-primary)'>DristiQ's proprietary</strong>"
                 ).replace(
                   /(EMA 20\/50|Panchak|MagicRS|Conviction Flow|Breadth ROC|Six-Day Outlook|RSI 14|SMA 50)/g,
-                  "<strong style='color:#e8eaed'>$1</strong>"
+                  "<strong style='color:var(--text-primary)'>$1</strong>"
                 )}} />
             </div>
           ))}
@@ -609,7 +611,7 @@ function Screen3({ template, isFree: _isFree, onAccept, onBrowse, isCommitting, 
                 borderRadius:'3px 10px 10px 10px', padding:'10px 14px',
                 fontSize:12, color:'var(--text-muted)', lineHeight:1.6, flex:1 }}>
                 Done.{' '}
-                <strong style={{ color:'#e8eaed' }}>{total} blocks placed.</strong>
+                <strong style={{ color:'var(--text-primary)' }}>{total} blocks placed.</strong>
                 {' '}Hover any block to swap or remove it. Add more anytime from the Catalog.
               </div>
             </div>
@@ -672,6 +674,13 @@ export default function ProfileSetup() {
     if (profile.icp_mode && step < 4) setStep(4)
   }, [profile, step])
 
+  // Funnel visibility — which onboarding step a user actually reaches.
+  // The step 1 back-navigation gap found in review means this can only
+  // ever move forward today; this event is what will prove that once fixed.
+  useEffect(() => {
+    trackEvent('onboarding_step_viewed', { step })
+  }, [step])
+
   // Screen 2: typing animation — reveal question after 1.4s
   useEffect(() => {
     if (step !== 2) return
@@ -704,35 +713,19 @@ export default function ProfileSetup() {
     if (val !== 'both') setTimeout(() => setStep(3), 280)
   }
 
-  function errMessage(e: unknown): string {
-    const raw = e instanceof Error ? e.message : String(e)
-    if (isAuthError(e)) {
-      return 'Your session has expired — please log in again.'
-    }
-    // Surface the actual server response when it's an HTTP error — the old
-    // "check your connection" fallback hid every real cause (401/403/500/etc.)
-    // and was indistinguishable from an actual network drop, which is exactly
-    // why we kept guessing wrong (2026-07-30). Real network failures still
-    // show the friendly line; anything with a status code is worth reading.
-    if (/HTTP \d/i.test(raw)) {
-      const short = raw.replace(/^Error:\s*/, '').slice(0, 220)
-      return `Server rejected the save: ${short}. Try again in a moment.`
-    }
-    if (/timed out/i.test(raw)) {
-      return 'The server took too long to respond. Try again in a moment.'
-    }
-    if (/framework service|Failed to fetch|NetworkError|load failed/i.test(raw)) {
-      return 'Couldn\'t reach the server to save your workspace. Check your connection and try again.'
-    }
-    return 'Something went wrong setting up your workspace. Please try again.'
-  }
+  const setupErrMessage = (e: unknown) => sharedErrMessage(e, {
+    networkMessage: 'Couldn\'t reach the server to save your workspace. Check your connection and try again.',
+    fallbackMessage: 'Something went wrong setting up your workspace. Please try again.',
+  })
 
   // A dead token can never succeed on retry — the ONLY exit is a fresh login.
   // Show the message briefly, then sign out (clears the stale session) so the
   // user lands on the login page instead of retrying forever at "Your
   // framework" (the stuck-wizard bug, 2026-07-25).
   async function handleCommitError(e: unknown) {
-    setError(errMessage(e))
+    const message = setupErrMessage(e)
+    setError(message)
+    trackEvent('error_shown', { context: `onboarding_step_${step}`, message })
     setCommitting(false)
     if (isAuthError(e)) {
       setTimeout(() => {
@@ -822,6 +815,7 @@ export default function ProfileSetup() {
       await handleCommitError(e)
       return
     }
+    trackEvent('onboarding_completed', { icp, icp_mode: icpMode })
     if (browseIntent) { navigate('/catalog', { replace: true }); return }
     const dest = await resolveSpotlightIntent()
     navigate(dest ?? '/workspace', { replace: true })

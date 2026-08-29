@@ -1234,8 +1234,16 @@ def assemble_scanner_context(
     timeframe: str = 'daily',
     exchange: str = 'combined',
     total_count: int | None = None,
+    cohort_stats: dict | None = None,
 ) -> dict | None:
-    """Build scanner intent context. Returns None if the preset is unknown."""
+    """Build scanner intent context. Returns None if the preset is unknown.
+
+    cohort_stats (Tier A, scannerenhancement.md): optional precomputed facts
+    over the FULL result set (not the capped row sample below) — real VaNi
+    highlight count, % accelerating, % on real volume, leading industry.
+    None for any page that hasn't wired this yet; format_scanner_user_message
+    falls back to the old sample-derived vani_count in that case.
+    """
     try:
         preset_rows = db.select(
             'kd_scan_presets', 'id,name,description,tooltip,vani_rule,is_active',
@@ -1261,6 +1269,7 @@ def assemble_scanner_context(
         'exchange': exchange,
         'rows': _clean_scanner_rows(rows or [], hide_vani),
         'total_count': total_count if total_count is not None else len(rows or []),
+        'cohort_stats': cohort_stats,
     }
 
 
@@ -1273,16 +1282,20 @@ def build_scanner_cache_context(intent_id: str, ctx: dict) -> dict:
     """
     # 'v' is a prompt-version marker: bump it whenever the scanner prompt or
     # message format changes so stale cached responses can never be served.
+    # v3: format_scanner_user_message now inserts a cohort_stats block —
+    # bumped even though the byte output is unchanged when cohort_stats is
+    # absent, since the hash below now includes that key.
     if intent_id == 'scanner.explain_preset':
         return {'v': 2, 'preset_id': ctx['preset_id'], **ctx['preset']}
     return {
-        'v': 2,
+        'v': 3,
         'preset_id': ctx['preset_id'],
         'date': ctx['data_date'],
         'timeframe': ctx['timeframe'],
         'exchange': ctx['exchange'],
         'symbols': [r['symbol'] for r in ctx['rows']],
         'vani_count': sum(1 for r in ctx['rows'] if r['vani']),
+        'cohort_stats': ctx.get('cohort_stats'),
     }
 
 
@@ -1333,7 +1346,28 @@ def format_scanner_user_message(intent_id: str, ctx: dict) -> str:
         if r['vani']: parts.append("carries the VaNi highlight")
         lines.append(', '.join(parts))
     rows_str = '\n'.join(lines) if lines else '  (no stocks meet the conditions today)'
-    vani_count = sum(1 for r in ctx['rows'] if r['vani'])
+
+    # Tier A (scannerenhancement.md): when the page has computed cohort-level
+    # facts over the FULL result set (not just the rows shown below), use
+    # those instead of guessing from a capped sample — this is exactly the
+    # documented "25-of-270 sample mismatch" failure mode. Pages that haven't
+    # wired cohort_stats yet fall back to the old sample-derived count, byte-
+    # identical to the previous message format.
+    cohort = ctx.get('cohort_stats')
+    vani_count = cohort['vani_highlight_count'] if cohort else sum(1 for r in ctx['rows'] if r['vani'])
+    cohort_facts = ''
+    if cohort:
+        facts = [f"VaNi highlights {cohort['vani_highlight_count']} of {ctx['total_count']} total"]
+        if cohort.get('accelerating_pct') is not None:
+            facts.append(f"{cohort['accelerating_pct']}% of the full list has 5-day momentum outpacing 22-day")
+        if cohort.get('real_volume_pct') is not None:
+            facts.append(f"{cohort['real_volume_pct']}% trading over 3x normal volume")
+        if cohort.get('leading_industry'):
+            facts.append(f"leading industry is {cohort['leading_industry']} ({cohort.get('leading_industry_count') or 0} names)")
+        cohort_facts = (
+            f"\nFull-cohort facts (measured across all {ctx['total_count']} "
+            f"results, not just the rows shown below): " + '; '.join(facts) + '.\n'
+        )
 
     return (
         f"Screener: {p['name']} (lens: {ctx['lens']})\n"
@@ -1341,12 +1375,15 @@ def format_scanner_user_message(intent_id: str, ctx: dict) -> str:
         f"Timeframe: {ctx['timeframe']}, Exchange filter: {ctx['exchange']}\n"
         f"Total results: {ctx['total_count']} "
         f"(showing top {len(ctx['rows'])}, VaNi highlights: {vani_count})\n"
+        f"{cohort_facts}"
         f"\n--- Results ---\n{rows_str}\n"
         f"\nInstructions: Begin your response with the exact words "
         f"'As of the {ctx['data_date']} close'. Write 2 short paragraphs: "
         f"first the shape of the result set (count, industry concentration, "
         f"common signal profile, 2-4 names with their factual signals), then "
-        f"the character read through the '{ctx['lens']}' lens. Mention the "
+        f"the character read through the '{ctx['lens']}' lens"
+        + (", grounded in the full-cohort facts above rather than guessed from the shown rows" if cohort else "")
+        + f". Mention the "
         f"VaNi-highlight count only if greater than zero. Use only the stocks "
         f"and numbers listed above."
     )

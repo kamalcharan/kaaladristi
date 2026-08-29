@@ -4,22 +4,27 @@ import { Loader2 } from 'lucide-react';
 import { signIn, signUp, forgotPassword } from '@/services/auth';
 import { resolveSpotlightIntent } from '@/services/spotlight';
 import { useAuthStore } from '@/stores/authStore';
+import { trackEvent } from '@/lib/analytics';
+import { errMessage } from '@/lib/errorMessages';
 import { LogoMark, Starfield } from './landing/shared';
 
-// Design tokens matching DristiQ landing page
+// Theme-aware tokens (routes through the app's real theme system —
+// config/theme/index.ts — so this page respects light/dark like the rest
+// of the authenticated app, instead of the DristiQ landing page's
+// fixed-dark palette it was originally copied from).
 const C = {
-  bg:    '#0d0f14',
-  card:  '#13161d',
-  ink1:  '#e8e6e0',
-  ink2:  '#b7bcc9',
-  ink3:  '#7a8099',
-  ink4:  '#3a3f52',
-  g1:    '#f5a623',
+  bg:    'var(--bg)',
+  card:  'var(--card)',
+  ink1:  'var(--text-primary)',
+  ink2:  'var(--text-secondary)',
+  ink3:  'var(--text-muted)',
+  ink4:  'var(--text-faint)',
+  g1:    'var(--gold)',
   g2:    'var(--gold)',
-  g3:    '#8a7433',
-  rule:  'rgba(245,166,35,.18)',
-  rs:    'rgba(245,166,35,.08)',
-  glow:  'rgba(245,166,35,.22)',
+  g3:    'var(--gold-soft)',
+  rule:  'color-mix(in srgb, var(--gold) 18%, transparent)',
+  rs:    'color-mix(in srgb, var(--gold) 8%, transparent)',
+  glow:  'color-mix(in srgb, var(--gold) 22%, transparent)',
 };
 const SERIF = "'Cormorant Garamond','Playfair Display',serif";
 const MONO  = "'JetBrains Mono','Geist Mono',ui-monospace,monospace";
@@ -71,10 +76,12 @@ export default function LoginPage() {
         // onboarding redirect never fires. A fresh account is never onboarded,
         // so go straight to the wizard.
         await useAuthStore.getState().refreshProfile();
+        trackEvent('user_registered');
         navigate('/setup');
       } else {
         await signIn(email, password);
         await useAuthStore.getState().refreshProfile();
+        trackEvent('user_login');
         const prof = useAuthStore.getState().profile;
         if (!prof?.onboarded) {
           navigate('/setup'); // intent survives — ProfileSetup's exits consume it
@@ -83,8 +90,16 @@ export default function LoginPage() {
           navigate(dest ?? '/workspace');
         }
       }
-    } catch (err: any) {
-      setError(err.message || 'Something went wrong');
+    } catch (err) {
+      const action = authMode === 'register' ? 'create your account'
+        : authMode === 'login' ? 'sign you in'
+        : 'send the reset';
+      const message = errMessage(err, {
+        networkMessage: `Couldn't reach the server to ${action}. Check your connection and try again.`,
+        fallbackMessage: `Something went wrong trying to ${action}. Please try again.`,
+      });
+      setError(message);
+      trackEvent('error_shown', { context: `auth_${authMode}`, message });
     } finally {
       setIsSubmitting(false);
     }

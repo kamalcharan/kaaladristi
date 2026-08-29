@@ -206,7 +206,7 @@ export default function PricingCards({ onPaidSuccess, onFreeSelected }: PricingC
               <div style={{ fontSize: 13, fontWeight: 600, color: 'color-mix(in srgb, var(--text-primary) 60%, transparent)', marginBottom: 8, letterSpacing: '.03em' }}>
                 {tier.label}
               </div>
-              <div style={{ fontSize: 28, fontWeight: 700, color: '#fff', marginBottom: 2 }}>
+              <div style={{ fontSize: 28, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 2 }}>
                 ₹{inr(tier.base)}
                 <span style={{ fontSize: 13, fontWeight: 400, color: 'var(--text-muted)' }}> / {tier.duration}</span>
               </div>

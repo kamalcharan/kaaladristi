@@ -401,11 +401,20 @@ async function fetchBreakoutSurge(exchangeFilter: ExchangeFilter): Promise<ScanS
     return [];
   }
 
-  // ISIN-dedup: prefer NSE over BSE; apply exchange filter
+  // Declared universe FIRST, then ISIN-dedup, then the user's exchange filter
+  // — same order fetchBreakdownWatch/fetchPeriodMovers use. This preset was
+  // missing the universe gate entirely: it declares NSE_ONLY
+  // (kd_scan_presets/SCAN_PRESETS) but nothing here enforced it, so the
+  // default 'Combined' exchange tab silently included every BSE-only
+  // breakout too. Confirmed live on 2026-08-28: 386 rows after ISIN-dedup
+  // (275 NSE + 111 BSE) vs. the matview-sourced tab-count badge's correct
+  // 252 — the visible table and the count next to it disagreed by 134 rows.
+  const declaredUniverse = getPresetMeta('breakout_surge')?.universe;
   const isinMap = new Map<string, any>();
   for (const row of eodRows) {
     const sym = row.km_equity_symbols;
     if (!sym) continue;
+    if (!passesUniverse(sym.exchange, declaredUniverse)) continue;
     if (exchangeFilter === 'NSE' && sym.exchange !== 'NSE') continue;
     if (exchangeFilter === 'BSE' && sym.exchange !== 'BSE') continue;
     const isin = sym.isin;
