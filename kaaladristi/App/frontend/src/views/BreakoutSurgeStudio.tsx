@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useScan } from '@/hooks/useScan'
 import { displaySymbol } from '@/lib/symbolUtils'
@@ -7,14 +7,11 @@ import { getPresetMeta, type ExchangeFilter } from '@/services/scanEngine'
 import { DownloadXlsButton, TradingViewExportButton } from '@/components/domain/ScannerExportButtons'
 import { ExchangeTabs } from '@/components/domain/ExchangeTabs'
 import { ScanFilterBar, applyFilters, DEFAULT_FILTERS, hasActiveFilters, type ScanFilters } from '@/components/domain/ScanFilterBar'
-import { computeCohortStats, isHighlight, type CohortStats } from '@/services/breakoutSurgeInsights'
+import { computeCohortStats, isHighlight } from '@/services/breakoutSurgeInsights'
 import ScanTable from '@/components/domain/ScanTable'
 import BreakoutSurgeCards from '@/components/domain/BreakoutSurgeTable'
-import ScanVaNiPublisher, { toVaNiScanRows } from '@/components/domain/ScanVaNiPublisher'
-import { useVaNiAsk } from '@/hooks/useVaNiChat'
-import { useVaNiStore } from '@/stores/vaniStore'
-import VaNiFeedback from '@/components/domain/VaNi/VaNiFeedback'
-import type { ScanStock, ScanDefinition } from '@/types'
+import ScanVaNiPublisher from '@/components/domain/ScanVaNiPublisher'
+import type { ScanStock } from '@/types'
 
 type QuickFilterKey = 'hl' | 'ob' | 'watch'
 const DEFAULT_QUICK: Record<QuickFilterKey, boolean> = { hl: false, ob: false, watch: false }
@@ -178,23 +175,6 @@ export default function BreakoutSurgeStudio() {
             />
           </div>
 
-          {/* ── VaNi Read — the piece from the reference prototype (VaNi_Scanner.html)
-              that wasn't built yet: an inline summary sitting ON the page, not
-              hidden behind the header's "Ask VaNi" click. Auto-fires once real
-              data lands, using the exact Tier A cohort facts wired in above. ── */}
-          {meta && (
-            <VaNiReadPanel
-              presetId="breakout_surge"
-              meta={meta}
-              rowsForContext={filtered}
-              totalCount={all.length}
-              dataDate={all[0]?.trade_date ?? null}
-              exchangeFilter={exchangeFilter}
-              cohortStats={stats}
-              onApplyHighlights={() => setQuick((p) => ({ ...p, hl: true }))}
-            />
-          )}
-
           {/* ── Exchange + quick toggles (no ScanFilterBar equivalent) + real filter bar + view toggle ── */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
             <ExchangeTabs value={exchangeFilter} onChange={setExchangeFilter} disabledOptions={meta?.universe === 'NSE_ONLY' ? ['BSE'] : []} />
@@ -232,139 +212,6 @@ export default function BreakoutSurgeStudio() {
       )}
     </div>
     </>
-  )
-}
-
-/**
- * VaNi Read — inline summary block, pulled from VaNi_Scanner.html's
- * `vaniBlock` pattern: "VaNi read" label + a paragraph + a quick-action
- * button ("Apply highlights" there → "Apply VaNi Highlights" here). That
- * prototype also had a separate floating "Ask VaNi" button for open Q&A —
- * this app already has that, globally, in Layout.tsx. What was missing was
- * this piece: VaNi's take sitting ON the page by default, not one click away.
- *
- * Fires `scanner.read_results` once per data date (a ref guard, not a
- * dependency-array trick — the mutate function itself is stable but
- * shouldn't gate re-fires) using the same request shape VaNiChatPanel.tsx
- * builds, including the Tier A `cohort_stats` wired in earlier.
- */
-function VaNiReadPanel({
-  presetId, meta, rowsForContext, totalCount, dataDate, exchangeFilter, cohortStats, onApplyHighlights,
-}: {
-  presetId: string
-  meta: ScanDefinition
-  rowsForContext: ScanStock[]
-  totalCount: number
-  dataDate: string | null
-  exchangeFilter: ExchangeFilter
-  cohortStats: CohortStats
-  onApplyHighlights: () => void
-}) {
-  const askMutation = useVaNiAsk()
-  const firedForDate = useRef<string | null>(null)
-  const [expanded, setExpanded] = useState(false)
-  const { openWithIntent, toggle: toggleVaniPanel } = useVaNiStore()
-
-  useEffect(() => {
-    if (!dataDate || firedForDate.current === dataDate) return
-    firedForDate.current = dataDate
-    const hideVani = meta.vani_rule === 'always_true'
-    const rows = toVaNiScanRows(rowsForContext, hideVani)
-    askMutation.mutate({
-      intent_id: 'scanner.read_results',
-      preset_id: presetId,
-      data_date: dataDate,
-      timeframe: 'daily',
-      exchange: exchangeFilter,
-      total_count: totalCount,
-      rows: rows.map((r) => ({
-        symbol: r.symbol, industry: r.industry, zone: r.zone, flow: r.flow,
-        rsi: r.rsi, rvol: r.rvol, pct_chng: r.pctChng, surge: r.surge, vani: r.vani,
-      })),
-      ...(hideVani ? {} : {
-        cohort_stats: {
-          vani_highlight_count: cohortStats.highlightCount,
-          accelerating_pct: cohortStats.acceleratingPct,
-          real_volume_pct: cohortStats.realVolumePct,
-          leading_industry: cohortStats.leadingIndustry?.name ?? null,
-          leading_industry_count: cohortStats.leadingIndustry?.count ?? null,
-        },
-      }),
-    })
-    // rowsForContext/cohortStats/etc. intentionally excluded — this should
-    // fire once per new trading day's data, not on every filter/sort change.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dataDate])
-
-  if (!dataDate) return null
-
-  return (
-    <div style={{
-      display: 'flex', gap: 12, alignItems: 'flex-start',
-      background: 'linear-gradient(135deg, var(--indigo-bg) 0%, var(--card) 60%)',
-      border: '1px solid var(--border-indigo)',
-      borderRadius: 14, padding: '16px 18px', marginBottom: 18,
-    }}>
-      <div className="text-white" style={{
-        width: 28, height: 28, borderRadius: '50%', flexShrink: 0,
-        background: 'var(--indigo)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontSize: 12, fontWeight: 700, fontFamily: 'var(--font-mono)',
-      }}>V</div>
-      <div style={{ minWidth: 0, flex: 1 }}>
-        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--indigo)' }}>
-          VaNi Read
-        </div>
-        {askMutation.isPending && (
-          <p style={{ margin: '7px 0 0', fontSize: 13.5, color: 'var(--text-faint)' }}>Reading today's results…</p>
-        )}
-        {!askMutation.isPending && askMutation.data?.response && (
-          <>
-            <p style={{
-              margin: '7px 0 0', fontSize: 14, lineHeight: 1.62, color: 'var(--text-primary)', whiteSpace: 'pre-wrap',
-              ...(expanded ? {} : {
-                display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden',
-              }),
-            }}>
-              {askMutation.data.response}
-            </p>
-            <button onClick={() => setExpanded((e) => !e)} style={{
-              background: 'none', border: 'none', padding: '5px 0 0', cursor: 'pointer',
-              fontFamily: 'var(--font-mono)', fontSize: 11.5, color: 'var(--indigo)', fontWeight: 600,
-            }}>{expanded ? 'Show less ▲' : 'Show more ▼'}</button>
-
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginTop: 12 }}>
-              {cohortStats.highlightCount > 0 && (
-                <button onClick={onApplyHighlights} className="text-white" style={{
-                  background: 'var(--indigo)', border: 'none',
-                  borderRadius: 100, padding: '7px 14px', fontSize: 12.5, fontWeight: 500,
-                  cursor: 'pointer', fontFamily: 'var(--font-body)',
-                }}>Apply VaNi Highlights</button>
-              )}
-              {askMutation.data.log_id && <VaNiFeedback logId={askMutation.data.log_id} />}
-            </div>
-
-            {/* Follow-up intents — same "also ask" idea VaNiChatPanel.tsx uses,
-                just surfaced here instead of requiring the header pill first. */}
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--border-indigo)' }}>
-              <button onClick={() => openWithIntent('scanner.explain_preset')} style={{
-                background: 'transparent', border: '1px solid var(--border-indigo)', color: 'var(--indigo)',
-                borderRadius: 100, padding: '6px 13px', fontSize: 12, fontWeight: 500,
-                cursor: 'pointer', fontFamily: 'var(--font-body)',
-              }}>What does this screener show?</button>
-              <button onClick={toggleVaniPanel} style={{
-                background: 'transparent', border: '1px solid var(--border-indigo)', color: 'var(--indigo)',
-                borderRadius: 100, padding: '6px 13px', fontSize: 12, fontWeight: 500,
-                cursor: 'pointer', fontFamily: 'var(--font-body)',
-              }}>Ask VaNi about a stock in this scan</button>
-            </div>
-          </>
-        )}
-        {!askMutation.isPending && askMutation.data?.error && (
-          <p style={{ margin: '7px 0 0', fontSize: 13, color: 'var(--bear)' }}>VaNi: {askMutation.data.error}</p>
-        )}
-      </div>
-    </div>
   )
 }
 
