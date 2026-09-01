@@ -101,11 +101,25 @@ function marketStatus(): string {
 interface SidebarProps {
   collapsed: boolean;
   onToggle: () => void;
+  /** Mobile off-canvas drawer state (below the `md` breakpoint) — entirely
+   *  separate from `collapsed`, which is the desktop icon-only/full-label
+   *  preference. Both optional so any other caller of Sidebar keeps working
+   *  unchanged if one exists; Layout.tsx always passes both. */
+  mobileOpen?: boolean;
+  onCloseMobile?: () => void;
 }
 
-export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
+export default function Sidebar({ collapsed, onToggle, mobileOpen = false, onCloseMobile }: SidebarProps) {
   const { profile, isAdmin, clear } = useAuthStore();
   const navigate = useNavigate();
+
+  // The mobile drawer always shows full labels — a phone-width off-canvas
+  // panel has room, and the desktop icon-only mode exists purely to save
+  // horizontal space in a PUSHED layout, which doesn't apply to an overlay.
+  // `mobileOpen` can only ever become true via the hamburger button, which
+  // Layout.tsx hides at `md:` and up, so on desktop this always equals
+  // `collapsed` unchanged.
+  const contentCollapsed = collapsed && !mobileOpen;
 
   // Accordion open/closed state per group (ContractNest-style collapsible nav).
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() =>
@@ -128,14 +142,17 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
       key={item.to}
       to={item.to}
       title={item.label}
-      onClick={() => trackEvent('nav_item_clicked', { label: item.label, path: item.to, section: sectionHeading })}
+      onClick={() => {
+        trackEvent('nav_item_clicked', { label: item.label, path: item.to, section: sectionHeading });
+        onCloseMobile?.(); // no-op on desktop — the drawer can only be open on mobile
+      }}
       style={({ isActive }) => ({
         position: 'relative',
         display: 'flex',
         alignItems: 'center',
-        gap: collapsed ? 0 : '11px',
-        justifyContent: collapsed ? 'center' : 'flex-start',
-        padding: collapsed ? '9px 0' : '9px 12px',
+        gap: contentCollapsed ? 0 : '11px',
+        justifyContent: contentCollapsed ? 'center' : 'flex-start',
+        padding: contentCollapsed ? '9px 0' : '9px 12px',
         borderRadius: '8px',
         color: isActive ? 'var(--accent)' : 'var(--text-muted)',
         fontSize: '13.5px',
@@ -162,7 +179,7 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
       {({ isActive }) => (
         <>
           {/* Amber left-rail on the active item (matches ContractNest) */}
-          {isActive && !collapsed && (
+          {isActive && !contentCollapsed && (
             <span
               aria-hidden
               style={{
@@ -189,26 +206,43 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
           >
             {item.glyph}
           </span>
-          {!collapsed && <span className="truncate leading-none">{item.label}</span>}
+          {!contentCollapsed && <span className="truncate leading-none">{item.label}</span>}
         </>
       )}
     </NavLink>
   );
 
   return (
-    <nav
-      className={cn(
-        'fixed h-full z-[100] flex flex-col overflow-hidden transition-all duration-300',
+    <>
+      {/* Backdrop — mobile only, dismisses the drawer on tap. Matches the
+          overlay pattern VaNiChatPanel already uses for its own drawer. */}
+      {mobileOpen && (
+        <div
+          className="fixed inset-0 z-[99] bg-black/40 backdrop-blur-[3px] md:hidden"
+          onClick={onCloseMobile}
+        />
       )}
-      style={{
-        width: collapsed ? '52px' : '220px',
-        background: 'var(--card)',
-        borderRight: '1px solid var(--border)',
-        padding: collapsed ? '28px 8px' : '28px 16px',
-      }}
-    >
+      <nav
+        className={cn(
+          'fixed h-full z-[100] flex flex-col overflow-hidden transition-transform duration-300',
+          // Mobile: fixed drawer width, expanded padding always (see
+          // contentCollapsed), slides off-screen unless mobileOpen. Desktop
+          // (md+): back to the real collapsed/expanded width+padding via the
+          // CSS vars below, always visible (translate-x-0), collapse state
+          // transitions on width/padding instead of position.
+          'w-[260px] p-[28px_16px] md:w-[var(--sidebar-w)] md:p-[var(--sidebar-pad)] md:transition-[width,padding]',
+          mobileOpen ? 'translate-x-0' : '-translate-x-full',
+          'md:translate-x-0',
+        )}
+        style={{
+          '--sidebar-w': collapsed ? '52px' : '220px',
+          '--sidebar-pad': collapsed ? '28px 8px' : '28px 16px',
+          background: 'var(--card)',
+          borderRight: '1px solid var(--border)',
+        } as React.CSSProperties}
+      >
       {/* ── Brand ── */}
-      {!collapsed ? (
+      {!contentCollapsed ? (
         <>
           <div
             style={{
@@ -255,12 +289,14 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
         </button>
       )}
 
-      {/* ── Collapse toggle (visible when expanded) ── */}
-      {!collapsed && (
+      {/* ── Collapse toggle (desktop only — collapsing to icons doesn't mean
+          anything for a mobile drawer that's about to be dismissed, not
+          pushed into a narrower column) ── */}
+      {!contentCollapsed && !mobileOpen && (
         <button
           onClick={onToggle}
           title="Collapse sidebar"
-          className="absolute top-[28px] right-[12px] flex items-center justify-center transition-colors"
+          className="absolute top-[28px] right-[12px] hidden md:flex items-center justify-center transition-colors"
           style={{
             width: '20px',
             height: '20px',
@@ -277,6 +313,30 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
         </button>
       )}
 
+      {/* ── Mobile drawer close (×) — the desktop collapse toggle above is
+          hidden here; this is the drawer's own explicit dismiss action,
+          alongside tapping the backdrop. ── */}
+      {mobileOpen && (
+        <button
+          onClick={onCloseMobile}
+          title="Close menu"
+          aria-label="Close menu"
+          className="absolute top-[28px] right-[12px] flex md:hidden items-center justify-center transition-colors"
+          style={{
+            width: '24px',
+            height: '24px',
+            borderRadius: '6px',
+            color: 'var(--text-faint)',
+          }}
+          onMouseEnter={e => (e.currentTarget.style.color = 'var(--text-secondary)')}
+          onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-faint)')}
+        >
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+            <path d="M2 2L12 12M12 2L2 12" />
+          </svg>
+        </button>
+      )}
+
       {/* ── Nav sections ── */}
       <div className="flex flex-col flex-1 overflow-y-auto no-scrollbar" style={{ gap: '0' }}>
         {navSections.map((section, si) => {
@@ -284,7 +344,7 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
           if (visibleItems.length === 0) return null;
 
           // Collapsed sidebar: no accordion — flat icon list, groups separated by gap.
-          if (collapsed) {
+          if (contentCollapsed) {
             return (
               <div key={section.heading} style={{ marginTop: si > 0 ? '24px' : '0' }}>
                 {visibleItems.map(item => renderItem(item, section.heading))}
@@ -364,15 +424,15 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
           marginTop: 'auto',
           paddingTop: '14px',
           paddingBottom: '4px',
-          paddingLeft: collapsed ? '0' : '12px',
-          paddingRight: collapsed ? '0' : '12px',
+          paddingLeft: contentCollapsed ? '0' : '12px',
+          paddingRight: contentCollapsed ? '0' : '12px',
           borderTop: '1px solid var(--border)',
           fontFamily: 'var(--font-mono)',
           fontSize: '11px',
           color: 'var(--text-faint)',
         }}
       >
-        {collapsed ? (
+        {contentCollapsed ? (
           /* Collapsed footer: just sign-out icon */
           <div className="flex flex-col items-center gap-2">
             <div
@@ -436,6 +496,7 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
           </>
         )}
       </div>
-    </nav>
+      </nav>
+    </>
   );
 }
