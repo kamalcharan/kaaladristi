@@ -109,7 +109,7 @@ WITH lvl AS (
 ), isl AS (
     -- Gaps and islands: the running count of NOT-above bars is constant
     -- within a stretch that stays above the line, so it identifies the run.
-    SELECT lvl.*,
+    SELECT near.*,
            SUM(CASE WHEN above THEN 0 ELSE 1 END)
              OVER (PARTITION BY equity_id ORDER BY trade_date
                    ROWS UNBOUNDED PRECEDING) AS grp
