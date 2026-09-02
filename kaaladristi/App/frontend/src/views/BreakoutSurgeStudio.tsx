@@ -106,12 +106,20 @@ export default function BreakoutSurgeStudio() {
       )}
     {/* No maxWidth cap — ScanView.tsx's content area is unconstrained (just
         `flex: 1` + padding). A 1200px cap here made the table hit horizontal
-        overflow far more often than production for the same column set. */}
-    <div style={{ padding: '28px 32px 48px' }}>
+        overflow far more often than production for the same column set.
+        Padding itself is now responsive (Tailwind, not inline — dynamic
+        inline padding isn't needed here, so plain classes suffice and stay
+        simpler): 32px sides wastes ~17% of a 375px phone's width. */}
+    <div className="px-4 pt-7 pb-12 sm:px-6 md:px-8">
       <div style={{ marginBottom: 8, fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--text-faint)' }}>
         Preview · Phase 2
       </div>
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, marginBottom: 22 }}>
+      {/* flexWrap added — the export buttons are flexShrink:0 (won't shrink)
+          and on a narrow screen the pair alone can be wider than the
+          available width; without wrap they'd overflow past the edge with
+          no way to scroll back to them (body{overflow-x:hidden}, no local
+          scroll region here). Now they drop to their own row instead. */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, marginBottom: 22, flexWrap: 'wrap' }}>
         <div>
           <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 28, fontWeight: 500, margin: '0 0 6px', color: 'var(--text-primary)' }}>
             {meta?.name ?? 'Breakout Surge'}
