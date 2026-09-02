@@ -850,3 +850,41 @@ mobile fit (2026-09-02).**
   same `body{overflow-x:hidden}` failure pattern already proven twice this
   thread, not by a live mobile screenshot of this specific page (no live
   scan data reachable from this environment to render the real table/tiles).
+
+**v19 — production-breaking hooks-order bug from the v17 loading-floor
+change, found live (2026-09-02).** Owner report: "whenever i try accesing
+preview scanner - it goes to landing pabe" — but every other page in the
+product worked fine on the same active session, ruling out an auth/session
+issue (`ProtectedRoute` gates every protected route identically; nothing
+route-specific there).
+
+Root cause: v17 added two `useMinVaNiLoading()` calls (plus the
+`mutationByIntent`/`active`/`readShowLoading`/`readDone` block that feeds
+them) to `ScannerVaNiCard`, but placed them AFTER the pre-existing
+`if (!dataDate) return null` early return, not before it. `dataDate` is
+`null` on the first render (before `useScan`'s query resolves) and becomes
+truthy once real data arrives — so on the first render those two hooks are
+never called at all, and on the very next render they suddenly are. React
+requires the exact same hooks in the exact same order on every render of a
+component; a changed hook COUNT between renders is a hard error ("Rendered
+fewer hooks than expected"), not a warning — it unmounts the component, and
+since nothing local catches it, crashes up to the app's top-level
+`ErrorBoundary`. This reproduces on essentially every real visit, the
+moment scan data arrives — which is why it looked total/instant rather
+than intermittent. (The exact "goes to landing page" symptom vs. the
+ErrorBoundary's own "Something went wrong" fallback screen wasn't traced
+further — the hooks violation is unambiguously wrong regardless of the
+precise resulting UI state, so it was fixed on that basis rather than
+chasing the redirect mechanism.)
+
+Fixed by moving the `mutationByIntent`/`active`/`readShowLoading`/
+`readDone`/`showLoading` block (including both `useMinVaNiLoading()` calls)
+to before the `if (!dataDate) return null` line, so every hook in this
+component is now called unconditionally on every render regardless of
+`dataDate`. Also re-audited both `ScannerVaNiCard` and the outer
+`BreakoutSurgeStudio` component end-to-end for any other conditional-hook
+pattern — none found; this was the only one.
+- Files touched: `App/frontend/src/views/BreakoutSurgeStudio.tsx` only.
+- `npm run typecheck` and `npm run build` (ratchet unchanged) pass clean.
+  Not verified against a live render — same standing gap as the mobile fit
+  fixes above; owner to confirm the preview page loads once redeployed.
