@@ -419,6 +419,38 @@ function ScannerVaNiCard({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dataDate])
 
+  // Real bug, found live (2026-09-02): this block — and its two
+  // useMinVaNiLoading() calls — used to sit AFTER the `if (!dataDate)
+  // return null` below. On the render where dataDate is still null (before
+  // the scan query resolves) those two hooks were never called at all; on
+  // the very next render, once dataDate is set, they suddenly are — a
+  // classic "rendered fewer hooks than expected" violation, since React
+  // requires the exact same hooks in the exact same order on every render
+  // of a component. That's not a lint nitpick: React throws when the count
+  // changes, unmounting this component (and, since nothing local catches
+  // it, crashing up to the app's top-level ErrorBoundary) on essentially
+  // every real visit, the moment scan data arrives. Moved above the early
+  // return so every hook call is unconditional regardless of dataDate.
+  const mutationByIntent: Record<ScannerIntentKey, ReturnType<typeof useVaNiAsk>> = {
+    read_results: readMutation,
+    your_view: yourViewMutation,
+    explain_preset: explainMutation,
+    why_highlighted: whyHighlightedMutation,
+    how_bookmarks_work: bookmarksHelpMutation,
+    legend_vani_dot: dotHelpMutation,
+  }
+  const active = mutationByIntent[activeIntent]
+  // Floors the spinner at MIN_VANI_LOADING_MS so a cache hit doesn't pop
+  // content in instantly while a live LLM call visibly takes longer — see
+  // useMinVaNiLoading's own comment. Content is withheld while holding so
+  // it can't flash in before the floor elapses. readMutation gets its own
+  // call (rather than reusing `showLoading` below) since it fires eagerly
+  // on load regardless of which intent is currently selected — the action
+  // pills below should wait for that same floor too, not just the card.
+  const readShowLoading = useMinVaNiLoading(readMutation.isPending)
+  const readDone = !readShowLoading && !!readMutation.data?.response
+  const showLoading = useMinVaNiLoading(active.isPending)
+
   if (!dataDate) return null
 
   const showYourView = () => {
@@ -514,26 +546,6 @@ function ScannerVaNiCard({
       })
     }
   }
-
-  const mutationByIntent: Record<ScannerIntentKey, ReturnType<typeof useVaNiAsk>> = {
-    read_results: readMutation,
-    your_view: yourViewMutation,
-    explain_preset: explainMutation,
-    why_highlighted: whyHighlightedMutation,
-    how_bookmarks_work: bookmarksHelpMutation,
-    legend_vani_dot: dotHelpMutation,
-  }
-  const active = mutationByIntent[activeIntent]
-  // Floors the spinner at MIN_VANI_LOADING_MS so a cache hit doesn't pop
-  // content in instantly while a live LLM call visibly takes longer — see
-  // useMinVaNiLoading's own comment. Content is withheld while holding so
-  // it can't flash in before the floor elapses. readMutation gets its own
-  // call (rather than reusing `showLoading` below) since it fires eagerly
-  // on load regardless of which intent is currently selected — the action
-  // pills below should wait for that same floor too, not just the card.
-  const readShowLoading = useMinVaNiLoading(readMutation.isPending)
-  const readDone = !readShowLoading && !!readMutation.data?.response
-  const showLoading = useMinVaNiLoading(active.isPending)
 
   // `whiteSpace: 'nowrap'` here used to force every pill onto one line —
   // harmless on desktop, but on a narrow viewport a single long label (e.g.
