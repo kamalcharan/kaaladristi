@@ -127,12 +127,22 @@ export default function BreakoutSurgeStudio() {
           back button. This is a flat pill row, not a port of ScanView's
           category rail + within-category tabs (out of scope for this round);
           it covers the actual gap (getting to another scanner at all) without
-          rebuilding the full switcher UI. */}
+          rebuilding the full switcher UI.
+
+          Single-line horizontal scroll, not wrap — with 22 presets, a
+          flex-wrap row runs to ~11 lines at a 375px width, burying the page's
+          actual title/stats/VaNi card below the fold before a mobile user
+          sees any of it (found live, 2026-09-02). Matches the same
+          `overflow-x-auto no-scrollbar` chip-strip pattern already used for
+          ActiveIndexScroll.tsx / IndustryTransitionView.tsx's category tabs —
+          swipeable on touch, scrollable with a mouse elsewhere, and stays a
+          fixed, small height at any screen width. */}
       {otherPresets.length > 0 && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 14 }}>
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '.06em', textTransform: 'uppercase', color: 'var(--text-faint)', marginRight: 2 }}>
+        <div style={{ marginBottom: 14 }}>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '.06em', textTransform: 'uppercase', color: 'var(--text-faint)', marginBottom: 6 }}>
             Other scanners
-          </span>
+          </div>
+          <div className="flex gap-1.5 overflow-x-auto no-scrollbar" style={{ paddingBottom: 2 }}>
           {otherPresets.map((p) => (
             <button
               key={p.id}
@@ -140,12 +150,13 @@ export default function BreakoutSurgeStudio() {
               style={{
                 padding: '4px 11px', borderRadius: 100, fontSize: 11.5, fontWeight: 500, cursor: 'pointer',
                 border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-muted)',
-                fontFamily: 'var(--font-body)', whiteSpace: 'nowrap',
+                fontFamily: 'var(--font-body)', whiteSpace: 'nowrap', flexShrink: 0,
               }}
             >
               {p.name}
             </button>
           ))}
+          </div>
         </div>
       )}
       {/* flexWrap added — the export buttons are flexShrink:0 (won't shrink)
