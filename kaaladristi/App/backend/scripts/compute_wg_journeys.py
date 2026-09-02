@@ -582,7 +582,17 @@ def walk_stock(s: pd.Series, zones: pd.Series, wk: pd.DataFrame, mo: pd.DataFram
 
     # ── final snapshot ──
     t = idx[-1]
-    c = vals[-1]
+    # Cast once here rather than at each downstream use (gl_dist_pct,
+    # pct_from_turn, pct_from_base_high, pct_from_wake, close_adj) — vals is
+    # a numpy array, so vals[-1] is a numpy.float64, not a Python float.
+    # Under numpy>=2.0 that scalar's repr changed from a bare number to
+    # 'np.float64(4.6)', and since close_adj carries it straight into the
+    # parameterized INSERT with no arithmetic to launder it through, psycopg2
+    # ends up binding that literal repr text — Postgres then reads "np" as a
+    # schema name in the value list and fails with 'schema "np" does not
+    # exist'. Every other value below is deliberately cast (float(g), etc.);
+    # this was the one that wasn't.
+    c = float(vals[-1])
     g = gl_arr[-1]
     score = int(score_arr[-1])
     d_g = bool(d_green[-1]) if d_known[-1] else None
@@ -608,9 +618,13 @@ def walk_stock(s: pd.Series, zones: pd.Series, wk: pd.DataFrame, mo: pd.DataFram
         if len(cand):
             j = run_start + int(cand[0])
             turn_date = idx[j].date()
-            turn_close = round(float(vals[j]), 2)
-            if vals[j] > 0:
-                pct_from_turn = round((c / vals[j] - 1) * 100, 2)
+            # Same numpy.float64-leak pattern as `c` above, independent of
+            # it: vals[j] was cast for turn_close but not for the division
+            # feeding pct_from_turn two lines down.
+            turn_close_raw = float(vals[j])
+            turn_close = round(turn_close_raw, 2)
+            if turn_close_raw > 0:
+                pct_from_turn = round((c / turn_close_raw - 1) * 100, 2)
 
     resting = False
     if state in ('WAKING', 'ASCENDING') and len(wk_close):
