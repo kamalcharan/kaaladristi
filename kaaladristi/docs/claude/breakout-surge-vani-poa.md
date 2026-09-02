@@ -796,3 +796,57 @@ for sometime and then load the content, irrespective of cached or LLM."
 - `npm run typecheck` and `npm run build` (ratchet unchanged: 371 hex + 276
   rgba) pass clean. Not verified live — same standing gap as every prior
   round.
+
+**v18 — VaNi masthead card shipped product-wide, plus scanner-preview's own
+mobile fit (2026-09-02).**
+
+1. **`VaNiInsight.tsx` masthead redesign, implemented.** The card style
+   proposed and approved earlier in the "VaNi Card Identity" artifact —
+   replaces the v1 low-alpha tint + left rail (which read as barely-there on
+   Jade Thorn light's parchment ground) with a masthead band (a small filled
+   badge + "VANI वाणी" wordmark, on a tint of the theme's own accent) sitting
+   above a plain elevated card body (`var(--kd-card)`). Every color is a
+   token (`--accent-indigo`, `--kd-card`, `--border`), so it inherits any
+   theme automatically — no new literals, ratchet unaffected. Since this is
+   the ONE shared component every VaNi surface uses, this single file change
+   reaches everywhere at once: every scanner intent on this page, every
+   Dashboard/Panchang/Breadth/Chart card, and the side drawer. `fadeTo`'s
+   default changed from `var(--bg)` (page background, correct for the old
+   near-transparent tint) to `var(--kd-card)` (the new body's own solid
+   background) — no caller currently overrides `fadeTo`, so this was a safe
+   change, not a breaking one.
+   - Verified visually the same way as the v15/v17 rounds: a temporary
+     unauthenticated preview route rendering `VaNiInsight` directly with
+     sample text (real Breakout Surge copy) + a loading state, screenshotted
+     via Playwright, confirmed against the approved mockup, then reverted
+     (`git diff` on `App.tsx` confirms no residual changes).
+2. **Scanner-preview's own mobile fit** (separate from the v17 app-shell
+   fix, which only covered the sidebar/topbar — this page's own content had
+   never been touched for mobile). Owner's assumption confirmed correct on
+   inspection, not just guessed at:
+   - The page's own `ScanTable` already had a contained internal horizontal
+     scroll (`overflowX: 'auto'` + `FloatingHScrollbar`) — NOT broken, just
+     dense (expected for a data table on a phone; the existing `viewMode:
+     'cards'` toggle is the better mobile path, unchanged here).
+   - Two REAL gaps fixed: (a) the header row (title/description +
+     Download/TradingView export buttons) had no `flexWrap` — the buttons
+     are `flexShrink: 0`, so on a narrow screen the pair alone could exceed
+     the available width with no way to scroll back to them
+     (`body{overflow-x:hidden}`, no local scroll region there) — same
+     clipping failure mode as the v14/v15 button bugs, just a different
+     row. Added `flexWrap: 'wrap'` so the buttons drop to their own line
+     instead. (b) the outer page padding (`28px 32px 48px`, inline, fixed)
+     wasted ~17% of a 375px phone's width on side padding alone — replaced
+     with responsive Tailwind classes (`px-4 pt-7 pb-12 sm:px-6 md:px-8`).
+   - The stat-tile grid (`repeat(auto-fit, minmax(160px, 1fr))`) and the
+     filter/exchange-tabs row (already `flexWrap: 'wrap'`) were already
+     fine — CSS grid `auto-fit` and an existing wrap both degrade correctly
+     without help.
+- Files touched: `App/frontend/src/components/domain/VaNiInsight.tsx`,
+  `App/frontend/src/views/BreakoutSurgeStudio.tsx`.
+- `npm run typecheck` and `npm run build` (ratchet unchanged: 371 hex + 276
+  rgba) pass clean. The masthead redesign was visually verified live (see
+  above); the two mobile fixes were verified by code review against the
+  same `body{overflow-x:hidden}` failure pattern already proven twice this
+  thread, not by a live mobile screenshot of this specific page (no live
+  scan data reachable from this environment to render the real table/tiles).
