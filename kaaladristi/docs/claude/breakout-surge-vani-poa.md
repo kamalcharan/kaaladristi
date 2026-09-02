@@ -950,3 +950,66 @@ Traced the actual mechanism instead of asking for more owner-side testing:
   step is capturing the actual browser Network/Console output at the
   moment it happens, since static reading has now been pushed as far as it
   can go without that.
+
+## v21 — Retired the old inline breakout_surge, activated the studio page at the real preset URL (2026-09-02)
+
+Owner report after v20 deployed: still redirecting. Rather than keep
+narrowing the auth-retry theory further, owner's explicit instruction was
+to sidestep the mechanism entirely: "retire the old breakout surge and
+activate the latest breakout surge — it should work from the URL only
+now." The v19 investigation had already established the structural fact
+that makes this work: `/scanner-preview/breakout-surge` was reachable
+ONLY by typing the URL — never through an in-app link — so it was the one
+page that repeatedly forced a full browser reload and a fresh
+`authStore.initialize()` run, the exact race v20 patched. Making the
+studio page live at the REAL, already-linked preset URL removes that
+full-reload path altogether: every route into `/scanner/breakout_surge`
+(sidebar "Scanner" link, the bare-`/scanner` auto-redirect, every other
+preset's own category tab strip) is already `navigate()`-based
+client-side routing in `ScanView.tsx` — none of it reloads the page. This
+fix holds regardless of whether v20's retry alone would have been enough.
+
+**What changed:**
+- `App.tsx` — added explicit `/scanner/breakout_surge` and
+  `/scanners/breakout_surge` routes rendering `<BreakoutSurgeStudio />`,
+  declared before the generic `/scanner/:presetId` / `/scanners/:presetId`
+  routes (React Router ranks a static path segment over a dynamic one
+  regardless of declaration order, but declaring them first keeps the
+  routing table readable). The old `/scanner-preview/breakout-surge` route
+  is now `<Navigate to="/scanner/breakout_surge" replace />` instead of
+  rendering the page directly, so any existing bookmark/open tab still
+  lands on the right page. `ScanView.tsx`'s own `if (presetId ===
+  'breakout_surge')` branch is now dead code at that URL (React Router
+  never reaches `ScanView` for it) — left in place rather than deleted,
+  since `ScanView.tsx` is shared production code serving 8 other presets
+  and touching its internals wasn't necessary to retire this one path.
+- `BreakoutSurgeStudio.tsx` — removed the "Preview · Phase 2" label (no
+  longer accurate now that this is the production page, not a preview).
+  Added a lightweight "Other scanners" pill row (via `useScanPresets()`,
+  falling back to the hardcoded `SCAN_PRESETS` on a query error rather
+  than an empty list) linking to each of the other 8 presets by
+  `navigate(`/scanner/${p.id}`)`.
+
+**Known, disclosed scope gap:** this page has no category rail or
+within-category tab strip of its own — unlike `ScanView.tsx`'s shared
+shell, which every other preset renders inside. The "Other scanners" row
+is a flat list of all 8 remaining presets, not a port of that shell (out
+of scope for this round, given the priority was closing the redirect
+gap). It closes the actual risk — a user landing here with no way out —
+without rebuilding the full switcher UI.
+
+**Verified:**
+- `npm run typecheck` and `npm run build` both pass clean; theme-standard
+  ratchet unchanged (371 hex + 276 rgba, same as baseline).
+- Live Playwright check (temp public route + the established
+  `window.__mockBSS` data-injection pattern in `useScan.ts`, both fully
+  reverted after — confirmed via `git diff --stat` showing only
+  `App.tsx` + `BreakoutSurgeStudio.tsx` changed): the page renders with no
+  console/page errors, the "Other scanners" row renders all 8 sibling
+  presets as clickable pills, and the rest of the page (stat tiles, VaNi
+  card, filter bar, table) renders unchanged. Screenshot taken during this
+  session for visual confirmation.
+- NOT verified live against a real authenticated session in this sandbox
+  (no backend/auth access here, as with every round this session) — owner
+  to confirm after deploy that navigating via the sidebar "Scanner" link
+  now lands on the studio page without a redirect to landing.

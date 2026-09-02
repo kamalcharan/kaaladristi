@@ -128,12 +128,29 @@ function AppRoutes() {
           <Route path="/intraday/:indexId" element={<IntradayPage />} />
           <Route path="/scan" element={<Navigate to="/scanner" replace />} />
           <Route path="/scanners" element={<Navigate to="/scanner" replace />} />
+          {/* Breakout Surge now lives at its real preset URL (see
+              docs/claude/breakout-surge-vani-poa.md v21) — these two explicit
+              routes are matched before the generic :presetId ones below
+              (React Router ranks a static segment over a dynamic one
+              regardless of declaration order, but declaring them first keeps
+              the intent readable) so /scanner/breakout_surge and
+              /scanners/breakout_surge render the redesigned studio page
+              instead of ScanView's old inline branch. This makes it reachable
+              via ordinary SPA navigation — the sidebar "Scanner" link, the
+              default-tab redirect off bare /scanner, and every other
+              preset's category tab strip already navigate() to this exact
+              URL — not just a typed direct link, which is what exposed the
+              full-page-reload/auth-reinit race (fixed separately in
+              authStore.ts, see v20) in the first place. */}
+          <Route path="/scanner/breakout_surge" element={<BreakoutSurgeStudio />} />
+          <Route path="/scanners/breakout_surge" element={<BreakoutSurgeStudio />} />
           <Route path="/scanners/:presetId" element={<ScanView />} />
           <Route path="/scanner" element={<ScanView />} />
           <Route path="/bookmarks" element={<MyBookmarksPage />} />
           <Route path="/scanner/:presetId" element={<ScanView />} />
-          {/* Direct-URL-only preview — intentionally not in Sidebar nav (see docs/claude/breakout-surge-vani-poa.md) */}
-          <Route path="/scanner-preview/breakout-surge" element={<BreakoutSurgeStudio />} />
+          {/* Old preview URL — kept as a redirect for continuity (bookmarks,
+              open tabs) now that the studio page lives at the real preset URL. */}
+          <Route path="/scanner-preview/breakout-surge" element={<Navigate to="/scanner/breakout_surge" replace />} />
           <Route path="/manipulation-watch" element={<ManipulationWatchView />} />
           <Route path="/industry-transition" element={<IndustryTransitionView />} />
           <Route path="/settings" element={<SettingsView />} />
