@@ -888,3 +888,65 @@ pattern — none found; this was the only one.
 - `npm run typecheck` and `npm run build` (ratchet unchanged) pass clean.
   Not verified against a live render — same standing gap as the mobile fit
   fixes above; owner to confirm the preview page loads once redeployed.
+
+**v20 — the v19 hooks fix was real but not the actual cause; the real bug
+was a silent sign-out in `authStore.ts` (2026-09-02).** Owner reported the
+redirect persisted after v19 deployed. Live-reproduced the exact null→truthy
+`dataDate` transition v19 fixed (mocked `useScan` data via a temp
+`useScan.ts` injection + a temp unauthenticated preview route, Playwright,
+both reverted after) — confirmed it renders cleanly, no crash, no redirect.
+A parallel independent audit (separate investigation, not reusing the v19
+one) reached the same conclusion from static reading and flagged the real
+tell: `ErrorBoundary.tsx` renders a "Something went wrong" fallback on
+catch — it never navigates. So even the PRE-fix v19 crash should have shown
+an error screen at the same URL, never a jump to landing. v19 fixed a real
+crash (worth keeping) but was never the cause of this symptom.
+
+Traced the actual mechanism instead of asking for more owner-side testing:
+- Ruled out nginx (`nginx/nginx.conf` and `App/frontend/nginx.conf` both
+  use a plain `try_files $uri $uri/ /index.html` SPA catch-all — nothing
+  route-specific, `/scanner-preview/breakout-surge` falls through
+  identically to any other path).
+- Ruled out `ProtectedRoute.tsx`'s own `!profile && authError` branch —
+  `App.tsx`'s `AppRoutes()` has its OWN top-level `if (authError)` guard,
+  checked before `<Routes>` even renders, which intercepts every authError
+  case first (rendering a "Connection Error" + Reload screen) — making
+  `ProtectedRoute`'s identical inner check unreachable dead code. Read
+  `authStore.ts` end-to-end for anything route-aware — none found.
+- Found the real path: `/scanner-preview/breakout-surge` is intentionally
+  not in the sidebar nav — the ONLY way to reach it is typing the URL,
+  which is always a full browser page reload. Every other page the owner
+  uses is reached by clicking a link inside the already-running app (a
+  client-side route change), which never re-enters `initialize()` at all.
+  So this is structurally the one page that repeatedly exercises a full
+  auth re-init, while nothing else does — that alone explains "everything
+  else works, only this doesn't" without needing a second code bug.
+- `authStore.ts`'s `initialize()`: on the FIRST `getProfile()` failure, if
+  the error LOOKED auth-shaped (`isAuthError()` — a regex over
+  `jwt|expired|unauthoriz|401`), it signed the user out immediately —
+  clearing `user` to `null`, `authError` left untouched — no retry, no
+  error surfaced. `ProtectedRoute` then sees `!user` and bounces to `/`,
+  indistinguishable from "never logged in." The SIBLING branch (a
+  non-auth-shaped error) already retried once after 1.5s before giving up;
+  this one didn't. A cold-starting backend container or a fleeting
+  network blip on the one API call that only ever fires on a fresh full
+  load can return something that LOOKS like a 401 without the token
+  actually being dead — and got treated as instant, silent, unrecoverable
+  sign-out.
+- Fix: give the auth-shaped first failure the same one retry the
+  non-auth-shaped path already had, before committing to a sign-out. A
+  genuinely dead token still gets caught (fails identically on retry); a
+  one-off blip no longer costs the whole session. If the retry fails with
+  a NON-auth-shaped error, it now surfaces as `authError` — which
+  `AppRoutes()`'s existing top-level guard renders as a visible,
+  recoverable "Connection Error" + Reload screen instead of a silent,
+  unexplained trip to landing.
+- Files touched: `App/frontend/src/stores/authStore.ts` only — a
+  product-wide fix (this login path isn't Breakout-Surge-specific), just
+  found via this page since it's the only one that reliably exercises it.
+- `npm run typecheck` and `npm run build` pass clean. Not verified against
+  a live backend (no way to force a transient 401 from this environment) —
+  owner to confirm once redeployed; if the redirect still recurs, the next
+  step is capturing the actual browser Network/Console output at the
+  moment it happens, since static reading has now been pushed as far as it
+  can go without that.
