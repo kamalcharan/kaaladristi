@@ -84,18 +84,31 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         try {
           profile = await getProfile();
         } catch (err1) {
-          if (isAuthError(err1)) {
-            console.error('[auth] token rejected — signing out:', err1);
-            await signOut();
-            set({ user: null, session: null, profile: null, isAdmin: false, isLoading: false });
-            return;
-          }
+          // Even an auth-shaped error (401/expired/jwt) gets ONE retry
+          // before we treat it as a genuinely dead token — a cold-starting
+          // backend container or a fleeting network blip can return a
+          // 401/502 that LOOKS auth-shaped without the token actually
+          // being invalid. This whole block only runs on a fresh full
+          // page load (a client-side SPA navigation between already-
+          // mounted pages never re-enters initialize()) — so a page only
+          // ever reached by typing its URL directly (never through an
+          // in-app link) is the one place that repeatedly exercises this
+          // exact race, while every other page — always reached via a
+          // link click into an already-initialized session — never does.
+          // Instant sign-out on the FIRST failure here silently bounced
+          // users to the landing page on nothing more than a transient
+          // hiccup, with zero error shown — indistinguishable from "never
+          // logged in." Retrying first (mirroring the non-auth-error path
+          // below) means a genuinely dead token still gets caught (it
+          // fails identically on retry), but a one-off blip doesn't cost
+          // the session.
+          console.error('[auth] getProfile failed (attempt 1), retrying once:', err1);
           await new Promise(r => setTimeout(r, 1500));
           try {
             profile = await getProfile();
           } catch (err2) {
             if (isAuthError(err2)) {
-              console.error('[auth] token rejected — signing out:', err2);
+              console.error('[auth] token rejected on retry — signing out:', err2);
               await signOut();
               set({ user: null, session: null, profile: null, isAdmin: false, isLoading: false });
               return;
