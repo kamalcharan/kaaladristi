@@ -41,7 +41,16 @@ WHERE clause to extend to another preset.
 
 import argparse
 import logging
+import os
+import sys
 
+# Makes `lib` importable when this script is run directly from inside
+# scripts/ (e.g. `cd App/backend/scripts && python compute_scan_membership_snapshot.py`)
+# rather than from App/backend or via the pipeline2 app import — matches
+# every other CLI script in this directory (rule_discovery.py, etc.).
+# Missing this line is exactly what produced a live
+# "ModuleNotFoundError: No module named 'lib.config'" when run standalone.
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from lib.config import DATABASE_URL
 
 log = logging.getLogger(__name__)
