@@ -22,7 +22,6 @@ import { EquityVisualPulsePage } from '@/components/domain/VisualPulse/equity';
 import { IntradayPage } from '@/components/domain/Intraday';
 import ScanView from '@/views/ScanView';
 import MyBookmarksPage from '@/views/MyBookmarksPage';
-import BreakoutSurgeStudio from '@/views/BreakoutSurgeStudio';
 import ManipulationWatchView from '@/views/ManipulationWatchView';
 import IndustryTransitionView from '@/views/IndustryTransitionView';
 import DataPipelinePage from '@/pages/DataPipeline';
@@ -128,22 +127,13 @@ function AppRoutes() {
           <Route path="/intraday/:indexId" element={<IntradayPage />} />
           <Route path="/scan" element={<Navigate to="/scanner" replace />} />
           <Route path="/scanners" element={<Navigate to="/scanner" replace />} />
-          {/* Breakout Surge now lives at its real preset URL (see
-              docs/claude/breakout-surge-vani-poa.md v21) — these two explicit
-              routes are matched before the generic :presetId ones below
-              (React Router ranks a static segment over a dynamic one
-              regardless of declaration order, but declaring them first keeps
-              the intent readable) so /scanner/breakout_surge and
-              /scanners/breakout_surge render the redesigned studio page
-              instead of ScanView's old inline branch. This makes it reachable
-              via ordinary SPA navigation — the sidebar "Scanner" link, the
-              default-tab redirect off bare /scanner, and every other
-              preset's category tab strip already navigate() to this exact
-              URL — not just a typed direct link, which is what exposed the
-              full-page-reload/auth-reinit race (fixed separately in
-              authStore.ts, see v20) in the first place. */}
-          <Route path="/scanner/breakout_surge" element={<BreakoutSurgeStudio />} />
-          <Route path="/scanners/breakout_surge" element={<BreakoutSurgeStudio />} />
+          {/* Breakout Surge renders inside ScanView's shell like every other
+              preset (category rail + within-category tab strip) — its own
+              body is BreakoutSurgeStudio, delegated to from ScannerResults'
+              breakout_surge branch, the same pattern stage_2_leaders/
+              conviction_flow/flower_pot_burst already use. No standalone
+              route for it: /scanner/breakout_surge falls through to the
+              generic :presetId route below like every other scanner. */}
           <Route path="/scanners/:presetId" element={<ScanView />} />
           <Route path="/scanner" element={<ScanView />} />
           <Route path="/bookmarks" element={<MyBookmarksPage />} />

@@ -15,6 +15,7 @@ import AtmosphericBadge from '@/components/domain/AtmosphericBadge';
 import { ScanFilterBar, applyFilters, DEFAULT_FILTERS, FPB_DEFAULT_FILTERS, JOURNEY_DEFAULT_FILTERS, type ScanFilters } from '@/components/domain/ScanFilterBar';
 import ScanVaNiPublisher from '@/components/domain/ScanVaNiPublisher';
 import ScanStalenessBanner from '@/components/domain/ScanStalenessBanner';
+import BreakoutSurgeStudio from '@/views/BreakoutSurgeStudio';
 import { navName } from '@/lib/symbolUtils';
 import { getSetupAdapter } from '@/services/thesis/setupAdapter';
 import '@/services/thesis/adapters'; // registers SETUP_ADAPTERS entries
@@ -1169,60 +1170,64 @@ function ScannerResults({ presetId }: { presetId: string }) {
     ? presets.filter((p) => p.category === preset.category)
     : [];
 
+  // Category tab strip — extracted so the breakout_surge branch (which
+  // delegates its body to BreakoutSurgeStudio, not the generic layout below)
+  // can render just this, without the title/description block that
+  // BreakoutSurgeStudio already renders itself.
+  const categoryTabStrip = categoryPresets.length > 1 && (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: '4px',
+      marginBottom: '20px', flexWrap: 'wrap',
+    }}>
+      {categoryPresets.map((p) => {
+        const isActive = p.id === presetId;
+        const count = allCounts?.[p.id] ?? null;
+        return (
+          <button
+            key={p.id}
+            onClick={() => navigate(`/scanner/${p.id}`)}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: '6px',
+              padding: '5px 12px', borderRadius: '8px',
+              border: `1px solid ${isActive ? preset.category_color : 'var(--border)'}`,
+              background: isActive ? `${preset.category_color}18` : 'transparent',
+              color: isActive ? preset.category_color : 'var(--text-muted)',
+              fontSize: '12px', fontWeight: isActive ? 600 : 400,
+              cursor: 'pointer', fontFamily: 'var(--font-body)',
+              transition: 'all 0.15s', whiteSpace: 'nowrap',
+            }}
+          >
+            {p.name}
+            {count != null && (
+              <span style={{
+                fontFamily: 'var(--font-mono)', fontSize: '10px',
+                color: isActive ? preset.category_color : 'var(--text-faint)',
+                opacity: 0.8,
+              }}>
+                {count}
+              </span>
+            )}
+          </button>
+        );
+      })}
+
+      {/* Timeframe tabs REMOVED (2026-08-26, owner). They were dead UI on
+          every preset: weekly and monthly were hard-disabled
+          (isDisabled = tf !== 'daily'), so the control only ever showed
+          "Daily" active beside two greyed buttons that could not be
+          clicked. The weekly/monthly CLOCKS now exist as their own presets
+          (Weekly/Monthly Movers and Decliners), which is what the tab strip
+          above is for — a timeframe switch on top of that would imply a
+          second, non-existent axis. The `timeframe` prop stays wired
+          (defaults to 'daily' from the URL) so useScan and the VaNi
+          publisher are untouched. */}
+    </div>
+  );
+
   // Shared header block reused for all presets
   const header = (
     <div style={{ paddingBottom: '0' }}>
-
-      {/* Category tab strip */}
-      {categoryPresets.length > 1 && (
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: '4px',
-          marginBottom: '20px', flexWrap: 'wrap',
-        }}>
-          {categoryPresets.map((p) => {
-            const isActive = p.id === presetId;
-            const count = allCounts?.[p.id] ?? null;
-            return (
-              <button
-                key={p.id}
-                onClick={() => navigate(`/scanner/${p.id}`)}
-                style={{
-                  display: 'inline-flex', alignItems: 'center', gap: '6px',
-                  padding: '5px 12px', borderRadius: '8px',
-                  border: `1px solid ${isActive ? preset.category_color : 'var(--border)'}`,
-                  background: isActive ? `${preset.category_color}18` : 'transparent',
-                  color: isActive ? preset.category_color : 'var(--text-muted)',
-                  fontSize: '12px', fontWeight: isActive ? 600 : 400,
-                  cursor: 'pointer', fontFamily: 'var(--font-body)',
-                  transition: 'all 0.15s', whiteSpace: 'nowrap',
-                }}
-              >
-                {p.name}
-                {count != null && (
-                  <span style={{
-                    fontFamily: 'var(--font-mono)', fontSize: '10px',
-                    color: isActive ? preset.category_color : 'var(--text-faint)',
-                    opacity: 0.8,
-                  }}>
-                    {count}
-                  </span>
-                )}
-              </button>
-            );
-          })}
-
-          {/* Timeframe tabs REMOVED (2026-08-26, owner). They were dead UI on
-              every preset: weekly and monthly were hard-disabled
-              (isDisabled = tf !== 'daily'), so the control only ever showed
-              "Daily" active beside two greyed buttons that could not be
-              clicked. The weekly/monthly CLOCKS now exist as their own presets
-              (Weekly/Monthly Movers and Decliners), which is what the tab strip
-              above is for — a timeframe switch on top of that would imply a
-              second, non-existent axis. The `timeframe` prop stays wired
-              (defaults to 'daily' from the URL) so useScan and the VaNi
-              publisher are untouched. */}
-        </div>
-      )}
+      {categoryTabStrip}
 
       <div style={{ marginBottom: '24px' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
@@ -1290,46 +1295,18 @@ function ScannerResults({ presetId }: { presetId: string }) {
     );
   }
 
-  // Breakout Surge — merged scan (single tab), table or custom card layout
+  // Breakout Surge — its own studio page (stat tiles, VaNi card, filters,
+  // table/cards), delegated to entirely rather than built inline here (same
+  // pattern as Stage 2 / Conviction Flow / Flower Pot Burst below: this
+  // component's own useScan/filters/sort state above goes unused for this
+  // branch, same as it does for those three). Only the category tab strip
+  // is reused from `header` — BreakoutSurgeStudio renders its own
+  // title/description, so the rest of `header` would duplicate it.
   if (presetId === 'breakout_surge') {
     return (
       <div style={{ paddingBottom: '100px' }}>
-        {header}
-        <ScanVaNiPublisher preset={preset} timeframe={timeframe} exchange={exchangeFilter} stocks={oppFilter ? exportStocks : sorted} isLoading={isLoading} />
-        <ScanStalenessBanner stocks={oppFilter ? exportStocks : sorted} />
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: '8px',
-          marginBottom: '12px', flexWrap: 'wrap',
-        }}>
-          <ExchangeTabs value={exchangeFilter} onChange={setExchangeFilter} disabledOptions={disabledExchangeOptions} />
-          {!hideVani && <VaniFilterButton active={oppFilter} count={oppCount} onToggle={() => setOppFilter((f) => !f)} />}
-          <ScanFilterBar
-            presetId={presetId}
-            stocks={rawStocks ?? []}
-            filters={filters}
-            onFiltersChange={setFilters}
-          />
-          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <DownloadXlsButton stocks={exportStocks} scanName={preset.name} />
-            <TradingViewExportButton stocks={exportStocks} scanName={preset.name} />
-            <ViewToggle value={viewMode} onChange={setViewMode} />
-          </div>
-        </div>
-        {isLoading ? (
-          <DristiQLoader />
-        ) : error ? (
-          <Card rounded="xxl" className="py-12 text-center">
-            <p style={{ fontSize: '13px', color: 'var(--bear)' }}>Failed to run scan.</p>
-          </Card>
-        ) : viewMode === 'table' ? (
-          <ScanTable
-            stocks={exportStocks}
-            presetId={presetId}
-            onRowClick={(s) => navigate(`/chart/equity/${s.equity_id}?name=${encodeURIComponent(navName(s))}${storySetupSuffix(presetId)}`)}
-          />
-        ) : (
-          <BreakoutSurgeCards stocks={oppFilter ? exportStocks : sorted} />
-        )}
+        {categoryTabStrip}
+        <BreakoutSurgeStudio />
       </div>
     );
   }
