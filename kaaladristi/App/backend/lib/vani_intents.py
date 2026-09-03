@@ -865,32 +865,34 @@ INTENTS: dict[str, VaNiIntent] = {
     # ══════════════════════════════════════════════════════════════════════════
 
     # ── 17. Explain Signals ───────────────────────────────────────────────────
+    # SHORTENED (2026-09-03, owner: "VaNi should respond with facts and
+    # numbers to enable decision but not big para's" — 2-paragraph prose was
+    # narrating real numbers as flowing text, which read as vague/possibly
+    # hallucinated even when factually correct). StockAskPopover.tsx now
+    # shows Volume/Flow/RS Zone/Delivery as a real ✓/– checklist computed
+    # client-side (no LLM) directly above this answer — the prompt is scoped
+    # to NOT restate that checklist, only add what it can't show.
     "equity.explain_signals": VaNiIntent(
         page="_equity",
         label="Explain this stock's signals",
         required_context=["instrument_context"],
         system_prompt=(
             _VANI_IDENTITY
-            + "The user has selected a specific stock and wants to understand its "
-            "current signal profile. You will receive a full technical + astro "
-            "snapshot: flow type, participation (institutional vs hot money), "
-            "momentum (RSI, MFI), relative strength (Magic RS zone), volume "
-            "character, dot signals (SVD/SBD/SYD), Golden Line (SMA 150) position, "
-            "and any active planetary cycle events. "
-            "\n\n"
-            "Write 2 short paragraphs:\n"
-            "(1) The signal picture — what is the dominant signal? Is flow "
-            "confirming the RS zone? Is participation institutional or speculative? "
-            "Are dot signals present and what do they indicate? What does the "
-            "volume character say about conviction?\n"
-            "(2) The multi-factor read — do the signals align (confluence) or "
-            "conflict? A stock in the Leading RS zone with Fresh Longs flow + SVD "
-            "+ high RVOL is in strong confluence. A stock in the Leading zone but "
-            "with Long Liquidation flow has conflicting signals. Describe which "
-            "situation this stock is in."
-            + _VANI_RULES
+            + "The user has selected a specific stock. Its Volume / Flow / RS Zone "
+            "/ Delivery confirmation is already shown as a checklist directly above "
+            "your answer — do NOT restate those four numbers. Add only what the "
+            "checklist can't show: institutional vs hot-money participation split, "
+            "dot signals (SVD/SBD/SYD) if present, and Golden Line (SMA 150) "
+            "position. Close with ONE clause on whether the overall picture is "
+            "confluent or conflicted."
+            + _VANI_RULES.replace(
+                "No bullet points — write flowing paragraphs. About 150 words.",
+                "No bullet points. About 40 words total — this sits directly "
+                "below a checklist that already shows volume/flow/RS/delivery, "
+                "so stay to what that checklist doesn't cover.",
+            )
         ),
-        max_tokens=400,
+        max_tokens=180,
         cache_ttl_hours=24,
         complexity="low",
     ),
@@ -907,20 +909,23 @@ INTENTS: dict[str, VaNiIntent] = {
             "understand why it appears there. You will receive the stock's full "
             "signal snapshot plus a page_context field explaining which page and "
             "category the stock is in (e.g., 'Industry Transition / Rotating In' "
-            "or 'Scanner / Power Buy'). "
+            "or 'Scanner / Power Buy'). Its Volume / Flow / RS Zone / Delivery "
+            "confirmation is already shown as a checklist directly above your "
+            "answer — do NOT restate those four numbers. "
             "\n\n"
-            "Write 2 short paragraphs:\n"
-            "(1) Why it qualifies — map the stock's specific signal values to "
-            "the criteria for this category. For example, if it's in 'Rotating In', "
-            "explain that its industry rank improved 5+ positions and its RS/flow "
-            "confirm the rotation. Be specific about which numbers meet which "
-            "thresholds.\n"
-            "(2) Strength of the signal — is this a strong inclusion (multiple "
-            "confirming factors) or borderline (barely meets criteria)? What would "
-            "strengthen or weaken its position in this list?"
-            + _VANI_RULES
+            "In 2-3 short sentences: name the ONE most specific criterion this "
+            "stock meets for its category — a real number against a real "
+            "threshold, not a generic restatement — then say plainly whether "
+            "this is a strong inclusion (multiple confirming factors) or "
+            "borderline (barely meets criteria)."
+            + _VANI_RULES.replace(
+                "No bullet points — write flowing paragraphs. About 150 words.",
+                "No bullet points. About 40 words total — this sits directly "
+                "below a checklist that already shows volume/flow/RS/delivery, "
+                "so stay to what that checklist doesn't cover.",
+            )
         ),
-        max_tokens=400,
+        max_tokens=180,
         cache_ttl_hours=24,
         complexity="low",
     ),
@@ -932,24 +937,23 @@ INTENTS: dict[str, VaNiIntent] = {
         required_context=["instrument_context"],
         system_prompt=(
             _VANI_IDENTITY
-            + "The user wants a risk assessment for a specific stock. You will "
-            "receive its full signal snapshot including flow type, volume, RS zone, "
-            "participation profile, dot signals, SMA 150 position, and any active "
-            "planetary cycle events. "
+            + "The user wants a risk read on a specific stock. Its Volume / Flow "
+            "/ RS Zone / Delivery confirmation is already shown as a checklist "
+            "directly above your answer — do NOT restate those four numbers. "
             "\n\n"
-            "Write 2 short paragraphs:\n"
-            "(1) Risk factors — identify what could go wrong. Is it trading on "
-            "low volume (weak conviction)? Is flow type fragile (Short Covering, "
-            "Long Liquidation)? Is there a vacuum flag? Any SYD (falling-flow) "
-            "signals? Is it below SMA 150 (structural weakness)? Are adverse "
-            "planetary events active?\n"
-            "(2) Risk level — synthesize into a plain-English risk characterization: "
-            "low risk (strong multi-factor support), moderate risk (mixed signals, "
-            "some concerns), or elevated risk (multiple warning signs). Explain "
-            "what would change the risk picture."
-            + _VANI_RULES
+            "In 2-3 short sentences: name the ONE biggest risk factor NOT already "
+            "visible in that checklist — a vacuum flag, an SYD (falling-flow) "
+            "signal, an adverse planetary event, or below-SMA-150 structural "
+            "weakness — then close with a plain risk characterization: low, "
+            "moderate, or elevated."
+            + _VANI_RULES.replace(
+                "No bullet points — write flowing paragraphs. About 150 words.",
+                "No bullet points. About 40 words total — this sits directly "
+                "below a checklist that already shows volume/flow/RS/delivery, "
+                "so stay to what that checklist doesn't cover.",
+            )
         ),
-        max_tokens=350,
+        max_tokens=180,
         cache_ttl_hours=24,
         complexity="low",
     ),

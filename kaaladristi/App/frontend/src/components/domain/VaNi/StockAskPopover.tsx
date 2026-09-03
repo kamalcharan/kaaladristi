@@ -1,12 +1,25 @@
 import { useEffect, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { getEquityIntents } from '@/config/vaniIntents'
 import { useVaNiAsk } from '@/hooks/useVaNiChat'
 import { usePipelineStatus } from '@/hooks/usePipelineStatus'
 import { fmtDateLong } from '@/lib/dateUtils'
+import { zoneLabel, flowLabel } from '@/constants/signalScale'
 import VaNiInsight from '@/components/domain/VaNiInsight'
 import { useStockAskStore } from '@/stores/stockAskStore'
 
 type EquityIntentKey = 'equity.explain_signals' | 'equity.why_in_context' | 'equity.risk_assessment'
+
+// Provisional confirmation thresholds for the line-item read below — not
+// calibrated against real data distributions yet (see LESSONS_LEARNED.md's
+// "always check actual data distribution before setting numeric thresholds"
+// — sniper_inst/sniper_hot were wrong for exactly this reason). RVOL >= 3
+// and delivery >= 30% are the same cuts already used elsewhere on this page
+// (Real Volume Behind tile, delivery_surge scans); owner should sanity-check
+// both against `percentile_cont` before this ships for real.
+const RVOL_CONFIRM_MIN = 3
+const DELIVERY_CONFIRM_MIN = 30
+const CONFIRMING_ZONES = ['Strong Bull', 'Mild Bull']
 
 /**
  * Anchored per-stock "Ask VaNi" popover — replaces VaNiTrigger's old
@@ -31,6 +44,19 @@ type EquityIntentKey = 'equity.explain_signals' | 'equity.why_in_context' | 'equ
  * phase, so it catches scrolling inside a nested container too, not just the
  * window) rather than computed once at click time.
  *
+ * Owner follow-up (2026-09-03, VaNi Two Levels mock review): a wall of two
+ * paragraphs read as "big paragraphs, is it hallucinating" for numbers that
+ * were real but narrated instead of shown. Added a confirmation row (do
+ * volume/flow/RS/delivery agree — real math, no LLM) above the VaNi answer,
+ * so the model's job shrinks to the one sentence that's actually its job:
+ * the read on whatever the pills already show. Confirmation only renders
+ * when the caller passes `entity.signals` (ScanTable.tsx does; other
+ * VaNiTrigger call sites and the URL-derived chart-page entity don't yet —
+ * the popover degrades to VaNi-answer-only for those, same as before).
+ * Also added Study →, which just navigates to the real ChartView route
+ * (`/chart/equity/:id`) — that page's own event/story-pin rendering is
+ * unrelated and untouched, this only has to get there correctly.
+ *
  * Mechanically still a copy of `OverlayExplainPopover.tsx`'s anchored-popover
  * chrome (fixed position clamped to the viewport, click-outside + Escape to
  * close) — the content is the entity intents (`equity.*`) VaNiChatPanel.tsx's
@@ -40,6 +66,7 @@ export default function StockAskPopover() {
   const entity = useStockAskStore((s) => s.entity)
   const anchorEl = useStockAskStore((s) => s.anchorEl)
   const close = useStockAskStore((s) => s.close)
+  const navigate = useNavigate()
 
   const ref = useRef<HTMLDivElement>(null)
   const { latestDataDate, latestDataDateFormatted } = usePipelineStatus()
@@ -137,8 +164,20 @@ export default function StockAskPopover() {
     })
   }
 
+  const study = () => {
+    close()
+    navigate(`/chart/equity/${entity.id}?name=${encodeURIComponent(entity.symbol)}&tab=chart`)
+  }
+
   const intents = getEquityIntents(entity.symbol) as Array<{ intentId: EquityIntentKey; label: string }>
   const left = Math.max(8, Math.min(pos.left, window.innerWidth - 348))
+  const s = entity.signals
+
+  const volOk = s?.rvol != null && s.rvol >= RVOL_CONFIRM_MIN
+  const flowOk = s?.flowType === 'FRESH_LONGS'
+  const rsOk = !!s?.magicRsZone && CONFIRMING_ZONES.includes(s.magicRsZone)
+  const delivOk = s?.deliveryPct != null && s.deliveryPct >= DELIVERY_CONFIRM_MIN
+  const confirmCount = s ? [volOk, flowOk, rsOk, delivOk].filter(Boolean).length : null
 
   return (
     <div
@@ -155,7 +194,12 @@ export default function StockAskPopover() {
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
         <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{entity.symbol}</span>
-        {entity.pageContext && (
+        {s && (
+          <span style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: s.pctChng != null && s.pctChng >= 0 ? 'var(--bull)' : 'var(--bear)' }}>
+            ₹{s.close.toFixed(2)} {s.pctChng != null ? `${s.pctChng >= 0 ? '+' : ''}${s.pctChng.toFixed(2)}%` : ''}
+          </span>
+        )}
+        {entity.pageContext && !s && (
           <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>{entity.pageContext}</span>
         )}
         <span style={{ marginLeft: 'auto', fontSize: 10, color: 'var(--text-faint)' }}>
@@ -169,6 +213,20 @@ export default function StockAskPopover() {
           }}
         >✕</button>
       </div>
+
+      {s && confirmCount != null && (
+        <>
+          <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: 8 }}>
+            <ConfirmPill k="Volume" v={s.rvol != null ? `${s.rvol.toFixed(1)}x` : '—'} ok={volOk} />
+            <ConfirmPill k="Flow" v={flowLabel(s.flowType).label} ok={flowOk} />
+            <ConfirmPill k="RS Zone" v={zoneLabel(s.magicRsZone).label} ok={rsOk} />
+            <ConfirmPill k="Delivery" v={s.deliveryPct != null ? `${s.deliveryPct}%` : '—'} ok={delivOk} />
+          </div>
+          <div style={{ fontSize: 10.5, color: 'var(--text-faint)', marginBottom: 10 }}>
+            <b style={{ color: 'var(--text-primary)' }}>{confirmCount} of 4</b> signals confirm
+          </div>
+        </>
+      )}
 
       <VaNiInsight
         insight={active.data?.response}
@@ -193,7 +251,36 @@ export default function StockAskPopover() {
             {i.label}
           </button>
         ))}
+        <button
+          onClick={study}
+          className="text-white"
+          style={{
+            marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 5,
+            padding: '4px 10px', borderRadius: 100, fontSize: 11, fontWeight: 600, cursor: 'pointer',
+            border: 'none', background: 'var(--indigo)', fontFamily: 'var(--font-body)',
+          }}
+        >
+          Study →
+        </button>
       </div>
+    </div>
+  )
+}
+
+function ConfirmPill({ k, v, ok }: { k: string; v: string; ok: boolean }) {
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 5, padding: '4px 8px', borderRadius: 7,
+      background: 'var(--card)', border: '1px solid var(--border)', fontSize: 10.5,
+    }}>
+      <span style={{
+        width: 12, height: 12, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
+        fontSize: 8, flexShrink: 0,
+        background: ok ? 'color-mix(in srgb, var(--bull) 20%, transparent)' : 'color-mix(in srgb, var(--bear) 16%, transparent)',
+        color: ok ? 'var(--bull)' : 'var(--bear)',
+      }}>{ok ? '✓' : '–'}</span>
+      <span style={{ color: 'var(--text-muted)' }}>{k}</span>
+      <span style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>{v}</span>
     </div>
   )
 }

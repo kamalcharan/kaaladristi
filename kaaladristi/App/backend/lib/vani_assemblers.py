@@ -1107,6 +1107,12 @@ def assemble_equity_context(db, entity_id: int, page_context: str = None, target
 def build_equity_cache_context(intent_id: str, ctx: dict) -> dict:
     """Cache key for equity intents — includes entity + key signal buckets."""
     return {
+        # v2 (2026-09-03): the three equity.* prompts were rewritten from
+        # 2-paragraph narration down to a 2-3 sentence read that assumes the
+        # frontend's own Volume/Flow/RS/Delivery checklist — bumped so a
+        # same-day cache hit can never serve the old long-form answer under
+        # the new UI, which no longer has room for it.
+        'v': 2,
         'date': ctx.get('date', ''),
         'entity_id': ctx.get('instrument', {}).get('id', ''),
         'rs_zone': ctx.get('relative_strength', {}).get('zone', ''),
