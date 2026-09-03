@@ -111,6 +111,64 @@ export function computeHighlightExplainFacts(rows: ScanStock[]): HighlightExplai
   }
 }
 
+export interface MomentumGapFacts {
+  count: number
+  avgGap: number | null
+  /** Up to 2 accelerating stocks, ranked by gap size — real named examples
+   *  for VaNi to cite, never a curated "pick". */
+  examples: { symbol: string; gap: number; score5d: number; score22d: number }[]
+}
+
+/**
+ * "Momentum gap" for the scanner.momentum_gap VaNi intent — how far a
+ * stock's 5-day score has pulled ahead of its own 22-day pace, among the
+ * SAME accelerating cohort isAccelerating()/ScanFilterBar's `accelerating`
+ * toggle already use. Deliberately not a new absolute threshold on
+ * (score_5d - score_22d) — see LESSONS_LEARNED.md's threshold-calibration
+ * lesson; there's no live data access at build time to calibrate a fresh
+ * cutoff, so this rides on an already-shipped, already-live one instead.
+ */
+export function computeMomentumGapFacts(rows: ScanStock[]): MomentumGapFacts {
+  const gapped = rows
+    .filter(isAccelerating)
+    .map((r) => ({ r, gap: (r.score_5d ?? 0) - (r.score_22d ?? 0) }))
+    .sort((a, b) => b.gap - a.gap)
+  const examples = gapped.slice(0, 2).map(({ r, gap }) => ({
+    symbol: displaySymbol(r),
+    gap,
+    score5d: r.score_5d ?? 0,
+    score22d: r.score_22d ?? 0,
+  }))
+  return {
+    count: gapped.length,
+    avgGap: _avg(gapped.map((x) => x.gap)),
+    examples,
+  }
+}
+
+export interface LeadingIndustryFacts {
+  name: string
+  count: number
+  totalCount: number
+  runnerUp: { name: string; count: number } | null
+}
+
+/**
+ * For the scanner.leading_industry VaNi intent — reuses the SAME industry
+ * breakdown computeCohortStats() already computes for the "Leading
+ * Industry" stat tile, just also surfacing the runner-up for contrast.
+ */
+export function computeLeadingIndustryFacts(rows: ScanStock[]): LeadingIndustryFacts | null {
+  const breakdown = industryBreakdown(rows)
+  if (!breakdown.length) return null
+  return {
+    name: breakdown[0].name,
+    count: breakdown[0].count,
+    totalCount: rows.length,
+    runnerUp: breakdown[1] ?? null,
+  }
+}
+
 /**
  * Deterministic "why this row" tags — the same boolean logic backfill_vani_flags.py
  * uses for is_vani_surge/is_vani_breakout (App/backend/scripts/backfill_vani_flags.py),

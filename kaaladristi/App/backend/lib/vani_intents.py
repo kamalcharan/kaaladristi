@@ -833,6 +833,88 @@ INTENTS: dict[str, VaNiIntent] = {
         complexity="low",
     ),
 
+    # ── 21e. Momentum Gap ───────────────────────────────────────────────────
+    # First of the 7 predefined "scanner-level" questions from the VaNi Two
+    # Levels design (owner, 2026-09-03): a closed set of NLP-phrased intents
+    # replacing the old ad-hoc pill set (your_view/explain_preset/glossary),
+    # each backed by real numbers computed client-side, never a free-text
+    # question. "Gap" reuses the SAME accelerating definition ScanFilterBar's
+    # `accelerating` toggle and the cohort-stats "Accelerating" tile already
+    # use (5-day score positive AND ahead of the 22-day score) rather than
+    # inventing a new absolute threshold on score_5d - score_22d — see
+    # LESSONS_LEARNED.md's "always check actual data distribution before
+    # setting numeric thresholds"; there's no live-data access at build time
+    # to calibrate a fresh cutoff, so this rides on an already-shipped one.
+    "scanner.momentum_gap": VaNiIntent(
+        page="scanner",
+        label="Stocks with a momentum gap",
+        required_context=["preset", "data_date", "momentum_gap_facts"],
+        system_prompt=(
+            _VANI_IDENTITY
+            + "The user clicked a question asking which stocks on this "
+            "screener have pulled furthest ahead of their own recent pace — "
+            "grounded in real numbers for THIS screener today, not a "
+            "generic definition. You will receive: how many stocks today "
+            "show 5-day momentum outpacing their 22-day pace, the average "
+            "gap between those two scores across that group, and up to 2 "
+            "named examples with their own 5-day score, 22-day score, and "
+            "gap.\n\n"
+            "Write ONE opening line stating the count, then 2 bullet "
+            "points, each starting with '• ', each ONE short line: (1) "
+            "name the 1-2 examples given, citing their own 5-day/22-day/gap "
+            "numbers as illustration; (2) state plainly this measures how "
+            "far ahead of its own recent pace a stock has moved, not a "
+            "signal to act. If the count is zero, say plainly that nothing "
+            "shows a meaningful gap today rather than describing the "
+            "criteria in the abstract. Never name a stock not provided."
+            + _VANI_RULES.replace(
+                "No bullet points — write flowing paragraphs. About 150 words.",
+                "Short bullet points are REQUIRED here (see the format "
+                "instructions above) — this overrides the no-bullets house "
+                "rule for this one intent. About 70 words total.",
+            )
+        ),
+        max_tokens=280,
+        cache_ttl_hours=24,
+        complexity="low",
+    ),
+
+    # ── 21f. Leading Industry ────────────────────────────────────────────────
+    # Reuses the SAME leading-industry fact already computed by
+    # computeCohortStats() (breakoutSurgeInsights.ts) for the "Leading
+    # Industry" stat tile — this intent just narrates it, no new client-side
+    # computation. Distinct from the still-unbuilt "Which sectors' stocks are
+    # leading today?" (needs a join to km_industry_eod.industry_rank, a
+    # cross-screener Sector Rotation signal) — this one only describes which
+    # industry has the most representation WITHIN today's own result set.
+    "scanner.leading_industry": VaNiIntent(
+        page="scanner",
+        label="Which industry is leading this scan?",
+        required_context=["preset", "data_date", "leading_industry_facts"],
+        system_prompt=(
+            _VANI_IDENTITY
+            + "The user clicked a question asking which industry has the "
+            "most representation in today's screener results. You will "
+            "receive: the leading industry's name and how many of today's "
+            "results belong to it, the total result count, and — if "
+            "present — the runner-up industry with its own count.\n\n"
+            "Write 1 to 2 short sentences (no bullets needed — this is "
+            "brief): name the leading industry and its share of today's "
+            "results, and if a runner-up is present, name it too for "
+            "contrast. State plainly this is a measurement of today's "
+            "concentration, not a sector call. Never invent an industry "
+            "name not provided."
+            + _VANI_RULES.replace(
+                "No bullet points — write flowing paragraphs. About 150 words.",
+                "About 45 words total — this is a short, direct answer, "
+                "not an essay.",
+            )
+        ),
+        max_tokens=180,
+        cache_ttl_hours=24,
+        complexity="low",
+    ),
+
     # ══════════════════════════════════════════════════════════════════════════
     # Index Chart Intents — Astro (deterministic, no LLM in practice)
     # Owner directive (2026-07-22): both the header "Ask VaNi" button and any
