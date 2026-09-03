@@ -902,17 +902,20 @@ def handle_scan_membership_snapshot(conn, trade_date: date, force: bool,
     km_scan_membership_daily (migration 198) — the foundation for the
     Breakout Surge scanner-level VaNi intents that need to diff today
     against a prior date ("new since yesterday", "which stocks just turned
-    RS-green", "is today unusual"). km_scan_results (migration 147) is a
-    current-snapshot-only materialized view and doesn't even cover
-    breakout_surge, so nothing in the schema persisted this history before
-    this step existed — "new since yesterday" only has something to answer
-    starting the day AFTER this snapshot begins running.
+    RS-green", "is today unusual"). km_scan_results (migration 147,
+    extended by 195/197 to also cover breakout_surge) is a current-
+    snapshot-only materialized view — it never holds a date other than
+    "today", so nothing in the schema persisted this history before this
+    step existed. "New since yesterday" only has something to answer
+    starting the day AFTER this snapshot begins running (or, backfilled,
+    the day after the earliest backfilled date — see
+    scripts/compute_scan_membership_snapshot.py's --from/--to).
 
-    Must run in the SAME pipeline execution as scan_refresh, immediately
-    after it: km_scan_results holds only whatever the last refresh
-    produced (current-snapshot-only, overwritten in place every night), so
-    this is the one point in the day where "today's row" is guaranteed to
-    still be there to read.
+    Runs right after scan_refresh in DAILY_STEPS purely to keep the two
+    ordered together conceptually (both read this date's compute output);
+    it does NOT depend on scan_refresh having just run — the membership
+    query goes straight to km_equity_eod (see compute_scan_membership_snapshot.py),
+    which is why the same function also backfills any past date correctly.
     """
     from scripts.compute_scan_membership_snapshot import compute_scan_membership_for_pipeline
     on_progress('snapshotting scan membership', 20)

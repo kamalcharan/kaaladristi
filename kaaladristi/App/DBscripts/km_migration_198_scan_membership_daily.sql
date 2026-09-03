@@ -18,20 +18,27 @@
 --
 -- Populated by scripts/compute_scan_membership_snapshot.py, wired into
 -- pipeline2 as the scan_membership_snapshot step (App/backend/pipeline2/
--- orchestrator.py DAILY_STEPS), which runs immediately after scan_refresh
--- and reads straight from km_scan_results for that date — reusing the
--- view's already-correct NSE-only/ISIN-dedup/display-cap logic rather than
--- re-deriving each preset's qualifying SQL by hand a second time.
+-- orchestrator.py DAILY_STEPS). CORRECTED (2026-09-03, before first
+-- deploy): an earlier version of this script read membership straight from
+-- km_scan_results, which seemed like reuse but actually broke backfill —
+-- that view is current-snapshot-only and never holds a date other than
+-- "today", so reading it for any past date silently returned zero rows.
+-- Fixed to re-derive membership directly from km_equity_eod (which DOES
+-- hold full history) for every date, live or backfilled alike — the same
+-- WHERE clause as migration 197's `breakout_surge`/`pa`/`pa_pool` CTEs
+-- (NSE-only, close >= 50, pct_chng > 0, pct_from_breakout > 0, capped at
+-- the display limit), kept in sync by hand since it's no longer read off a
+-- live view.
 --
 -- Scope: breakout_surge only for now (the one preset with Phase 3 VaNi
--- intents) — extend by adding a preset_id to the script's
--- SNAPSHOT_PRESET_IDS once it's also covered by km_scan_results.
+-- intents) — extend by adding a preset_id + its qualifying WHERE clause to
+-- the script's PRESET_MEMBERSHIP_FNS.
 --
 -- "New since yesterday" / "RS just turned green" only have something real
--- to answer starting the day AFTER this snapshot begins running (or, if
--- backfilled below, the day after the earliest backfilled date) — there is
--- no history before this migration to reconstruct further back without a
--- backfill.
+-- to answer starting the day AFTER a prior day's snapshot exists — either
+-- the day after the nightly pipeline first runs this step, or immediately
+-- if backfilled below (backfill now works for any real past date, unlike
+-- the original version of this migration's tail comment implied).
 -- ============================================================================
 
 BEGIN;
@@ -49,7 +56,7 @@ CREATE INDEX IF NOT EXISTS ix_scan_membership_daily_preset_date
     ON km_scan_membership_daily (preset_id, trade_date);
 
 COMMENT ON TABLE km_scan_membership_daily IS
-  'Frozen daily membership of a scan preset''s qualifying equities, appended once per day -- unlike km_scan_results (a current-snapshot-only materialized view), this persists history so day-over-day VaNi intents (new-since-yesterday, RS-flip, unusual-vs-recent) can diff today against a prior date. Populated by scripts/compute_scan_membership_snapshot.py, wired into pipeline2 as the scan_membership_snapshot step (runs right after scan_refresh). Scope: breakout_surge only for now -- see the script''s SNAPSHOT_PRESET_IDS to extend.';
+  'Frozen daily membership of a scan preset''s qualifying equities, appended once per day -- unlike km_scan_results (a current-snapshot-only materialized view), this persists history so day-over-day VaNi intents (new-since-yesterday, RS-flip, unusual-vs-recent) can diff today against a prior date. Populated by scripts/compute_scan_membership_snapshot.py (derives membership directly from km_equity_eod, so it works for backfilled past dates too, not just live runs), wired into pipeline2 as the scan_membership_snapshot step. Scope: breakout_surge only for now -- see the script''s SNAPSHOT_PRESET_IDS to extend.';
 
 COMMENT ON COLUMN km_scan_membership_daily.magic_rs_zone IS
   'The equity''s magic_rs_zone AS OF this trade_date -- captured here (not re-joined from km_equity_eod later) so a Magic RS zone flip can be detected via LAG() over this table''s own history even after km_equity_eod''s retention window or the zone-banding logic changes.';
