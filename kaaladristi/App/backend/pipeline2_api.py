@@ -5009,6 +5009,12 @@ def vani_ask(req: VaNiAskRequest):
             max_tokens=intent.max_tokens,
             temperature=0.4 if _attempt == 0 else 0.6,
             no_think=True,
+            # Found live (2026-09-03): intent.complexity has said 'low' =
+            # local LLM fine since the registry existed, but complete()
+            # never accepted it — every call hit the cloud provider first
+            # regardless, Qwen only ever reached as a failure fallback.
+            # See ai_client.py's own comment on prefer_local for the fix.
+            prefer_local=(intent.complexity == 'low'),
         )
         if not raw:
             continue

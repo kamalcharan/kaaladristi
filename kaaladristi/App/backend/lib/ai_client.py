@@ -16,6 +16,7 @@ Usage:
 
   text = complete(system="...", user="...", max_tokens=200)
   text = complete(system="...", user="...", max_tokens=200, temperature=0.4, no_think=True)
+  text = complete(system="...", user="...", prefer_local=True)  # try Qwen (LLM_BASE_URL) first
   # Returns str on success, None if disabled / misconfigured / error
 """
 
@@ -121,19 +122,37 @@ def complete(
     max_tokens: int = 200,
     temperature: float | None = None,
     no_think: bool = False,
+    prefer_local: bool = False,
 ) -> str | None:
     """
     Send a single chat completion. Returns the text response or None.
 
-    temperature — included in the request body only when not None.
-    no_think    — prepend '/no_think\\n' to system prompt (Qwen3 CoT suppression).
+    temperature  — included in the request body only when not None.
+    no_think     — prepend '/no_think\\n' to system prompt (Qwen3 CoT suppression).
+    prefer_local — try LLM_BASE_URL (the self-hosted Qwen server) FIRST, only
+                   falling back to the configured cloud AI_PROVIDER if Qwen
+                   fails or LLM_BASE_URL isn't set. Callers pass this for
+                   VaNiIntent.complexity == 'low' (see vani_intents.py) —
+                   the field existed since the intent registry was first
+                   built ("'low' = local LLM fine, 'high' = prefer cloud")
+                   but nothing ever read it: every call went through the
+                   OPPOSITE order below regardless of complexity, so a
+                   'low' intent still always hit Anthropic first and only
+                   reached Qwen if Anthropic errored — the reverse of what
+                   the field was named for. Found live (2026-09-03): every
+                   scanner.* cache row showed llm_provider='anthropic', for
+                   intents whose registry entry explicitly says 'low'.
 
     All errors are caught — callers never need to handle exceptions.
-    Falls back to LLM_BASE_URL (OpenAI-compat) when the primary provider fails
-    or AI_ENABLED=false but LLM_BASE_URL is configured.
     """
     if no_think:
         system = f"/no_think\n{system}"
+
+    if prefer_local:
+        result = _fallback_complete(system, user, max_tokens, temperature)
+        if result is not None:
+            return result
+        return _primary_complete(system, user, max_tokens, temperature)
 
     result = _primary_complete(system, user, max_tokens, temperature)
     if result is not None:
