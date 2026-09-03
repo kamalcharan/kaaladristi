@@ -4,7 +4,7 @@ import { useVaNiAsk } from '@/hooks/useVaNiChat'
 import { usePipelineStatus } from '@/hooks/usePipelineStatus'
 import { fmtDateLong } from '@/lib/dateUtils'
 import VaNiInsight from '@/components/domain/VaNiInsight'
-import type { VaNiEntity } from '@/stores/vaniStore'
+import { useStockAskStore } from '@/stores/stockAskStore'
 
 type EquityIntentKey = 'equity.explain_signals' | 'equity.why_in_context' | 'equity.risk_assessment'
 
@@ -15,28 +15,32 @@ type EquityIntentKey = 'equity.explain_signals' | 'equity.why_in_context' | 'equ
  * Owner (2026-09-02, re: the sparkle icon in every scan table row): "why am
  * i still getting slide for the onboard vani, we have discussed this a few
  * times" — the same "existing VaNi space, not a right drawer" complaint
- * already fixed for the on-page screener-level pills (breakout-surge-vani-poa.md
- * v10-v12) had never been applied to this PER-STOCK trigger, which
- * `docs/claude/vani-common-component.md` had actually documented as a
- * deliberate exception ("list/scanner pages stay on-demand via the drawer").
- * Owner's choice this round, given three options: an inline popover anchored
- * to the clicked row — not the drawer, and not a scroll-away trip to a
- * shared on-page card either, since a table row has no "on page" card of its
- * own the way a single-stock/scanner page does.
+ * already fixed for the on-page screener-level pills had never been applied
+ * to this per-stock trigger. Owner's choice, given three options: an inline
+ * popover anchored to the clicked row.
  *
- * Mechanically a copy of `OverlayExplainPopover.tsx`'s proven anchored-popover
+ * Owner follow-up (2026-09-03): a per-row local `anchor` (this component's
+ * original v1) let every row open its OWN popover independently, and the
+ * popover stayed pinned to a one-time click-point snapshot even as the page
+ * scrolled, drifting away from the row it was actually about. Fixed by
+ * mounting exactly ONE instance globally (Layout.tsx, next to
+ * VaNiChatPanel) driven by `stockAskStore` — `open()` there always replaces
+ * whatever was open, so a second row's click can never leave two popovers
+ * live — and by tracking the anchor as a live DOM element reference, whose
+ * `getBoundingClientRect()` is re-read on every scroll/resize event (capture
+ * phase, so it catches scrolling inside a nested container too, not just the
+ * window) rather than computed once at click time.
+ *
+ * Mechanically still a copy of `OverlayExplainPopover.tsx`'s anchored-popover
  * chrome (fixed position clamped to the viewport, click-outside + Escape to
  * close) — the content is the entity intents (`equity.*`) VaNiChatPanel.tsx's
  * drawer already asks for this entity, just rendered here instead of there.
  */
-export default function StockAskPopover({
-  entity, anchorX, anchorY, onClose,
-}: {
-  entity: VaNiEntity
-  anchorX: number
-  anchorY: number
-  onClose: () => void
-}) {
+export default function StockAskPopover() {
+  const entity = useStockAskStore((s) => s.entity)
+  const anchorEl = useStockAskStore((s) => s.anchorEl)
+  const close = useStockAskStore((s) => s.close)
+
   const ref = useRef<HTMLDivElement>(null)
   const { latestDataDate, latestDataDateFormatted } = usePipelineStatus()
 
@@ -51,14 +55,34 @@ export default function StockAskPopover({
   const [activeIntent, setActiveIntent] = useState<EquityIntentKey>('equity.why_in_context')
   const active = mutationByIntent[activeIntent]
 
-  const intents = getEquityIntents(entity.symbol) as Array<{ intentId: EquityIntentKey; label: string }>
+  // Live position — recomputed from the anchor element's current bounding
+  // rect, not a one-time snapshot, so the popover tracks the clicked row
+  // through scrolling instead of drifting to a stale viewport coordinate.
+  const [pos, setPos] = useState<{ left: number; top: number } | null>(null)
+  useEffect(() => {
+    if (!anchorEl) { setPos(null); return }
+    const update = () => {
+      const rect = anchorEl.getBoundingClientRect()
+      setPos({ left: rect.left, top: rect.bottom + 6 })
+    }
+    update()
+    // capture: true catches scroll events from any nested scroll container
+    // on the page (scroll events don't bubble, but do fire in the capture
+    // phase on ancestors, window included), not just window-level scroll.
+    window.addEventListener('scroll', update, true)
+    window.addEventListener('resize', update)
+    return () => {
+      window.removeEventListener('scroll', update, true)
+      window.removeEventListener('resize', update)
+    }
+  }, [anchorEl])
 
   useEffect(() => {
     function handle(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) onClose()
+      if (ref.current && !ref.current.contains(e.target as Node)) close()
     }
     function handleKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') onClose()
+      if (e.key === 'Escape') close()
     }
     // Defer so the click that opened the popover doesn't immediately close it.
     const t = setTimeout(() => document.addEventListener('mousedown', handle), 0)
@@ -68,7 +92,36 @@ export default function StockAskPopover({
       document.removeEventListener('mousedown', handle)
       document.removeEventListener('keydown', handleKey)
     }
-  }, [onClose])
+  }, [close])
+
+  // Reset which intent pill is active + fire the default question fresh
+  // whenever a NEW entity opens. This component is now a single long-lived
+  // global instance (mounted once in Layout.tsx) shared across every stock —
+  // without resetting explain/risk here too, ask()'s "already have data,
+  // don't refire" guard would show a PREVIOUS stock's stale answer under a
+  // pill for the stock now open, since a mutation's `.data` otherwise only
+  // clears on its own next `.mutate()` call.
+  const askedForRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!entity) return
+    const key = `${entity.type}:${entity.id}`
+    if (askedForRef.current === key) return
+    askedForRef.current = key
+    setActiveIntent('equity.why_in_context')
+    explainMutation.reset()
+    riskMutation.reset()
+    const dateIso = latestDataDate || new Date().toISOString().slice(0, 10)
+    whyMutation.mutate({
+      intent_id: 'equity.why_in_context',
+      date: dateIso,
+      entity_type: entity.type,
+      entity_id: entity.id,
+      page_context: entity.pageContext,
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entity?.type, entity?.id])
+
+  if (!entity || !anchorEl || !pos) return null
 
   const ask = (intentId: EquityIntentKey) => {
     setActiveIntent(intentId)
@@ -84,24 +137,15 @@ export default function StockAskPopover({
     })
   }
 
-  // Fires eagerly, same default the gated stock-lookup search in
-  // VaNiChatPanel.tsx already uses for "tell me about this stock".
-  const firedRef = useRef(false)
-  useEffect(() => {
-    if (firedRef.current) return
-    firedRef.current = true
-    ask('equity.why_in_context')
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  const left = Math.max(8, Math.min(anchorX, window.innerWidth - 348))
+  const intents = getEquityIntents(entity.symbol) as Array<{ intentId: EquityIntentKey; label: string }>
+  const left = Math.max(8, Math.min(pos.left, window.innerWidth - 348))
 
   return (
     <div
       ref={ref}
       onClick={(e) => e.stopPropagation()}
       style={{
-        position: 'fixed', left, top: anchorY + 6, zIndex: 500,
+        position: 'fixed', left, top: pos.top, zIndex: 500,
         width: 340, maxHeight: '70vh', overflowY: 'auto',
         background: 'var(--card)',
         border: '1px solid var(--border-indigo)', borderRadius: 12,
@@ -118,7 +162,7 @@ export default function StockAskPopover({
           {latestDataDateFormatted || fmtDateLong(latestDataDate || '')}
         </span>
         <button
-          onClick={onClose}
+          onClick={close}
           style={{
             background: 'none', border: 'none', cursor: 'pointer',
             color: 'var(--text-muted)', fontSize: 13, padding: 0, lineHeight: 1,

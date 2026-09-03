@@ -7,6 +7,7 @@ import Sidebar from './Sidebar';
 import DataFreshnessChip from './DataFreshnessChip';
 import SearchStrip from './SearchStrip';
 import VaNiChatPanel from './VaNiChatPanel';
+import StockAskPopover from './VaNi/StockAskPopover';
 import JobMonitor from './JobMonitor';
 import { NoiseOverlay } from '@/components/ui';
 import PageTour from '@/components/ui/PageTour';
@@ -122,6 +123,7 @@ export default function Layout() {
       </main>
 
       <VaNiChatPanel />
+      <StockAskPopover />
       <JobMonitor />
     </div>
   );

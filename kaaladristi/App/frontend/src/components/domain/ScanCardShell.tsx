@@ -14,6 +14,7 @@
 import React from 'react';
 import VaNiTrigger from './VaNiTrigger';
 import type { VaNiEntity } from '@/stores/vaniStore';
+import { useStockAskStore } from '@/stores/stockAskStore';
 
 // ── Avatar ────────────────────────────────────────────────────────────────────
 
@@ -109,6 +110,10 @@ interface ScanCardWrapperProps {
 }
 
 export function ScanCardWrapper({ isVani, symbol, onClick, children, vaniEntity }: ScanCardWrapperProps) {
+  // Card whose "Ask VaNi" popover is open gets an indigo border, same
+  // priority-over-gold convention as ScanTable.tsx's row highlight — stays
+  // identifiable as the popover's subject through scrolling.
+  const isAskActive = useStockAskStore((s) => !!vaniEntity && s.isOpenFor(vaniEntity));
   return (
     <div
       role={onClick ? 'button' : undefined}
@@ -122,8 +127,8 @@ export function ScanCardWrapper({ isVani, symbol, onClick, children, vaniEntity 
         background: isVani
           ? 'linear-gradient(135deg, rgba(212,168,75,0.06) 0%, var(--card) 55%)'
           : 'var(--card)',
-        border: '1px solid var(--border)',
-        borderLeft: isVani ? '3px solid var(--gold)' : '3px solid transparent',
+        border: `1px solid ${isAskActive ? 'var(--border-indigo)' : 'var(--border)'}`,
+        borderLeft: isAskActive ? '3px solid var(--indigo)' : isVani ? '3px solid var(--gold)' : '3px solid transparent',
         borderRadius: '12px',
         padding: '12px 16px 12px 14px',
         cursor: onClick ? 'pointer' : undefined,
