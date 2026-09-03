@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useScan, useScanPresets } from '@/hooks/useScan'
+import { useScan } from '@/hooks/useScan'
 import { displaySymbol } from '@/lib/symbolUtils'
 import { useBookmarkStore } from '@/stores/bookmarkStore'
-import { getPresetMeta, SCAN_PRESETS, type ExchangeFilter } from '@/services/scanEngine'
+import { getPresetMeta, type ExchangeFilter } from '@/services/scanEngine'
 import { DownloadXlsButton, TradingViewExportButton } from '@/components/domain/ScannerExportButtons'
 import { ExchangeTabs } from '@/components/domain/ExchangeTabs'
 import { ScanFilterBar, applyFilters, DEFAULT_FILTERS, hasActiveFilters, type ScanFilters } from '@/components/domain/ScanFilterBar'
@@ -64,12 +64,6 @@ export default function BreakoutSurgeStudio() {
   useEffect(() => { loadBookmarks() }, [loadBookmarks])
 
   const meta = getPresetMeta('breakout_surge')
-  // Falls back to the hardcoded SCAN_PRESETS (same fallback useScanPresets
-  // itself uses as placeholderData) rather than [] on a query error, so a
-  // transient scan_presets fetch failure doesn't strand the user with no
-  // way to reach the other 8 scanners.
-  const { data: allPresets = SCAN_PRESETS } = useScanPresets()
-  const otherPresets = allPresets.filter((p) => p.id !== 'breakout_surge')
   const all = rows ?? []
   const stats = computeCohortStats(all)
 
@@ -117,48 +111,13 @@ export default function BreakoutSurgeStudio() {
         inline padding isn't needed here, so plain classes suffice and stay
         simpler): 32px sides wastes ~17% of a 375px phone's width. */}
     <div className="px-4 pt-7 pb-12 sm:px-6 md:px-8">
-      {/* Escape hatch — this page has no category rail / tab-bar shell of its
-          own (unlike ScanView.tsx, which every other preset renders inside).
-          Now that this component IS the canonical /scanner/breakout_surge
-          page (retired the old inline ScanView branch, see
-          docs/claude/breakout-surge-vani-poa.md v21), a user arriving here —
-          via the sidebar "Scanner" link, since Breakout Surge is the default
-          tab — needs a way to reach the other 8 presets without a browser
-          back button. This is a flat pill row, not a port of ScanView's
-          category rail + within-category tabs (out of scope for this round);
-          it covers the actual gap (getting to another scanner at all) without
-          rebuilding the full switcher UI.
-
-          Single-line horizontal scroll, not wrap — with 22 presets, a
-          flex-wrap row runs to ~11 lines at a 375px width, burying the page's
-          actual title/stats/VaNi card below the fold before a mobile user
-          sees any of it (found live, 2026-09-02). Matches the same
-          `overflow-x-auto no-scrollbar` chip-strip pattern already used for
-          ActiveIndexScroll.tsx / IndustryTransitionView.tsx's category tabs —
-          swipeable on touch, scrollable with a mouse elsewhere, and stays a
-          fixed, small height at any screen width. */}
-      {otherPresets.length > 0 && (
-        <div style={{ marginBottom: 14 }}>
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '.06em', textTransform: 'uppercase', color: 'var(--text-faint)', marginBottom: 6 }}>
-            Other scanners
-          </div>
-          <div className="flex gap-1.5 overflow-x-auto no-scrollbar" style={{ paddingBottom: 2 }}>
-          {otherPresets.map((p) => (
-            <button
-              key={p.id}
-              onClick={() => navigate(`/scanner/${p.id}`)}
-              style={{
-                padding: '4px 11px', borderRadius: 100, fontSize: 11.5, fontWeight: 500, cursor: 'pointer',
-                border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-muted)',
-                fontFamily: 'var(--font-body)', whiteSpace: 'nowrap', flexShrink: 0,
-              }}
-            >
-              {p.name}
-            </button>
-          ))}
-          </div>
-        </div>
-      )}
+      {/* This page now renders inside ScanView's shell (left category rail +
+          within-category tab strip, both scoped to price_action's 9
+          siblings) — see ScanView.tsx's breakout_surge branch. It used to be
+          a standalone route with no shell of its own and a flat "Other
+          scanners" pill row listing all ~22 presets across every category as
+          a stopgap; that's gone now that the real navigation (rail + tabs)
+          is present. */}
       {/* flexWrap added — the export buttons are flexShrink:0 (won't shrink)
           and on a narrow screen the pair alone can be wider than the
           available width; without wrap they'd overflow past the edge with
