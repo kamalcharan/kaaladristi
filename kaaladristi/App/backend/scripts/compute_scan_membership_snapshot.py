@@ -12,26 +12,31 @@ place every night by the scan_refresh step. Nothing anywhere in the schema
 persisted that membership across days, so there was no way to answer "which
 stocks are new to this scan since yesterday" or "which stocks just turned
 RS-green" — both need a PRIOR day's membership to diff against, and none
-existed. This table is that history, appended once per day going forward —
-"new since yesterday" only has something real to say starting the day AFTER
-this snapshot begins running (or, backfilled, the day after the earliest
-backfilled date).
+existed. This table is that history, appended once per day going forward.
 
-Reads FROM km_scan_results rather than re-deriving each preset's qualifying
-SQL by hand — that view already encodes the exact ranking, NSE-only
-universe gate, ISIN-dedup, and top-N display cap the real scanner UI uses
-(migration 197's `pa`/`pa_pool` CTEs), so this snapshot always matches what
-users actually saw that day instead of risking drift from a second,
-hand-maintained copy of the same logic. Must run in the SAME pipeline
-execution as scan_refresh, immediately after it (see DAILY_STEPS,
-orchestrator.py) — the matview holds only whatever the last refresh
-produced, so this is the one point in the day where "today's row" is
-guaranteed to still be there.
+CORRECTED (2026-09-03, before first deploy): the original version of this
+script read membership straight from km_scan_results, reasoning that it
+already encodes the right WHERE clause and would save duplicating it. That
+reasoning missed the table's own nature — km_scan_results is CURRENT-
+SNAPSHOT-ONLY, so it never holds a date other than "today"; reading it for
+any past date silently returns zero rows. That broke exactly the case an
+owner would reach for first: backfilling recent history right after deploy
+so "new since yesterday" doesn't sit dark for days waiting on real pipeline
+runs to accumulate it one day at a time. Fixed by re-deriving membership
+directly from km_equity_eod (which DOES hold full history) for every date,
+live or backfilled alike — one function, used both ways, no dependency on
+what the matview happens to hold at call time. The WHERE clause mirrors
+migration 197's `breakout_surge`/`pa`/`pa_pool` CTEs (NSE-only, close >= 50,
+pct_chng > 0, pct_from_breakout > 0, capped at the preset's real display
+limit ranked by pct_from_breakout) — kept in sync by hand since there's no
+longer a live view being read; the ISIN-dedup those CTEs also apply is a
+no-op once already filtered to a single exchange (a dual-listed stock's
+NSE and BSE rows are two distinct equity_ids from km_equity_symbols; the
+exchange filter alone drops the BSE one, nothing left to dedupe).
 
 Scope: breakout_surge only for now — the one preset with Phase 3 VaNi
-intents (scannerenhancement.md's Tier B). Add a preset_id to
-SNAPSHOT_PRESET_IDS to extend to another preset already covered by
-km_scan_results.
+intents (scannerenhancement.md's Tier B). Add a preset_id + its qualifying
+WHERE clause to extend to another preset.
 """
 
 import argparse
@@ -51,19 +56,42 @@ def get_conn():
 
 SNAPSHOT_PRESET_IDS = ['breakout_surge']
 
+# Preset display cap (kd_scan_presets.limit / SCAN_PRESETS in scanEngine.ts)
+# — matches migration 197's `FROM breakout_surge WHERE rnk <= 500`, so a
+# backfilled date's "membership" means the same top-N the UI would have
+# shown, not an unbounded technical superset.
+BREAKOUT_SURGE_DISPLAY_CAP = 500
 
-def _membership_from_scan_results(conn, trade_date, preset_id: str) -> list[tuple[int, str | None]]:
-    """(equity_id, magic_rs_zone) for every row km_scan_results currently
-    holds for `preset_id` on `trade_date` — i.e. exactly what the scanner UI
-    showed that day (already NSE-only, ISIN-deduped, and capped at the
-    preset's real display limit by the view itself)."""
+
+def _membership_breakout_surge(conn, trade_date) -> list[tuple[int, str | None]]:
+    """(equity_id, magic_rs_zone) for every equity that qualifies for
+    Breakout Surge on `trade_date`, ranked and capped exactly like migration
+    197's `breakout_surge` CTE (NSE-only, close >= 50, pct_chng > 0,
+    pct_from_breakout > 0, top BREAKOUT_SURGE_DISPLAY_CAP by
+    pct_from_breakout DESC). Works identically for today or any past date —
+    km_equity_eod carries full history, unlike km_scan_results."""
     with conn.cursor() as cur:
         cur.execute(
-            "SELECT equity_id, magic_rs_zone FROM km_scan_results "
-            "WHERE preset_id = %(p)s AND trade_date = %(d)s",
-            {'p': preset_id, 'd': str(trade_date)},
+            """
+            SELECT e.equity_id, e.magic_rs_zone
+            FROM km_equity_eod e
+            JOIN km_equity_symbols s ON s.id = e.equity_id
+            WHERE e.trade_date = %(d)s
+              AND s.exchange = 'NSE'
+              AND e.close >= 50
+              AND e.pct_chng > 0
+              AND e.pct_from_breakout > 0
+            ORDER BY e.pct_from_breakout DESC, e.equity_id
+            LIMIT %(cap)s
+            """,
+            {'d': str(trade_date), 'cap': BREAKOUT_SURGE_DISPLAY_CAP},
         )
         return cur.fetchall()
+
+
+PRESET_MEMBERSHIP_FNS = {
+    'breakout_surge': _membership_breakout_surge,
+}
 
 
 def compute_scan_membership_for_date(conn, trade_date, verbose: bool = False) -> int:
@@ -78,7 +106,7 @@ def compute_scan_membership_for_date(conn, trade_date, verbose: bool = False) ->
                 "DELETE FROM km_scan_membership_daily WHERE trade_date = %(d)s AND preset_id = %(p)s",
                 {'d': str(trade_date), 'p': preset_id},
             )
-            rows = _membership_from_scan_results(conn, trade_date, preset_id)
+            rows = PRESET_MEMBERSHIP_FNS[preset_id](conn, trade_date)
             if not rows:
                 if verbose:
                     log.info(f'[scan_membership] {preset_id} {trade_date}: 0 qualifying rows')

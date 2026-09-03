@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { Loader2 } from 'lucide-react'
 import { useScan, useScanMembershipHistory } from '@/hooks/useScan'
 import { displaySymbol } from '@/lib/symbolUtils'
 import { useBookmarkStore } from '@/stores/bookmarkStore'
@@ -16,7 +17,7 @@ import {
 import ScanTable from '@/components/domain/ScanTable'
 import BreakoutSurgeCards from '@/components/domain/BreakoutSurgeTable'
 import ScanVaNiPublisher from '@/components/domain/ScanVaNiPublisher'
-import VaNiInsight from '@/components/domain/VaNiInsight'
+import VaNiFeedback from '@/components/domain/VaNi/VaNiFeedback'
 import { useVaNiAsk } from '@/hooks/useVaNiChat'
 import { useIndustryLeadershipMap } from '@/hooks/useIndustryRotation'
 import type { ScanStock, ScanDefinition } from '@/types'
@@ -269,10 +270,11 @@ export default function BreakoutSurgeStudio() {
           </div>
 
           {/* ── VaNi Read — on-page, always visible (owner call: users should
-              SEE it, not have to open a drawer). Built entirely on VaNiInsight
-              (the common component every VaNi surface now shares, see
-              docs/claude/vani-common-component.md) — this file only owns the
-              pill row's actions, not a second bespoke card. ── */}
+              SEE it, not have to open a drawer). One card: the question
+              pills and the answer share a single VaNi-badged masthead (see
+              ScannerVaNiCard's own comment — VaNiInsight isn't reused here,
+              its masthead-per-answer shape doesn't fit a persistent
+              question row). ── */}
           {meta && (
             <ScannerVaNiCard
               presetId="breakout_surge"
@@ -544,33 +546,64 @@ function ScannerVaNiCard({
   const activePillStyle: React.CSSProperties = { ...pillStyle, background: 'var(--indigo-bg)', fontWeight: 700 }
   const visibleIntents = ALL_INTENTS_ORDERED.filter((it) => readyByIntent[it.key])
 
+  // Owner (2026-09-03): "intents should be part of VaNi interaction" — the
+  // mockup's own .vani-main wraps ONE badge header around BOTH the
+  // question row and the answer (intent-row + vani-answer share one card
+  // body); this component used to render the pills as a bare row above a
+  // separate <VaNiInsight> card that only appeared once a question was
+  // clicked, reading as two disconnected pieces rather than one companion
+  // interaction. Rebuilt as a single card, matching VaNiInsight's own
+  // masthead markup (same badge/tokens) rather than reusing the component
+  // itself — VaNiInsight returns null with no insight yet and has no slot
+  // for content above the answer body, and these answers are all
+  // deliberately short (45-90 words, capped at build time — see each
+  // intent's system_prompt in vani_intents.py) so the `collapsible`
+  // truncation VaNiInsight offers isn't needed here either.
   return (
-    <div style={{ marginBottom: 18 }}>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>
-        {visibleIntents.map((it) => (
-          <button
-            key={it.key}
-            onClick={() => askIntent(it.key)}
-            style={scanIntent === it.key ? activePillStyle : pillStyle}
-          >
-            {it.question}
-          </button>
-        ))}
+    <div
+      className="rounded-lg overflow-hidden border border-accent-indigo/20 bg-[var(--kd-card)]"
+      style={{ marginBottom: 18 }}
+    >
+      <div className="flex items-center gap-1.5 px-3 py-1.5 bg-accent-indigo/[0.13] border-b border-accent-indigo/25">
+        <span className="w-[15px] h-[15px] rounded-[4px] bg-accent-indigo flex items-center justify-center shrink-0">
+          <span className="text-white text-[8px] leading-none select-none">✦</span>
+        </span>
+        <span className="text-[9px] font-black uppercase tracking-[0.16em] text-accent-indigo">VaNi</span>
+        <span className="text-[8px] text-accent-indigo/60 tracking-wide">वाणी</span>
       </div>
-      {scanIntent ? (
-        <VaNiInsight
-          insight={showLoading ? undefined : active?.data?.response}
-          isLoading={showLoading}
-          logId={showLoading ? undefined : (active?.data?.log_id ?? undefined)}
-          collapsible
-          collapsedHeight={110}
-          className="mt-0"
-        />
-      ) : (
-        <p style={{ fontSize: 12, color: 'var(--text-faint)', margin: 0 }}>
-          Pick a question above — VaNi answers in a couple of lines, then the table below filters to match.
-        </p>
-      )}
+      <div className="px-3 py-2.5">
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: scanIntent ? 10 : 0 }}>
+          {visibleIntents.map((it) => (
+            <button
+              key={it.key}
+              onClick={() => askIntent(it.key)}
+              style={scanIntent === it.key ? activePillStyle : pillStyle}
+            >
+              {it.question}
+            </button>
+          ))}
+        </div>
+        {!scanIntent && (
+          <p style={{ fontSize: 12, color: 'var(--text-faint)', margin: 0 }}>
+            Pick a question above — VaNi answers in a couple of lines, then the table below filters to match.
+          </p>
+        )}
+        {scanIntent && (
+          showLoading ? (
+            <div className="flex items-center gap-1.5 text-muted">
+              <Loader2 className="w-3 h-3 animate-spin" />
+              <span className="text-[10px]">Consulting VaNi…</span>
+            </div>
+          ) : (
+            <>
+              <p className="text-[11px] text-[var(--text-secondary)] leading-relaxed whitespace-pre-line">
+                {active?.data?.response}
+              </p>
+              {active?.data?.log_id && <VaNiFeedback logId={active.data.log_id} />}
+            </>
+          )
+        )}
+      </div>
     </div>
   )
 }
