@@ -8,6 +8,7 @@ import type React from 'react'
 import { getPresetMeta } from '@/services/scanEngine'
 import { getFieldsForGroup } from '@/fieldAvailability'
 import VaNiTrigger from '@/components/domain/VaNiTrigger'
+import { useStockAskStore } from '@/stores/stockAskStore'
 import BookmarkToggle from '@/components/domain/BookmarkToggle'
 import FloatingHScrollbar from '@/components/ui/FloatingHScrollbar'
 import { DOT_LABELS, dotLabel, type DotSignal } from '@/constants/signalScale'
@@ -243,6 +244,11 @@ export default function ScanTable({ stocks, presetId, onRowClick }: ScanTablePro
   const [gearOpen, setGearOpen] = useState(false)
   const gearRef = useRef<HTMLDivElement>(null)
   const scrollBoxRef = useRef<HTMLDivElement>(null)
+  // Which row (if any) has its "Ask VaNi" popover open right now — used to
+  // highlight that row so it stays identifiable even if the popover has
+  // drifted along with scroll away from being directly over it.
+  const activeStockAskEntity = useStockAskStore((s) => s.entity)
+  const activeEquityId = activeStockAskEntity?.type === 'equity' ? activeStockAskEntity.id : null
 
   const storageKey = `dristiq_cols_${presetId}`
   const [hiddenCols, setHiddenCols] = useState<Set<string>>(() => {
@@ -423,17 +429,29 @@ export default function ScanTable({ stocks, presetId, onRowClick }: ScanTablePro
           </thead>
           <tbody>
             {sorted.map(stock => {
-              // Same gold tint BreakoutSurgeCards already uses for its VaNi
-              // tier — mixed with --card (not transparent) so the sticky
-              // symbol column stays opaque over horizontally-scrolled cells.
-              const rowBg = stock.vaniOpportunity
-                ? 'color-mix(in srgb, var(--gold) 7%, var(--card))'
-                : 'transparent'
+              // Row whose "Ask VaNi" popover is currently open gets a
+              // stronger indigo tint (matches the popover's own accent
+              // color) — takes priority over the vaniOpportunity gold tint,
+              // so the row stays identifiable while the popover is open,
+              // including after scrolling moves it away from directly
+              // beneath the popover. Same gold tint BreakoutSurgeCards
+              // already uses for its VaNi tier otherwise — mixed with
+              // --card (not transparent) so the sticky symbol column stays
+              // opaque over horizontally-scrolled cells.
+              const isVaniAskActive = stock.equity_id === activeEquityId
+              const rowBg = isVaniAskActive
+                ? 'color-mix(in srgb, var(--indigo) 12%, var(--card))'
+                : stock.vaniOpportunity
+                  ? 'color-mix(in srgb, var(--gold) 7%, var(--card))'
+                  : 'transparent'
               return (
               <tr
                 key={stock.equity_id}
                 onClick={() => onRowClick(stock)}
-                style={{ cursor: 'pointer', height: 40, background: rowBg }}
+                style={{
+                  cursor: 'pointer', height: 40, background: rowBg,
+                  boxShadow: isVaniAskActive ? 'inset 3px 0 0 var(--indigo)' : undefined,
+                }}
                 onMouseEnter={e => {
                   const row = e.currentTarget as HTMLElement
                   row.style.background = 'var(--accent-glow)'

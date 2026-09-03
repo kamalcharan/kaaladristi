@@ -4,6 +4,7 @@ import { Loader2, TrendingUp, TrendingDown, ArrowUpDown, ArrowUp, ArrowDown, Bar
 import { displaySymbol, displaySubName, navName as toNavName } from '@/lib/symbolUtils';
 import { Card, PageHeader } from '@/components/ui';
 import VaNiTrigger from '@/components/domain/VaNiTrigger';
+import { useStockAskStore } from '@/stores/stockAskStore';
 import { cn } from '@/lib/utils';
 import { useIndustryTransitionStocks } from '@/hooks/useIndustryRotation';
 import { StockCard, MetricPill, SignalDots, ExchangeBadge, ZONE_LABELS, FLOW_LABELS } from '@/components/domain/StockCard';
@@ -94,12 +95,17 @@ function EnrichedStockCard({ stock }: { stock: IndustryEnrichedStock }) {
 
   const heroName = displaySymbol(stock);
   const subName = displaySubName(stock);
+  // Indigo top accent while this card's "Ask VaNi" popover is open — same
+  // convention as ScanTable.tsx's row highlight and ScanCardShell.tsx's card
+  // border, so the subject stays identifiable through scrolling.
+  const isAskActive = useStockAskStore((s) => s.isOpenFor({ type: 'equity', id: stock.equity_id, symbol: heroName }));
 
   return (
     <Card
       rounded="xxl"
       hover="lift"
-      className="p-3 sm:p-4 cursor-pointer group"
+      accentColor={isAskActive ? 'var(--indigo)' : undefined}
+      className={cn('p-3 sm:p-4 cursor-pointer group', isAskActive && 'border-[var(--border-indigo)]')}
       onClick={() => navigate(`/chart/equity/${stock.equity_id}?name=${encodeURIComponent(toNavName(stock))}`)}
     >
       {/* Row 1: Script name + Industry tag + Price */}
