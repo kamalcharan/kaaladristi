@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { executeScan, getAllScanCounts, fetchScanPresets, fetchVaniHighlights, fetchFpbActive, fetchScanReadyDate, SCAN_PRESETS, type ExchangeFilter, type ScanTimeframe, type ScanCountsResult, type VaniHighlights, type FpbActiveRow } from '@/services/scanEngine';
+import { executeScan, getAllScanCounts, fetchScanPresets, fetchVaniHighlights, fetchFpbActive, fetchScanReadyDate, fetchScanMembershipHistory, SCAN_PRESETS, type ExchangeFilter, type ScanTimeframe, type ScanCountsResult, type VaniHighlights, type FpbActiveRow, type ScanMembershipRow } from '@/services/scanEngine';
 import type { ScanStock, ScanDefinition } from '@/types';
 import { usePipelineStatus } from '@/hooks/usePipelineStatus';
 
@@ -178,6 +178,20 @@ export function useScanReadyDate() {
     // someone reloaded — the staleness this whole path exists to remove.
     staleTime: 60_000,
     refetchInterval: 60_000,
+    retry: 1,
+  });
+}
+
+/** Day-over-day scan-membership history (km_scan_membership_daily) for the
+ *  3 Phase-3 VaNi intents (new-since-yesterday / RS-flip / is-unusual) —
+ *  see fetchScanMembershipHistory's own comment. `beforeDate` is the page's
+ *  own live scan data date; this never includes that date's row. */
+export function useScanMembershipHistory(presetId: string, beforeDate: string | null, lookbackDays = 10) {
+  return useQuery<ScanMembershipRow[]>({
+    queryKey: ['scanMembershipHistory', presetId, beforeDate, lookbackDays],
+    queryFn: () => fetchScanMembershipHistory(presetId, beforeDate!, lookbackDays),
+    enabled: !!beforeDate,
+    staleTime: 5 * 60 * 1000,
     retry: 1,
   });
 }

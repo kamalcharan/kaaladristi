@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useScan } from '@/hooks/useScan'
+import { useScan, useScanMembershipHistory } from '@/hooks/useScan'
 import { displaySymbol } from '@/lib/symbolUtils'
 import { useBookmarkStore } from '@/stores/bookmarkStore'
 import { getPresetMeta, type ExchangeFilter } from '@/services/scanEngine'
@@ -9,7 +9,9 @@ import { ExchangeTabs } from '@/components/domain/ExchangeTabs'
 import { ScanFilterBar, applyFilters, DEFAULT_FILTERS, hasActiveFilters, type ScanFilters } from '@/components/domain/ScanFilterBar'
 import {
   computeCohortStats, computeHighlightExplainFacts, computeMomentumGapFacts, computeLeadingIndustryFacts,
-  computeSectorLeadingFacts, isHighlight, isAccelerating, type SectorLeadingFacts,
+  computeSectorLeadingFacts, buildDayOverDayContext, computeNewSinceYesterdayFacts, computeRsFlipFacts,
+  computeIsUnusualFacts, isHighlight, isAccelerating,
+  type SectorLeadingFacts, type NewSinceYesterdayFacts, type RsFlipFacts, type IsUnusualFacts,
 } from '@/services/breakoutSurgeInsights'
 import ScanTable from '@/components/domain/ScanTable'
 import BreakoutSurgeCards from '@/components/domain/BreakoutSurgeTable'
@@ -26,19 +28,25 @@ const DEFAULT_QUICK: Record<QuickFilterKey, boolean> = { ob: false, watch: false
  * The 7 predefined scanner-level VaNi questions from the "VaNi Two Levels"
  * design (owner, 2026-09-03) — a closed, NLP-phrased intent set replacing
  * the old ad-hoc pill row (Today's Results/Your View/How to use this
- * scanner/glossary). Shipping in phases (each phase ships only the intents
+ * scanner/glossary). Shipped in 3 phases (each phase ships only the intents
  * that are REALLY wired end-to-end — no disabled/"coming soon" pills):
- *   Phase 1 (shipped): momentum_gap, leading_industry, why_flagged — all
- *     computable from data this page already has, no new backend infra.
- *   Phase 2 (this round): sector_leading — a join to
- *     km_industry_eod.industry_rank (useIndustryLeadershipMap). Rendered
- *     only once that fetch resolves (its own loading state, separate from
- *     the scan query) — never a pill that does nothing yet.
- *   Phase 3: new_since_yesterday, rs_flip, is_unusual — need a new
- *     day-over-day scan-membership snapshot table + pipeline step, neither
- *     of which exist yet.
+ *   Phase 1: momentum_gap, leading_industry, why_flagged — all computable
+ *     from data this page already has, no new backend infra.
+ *   Phase 2: sector_leading — a join to km_industry_eod.industry_rank
+ *     (useIndustryLeadershipMap).
+ *   Phase 3 (this round): new_since_yesterday, rs_flip, is_unusual — need
+ *     day-over-day scan-membership history (km_scan_membership_daily,
+ *     migration 198 + the scan_membership_snapshot pipeline step,
+ *     useScanMembershipHistory). All 3 render only once a prior-day
+ *     snapshot exists to diff against (buildDayOverDayContext returns
+ *     null-guarded facts otherwise) — on a fresh deploy, or the very first
+ *     day the snapshot ran, none of the 3 show at all rather than lying
+ *     ("252 new stocks" on day one). is_unusual additionally needs 3+
+ *     prior sessions before it says anything (a minimum-sample floor).
  */
-type ScannerIntentKey = 'momentum_gap' | 'leading_industry' | 'why_flagged' | 'sector_leading'
+type ScannerIntentKey =
+  | 'momentum_gap' | 'leading_industry' | 'why_flagged' | 'sector_leading'
+  | 'new_since_yesterday' | 'rs_flip' | 'is_unusual'
 
 /**
  * Phase 1 (v4) — filtering now goes through the REAL ScanFilterBar
@@ -100,6 +108,15 @@ export default function BreakoutSurgeStudio() {
   const sectorLeading = leadershipMap
     ? computeSectorLeadingFacts(all, leadershipMap.rankByIndustry, leadershipMap.leadingCutoff)
     : null
+  // Phase 3 — day-over-day facts from km_scan_membership_daily, fetched
+  // separately for the same reason (depends on knowing dataDate first).
+  // null/undefined-safe throughout: buildDayOverDayContext handles an
+  // empty/still-loading history array the same as "no prior snapshot yet".
+  const { data: membershipHistory } = useScanMembershipHistory('breakout_surge', dataDate, 10)
+  const dayOverDay = buildDayOverDayContext(membershipHistory ?? [])
+  const newSinceYesterday = computeNewSinceYesterdayFacts(all, dayOverDay)
+  const rsFlip = computeRsFlipFacts(all, dayOverDay)
+  const isUnusual = computeIsUnusualFacts(all.length, dayOverDay)
 
   let filtered = applyFilters(all, filters)
   if (scanIntent === 'why_flagged') {
@@ -112,7 +129,13 @@ export default function BreakoutSurgeStudio() {
     filtered = filtered.filter((r) => r.industry === stats.leadingIndustry!.name)
   } else if (scanIntent === 'sector_leading' && sectorLeading) {
     filtered = filtered.filter(sectorLeading.isSectorLeading)
+  } else if (scanIntent === 'new_since_yesterday' && newSinceYesterday) {
+    filtered = filtered.filter(newSinceYesterday.isNew)
+  } else if (scanIntent === 'rs_flip' && rsFlip) {
+    filtered = filtered.filter(rsFlip.isFlip)
   }
+  // is_unusual applies no filter (mode: none, per the mockup) — the pill
+  // still selects/narrates, the table below is untouched.
   if (quick.ob) filtered = filtered.filter((r) => (r.rsi_14 ?? 0) < 70)
   if (quick.watch) filtered = filtered.filter((r) => bookmarkedIds.has(r.equity_id))
 
@@ -261,6 +284,9 @@ export default function BreakoutSurgeStudio() {
               onSelectIntent={selectScanIntent}
               sectorLeadingReady={!!sectorLeading}
               sectorLeadingFacts={sectorLeading?.facts ?? null}
+              newSinceYesterdayFacts={newSinceYesterday?.facts ?? null}
+              rsFlipFacts={rsFlip?.facts ?? null}
+              isUnusualFacts={isUnusual}
             />
           )}
 
@@ -355,21 +381,23 @@ function useMinVaNiLoading(isPending: boolean): boolean {
   return holding
 }
 
-/** The always-wired questions, in the same relative order the mockup's
- *  full 7 use (sector_leading is 2nd of 7, momentum_gap 3rd, leading_industry
- *  5th, why_flagged 6th) — so Phase 3 can insert new_since_yesterday/
- *  rs_flip/is_unusual into their correct slots without reordering these. */
-const WIRED_INTENTS: { key: ScannerIntentKey; question: string }[] = [
+/** All 7 questions, in the mockup's own order — a pill only actually
+ *  renders once its `ready` check (below) passes, so partial infra
+ *  readiness (e.g. no prior-day snapshot yet) just means fewer pills, never
+ *  a broken one. */
+const ALL_INTENTS_ORDERED: { key: ScannerIntentKey; question: string }[] = [
+  { key: 'new_since_yesterday', question: "Show me what's new since yesterday" },
+  { key: 'sector_leading', question: "Which sectors' stocks are leading today?" },
   { key: 'momentum_gap', question: 'Stocks with a momentum gap' },
+  { key: 'rs_flip', question: 'Which stocks just turned RS-green?' },
   { key: 'leading_industry', question: 'Which industry is leading this scan?' },
   { key: 'why_flagged', question: 'Why did VaNi flag these stocks?' },
+  { key: 'is_unusual', question: 'Is today unusual compared to recent sessions?' },
 ]
-const SECTOR_LEADING_INTENT: { key: ScannerIntentKey; question: string } =
-  { key: 'sector_leading', question: "Which sectors' stocks are leading today?" }
 
 function ScannerVaNiCard({
   presetId, meta, allStocks, dataDate, exchangeFilter, scanIntent, onSelectIntent,
-  sectorLeadingReady, sectorLeadingFacts,
+  sectorLeadingReady, sectorLeadingFacts, newSinceYesterdayFacts, rsFlipFacts, isUnusualFacts,
 }: {
   presetId: string
   meta: ScanDefinition
@@ -384,9 +412,14 @@ function ScannerVaNiCard({
    *  stocks are leading today?" pill only renders once true, never a click
    *  that does nothing yet. */
   sectorLeadingReady: boolean
-  /** Computed once in the parent (shared with the table's own filter
-   *  predicate) — passed through rather than recomputed here. */
+  /** All computed once in the parent (shared with the table's own filter
+   *  predicates where applicable) — passed through rather than recomputed
+   *  here. The Phase 3 facts are null until a prior-day snapshot exists;
+   *  their pills simply don't render until then (see ALL_INTENTS_ORDERED). */
   sectorLeadingFacts: SectorLeadingFacts | null
+  newSinceYesterdayFacts: NewSinceYesterdayFacts | null
+  rsFlipFacts: RsFlipFacts | null
+  isUnusualFacts: IsUnusualFacts | null
 }) {
   // One useVaNiAsk() instance per intent so switching pills never refetches
   // or loses a sibling intent's already-fetched answer.
@@ -394,11 +427,26 @@ function ScannerVaNiCard({
   const leadingIndustryMutation = useVaNiAsk()
   const whyFlaggedMutation = useVaNiAsk()
   const sectorLeadingMutation = useVaNiAsk()
+  const newSinceYesterdayMutation = useVaNiAsk()
+  const rsFlipMutation = useVaNiAsk()
+  const isUnusualMutation = useVaNiAsk()
   const mutationByIntent: Record<ScannerIntentKey, ReturnType<typeof useVaNiAsk>> = {
     momentum_gap: momentumGapMutation,
     leading_industry: leadingIndustryMutation,
     why_flagged: whyFlaggedMutation,
     sector_leading: sectorLeadingMutation,
+    new_since_yesterday: newSinceYesterdayMutation,
+    rs_flip: rsFlipMutation,
+    is_unusual: isUnusualMutation,
+  }
+  const readyByIntent: Record<ScannerIntentKey, boolean> = {
+    momentum_gap: true,
+    leading_industry: true,
+    why_flagged: true,
+    sector_leading: sectorLeadingReady,
+    new_since_yesterday: !!newSinceYesterdayFacts,
+    rs_flip: !!rsFlipFacts,
+    is_unusual: !!isUnusualFacts,
   }
 
   const askIntent = (key: ScannerIntentKey) => {
@@ -444,6 +492,36 @@ function ScannerVaNiCard({
           industries: sectorLeadingFacts.industries.map((i) => ({ name: i.name, count: i.count })),
         },
       })
+    } else if (key === 'new_since_yesterday' && newSinceYesterdayFacts) {
+      mutation.mutate({
+        intent_id: 'scanner.new_since_yesterday', preset_id: presetId, data_date: dataDate,
+        timeframe: 'daily', exchange: exchangeFilter,
+        new_since_yesterday_facts: {
+          count: newSinceYesterdayFacts.count,
+          prior_date: newSinceYesterdayFacts.priorDate,
+          examples: newSinceYesterdayFacts.examples.map((e) => ({ symbol: e.symbol })),
+        },
+      })
+    } else if (key === 'rs_flip' && rsFlipFacts) {
+      mutation.mutate({
+        intent_id: 'scanner.rs_flip', preset_id: presetId, data_date: dataDate,
+        timeframe: 'daily', exchange: exchangeFilter,
+        rs_flip_facts: {
+          count: rsFlipFacts.count,
+          prior_date: rsFlipFacts.priorDate,
+          examples: rsFlipFacts.examples.map((e) => ({ symbol: e.symbol, from_zone: e.fromZone, to_zone: e.toZone })),
+        },
+      })
+    } else if (key === 'is_unusual' && isUnusualFacts) {
+      mutation.mutate({
+        intent_id: 'scanner.is_unusual', preset_id: presetId, data_date: dataDate,
+        timeframe: 'daily', exchange: exchangeFilter,
+        is_unusual_facts: {
+          today_count: isUnusualFacts.todayCount,
+          avg_count: isUnusualFacts.avgCount,
+          lookback_days: isUnusualFacts.lookbackDays,
+        },
+      })
     }
   }
 
@@ -464,11 +542,7 @@ function ScannerVaNiCard({
     cursor: 'pointer', fontFamily: 'var(--font-body)', maxWidth: '100%', textAlign: 'left',
   }
   const activePillStyle: React.CSSProperties = { ...pillStyle, background: 'var(--indigo-bg)', fontWeight: 700 }
-  // sector_leading slots in 2nd of 7 in the mockup's own ordering — ahead of
-  // momentum_gap, not appended at the end of whatever's already wired.
-  const visibleIntents = sectorLeadingReady
-    ? [SECTOR_LEADING_INTENT, ...WIRED_INTENTS]
-    : WIRED_INTENTS
+  const visibleIntents = ALL_INTENTS_ORDERED.filter((it) => readyByIntent[it.key])
 
   return (
     <div style={{ marginBottom: 18 }}>

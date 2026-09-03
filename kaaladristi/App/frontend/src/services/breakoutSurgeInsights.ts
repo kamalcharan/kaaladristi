@@ -206,6 +206,137 @@ export function computeSectorLeadingFacts(
   return { facts: { count: matched.length, industries }, isSectorLeading }
 }
 
+/** Zones on the bull side of the 7-band Magic RS scale (signalScale.ts) —
+ *  a stock "turns RS-green" when it crosses INTO one of these from outside
+ *  them, never merely for sitting in one already. */
+export const BULLISH_ZONES = ['Strong Bull', 'Mild Bull', 'Neutral Bull']
+
+export interface DayOverDayContext {
+  /** Most recent trade_date strictly before today with a snapshot row —
+   *  null when no history exists yet (fresh deploy, or the very first day
+   *  the scan_membership_snapshot pipeline step ran). */
+  priorDate: string | null
+  priorZoneByEquity: Map<number, string | null>
+  /** One entry per distinct historical date (excludes today), oldest last —
+   *  for the "is today unusual" count comparison. */
+  countHistory: { tradeDate: string; count: number }[]
+}
+
+/**
+ * Groups a flat km_scan_membership_daily row list (fetchScanMembershipHistory,
+ * scanEngine.ts) into the shape the 3 day-over-day intents need. Today's own
+ * membership never comes from this — it's always the live scan (`all`), to
+ * avoid any timing drift between the two; this only ever supplies PRIOR days.
+ */
+export function buildDayOverDayContext(
+  history: { trade_date: string; equity_id: number; magic_rs_zone: string | null }[],
+): DayOverDayContext {
+  const dates = [...new Set(history.map((r) => r.trade_date))].sort((a, b) => b.localeCompare(a))
+  const priorDate = dates[0] ?? null
+  const priorZoneByEquity = new Map<number, string | null>()
+  if (priorDate) {
+    for (const r of history) {
+      if (r.trade_date === priorDate) priorZoneByEquity.set(r.equity_id, r.magic_rs_zone)
+    }
+  }
+  const countHistory = dates.map((d) => ({
+    tradeDate: d,
+    count: history.filter((r) => r.trade_date === d).length,
+  }))
+  return { priorDate, priorZoneByEquity, countHistory }
+}
+
+export interface NewSinceYesterdayFacts {
+  count: number
+  priorDate: string
+  examples: { symbol: string }[]
+}
+
+/**
+ * For scanner.new_since_yesterday ("Show me what's new since yesterday").
+ * Returns null when there's no prior-day snapshot yet — never renders as
+ * "everything is new", which would be true but meaningless on day one.
+ */
+export function computeNewSinceYesterdayFacts(
+  rows: ScanStock[],
+  ctx: DayOverDayContext,
+): { facts: NewSinceYesterdayFacts; isNew: (r: ScanStock) => boolean } | null {
+  if (!ctx.priorDate) return null
+  const isNew = (r: ScanStock): boolean => !ctx.priorZoneByEquity.has(r.equity_id)
+  const matched = rows.filter(isNew)
+  return {
+    facts: {
+      count: matched.length,
+      priorDate: ctx.priorDate,
+      examples: matched.slice(0, 3).map((r) => ({ symbol: displaySymbol(r) })),
+    },
+    isNew,
+  }
+}
+
+export interface RsFlipFacts {
+  count: number
+  priorDate: string
+  examples: { symbol: string; fromZone: string | null; toZone: string | null }[]
+}
+
+/**
+ * For scanner.rs_flip ("Which stocks just turned RS-green?") — a stock
+ * present both yesterday and today whose zone crossed from outside
+ * BULLISH_ZONES into one of them. A stock that WASN'T in yesterday's
+ * snapshot at all doesn't count as a flip (it's new_since_yesterday's
+ * concern, not this one) — only equities present on both days qualify.
+ */
+export function computeRsFlipFacts(
+  rows: ScanStock[],
+  ctx: DayOverDayContext,
+): { facts: RsFlipFacts; isFlip: (r: ScanStock) => boolean } | null {
+  if (!ctx.priorDate) return null
+  const isFlip = (r: ScanStock): boolean => {
+    if (!ctx.priorZoneByEquity.has(r.equity_id)) return false
+    const fromZone = ctx.priorZoneByEquity.get(r.equity_id) ?? null
+    const wasBullish = !!fromZone && BULLISH_ZONES.includes(fromZone)
+    const isBullishNow = !!r.magic_rs_zone && BULLISH_ZONES.includes(r.magic_rs_zone)
+    return !wasBullish && isBullishNow
+  }
+  const matched = rows.filter(isFlip)
+  return {
+    facts: {
+      count: matched.length,
+      priorDate: ctx.priorDate,
+      examples: matched.slice(0, 3).map((r) => ({
+        symbol: displaySymbol(r),
+        fromZone: ctx.priorZoneByEquity.get(r.equity_id) ?? null,
+        toZone: r.magic_rs_zone ?? null,
+      })),
+    },
+    isFlip,
+  }
+}
+
+export interface IsUnusualFacts {
+  todayCount: number
+  avgCount: number
+  lookbackDays: number
+}
+
+/**
+ * For scanner.is_unusual ("Is today unusual compared to recent sessions?")
+ * — the mockup's own example frames this as industry-concentration-of-
+ * momentum-gap-stocks vs a typical session, which isn't something anything
+ * stores per day; this uses the simplest REAL comparison the new snapshot
+ * table actually gives us instead of a second hand-rolled historical
+ * computation: today's qualifying count vs the trailing-session average.
+ * Requires at least 3 prior days of history (a minimum-sample floor, not a
+ * calibrated threshold) before saying anything — an "average" of 1-2 days
+ * isn't a baseline. mode: none in the card (no filter/highlight applies).
+ */
+export function computeIsUnusualFacts(todayCount: number, ctx: DayOverDayContext): IsUnusualFacts | null {
+  if (ctx.countHistory.length < 3) return null
+  const avgCount = ctx.countHistory.reduce((sum, d) => sum + d.count, 0) / ctx.countHistory.length
+  return { todayCount, avgCount, lookbackDays: ctx.countHistory.length }
+}
+
 /**
  * Deterministic "why this row" tags — the same boolean logic backfill_vani_flags.py
  * uses for is_vani_surge/is_vani_breakout (App/backend/scripts/backfill_vani_flags.py),

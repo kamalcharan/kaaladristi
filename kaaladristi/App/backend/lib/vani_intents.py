@@ -957,6 +957,104 @@ INTENTS: dict[str, VaNiIntent] = {
         complexity="low",
     ),
 
+    # ── 21h/21i/21j. Phase 3 — day-over-day (km_scan_membership_daily,
+    # migration 198 + the scan_membership_snapshot pipeline step). Only real
+    # starting the day AFTER that snapshot began running — the frontend
+    # (buildDayOverDayContext, breakoutSurgeInsights.ts) returns null facts
+    # with no prior-day history, and BreakoutSurgeStudio.tsx only renders
+    # these 3 pills once real facts exist, never a click that says
+    # "everything is new" on day one.
+    "scanner.new_since_yesterday": VaNiIntent(
+        page="scanner",
+        label="Show me what's new since yesterday",
+        required_context=["preset", "data_date", "new_since_yesterday_facts"],
+        system_prompt=(
+            _VANI_IDENTITY
+            + "The user clicked a question asking which stocks entered "
+            "today's screener results for the first time since the prior "
+            "trading session — grounded in a real day-over-day membership "
+            "comparison, not a guess. You will receive: how many stocks are "
+            "new since the prior session, that prior session's date, and up "
+            "to 3 named examples.\n\n"
+            "Write ONE opening line stating the count and the prior "
+            "session's date, then AT MOST ONE bullet point naming the "
+            "example(s) given (starting with '• '). State plainly this is "
+            "a membership change, not a signal to act. If the count is "
+            "zero, say plainly that nothing is new since the prior session. "
+            "Never name a stock not provided."
+            + _VANI_RULES.replace(
+                "No bullet points — write flowing paragraphs. About 150 words.",
+                "At most one short bullet point, as described above — this "
+                "overrides the no-bullets house rule for this one intent. "
+                "About 55 words total.",
+            )
+        ),
+        max_tokens=220,
+        cache_ttl_hours=24,
+        complexity="low",
+    ),
+
+    "scanner.rs_flip": VaNiIntent(
+        page="scanner",
+        label="Which stocks just turned RS-green?",
+        required_context=["preset", "data_date", "rs_flip_facts"],
+        system_prompt=(
+            _VANI_IDENTITY
+            + "The user clicked a question asking which stocks, present in "
+            "both today's and the prior session's screener results, crossed "
+            "from outside the bull-side relative-strength zones into one of "
+            "them since the prior session — a real day-over-day zone "
+            "comparison. You will receive: how many stocks made that "
+            "crossing, the prior session's date, and up to 3 named examples "
+            "with their from-zone and to-zone.\n\n"
+            "Write ONE opening line stating the count and the prior "
+            "session's date, then AT MOST ONE bullet point naming the "
+            "example(s) given with their from → to zones (starting with "
+            "'• '). State plainly this is a measurement of a zone crossing, "
+            "not a signal to act. If the count is zero, say plainly that no "
+            "stocks made that crossing since the prior session. Never name "
+            "a stock not provided, and never use the words bull/bullish/"
+            "bear/bearish for the zone names themselves — use the exact "
+            "zone labels given."
+            + _VANI_RULES.replace(
+                "No bullet points — write flowing paragraphs. About 150 words.",
+                "At most one short bullet point, as described above — this "
+                "overrides the no-bullets house rule for this one intent. "
+                "About 55 words total.",
+            )
+        ),
+        max_tokens=220,
+        cache_ttl_hours=24,
+        complexity="low",
+    ),
+
+    "scanner.is_unusual": VaNiIntent(
+        page="scanner",
+        label="Is today unusual compared to recent sessions?",
+        required_context=["preset", "data_date", "is_unusual_facts"],
+        system_prompt=(
+            _VANI_IDENTITY
+            + "The user clicked a question asking whether today's screener "
+            "result count is unusual compared to recent sessions. You will "
+            "receive: today's result count, the average result count over "
+            "the trailing sessions, and how many sessions that average "
+            "covers.\n\n"
+            "Write 1 to 2 short sentences (no bullets needed — this is "
+            "brief) comparing today's count to the trailing average in "
+            "plain terms (e.g. 'well above', 'in line with', 'below') — "
+            "state both numbers. Never say this predicts what happens next; "
+            "describe today's participation level only, as a measurement."
+            + _VANI_RULES.replace(
+                "No bullet points — write flowing paragraphs. About 150 words.",
+                "About 45 words total — this is a short, direct answer, "
+                "not an essay.",
+            )
+        ),
+        max_tokens=180,
+        cache_ttl_hours=6,   # count history changes as soon as the next day's snapshot lands
+        complexity="low",
+    ),
+
     # ══════════════════════════════════════════════════════════════════════════
     # Index Chart Intents — Astro (deterministic, no LLM in practice)
     # Owner directive (2026-07-22): both the header "Ask VaNi" button and any
