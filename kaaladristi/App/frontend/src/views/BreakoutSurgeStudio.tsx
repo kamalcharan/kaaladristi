@@ -9,13 +9,14 @@ import { ExchangeTabs } from '@/components/domain/ExchangeTabs'
 import { ScanFilterBar, applyFilters, DEFAULT_FILTERS, hasActiveFilters, type ScanFilters } from '@/components/domain/ScanFilterBar'
 import {
   computeCohortStats, computeHighlightExplainFacts, computeMomentumGapFacts, computeLeadingIndustryFacts,
-  isHighlight, isAccelerating,
+  computeSectorLeadingFacts, isHighlight, isAccelerating, type SectorLeadingFacts,
 } from '@/services/breakoutSurgeInsights'
 import ScanTable from '@/components/domain/ScanTable'
 import BreakoutSurgeCards from '@/components/domain/BreakoutSurgeTable'
 import ScanVaNiPublisher from '@/components/domain/ScanVaNiPublisher'
 import VaNiInsight from '@/components/domain/VaNiInsight'
 import { useVaNiAsk } from '@/hooks/useVaNiChat'
+import { useIndustryLeadershipMap } from '@/hooks/useIndustryRotation'
 import type { ScanStock, ScanDefinition } from '@/types'
 
 type QuickFilterKey = 'ob' | 'watch'
@@ -27,14 +28,17 @@ const DEFAULT_QUICK: Record<QuickFilterKey, boolean> = { ob: false, watch: false
  * the old ad-hoc pill row (Today's Results/Your View/How to use this
  * scanner/glossary). Shipping in phases (each phase ships only the intents
  * that are REALLY wired end-to-end — no disabled/"coming soon" pills):
- *   Phase 1 (this round): momentum_gap, leading_industry, why_flagged —
- *     all computable from data this page already has, no new backend infra.
- *   Phase 2: sector_leading — needs a join to km_industry_eod.industry_rank.
+ *   Phase 1 (shipped): momentum_gap, leading_industry, why_flagged — all
+ *     computable from data this page already has, no new backend infra.
+ *   Phase 2 (this round): sector_leading — a join to
+ *     km_industry_eod.industry_rank (useIndustryLeadershipMap). Rendered
+ *     only once that fetch resolves (its own loading state, separate from
+ *     the scan query) — never a pill that does nothing yet.
  *   Phase 3: new_since_yesterday, rs_flip, is_unusual — need a new
  *     day-over-day scan-membership snapshot table + pipeline step, neither
  *     of which exist yet.
  */
-type ScannerIntentKey = 'momentum_gap' | 'leading_industry' | 'why_flagged'
+type ScannerIntentKey = 'momentum_gap' | 'leading_industry' | 'why_flagged' | 'sector_leading'
 
 /**
  * Phase 1 (v4) — filtering now goes through the REAL ScanFilterBar
@@ -88,6 +92,14 @@ export default function BreakoutSurgeStudio() {
   const meta = getPresetMeta('breakout_surge')
   const all = rows ?? []
   const stats = computeCohortStats(all)
+  const dataDate = all[0]?.trade_date ?? null
+  // Cross-screener Sector Rotation signal (industry_rank), fetched
+  // separately from the scan query itself — its own loading state, since
+  // it depends on knowing today's data date first.
+  const { data: leadershipMap } = useIndustryLeadershipMap(dataDate)
+  const sectorLeading = leadershipMap
+    ? computeSectorLeadingFacts(all, leadershipMap.rankByIndustry, leadershipMap.leadingCutoff)
+    : null
 
   let filtered = applyFilters(all, filters)
   if (scanIntent === 'why_flagged') {
@@ -98,6 +110,8 @@ export default function BreakoutSurgeStudio() {
       .sort((a, b) => ((b.score_5d ?? 0) - (b.score_22d ?? 0)) - ((a.score_5d ?? 0) - (a.score_22d ?? 0)))
   } else if (scanIntent === 'leading_industry' && stats.leadingIndustry) {
     filtered = filtered.filter((r) => r.industry === stats.leadingIndustry!.name)
+  } else if (scanIntent === 'sector_leading' && sectorLeading) {
+    filtered = filtered.filter(sectorLeading.isSectorLeading)
   }
   if (quick.ob) filtered = filtered.filter((r) => (r.rsi_14 ?? 0) < 70)
   if (quick.watch) filtered = filtered.filter((r) => bookmarkedIds.has(r.equity_id))
@@ -241,10 +255,12 @@ export default function BreakoutSurgeStudio() {
               presetId="breakout_surge"
               meta={meta}
               allStocks={all}
-              dataDate={all[0]?.trade_date ?? null}
+              dataDate={dataDate}
               exchangeFilter={exchangeFilter}
               scanIntent={scanIntent}
               onSelectIntent={selectScanIntent}
+              sectorLeadingReady={!!sectorLeading}
+              sectorLeadingFacts={sectorLeading?.facts ?? null}
             />
           )}
 
@@ -339,18 +355,21 @@ function useMinVaNiLoading(isPending: boolean): boolean {
   return holding
 }
 
-/** The 3 wired questions, in the same relative order the mockup's full 7
- *  use (momentum_gap is 3rd of 7, leading_industry 5th, why_flagged 6th) —
- *  so later phases can insert new_since_yesterday/sector_leading/rs_flip/
- *  is_unusual into their correct slots without reordering these. */
+/** The always-wired questions, in the same relative order the mockup's
+ *  full 7 use (sector_leading is 2nd of 7, momentum_gap 3rd, leading_industry
+ *  5th, why_flagged 6th) — so Phase 3 can insert new_since_yesterday/
+ *  rs_flip/is_unusual into their correct slots without reordering these. */
 const WIRED_INTENTS: { key: ScannerIntentKey; question: string }[] = [
   { key: 'momentum_gap', question: 'Stocks with a momentum gap' },
   { key: 'leading_industry', question: 'Which industry is leading this scan?' },
   { key: 'why_flagged', question: 'Why did VaNi flag these stocks?' },
 ]
+const SECTOR_LEADING_INTENT: { key: ScannerIntentKey; question: string } =
+  { key: 'sector_leading', question: "Which sectors' stocks are leading today?" }
 
 function ScannerVaNiCard({
   presetId, meta, allStocks, dataDate, exchangeFilter, scanIntent, onSelectIntent,
+  sectorLeadingReady, sectorLeadingFacts,
 }: {
   presetId: string
   meta: ScanDefinition
@@ -361,16 +380,25 @@ function ScannerVaNiCard({
   exchangeFilter: ExchangeFilter
   scanIntent: ScannerIntentKey | null
   onSelectIntent: (key: ScannerIntentKey) => void
+  /** Whether useIndustryLeadershipMap has resolved — the "Which sectors'
+   *  stocks are leading today?" pill only renders once true, never a click
+   *  that does nothing yet. */
+  sectorLeadingReady: boolean
+  /** Computed once in the parent (shared with the table's own filter
+   *  predicate) — passed through rather than recomputed here. */
+  sectorLeadingFacts: SectorLeadingFacts | null
 }) {
   // One useVaNiAsk() instance per intent so switching pills never refetches
   // or loses a sibling intent's already-fetched answer.
   const momentumGapMutation = useVaNiAsk()
   const leadingIndustryMutation = useVaNiAsk()
   const whyFlaggedMutation = useVaNiAsk()
+  const sectorLeadingMutation = useVaNiAsk()
   const mutationByIntent: Record<ScannerIntentKey, ReturnType<typeof useVaNiAsk>> = {
     momentum_gap: momentumGapMutation,
     leading_industry: leadingIndustryMutation,
     why_flagged: whyFlaggedMutation,
+    sector_leading: sectorLeadingMutation,
   }
 
   const askIntent = (key: ScannerIntentKey) => {
@@ -407,6 +435,15 @@ function ScannerVaNiCard({
           examples: facts.examples.map((e) => ({ symbol: e.symbol, rvol: e.rvol, pct_of_52w_high: e.pctOf52wHigh, magic_rs: e.magicRs })),
         },
       })
+    } else if (key === 'sector_leading' && sectorLeadingFacts) {
+      mutation.mutate({
+        intent_id: 'scanner.sector_leading', preset_id: presetId, data_date: dataDate,
+        timeframe: 'daily', exchange: exchangeFilter,
+        sector_leading_facts: {
+          count: sectorLeadingFacts.count,
+          industries: sectorLeadingFacts.industries.map((i) => ({ name: i.name, count: i.count })),
+        },
+      })
     }
   }
 
@@ -427,11 +464,16 @@ function ScannerVaNiCard({
     cursor: 'pointer', fontFamily: 'var(--font-body)', maxWidth: '100%', textAlign: 'left',
   }
   const activePillStyle: React.CSSProperties = { ...pillStyle, background: 'var(--indigo-bg)', fontWeight: 700 }
+  // sector_leading slots in 2nd of 7 in the mockup's own ordering — ahead of
+  // momentum_gap, not appended at the end of whatever's already wired.
+  const visibleIntents = sectorLeadingReady
+    ? [SECTOR_LEADING_INTENT, ...WIRED_INTENTS]
+    : WIRED_INTENTS
 
   return (
     <div style={{ marginBottom: 18 }}>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>
-        {WIRED_INTENTS.map((it) => (
+        {visibleIntents.map((it) => (
           <button
             key={it.key}
             onClick={() => askIntent(it.key)}

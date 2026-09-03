@@ -1262,6 +1262,7 @@ def assemble_scanner_context(
     highlight_facts: dict | None = None,
     momentum_gap_facts: dict | None = None,
     leading_industry_facts: dict | None = None,
+    sector_leading_facts: dict | None = None,
 ) -> dict | None:
     """Build scanner intent context. Returns None if the preset is unknown.
 
@@ -1296,6 +1297,15 @@ def assemble_scanner_context(
     runner-up industry if present — computed client-side by
     computeLeadingIndustryFacts(), reusing the same breakdown
     computeCohortStats() already does for the "Leading Industry" stat tile.
+
+    sector_leading_facts (scanner.sector_leading only): how many of today's
+    results sit in an industry Sector Rotation's own industry_rank
+    (km_industry_eod) currently ranks as leading (top quartile), and up to 2
+    named leading industries with their count — computed client-side by
+    computeSectorLeadingFacts() (breakoutSurgeInsights.ts), which joins each
+    result's industry to a fetched rank map. Distinct from
+    leading_industry_facts: this is a cross-screener market signal, not
+    today's own in-result concentration.
     """
     # The two universal glossary intents (scanner.how_bookmarks_work,
     # scanner.legend_vani_dot) still require a preset_id at the API layer
@@ -1336,6 +1346,7 @@ def assemble_scanner_context(
         'highlight_facts': _clean_highlight_facts(highlight_facts),
         'momentum_gap_facts': _clean_momentum_gap_facts(momentum_gap_facts),
         'leading_industry_facts': _clean_leading_industry_facts(leading_industry_facts),
+        'sector_leading_facts': _clean_sector_leading_facts(sector_leading_facts),
     }
 
 
@@ -1374,6 +1385,21 @@ def _clean_leading_industry_facts(facts: dict | None) -> dict | None:
             {'name': str(runner_up['name'])[:60], 'count': int(runner_up.get('count') or 0)}
             if isinstance(runner_up, dict) and runner_up.get('name') else None
         ),
+    }
+
+
+def _clean_sector_leading_facts(facts: dict | None) -> dict | None:
+    """Sanitize the client-computed sector-leading payload."""
+    if not isinstance(facts, dict):
+        return None
+    industries = []
+    for i in (facts.get('industries') or [])[:2]:
+        if not isinstance(i, dict) or not i.get('name'):
+            continue
+        industries.append({'name': str(i['name'])[:60], 'count': int(i.get('count') or 0)})
+    return {
+        'count': int(facts.get('count') or 0),
+        'industries': industries,
     }
 
 
@@ -1469,6 +1495,15 @@ def build_scanner_cache_context(intent_id: str, ctx: dict) -> dict:
             'name': f.get('name'),
             'count': f.get('count'),
             'runner_up': (f.get('runner_up') or {}).get('name'),
+        }
+    if intent_id == 'scanner.sector_leading':
+        f = ctx.get('sector_leading_facts') or {}
+        return {
+            'v': 1,
+            'preset_id': ctx['preset_id'],
+            'date': ctx['data_date'],
+            'count': f.get('count', 0),
+            'industries': [i['name'] for i in (f.get('industries') or [])],
         }
     return {
         'v': 4,
@@ -1668,6 +1703,31 @@ def format_scanner_user_message(intent_id: str, ctx: dict) -> str:
             f"and the runner-up if present, for contrast. State plainly "
             f"this is a measurement of today's concentration, not a sector "
             f"call. Never invent an industry name not listed above."
+        )
+
+    if intent_id == 'scanner.sector_leading':
+        f = ctx.get('sector_leading_facts') or {}
+        count = f.get('count', 0)
+        if not count:
+            return (
+                f"Screener: {p['name']}\n"
+                f"Results in a currently-leading industry: 0\n"
+                f"\nInstructions: In ONE to two short sentences, say plainly "
+                f"that none of today's results sit in an industry Sector "
+                f"Rotation currently ranks as leading."
+            )
+        industries = f.get('industries') or []
+        ind_str = ', '.join(f"{i['name']} ({i['count']})" for i in industries) or 'not available'
+        return (
+            f"Screener: {p['name']}\n"
+            f"Results in a currently-leading industry: {count}\n"
+            f"Leading industries represented (use ONLY these, at most "
+            f"these 2): {ind_str}\n"
+            f"\nInstructions: Write 1 to 2 short sentences (no bullets) "
+            f"stating the count and naming the leading industry/industries "
+            f"above. State plainly this reflects the wider market's "
+            f"current industry ranking, not a call on this list "
+            f"specifically. Never invent an industry name not listed above."
         )
 
     # scanner.read_results — plain-English field labels so the model never

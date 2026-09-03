@@ -4,10 +4,12 @@ import {
   fetchIndustryStocks,
   fetchFullIndustryTransition,
   fetchIndustryTransitionStocks,
+  fetchIndustryLeadershipMap,
   type IndustryRotationData,
   type IndustryStockRow,
   type IndustryTransitionData,
   type IndustryTransitionStocksResult,
+  type IndustryLeadershipMap,
 } from '@/services/industryRotation';
 
 export function useIndustryRotation() {
@@ -33,6 +35,16 @@ export function useIndustryTransitionStocks() {
     queryKey: ['industryTransitionStocks'],
     queryFn: fetchIndustryTransitionStocks,
     staleTime: 3 * 60 * 1000,
+    retry: 1,
+  });
+}
+
+export function useIndustryLeadershipMap(tradeDate: string | null) {
+  return useQuery<IndustryLeadershipMap>({
+    queryKey: ['industryLeadershipMap', tradeDate],
+    queryFn: () => fetchIndustryLeadershipMap(tradeDate!),
+    enabled: !!tradeDate,
+    staleTime: 5 * 60 * 1000,
     retry: 1,
   });
 }
