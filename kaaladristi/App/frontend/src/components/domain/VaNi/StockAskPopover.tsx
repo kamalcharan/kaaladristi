@@ -57,6 +57,17 @@ const CONFIRMING_ZONES = ['Strong Bull', 'Mild Bull']
  * (`/chart/equity/:id`) — that page's own event/story-pin rendering is
  * unrelated and untouched, this only has to get there correctly.
  *
+ * Owner (2026-09-03, live on BODALCHEM): "line level pop up - put it nice -
+ * landscape mode rather than vertical mode" — at the old fixed 340px width
+ * the 4 confirm pills wrapped onto two rows and the VaNi paragraph wrapped
+ * to 5-6 lines, stacking into a tall narrow card. Widened to 560px (capped
+ * to the viewport) and split the body into two columns — a narrow rail with
+ * the confirm pills in a 2x2 grid + the "N of 4" line on the left, the VaNi
+ * answer filling the remaining width on the right — so the same content
+ * reads wide and short instead of narrow and tall. The two columns wrap
+ * back to stacked on a narrow viewport (flex-wrap, not a fixed split).
+ *
+
  * Mechanically still a copy of `OverlayExplainPopover.tsx`'s anchored-popover
  * chrome (fixed position clamped to the viewport, click-outside + Escape to
  * close) — the content is the entity intents (`equity.*`) VaNiChatPanel.tsx's
@@ -170,7 +181,8 @@ export default function StockAskPopover() {
   }
 
   const intents = getEquityIntents(entity.symbol) as Array<{ intentId: EquityIntentKey; label: string }>
-  const left = Math.max(8, Math.min(pos.left, window.innerWidth - 348))
+  const POPOVER_WIDTH = 560
+  const left = Math.max(8, Math.min(pos.left, window.innerWidth - POPOVER_WIDTH - 16))
   const s = entity.signals
 
   const volOk = s?.rvol != null && s.rvol >= RVOL_CONFIRM_MIN
@@ -185,7 +197,7 @@ export default function StockAskPopover() {
       onClick={(e) => e.stopPropagation()}
       style={{
         position: 'fixed', left, top: pos.top, zIndex: 500,
-        width: 340, maxHeight: '70vh', overflowY: 'auto',
+        width: POPOVER_WIDTH, maxWidth: 'calc(100vw - 16px)', maxHeight: '70vh', overflowY: 'auto',
         background: 'var(--card)',
         border: '1px solid var(--border-indigo)', borderRadius: 12,
         boxShadow: '0 16px 48px color-mix(in srgb, black 45%, transparent)',
@@ -214,26 +226,35 @@ export default function StockAskPopover() {
         >✕</button>
       </div>
 
-      {s && confirmCount != null && (
-        <>
-          <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: 8 }}>
-            <ConfirmPill k="Volume" v={s.rvol != null ? `${s.rvol.toFixed(1)}x` : '—'} ok={volOk} />
-            <ConfirmPill k="Flow" v={flowLabel(s.flowType).label} ok={flowOk} />
-            <ConfirmPill k="RS Zone" v={zoneLabel(s.magicRsZone).label} ok={rsOk} />
-            <ConfirmPill k="Delivery" v={s.deliveryPct != null ? `${s.deliveryPct}%` : '—'} ok={delivOk} />
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
+        {s && confirmCount != null && (
+          <div style={{ flex: '1 1 190px', minWidth: 170 }}>
+            {/* Single column, not 2x2 — a 2-up grid at this width wrapped
+                longer values ("Fresh Longs") onto their own line, which
+                looked worse than just stacking all 4 (still far shorter
+                than the old fully-vertical card, since the VaNi text sits
+                beside this column instead of below it). */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 5, marginBottom: 8 }}>
+              <ConfirmPill k="Volume" v={s.rvol != null ? `${s.rvol.toFixed(1)}x` : '—'} ok={volOk} />
+              <ConfirmPill k="Flow" v={flowLabel(s.flowType).label} ok={flowOk} />
+              <ConfirmPill k="RS Zone" v={zoneLabel(s.magicRsZone).label} ok={rsOk} />
+              <ConfirmPill k="Delivery" v={s.deliveryPct != null ? `${s.deliveryPct}%` : '—'} ok={delivOk} />
+            </div>
+            <div style={{ fontSize: 10.5, color: 'var(--text-faint)' }}>
+              <b style={{ color: 'var(--text-primary)' }}>{confirmCount} of 4</b> signals confirm
+            </div>
           </div>
-          <div style={{ fontSize: 10.5, color: 'var(--text-faint)', marginBottom: 10 }}>
-            <b style={{ color: 'var(--text-primary)' }}>{confirmCount} of 4</b> signals confirm
-          </div>
-        </>
-      )}
+        )}
 
-      <VaNiInsight
-        insight={active.data?.response}
-        isLoading={active.isPending}
-        logId={active.data?.log_id ?? undefined}
-        className="mt-0"
-      />
+        <div style={{ flex: '2 1 260px', minWidth: 220 }}>
+          <VaNiInsight
+            insight={active.data?.response}
+            isLoading={active.isPending}
+            logId={active.data?.log_id ?? undefined}
+            className="mt-0"
+          />
+        </div>
+      </div>
 
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 10 }}>
         {intents.map((i) => (
