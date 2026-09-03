@@ -283,6 +283,11 @@ class VaNiAskRequest(BaseModel):
     leading_industry_facts: Optional[dict] = None
     # scanner.sector_leading only — computed client-side (computeSectorLeadingFacts).
     sector_leading_facts: Optional[dict] = None
+    # Phase 3 (km_scan_membership_daily) — computed client-side, None until
+    # a prior-day snapshot exists to diff against.
+    new_since_yesterday_facts: Optional[dict] = None
+    rs_flip_facts: Optional[dict] = None
+    is_unusual_facts: Optional[dict] = None
 
 
 # Dependency order for the 'all' backfill — DERIVED from the daily run's own
@@ -4912,6 +4917,9 @@ def vani_ask(req: VaNiAskRequest):
                 momentum_gap_facts=req.momentum_gap_facts,
                 leading_industry_facts=req.leading_industry_facts,
                 sector_leading_facts=req.sector_leading_facts,
+                new_since_yesterday_facts=req.new_since_yesterday_facts,
+                rs_flip_facts=req.rs_flip_facts,
+                is_unusual_facts=req.is_unusual_facts,
             )
             if not ctx:
                 return {

@@ -69,6 +69,7 @@ DAILY_STEPS: list[tuple[str, Optional[str]]] = [
     ('dots',                  None),   # SVD/SBD/SYD — Volume Drive selects on these; must precede scan_refresh
     ('gl_events',             None),   # Golden Line breakout/retest — reads sma_150 AND the dots, so AFTER `dots`
     ('scan_refresh',          None),   # matview reads all equity/industry compute above
+    ('scan_membership_snapshot', None),  # freezes today's scan membership + magic_rs_zone for day-over-day VaNi intents; after scan_refresh (same data), before wg_journeys
     ('wg_journeys',           None),   # journey state reads final daily zones + weekly/monthly aggregates
     ('integrity_checks',      None),   # LAST — sweeps every other step's outcome + the day's data
 ]

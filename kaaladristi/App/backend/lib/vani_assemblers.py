@@ -1263,6 +1263,9 @@ def assemble_scanner_context(
     momentum_gap_facts: dict | None = None,
     leading_industry_facts: dict | None = None,
     sector_leading_facts: dict | None = None,
+    new_since_yesterday_facts: dict | None = None,
+    rs_flip_facts: dict | None = None,
+    is_unusual_facts: dict | None = None,
 ) -> dict | None:
     """Build scanner intent context. Returns None if the preset is unknown.
 
@@ -1306,6 +1309,14 @@ def assemble_scanner_context(
     result's industry to a fetched rank map. Distinct from
     leading_industry_facts: this is a cross-screener market signal, not
     today's own in-result concentration.
+
+    new_since_yesterday_facts / rs_flip_facts / is_unusual_facts (Phase 3,
+    each intent-specific): real day-over-day facts from
+    km_scan_membership_daily (migration 198), computed client-side by
+    computeNewSinceYesterdayFacts() / computeRsFlipFacts() /
+    computeIsUnusualFacts() (breakoutSurgeInsights.ts). All three are None
+    until the frontend has at least one prior day's snapshot to diff
+    against — see buildDayOverDayContext()'s own comment.
     """
     # The two universal glossary intents (scanner.how_bookmarks_work,
     # scanner.legend_vani_dot) still require a preset_id at the API layer
@@ -1347,6 +1358,9 @@ def assemble_scanner_context(
         'momentum_gap_facts': _clean_momentum_gap_facts(momentum_gap_facts),
         'leading_industry_facts': _clean_leading_industry_facts(leading_industry_facts),
         'sector_leading_facts': _clean_sector_leading_facts(sector_leading_facts),
+        'new_since_yesterday_facts': _clean_new_since_yesterday_facts(new_since_yesterday_facts),
+        'rs_flip_facts': _clean_rs_flip_facts(rs_flip_facts),
+        'is_unusual_facts': _clean_is_unusual_facts(is_unusual_facts),
     }
 
 
@@ -1400,6 +1414,56 @@ def _clean_sector_leading_facts(facts: dict | None) -> dict | None:
     return {
         'count': int(facts.get('count') or 0),
         'industries': industries,
+    }
+
+
+def _clean_new_since_yesterday_facts(facts: dict | None) -> dict | None:
+    """Sanitize the client-computed new-since-yesterday payload. None when
+    the frontend has no prior-day snapshot to diff against yet."""
+    if not isinstance(facts, dict) or not facts.get('prior_date'):
+        return None
+    examples = []
+    for e in (facts.get('examples') or [])[:3]:
+        if not isinstance(e, dict) or not e.get('symbol'):
+            continue
+        examples.append({'symbol': str(e['symbol'])[:40]})
+    return {
+        'count': int(facts.get('count') or 0),
+        'prior_date': str(facts['prior_date']),
+        'examples': examples,
+    }
+
+
+def _clean_rs_flip_facts(facts: dict | None) -> dict | None:
+    """Sanitize the client-computed RS-flip payload. None when the
+    frontend has no prior-day snapshot to diff against yet."""
+    if not isinstance(facts, dict) or not facts.get('prior_date'):
+        return None
+    examples = []
+    for e in (facts.get('examples') or [])[:3]:
+        if not isinstance(e, dict) or not e.get('symbol'):
+            continue
+        examples.append({
+            'symbol': str(e['symbol'])[:40],
+            'from_zone': str(e['from_zone'])[:30] if e.get('from_zone') else None,
+            'to_zone': str(e['to_zone'])[:30] if e.get('to_zone') else None,
+        })
+    return {
+        'count': int(facts.get('count') or 0),
+        'prior_date': str(facts['prior_date']),
+        'examples': examples,
+    }
+
+
+def _clean_is_unusual_facts(facts: dict | None) -> dict | None:
+    """Sanitize the client-computed is-unusual payload. None when there's
+    fewer than 3 prior sessions of count history (minimum-sample floor)."""
+    if not isinstance(facts, dict) or facts.get('today_count') is None:
+        return None
+    return {
+        'today_count': int(facts.get('today_count') or 0),
+        'avg_count': _safe_float(facts.get('avg_count')),
+        'lookback_days': int(facts.get('lookback_days') or 0),
     }
 
 
@@ -1504,6 +1568,35 @@ def build_scanner_cache_context(intent_id: str, ctx: dict) -> dict:
             'date': ctx['data_date'],
             'count': f.get('count', 0),
             'industries': [i['name'] for i in (f.get('industries') or [])],
+        }
+    if intent_id == 'scanner.new_since_yesterday':
+        f = ctx.get('new_since_yesterday_facts') or {}
+        return {
+            'v': 1,
+            'preset_id': ctx['preset_id'],
+            'date': ctx['data_date'],
+            'prior_date': f.get('prior_date'),
+            'count': f.get('count', 0),
+            'examples': [e['symbol'] for e in (f.get('examples') or [])],
+        }
+    if intent_id == 'scanner.rs_flip':
+        f = ctx.get('rs_flip_facts') or {}
+        return {
+            'v': 1,
+            'preset_id': ctx['preset_id'],
+            'date': ctx['data_date'],
+            'prior_date': f.get('prior_date'),
+            'count': f.get('count', 0),
+            'examples': [(e['symbol'], e.get('from_zone'), e.get('to_zone')) for e in (f.get('examples') or [])],
+        }
+    if intent_id == 'scanner.is_unusual':
+        f = ctx.get('is_unusual_facts') or {}
+        return {
+            'v': 1,
+            'preset_id': ctx['preset_id'],
+            'date': ctx['data_date'],
+            'today_count': f.get('today_count'),
+            'avg_count_bucket': round(f['avg_count']) if f.get('avg_count') is not None else None,
         }
     return {
         'v': 4,
@@ -1728,6 +1821,86 @@ def format_scanner_user_message(intent_id: str, ctx: dict) -> str:
             f"above. State plainly this reflects the wider market's "
             f"current industry ranking, not a call on this list "
             f"specifically. Never invent an industry name not listed above."
+        )
+
+    if intent_id == 'scanner.new_since_yesterday':
+        f = ctx.get('new_since_yesterday_facts') or {}
+        count = f.get('count', 0)
+        prior_date = f.get('prior_date', 'the prior session')
+        if not count:
+            return (
+                f"Screener: {p['name']}\n"
+                f"New since {prior_date}: 0\n"
+                f"\nInstructions: In ONE line, say plainly that nothing is "
+                f"new on this screener since {prior_date} — no bullets needed."
+            )
+        examples = f.get('examples') or []
+        ex_str = ', '.join(e['symbol'] for e in examples) or 'not available'
+        return (
+            f"Screener: {p['name']}\n"
+            f"New since {prior_date}: {count} stocks\n"
+            f"Named examples (use ONLY these, at most these 3): {ex_str}\n"
+            f"\nInstructions: Write ONE opening line stating the count and "
+            f"{prior_date} as the comparison date, then AT MOST ONE bullet "
+            f"point (starting with '• ') naming the example(s) above. State "
+            f"plainly this is a membership change, not a signal to act. "
+            f"Never name a stock not listed above."
+        )
+
+    if intent_id == 'scanner.rs_flip':
+        f = ctx.get('rs_flip_facts') or {}
+        count = f.get('count', 0)
+        prior_date = f.get('prior_date', 'the prior session')
+        if not count:
+            return (
+                f"Screener: {p['name']}\n"
+                f"Turned RS-green since {prior_date}: 0\n"
+                f"\nInstructions: In ONE line, say plainly that no stocks "
+                f"crossed into a bull-side relative-strength zone since "
+                f"{prior_date} — no bullets needed."
+            )
+        examples = f.get('examples') or []
+        ex_lines = '\n'.join(
+            f"  {e['symbol']}: {e.get('from_zone') or 'unknown'} → {e.get('to_zone') or 'unknown'}"
+            for e in examples
+        ) or '  (no example detail available)'
+        return (
+            f"Screener: {p['name']}\n"
+            f"Turned RS-green since {prior_date}: {count} stocks\n"
+            f"\n--- Named examples (use ONLY these, at most these 3) ---\n"
+            f"{ex_lines}\n"
+            f"\nInstructions: Write ONE opening line stating the count and "
+            f"{prior_date} as the comparison date, then AT MOST ONE bullet "
+            f"point (starting with '• ') naming the example(s) above with "
+            f"their from → to zone labels exactly as given. State plainly "
+            f"this is a zone-crossing measurement, not a signal to act. "
+            f"Never name a stock not listed above, and never substitute "
+            f"bull/bullish/bear/bearish for the zone labels given."
+        )
+
+    if intent_id == 'scanner.is_unusual':
+        f = ctx.get('is_unusual_facts') or {}
+        today = f.get('today_count')
+        avg = f.get('avg_count')
+        lookback = f.get('lookback_days', 0)
+        if today is None or avg is None:
+            return (
+                f"Screener: {p['name']}\n"
+                f"Insufficient session history.\n"
+                f"\nInstructions: In ONE short sentence, say plainly there "
+                f"isn't enough recent-session history yet to compare today "
+                f"against."
+            )
+        return (
+            f"Screener: {p['name']}\n"
+            f"Today's result count: {today}\n"
+            f"Average result count over the trailing {lookback} sessions: {avg:.0f}\n"
+            f"\nInstructions: Write 1 to 2 short sentences (no bullets) "
+            f"comparing today's count ({today}) to the trailing average "
+            f"({avg:.0f}) in plain terms (e.g. 'well above', 'in line "
+            f"with', 'below'), stating both numbers. Never say this "
+            f"predicts what happens next — describe today's participation "
+            f"level only, as a measurement."
         )
 
     # scanner.read_results — plain-English field labels so the model never

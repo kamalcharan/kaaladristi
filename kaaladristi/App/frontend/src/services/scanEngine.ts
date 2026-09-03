@@ -253,6 +253,49 @@ async function fetchRecentDates(limit: number): Promise<string[]> {
   return usable.slice(0, limit);
 }
 
+// ── Scan Membership History (Phase 3 VaNi intents) ─────────────
+// km_scan_membership_daily (migration 198) — day-over-day scan-membership
+// history, populated by the scan_membership_snapshot pipeline step. Unlike
+// km_scan_results (a current-snapshot-only matview), this persists past
+// days, so it's the only place "yesterday's" membership can come from —
+// today's own membership is always read from the live scan itself
+// (useScan), never from this table, to avoid any timing drift between the
+// two.
+export interface ScanMembershipRow {
+  trade_date: string;
+  equity_id: number;
+  magic_rs_zone: string | null;
+}
+
+/**
+ * Every km_scan_membership_daily row for `presetId` strictly BEFORE
+ * `beforeDate` (today's own data date — this never includes today's row,
+ * even if the snapshot for it already exists), within `lookbackDays`
+ * trading days. Returns the flat row list; callers group by trade_date.
+ */
+export async function fetchScanMembershipHistory(
+  presetId: string,
+  beforeDate: string,
+  lookbackDays: number,
+): Promise<ScanMembershipRow[]> {
+  const { data, error } = await from('km_scan_membership_daily')
+    .select('trade_date,equity_id,magic_rs_zone')
+    .eq('preset_id', presetId)
+    .lt('trade_date', beforeDate)
+    .order('trade_date', { ascending: false })
+    // Generous per-day headroom (breakout_surge caps at 500/day) so a
+    // `lookbackDays`-window fetch reliably captures every distinct date's
+    // full membership, not a partial day cut off mid-page.
+    .limit(lookbackDays * 600)
+    .execute();
+
+  if (error) throw new Error(`Scan membership history fetch failed: ${error.message}`);
+  const rows = (data ?? []) as ScanMembershipRow[];
+  const distinctDates = [...new Set(rows.map((r) => r.trade_date))].sort((a, b) => b.localeCompare(a));
+  const keepDates = new Set(distinctDates.slice(0, lookbackDays));
+  return rows.filter((r) => keepDates.has(r.trade_date));
+}
+
 // ── VaNi Opportunity Rule — data-driven ────────────────────────
 /*
  * VANI OPPORTUNITY RULE TYPES (data-driven via kd_scan_presets.vani_rule)

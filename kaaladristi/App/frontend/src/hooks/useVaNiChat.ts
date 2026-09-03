@@ -83,6 +83,23 @@ export interface VaNiAskRequest {
     count: number;
     industries: Array<{ name: string; count: number }>;
   };
+  // Phase 3 (km_scan_membership_daily) — computeNewSinceYesterdayFacts() /
+  // computeRsFlipFacts() / computeIsUnusualFacts(), breakoutSurgeInsights.ts.
+  new_since_yesterday_facts?: {
+    count: number;
+    prior_date: string;
+    examples: Array<{ symbol: string }>;
+  };
+  rs_flip_facts?: {
+    count: number;
+    prior_date: string;
+    examples: Array<{ symbol: string; from_zone: string | null; to_zone: string | null }>;
+  };
+  is_unusual_facts?: {
+    today_count: number;
+    avg_count: number;
+    lookback_days: number;
+  };
 }
 
 export interface VaNiAskResponse {

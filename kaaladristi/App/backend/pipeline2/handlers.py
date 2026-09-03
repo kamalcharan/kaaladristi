@@ -50,6 +50,7 @@ FIXABLE_DIMENSIONS = frozenset({
     'equity_weekly', 'equity_monthly',
     'index_returns', 'industry_composites', 'market_breadth', 'breadth_roc',
     'symbol_enrichment', 'scan_refresh', 'wg_journeys', 'integrity_checks', 'dots',
+    'scan_membership_snapshot',
 })
 
 
@@ -895,6 +896,37 @@ def handle_scan_refresh(conn, trade_date: date, force: bool,
     return HandlerResult(status, 0.0, 100.0 if n > 0 else 0.0, n)
 
 
+def handle_scan_membership_snapshot(conn, trade_date: date, force: bool,
+                                    exchange: Optional[str], on_progress: ProgressFn) -> HandlerResult:
+    """Freeze today's scan membership (+ magic_rs_zone) into
+    km_scan_membership_daily (migration 198) — the foundation for the
+    Breakout Surge scanner-level VaNi intents that need to diff today
+    against a prior date ("new since yesterday", "which stocks just turned
+    RS-green", "is today unusual"). km_scan_results (migration 147) is a
+    current-snapshot-only materialized view and doesn't even cover
+    breakout_surge, so nothing in the schema persisted this history before
+    this step existed — "new since yesterday" only has something to answer
+    starting the day AFTER this snapshot begins running.
+
+    Must run in the SAME pipeline execution as scan_refresh, immediately
+    after it: km_scan_results holds only whatever the last refresh
+    produced (current-snapshot-only, overwritten in place every night), so
+    this is the one point in the day where "today's row" is guaranteed to
+    still be there to read.
+    """
+    from scripts.compute_scan_membership_snapshot import compute_scan_membership_for_pipeline
+    on_progress('snapshotting scan membership', 20)
+    try:
+        rows, status = compute_scan_membership_for_pipeline(conn, trade_date, force)
+    except Exception as e:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        return HandlerResult('failed', 0.0, 0.0, 0, error_msg=str(e)[:500])
+    return HandlerResult(status, 0.0, 100.0, rows)
+
+
 # ── Download handlers ───────────────────────────────────────────────────
 #
 # These drive the legacy download code under pipeline/ (not touched by v2
@@ -1098,6 +1130,8 @@ def handle(dimension: str, conn, trade_date: date, force: bool,
         return handle_breadth_roc(conn, trade_date, force, exchange, on_progress)
     if dimension == 'scan_refresh':
         return handle_scan_refresh(conn, trade_date, force, exchange, on_progress)
+    if dimension == 'scan_membership_snapshot':
+        return handle_scan_membership_snapshot(conn, trade_date, force, exchange, on_progress)
     if dimension == 'wg_journeys':
         return handle_wg_journeys(conn, trade_date, force, exchange, on_progress)
     if dimension == 'dots':
@@ -1137,6 +1171,7 @@ KNOWN_DIMENSIONS = [
     'symbol_enrichment',
     'dots',
     'scan_refresh',
+    'scan_membership_snapshot',
     'wg_journeys',
     'integrity_checks',
 ]
