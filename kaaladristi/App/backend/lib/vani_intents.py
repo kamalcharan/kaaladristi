@@ -915,6 +915,48 @@ INTENTS: dict[str, VaNiIntent] = {
         complexity="low",
     ),
 
+    # ── 21g. Sector Leading (Phase 2, VaNi Two Levels 7-question set) ────────
+    # Distinct from scanner.leading_industry above: that one looks only at
+    # TODAY'S result set (which industry has the most representation in this
+    # screener's own rows). This one is a CROSS-SCREENER signal — Sector
+    # Rotation's own industry_rank (km_industry_eod, "top quartile by
+    # avg_magic_rs" = leading, the exact cutoff industryRotation.ts's
+    # topQuartileCutoff already uses) — answering "which of today's results
+    # sit in an industry the wider market currently ranks as leading",
+    # independent of how many names from that industry happen to be on this
+    # particular screener.
+    "scanner.sector_leading": VaNiIntent(
+        page="scanner",
+        label="Which sectors' stocks are leading today?",
+        required_context=["preset", "data_date", "sector_leading_facts"],
+        system_prompt=(
+            _VANI_IDENTITY
+            + "The user clicked a question asking which of today's screener "
+            "results sit inside an industry that Sector Rotation currently "
+            "ranks as leading (top quartile by relative strength across the "
+            "whole market) — a cross-screener signal, not just today's own "
+            "concentration within this list. You will receive: how many of "
+            "today's results belong to a currently-leading industry, and up "
+            "to 2 named leading industries with their count in today's "
+            "results.\n\n"
+            "Write 1 to 2 short sentences (no bullets needed — this is "
+            "brief): state the count, and name the top 1-2 leading "
+            "industries given. State plainly this reflects the wider "
+            "market's current industry ranking, not a call on this list "
+            "specifically. If the count is zero, say plainly that none of "
+            "today's results sit in a currently-leading industry. Never "
+            "invent an industry name not provided."
+            + _VANI_RULES.replace(
+                "No bullet points — write flowing paragraphs. About 150 words.",
+                "About 45 words total — this is a short, direct answer, "
+                "not an essay.",
+            )
+        ),
+        max_tokens=180,
+        cache_ttl_hours=24,
+        complexity="low",
+    ),
+
     # ══════════════════════════════════════════════════════════════════════════
     # Index Chart Intents — Astro (deterministic, no LLM in practice)
     # Owner directive (2026-07-22): both the header "Ask VaNi" button and any

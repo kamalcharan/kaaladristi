@@ -36,6 +36,37 @@ async function fetchIndustryEodForDate(date: string): Promise<IndustryEodRow[]> 
   return (data ?? []) as IndustryEodRow[];
 }
 
+export interface IndustryLeadershipMap {
+  rankByIndustry: Map<string, number>;
+  /** An industry is "leading" when its rank is <= this cutoff — reuses the
+   *  SAME "top quartile by industry_rank" definition Sector Rotation's own
+   *  Leading category uses below (topQuartileCutoff), not a fresh threshold. */
+  leadingCutoff: number;
+  totalIndustries: number;
+}
+
+/**
+ * Leading-industry ranks for a specific trade date — for scanner-level VaNi
+ * intents that need to know whether a stock's industry is CURRENTLY ranked
+ * as leading, a cross-screener Sector Rotation signal (`scanner.sector_leading`
+ * / "Which sectors' stocks are leading today?"). Distinct from a scanner's
+ * own in-result industry concentration (computeLeadingIndustryFacts,
+ * breakoutSurgeInsights.ts), which only looks at today's result set, not
+ * the full market's industry ranking.
+ */
+export async function fetchIndustryLeadershipMap(tradeDate: string): Promise<IndustryLeadershipMap> {
+  const { data, error } = await from('km_industry_eod')
+    .select('industry,industry_rank')
+    .eq('trade_date', tradeDate)
+    .execute();
+
+  if (error) throw new Error(`Industry leadership fetch failed: ${error.message}`);
+  const rows = (data ?? []) as { industry: string; industry_rank: number }[];
+  const rankByIndustry = new Map(rows.map((r) => [r.industry, r.industry_rank]));
+  const totalIndustries = rows.length;
+  return { rankByIndustry, leadingCutoff: Math.ceil(totalIndustries / 4), totalIndustries };
+}
+
 /** Fetch the latest N distinct trade dates from km_industry_eod.
  *
  *  No explicit indicator-completeness gate here — none is needed as long as

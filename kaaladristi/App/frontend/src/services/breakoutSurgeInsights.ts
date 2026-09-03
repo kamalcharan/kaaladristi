@@ -169,6 +169,43 @@ export function computeLeadingIndustryFacts(rows: ScanStock[]): LeadingIndustryF
   }
 }
 
+export interface SectorLeadingFacts {
+  count: number
+  /** Leading industries represented in today's cohort, sorted by count desc. */
+  industries: { name: string; count: number }[]
+}
+
+/**
+ * For the scanner.sector_leading VaNi intent ("Which sectors' stocks are
+ * leading today?") — a CROSS-SCANNER signal from Sector Rotation's own
+ * industry_rank (km_industry_eod), not today's in-result concentration
+ * (that's computeLeadingIndustryFacts above). "Leading" reuses the exact
+ * same "top quartile by industry_rank" cutoff Sector Rotation's own Leading
+ * category already uses (industryRotation.ts's topQuartileCutoff) — not a
+ * fresh threshold.
+ */
+export function computeSectorLeadingFacts(
+  rows: ScanStock[],
+  rankByIndustry: Map<string, number>,
+  leadingCutoff: number,
+): { facts: SectorLeadingFacts; isSectorLeading: (r: ScanStock) => boolean } {
+  const isSectorLeading = (r: ScanStock): boolean => {
+    if (!r.industry) return false
+    const rank = rankByIndustry.get(r.industry)
+    return rank != null && rank <= leadingCutoff
+  }
+  const matched = rows.filter(isSectorLeading)
+  const counts = new Map<string, number>()
+  for (const r of matched) {
+    if (!r.industry) continue
+    counts.set(r.industry, (counts.get(r.industry) ?? 0) + 1)
+  }
+  const industries = [...counts.entries()]
+    .map(([name, count]) => ({ name, count }))
+    .sort((a, b) => b.count - a.count)
+  return { facts: { count: matched.length, industries }, isSectorLeading }
+}
+
 /**
  * Deterministic "why this row" tags — the same boolean logic backfill_vani_flags.py
  * uses for is_vani_surge/is_vani_breakout (App/backend/scripts/backfill_vani_flags.py),

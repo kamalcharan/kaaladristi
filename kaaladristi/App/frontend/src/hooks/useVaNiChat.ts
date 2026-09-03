@@ -78,6 +78,11 @@ export interface VaNiAskRequest {
     total_count: number;
     runner_up: { name: string; count: number } | null;
   };
+  // scanner.sector_leading only — computeSectorLeadingFacts(), breakoutSurgeInsights.ts.
+  sector_leading_facts?: {
+    count: number;
+    industries: Array<{ name: string; count: number }>;
+  };
 }
 
 export interface VaNiAskResponse {
