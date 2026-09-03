@@ -12,11 +12,26 @@
 
 import { create } from 'zustand';
 
+/** Raw signal values for the line-item confirmation view (StockAskPopover) —
+ *  optional because most VaNiEntity call sites (VaNiChatPanel's URL-derived
+ *  entity, chart/pulse pages) don't have a scan row to read them from.
+ *  When absent, the popover just skips the confirmation row and shows the
+ *  VaNi answer alone, same as before this existed. */
+export interface VaNiEntitySignals {
+  close: number;
+  pctChng: number | null;
+  rvol: number | null;
+  flowType: string | null;
+  magicRsZone: string | null;
+  deliveryPct: number | null;
+}
+
 export interface VaNiEntity {
   type: 'equity' | 'index';
   id: number;
   symbol: string;
   pageContext?: string;
+  signals?: VaNiEntitySignals;
 }
 
 /** One visible scan result row, already translated to the SEBI-safe

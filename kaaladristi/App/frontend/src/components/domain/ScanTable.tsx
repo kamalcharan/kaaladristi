@@ -530,6 +530,14 @@ export default function ScanTable({ stocks, presetId, onRowClick }: ScanTablePro
                               id: stock.equity_id,
                               symbol: sym,
                               pageContext: `Scanner / ${preset?.name ?? presetId}`,
+                              signals: {
+                                close: stock.close,
+                                pctChng: stock.pct_chng,
+                                rvol: stock.rvol,
+                                flowType: stock.flow_type,
+                                magicRsZone: stock.magic_rs_zone,
+                                deliveryPct: stock.delivery_pct,
+                              },
                             }}
                           />
                         </div>
