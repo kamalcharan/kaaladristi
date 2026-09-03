@@ -65,6 +65,19 @@ export interface VaNiAskRequest {
     avg_magic_rs: number | null;
     examples: Array<{ symbol: string; rvol: number | null; pct_of_52w_high: number | null; magic_rs: number | null }>;
   };
+  // scanner.momentum_gap only — computeMomentumGapFacts(), breakoutSurgeInsights.ts.
+  momentum_gap_facts?: {
+    count: number;
+    avg_gap: number | null;
+    examples: Array<{ symbol: string; gap: number; score_5d: number; score_22d: number }>;
+  };
+  // scanner.leading_industry only — computeLeadingIndustryFacts(), breakoutSurgeInsights.ts.
+  leading_industry_facts?: {
+    name: string;
+    count: number;
+    total_count: number;
+    runner_up: { name: string; count: number } | null;
+  };
 }
 
 export interface VaNiAskResponse {

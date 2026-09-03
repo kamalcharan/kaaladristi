@@ -277,6 +277,10 @@ class VaNiAskRequest(BaseModel):
     # scanner.why_highlighted only — real facts over the full day's
     # VaNi-highlighted cohort, computed client-side (computeHighlightExplainFacts).
     highlight_facts: Optional[dict] = None
+    # scanner.momentum_gap only — computed client-side (computeMomentumGapFacts).
+    momentum_gap_facts: Optional[dict] = None
+    # scanner.leading_industry only — computed client-side (computeLeadingIndustryFacts).
+    leading_industry_facts: Optional[dict] = None
 
 
 # Dependency order for the 'all' backfill — DERIVED from the daily run's own
@@ -4903,6 +4907,8 @@ def vani_ask(req: VaNiAskRequest):
                 bookmarked_symbols=req.bookmarked_symbols,
                 top_accelerators=req.top_accelerators,
                 highlight_facts=req.highlight_facts,
+                momentum_gap_facts=req.momentum_gap_facts,
+                leading_industry_facts=req.leading_industry_facts,
             )
             if not ctx:
                 return {

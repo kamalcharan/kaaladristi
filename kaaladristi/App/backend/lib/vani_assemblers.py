@@ -1260,6 +1260,8 @@ def assemble_scanner_context(
     bookmarked_symbols: list | None = None,
     top_accelerators: list | None = None,
     highlight_facts: dict | None = None,
+    momentum_gap_facts: dict | None = None,
+    leading_industry_facts: dict | None = None,
 ) -> dict | None:
     """Build scanner intent context. Returns None if the preset is unknown.
 
@@ -1281,6 +1283,19 @@ def assemble_scanner_context(
     computeHighlightExplainFacts() (breakoutSurgeInsights.ts). Not the
     generic "reward-to-risk" story legend_vani_dot used to (wrongly) claim;
     this is the real per-preset gate's numbers for today specifically.
+
+    momentum_gap_facts (scanner.momentum_gap only): count of stocks whose
+    5-day score outpaces their 22-day score (the same `isAccelerating()`
+    definition the "Accelerating" stat tile and ScanFilterBar's toggle
+    already use), the average gap among them, and up to 2 named examples —
+    computed client-side by computeMomentumGapFacts() (breakoutSurgeInsights.ts).
+
+    leading_industry_facts (scanner.leading_industry only): the industry with
+    the most representation in today's own result set (not a cross-screener
+    Sector Rotation signal), its count, the total result count, and the
+    runner-up industry if present — computed client-side by
+    computeLeadingIndustryFacts(), reusing the same breakdown
+    computeCohortStats() already does for the "Leading Industry" stat tile.
     """
     # The two universal glossary intents (scanner.how_bookmarks_work,
     # scanner.legend_vani_dot) still require a preset_id at the API layer
@@ -1319,6 +1334,46 @@ def assemble_scanner_context(
             for a in (top_accelerators or []) if isinstance(a, dict) and a.get('symbol')
         ][:5],
         'highlight_facts': _clean_highlight_facts(highlight_facts),
+        'momentum_gap_facts': _clean_momentum_gap_facts(momentum_gap_facts),
+        'leading_industry_facts': _clean_leading_industry_facts(leading_industry_facts),
+    }
+
+
+def _clean_momentum_gap_facts(facts: dict | None) -> dict | None:
+    """Sanitize the client-computed momentum-gap payload — same shape
+    discipline as _clean_highlight_facts."""
+    if not isinstance(facts, dict):
+        return None
+    examples = []
+    for e in (facts.get('examples') or [])[:2]:
+        if not isinstance(e, dict) or not e.get('symbol'):
+            continue
+        examples.append({
+            'symbol': str(e['symbol'])[:40],
+            'gap': _safe_float(e.get('gap')),
+            'score_5d': _safe_float(e.get('score_5d')),
+            'score_22d': _safe_float(e.get('score_22d')),
+        })
+    return {
+        'count': int(facts.get('count') or 0),
+        'avg_gap': _safe_float(facts.get('avg_gap')),
+        'examples': examples,
+    }
+
+
+def _clean_leading_industry_facts(facts: dict | None) -> dict | None:
+    """Sanitize the client-computed leading-industry payload."""
+    if not isinstance(facts, dict) or not facts.get('name'):
+        return None
+    runner_up = facts.get('runner_up')
+    return {
+        'name': str(facts['name'])[:60],
+        'count': int(facts.get('count') or 0),
+        'total_count': int(facts.get('total_count') or 0),
+        'runner_up': (
+            {'name': str(runner_up['name'])[:60], 'count': int(runner_up.get('count') or 0)}
+            if isinstance(runner_up, dict) and runner_up.get('name') else None
+        ),
     }
 
 
@@ -1394,6 +1449,26 @@ def build_scanner_cache_context(intent_id: str, ctx: dict) -> dict:
             'bookmarked': sorted(ctx.get('bookmarked_symbols') or []),
             'accelerators': [a['symbol'] for a in (ctx.get('top_accelerators') or [])],
             'vani_count': sum(1 for r in ctx['rows'] if r['vani']),
+        }
+    if intent_id == 'scanner.momentum_gap':
+        f = ctx.get('momentum_gap_facts') or {}
+        return {
+            'v': 1,
+            'preset_id': ctx['preset_id'],
+            'date': ctx['data_date'],
+            'count': f.get('count', 0),
+            'avg_gap_bucket': round(f['avg_gap']) if f.get('avg_gap') is not None else None,
+            'examples': [e['symbol'] for e in (f.get('examples') or [])],
+        }
+    if intent_id == 'scanner.leading_industry':
+        f = ctx.get('leading_industry_facts') or {}
+        return {
+            'v': 1,
+            'preset_id': ctx['preset_id'],
+            'date': ctx['data_date'],
+            'name': f.get('name'),
+            'count': f.get('count'),
+            'runner_up': (f.get('runner_up') or {}).get('name'),
         }
     return {
         'v': 4,
@@ -1535,6 +1610,64 @@ def format_scanner_user_message(intent_id: str, ctx: dict) -> str:
             f"nothing personalized to report today rather than padding with "
             f"generic commentary. Use only the stocks and numbers listed "
             f"above — never manufacture names."
+        )
+
+    if intent_id == 'scanner.momentum_gap':
+        f = ctx.get('momentum_gap_facts') or {}
+        count = f.get('count', 0)
+        if not count:
+            return (
+                f"Screener: {p['name']}\n"
+                f"Stocks with 5-day momentum ahead of 22-day pace today: 0\n"
+                f"\nInstructions: In ONE line, say plainly that nothing "
+                f"shows a meaningful momentum gap on this screener today — "
+                f"no bullets needed."
+            )
+        avg_gap = f.get('avg_gap')
+        examples = f.get('examples') or []
+        ex_lines = '\n'.join(
+            f"  {e['symbol']}: 5-day score {e['score_5d']:.0f}, "
+            f"22-day score {e['score_22d']:.0f}, gap {e['gap']:+.0f}"
+            for e in examples if e.get('score_5d') is not None and e.get('score_22d') is not None
+        ) or '  (no example detail available)'
+        return (
+            f"Screener: {p['name']}\n"
+            f"Stocks with 5-day momentum ahead of 22-day pace today: {count}\n"
+            f"Average gap among them: "
+            f"{f'{avg_gap:+.0f} points' if avg_gap is not None else 'not available'}\n"
+            f"\n--- Named examples (use ONLY these, at most these 2) ---\n"
+            f"{ex_lines}\n"
+            f"\nInstructions: Write ONE opening line stating the count, "
+            f"then 2 bullet points (each starting with '• ', each one "
+            f"short line): (1) name the example(s) above with their own "
+            f"5-day/22-day/gap numbers; (2) state plainly this measures how "
+            f"far ahead of its own recent pace a stock has moved, not a "
+            f"signal to act. Never name a stock not listed above."
+        )
+
+    if intent_id == 'scanner.leading_industry':
+        f = ctx.get('leading_industry_facts') or {}
+        if not f.get('name'):
+            return (
+                f"Screener: {p['name']}\n"
+                f"No industry breakdown available today.\n"
+                f"\nInstructions: In ONE short sentence, say plainly there "
+                f"is no industry concentration to report today."
+            )
+        runner_up = f.get('runner_up')
+        runner_up_str = (
+            f"Runner-up industry: {runner_up['name']} ({runner_up['count']} names)\n"
+            if runner_up else "No runner-up industry to report.\n"
+        )
+        return (
+            f"Screener: {p['name']}\n"
+            f"Leading industry: {f['name']} ({f['count']} of {f['total_count']} results)\n"
+            f"{runner_up_str}"
+            f"\nInstructions: Write 1 to 2 short sentences (no bullets) "
+            f"naming the leading industry and its share of today's results, "
+            f"and the runner-up if present, for contrast. State plainly "
+            f"this is a measurement of today's concentration, not a sector "
+            f"call. Never invent an industry name not listed above."
         )
 
     # scanner.read_results — plain-English field labels so the model never
