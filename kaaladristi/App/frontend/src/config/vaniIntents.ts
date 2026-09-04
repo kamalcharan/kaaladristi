@@ -150,23 +150,49 @@ export interface EquityIntentDef {
   labelTemplate: string;
   icon: string;
   displayOrder: number;
+  /** 'position' pills (about the user's own holding) render visually
+   *  separated from 'market' pills (about the stock in general) in
+   *  StockAskPopover — first because they're about you, not the stock.
+   *  Omitted = 'market'. */
+  group?: 'position' | 'market';
 }
 
 export const EQUITY_INTENTS: Record<string, EquityIntentDef> = {
+  // ── Your position — deterministic, no LLM call (StockAskPopover computes
+  // these itself via services/thesis.ts + bookmarkStore) ──────────────────
+  'equity.i_hold_this': {
+    labelTemplate: 'I hold this',
+    icon: 'briefcase',
+    displayOrder: 1,
+    group: 'position',
+  },
+  'equity.can_i_enter': {
+    labelTemplate: 'Can I enter now?',
+    icon: 'log-in',
+    displayOrder: 2,
+    group: 'position',
+  },
+  // ── About the stock ───────────────────────────────────────────────────
   'equity.explain_signals': {
     labelTemplate: "Explain {symbol}'s signals",
     icon: 'activity',
-    displayOrder: 1,
+    displayOrder: 3,
   },
   'equity.why_in_context': {
     labelTemplate: 'Why is {symbol} here?',
     icon: 'help-circle',
-    displayOrder: 2,
+    displayOrder: 4,
   },
   'equity.risk_assessment': {
     labelTemplate: "What's the risk on {symbol}?",
     icon: 'shield-alert',
-    displayOrder: 3,
+    displayOrder: 5,
+  },
+  // Deterministic (useScanPresence), same as the position pills — no LLM call.
+  'equity.also_in_scans': {
+    labelTemplate: 'Also in these scans?',
+    icon: 'scan-search',
+    displayOrder: 6,
   },
 };
 
@@ -177,7 +203,7 @@ export function getIntentsForPage(page: VaNiPage): Array<{ intentId: string } & 
     .map(([id, def]) => ({ intentId: id, ...def }));
 }
 
-export function getEquityIntents(symbol: string): Array<{ intentId: string; label: string; icon: string; displayOrder: number }> {
+export function getEquityIntents(symbol: string): Array<{ intentId: string; label: string; icon: string; displayOrder: number; group?: 'position' | 'market' }> {
   return Object.entries(EQUITY_INTENTS)
     .sort(([, a], [, b]) => a.displayOrder - b.displayOrder)
     .map(([id, def]) => ({
@@ -185,5 +211,6 @@ export function getEquityIntents(symbol: string): Array<{ intentId: string; labe
       label: def.labelTemplate.replace('{symbol}', symbol),
       icon: def.icon,
       displayOrder: def.displayOrder,
+      group: def.group,
     }));
 }

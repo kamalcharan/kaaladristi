@@ -32,6 +32,10 @@ export interface VaNiEntity {
   symbol: string;
   pageContext?: string;
   signals?: VaNiEntitySignals;
+  /** The scan preset id this entity was opened from (e.g. 'breakout_surge'),
+   *  when known — lets "Also in these scans?" drop the screen the user is
+   *  already looking at from its own list instead of naming it redundantly. */
+  currentPresetId?: string;
 }
 
 /** One visible scan result row, already translated to the SEBI-safe

@@ -1,14 +1,29 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
 import { getEquityIntents } from '@/config/vaniIntents'
 import { useVaNiAsk } from '@/hooks/useVaNiChat'
 import { usePipelineStatus } from '@/hooks/usePipelineStatus'
+import { useScanPresence } from '@/hooks/useScanPresence'
 import { fmtDateLong } from '@/lib/dateUtils'
 import { zoneLabel, flowLabel } from '@/constants/signalScale'
 import VaNiInsight from '@/components/domain/VaNiInsight'
+import ScanPresenceCard from '@/components/domain/VisualPulse/equity/ScanPresenceCard'
+import { PnlChart } from '@/components/domain/StockCockpit/ThesisTab'
+import { computeThesis, type ThesisBar, type PositionInput, type ThesisRead } from '@/services/thesis'
+import { fetchEquityEodById } from '@/services/indicatorData'
 import { useStockAskStore } from '@/stores/stockAskStore'
+import { useBookmarkStore } from '@/stores/bookmarkStore'
+import { useAuthStore } from '@/stores/authStore'
+import type { ScanStock } from '@/types'
 
-type EquityIntentKey = 'equity.explain_signals' | 'equity.why_in_context' | 'equity.risk_assessment'
+type LlmEquityIntentKey = 'equity.explain_signals' | 'equity.why_in_context' | 'equity.risk_assessment'
+type StructuredEquityIntentKey = 'equity.i_hold_this' | 'equity.can_i_enter' | 'equity.also_in_scans'
+type EquityIntentKey = LlmEquityIntentKey | StructuredEquityIntentKey
+
+function isStructuredIntent(id: EquityIntentKey): id is StructuredEquityIntentKey {
+  return id === 'equity.i_hold_this' || id === 'equity.can_i_enter' || id === 'equity.also_in_scans'
+}
 
 // Provisional confirmation thresholds for the line-item read below — not
 // calibrated against real data distributions yet (see LESSONS_LEARNED.md's
@@ -85,13 +100,72 @@ export default function StockAskPopover() {
   const explainMutation = useVaNiAsk()
   const whyMutation = useVaNiAsk()
   const riskMutation = useVaNiAsk()
-  const mutationByIntent: Record<EquityIntentKey, ReturnType<typeof useVaNiAsk>> = {
+  const mutationByIntent: Record<LlmEquityIntentKey, ReturnType<typeof useVaNiAsk>> = {
     'equity.explain_signals': explainMutation,
     'equity.why_in_context': whyMutation,
     'equity.risk_assessment': riskMutation,
   }
   const [activeIntent, setActiveIntent] = useState<EquityIntentKey>('equity.why_in_context')
-  const active = mutationByIntent[activeIntent]
+  const active = isStructuredIntent(activeIntent) ? null : mutationByIntent[activeIntent]
+
+  // ── "I hold this" / "Can I enter now?" — deterministic, no LLM call.
+  // Both read the SAME computeThesis() the Chart View Thesis tab uses; "I
+  // hold this" reads a SAVED position (bookmarkStore), "Can I enter now?"
+  // previews an UNSAVED one (today's close, a typed qty) through the exact
+  // same function, per the owner-approved design plan.
+  const userId = useAuthStore((s) => s.profile?.id) ?? null
+  const bookmarks = useBookmarkStore((s) => s.bookmarks)
+  const hasLoadedBookmarks = useBookmarkStore((s) => s.hasLoaded)
+  const loadBookmarks = useBookmarkStore((s) => s.load)
+  const setPositionApi = useBookmarkStore((s) => s.setPosition)
+  const clearPositionApi = useBookmarkStore((s) => s.clearPosition)
+  useEffect(() => { if (!hasLoadedBookmarks) loadBookmarks() }, [hasLoadedBookmarks, loadBookmarks])
+
+  const bmRow = entity ? bookmarks.find((b) => b.equity_id === entity.id) ?? null : null
+  const position: PositionInput | null = bmRow?.entry_price != null
+    ? { entryPrice: bmRow.entry_price, entryDate: bmRow.entry_date ?? '', qty: bmRow.entry_qty }
+    : null
+
+  // Bars only fetched once one of the two position pills is actually opened
+  // (not on every popover open) — same 6M range ChartView/ThesisTab use.
+  const needsBars = activeIntent === 'equity.i_hold_this' || activeIntent === 'equity.can_i_enter'
+  const barsQuery = useQuery({
+    queryKey: ['ask-popover-bars', entity?.id],
+    queryFn: () => fetchEquityEodById(entity!.id, '6M'),
+    enabled: !!entity && needsBars,
+    staleTime: 5 * 60 * 1000,
+  })
+  const bars = barsQuery.data as unknown as ThesisBar[] | undefined
+  const latestClose = bars && bars.length ? bars[bars.length - 1].close : (entity?.signals?.close ?? null)
+  const latestBarDate = bars && bars.length ? bars[bars.length - 1].trade_date : ''
+
+  const heldThesis: ThesisRead | null = position && bars ? computeThesis(bars, 'position', position) : null
+
+  const [holdQty, setHoldQty] = useState('')
+  const [holdPrice, setHoldPrice] = useState('')
+  const [holdDate, setHoldDate] = useState('')
+  // Prefill the capture form's defaults once bars/last-close are known — same
+  // pattern ThesisTab's own "+ I hold this" form uses.
+  useEffect(() => {
+    if (activeIntent === 'equity.i_hold_this' && !position) {
+      setHoldPrice(latestClose != null ? String(latestClose) : '')
+      setHoldDate(latestBarDate || latestDataDate || '')
+      setHoldQty('')
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeIntent, position, latestClose, latestBarDate, latestDataDate])
+
+  const [enterQty, setEnterQty] = useState('')
+  const enterQtyNum = enterQty ? Number(enterQty) : null
+  const previewPosition: PositionInput | null =
+    enterQtyNum && enterQtyNum > 0 && latestClose != null
+      ? { entryPrice: latestClose, entryDate: latestBarDate || latestDataDate || new Date().toISOString().slice(0, 10), qty: enterQtyNum }
+      : null
+  const previewThesis: ThesisRead | null = previewPosition && bars ? computeThesis(bars, 'position', previewPosition) : null
+
+  // ── "Also in these scans?" — deterministic, no LLM call. Only fires once
+  // the pill is actually clicked (useScanPresence no-ops on a null id).
+  const scanPresence = useScanPresence(activeIntent === 'equity.also_in_scans' && entity ? entity.id : null)
 
   // Live position — recomputed from the anchor element's current bounding
   // rect, not a one-time snapshot, so the popover tracks the clicked row
@@ -148,6 +222,8 @@ export default function StockAskPopover() {
     setActiveIntent('equity.why_in_context')
     explainMutation.reset()
     riskMutation.reset()
+    setHoldQty(''); setHoldPrice(''); setHoldDate('')
+    setEnterQty('')
     const dateIso = latestDataDate || new Date().toISOString().slice(0, 10)
     whyMutation.mutate({
       intent_id: 'equity.why_in_context',
@@ -163,6 +239,9 @@ export default function StockAskPopover() {
 
   const ask = (intentId: EquityIntentKey) => {
     setActiveIntent(intentId)
+    // The 3 position/scan-presence pills are computed locally (thesis.ts /
+    // useScanPresence) — never an LLM call, nothing to mutate.
+    if (isStructuredIntent(intentId)) return
     const mutation = mutationByIntent[intentId]
     if (mutation.data || mutation.isPending) return
     const dateIso = latestDataDate || new Date().toISOString().slice(0, 10)
@@ -180,7 +259,7 @@ export default function StockAskPopover() {
     navigate(`/chart/equity/${entity.id}?name=${encodeURIComponent(entity.symbol)}&tab=chart`)
   }
 
-  const intents = getEquityIntents(entity.symbol) as Array<{ intentId: EquityIntentKey; label: string }>
+  const intents = getEquityIntents(entity.symbol) as Array<{ intentId: EquityIntentKey; label: string; group?: 'position' | 'market' }>
   const POPOVER_WIDTH = 560
   const left = Math.max(8, Math.min(pos.left, window.innerWidth - POPOVER_WIDTH - 16))
   const s = entity.signals
@@ -227,51 +306,96 @@ export default function StockAskPopover() {
       </div>
 
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
-        {s && confirmCount != null && (
-          <div style={{ flex: '1 1 190px', minWidth: 170 }}>
-            {/* Single column, not 2x2 — a 2-up grid at this width wrapped
-                longer values ("Fresh Longs") onto their own line, which
-                looked worse than just stacking all 4 (still far shorter
-                than the old fully-vertical card, since the VaNi text sits
-                beside this column instead of below it). */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 5, marginBottom: 8 }}>
-              <ConfirmPill k="Volume" v={s.rvol != null ? `${s.rvol.toFixed(1)}x` : '—'} ok={volOk} />
-              <ConfirmPill k="Flow" v={flowLabel(s.flowType).label} ok={flowOk} />
-              <ConfirmPill k="RS Zone" v={zoneLabel(s.magicRsZone).label} ok={rsOk} />
-              <ConfirmPill k="Delivery" v={s.deliveryPct != null ? `${s.deliveryPct}%` : '—'} ok={delivOk} />
-            </div>
-            <div style={{ fontSize: 10.5, color: 'var(--text-faint)' }}>
-              <b style={{ color: 'var(--text-primary)' }}>{confirmCount} of 4</b> signals confirm
-            </div>
-          </div>
-        )}
-
-        <div style={{ flex: '2 1 260px', minWidth: 220 }}>
-          <VaNiInsight
-            insight={active.data?.response}
-            isLoading={active.isPending}
-            logId={active.data?.log_id ?? undefined}
-            className="mt-0"
+        {activeIntent === 'equity.i_hold_this' ? (
+          <HoldThisBody
+            position={position}
+            thesis={heldThesis}
+            barsLoading={barsQuery.isLoading}
+            qty={holdQty} setQty={setHoldQty}
+            price={holdPrice} setPrice={setHoldPrice}
+            date={holdDate} setDate={setHoldDate}
+            canSave={userId != null}
+            onSave={() => {
+              const p = Number(holdPrice)
+              if (!p || !holdDate) return
+              setPositionApi(entity.id, { entry_price: p, entry_date: holdDate, entry_qty: holdQty ? Number(holdQty) : null })
+            }}
+            onClear={() => clearPositionApi(entity.id)}
           />
-        </div>
+        ) : activeIntent === 'equity.can_i_enter' ? (
+          <CanIEnterBody
+            latestClose={latestClose}
+            latestDate={latestBarDate || latestDataDate || ''}
+            qty={enterQty} setQty={setEnterQty}
+            thesis={previewThesis}
+            barsLoading={barsQuery.isLoading && !!enterQtyNum}
+            canSave={userId != null}
+            onSave={() => {
+              if (!previewPosition) return
+              setPositionApi(entity.id, { entry_price: previewPosition.entryPrice, entry_date: previewPosition.entryDate, entry_qty: previewPosition.qty ?? null })
+              setEnterQty('')
+            }}
+          />
+        ) : activeIntent === 'equity.also_in_scans' ? (
+          <AlsoInScansBody
+            isLoading={scanPresence.isLoading}
+            stock={scanPresence.stock}
+            matchedScans={scanPresence.matchedScans}
+            currentPresetId={entity.currentPresetId}
+          />
+        ) : (
+          <>
+            {s && confirmCount != null && (
+              <div style={{ flex: '1 1 190px', minWidth: 170 }}>
+                {/* Single column, not 2x2 — a 2-up grid at this width wrapped
+                    longer values ("Fresh Longs") onto their own line, which
+                    looked worse than just stacking all 4 (still far shorter
+                    than the old fully-vertical card, since the VaNi text sits
+                    beside this column instead of below it). */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 5, marginBottom: 8 }}>
+                  <ConfirmPill k="Volume" v={s.rvol != null ? `${s.rvol.toFixed(1)}x` : '—'} ok={volOk} />
+                  <ConfirmPill k="Flow" v={flowLabel(s.flowType).label} ok={flowOk} />
+                  <ConfirmPill k="RS Zone" v={zoneLabel(s.magicRsZone).label} ok={rsOk} />
+                  <ConfirmPill k="Delivery" v={s.deliveryPct != null ? `${s.deliveryPct}%` : '—'} ok={delivOk} />
+                </div>
+                <div style={{ fontSize: 10.5, color: 'var(--text-faint)' }}>
+                  <b style={{ color: 'var(--text-primary)' }}>{confirmCount} of 4</b> signals confirm
+                </div>
+              </div>
+            )}
+
+            <div style={{ flex: '2 1 260px', minWidth: 220 }}>
+              <VaNiInsight
+                insight={active?.data?.response}
+                isLoading={active?.isPending ?? false}
+                logId={active?.data?.log_id ?? undefined}
+                className="mt-0"
+              />
+            </div>
+          </>
+        )}
       </div>
 
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 10 }}>
-        {intents.map((i) => (
-          <button
-            key={i.intentId}
-            onClick={() => ask(i.intentId)}
-            style={{
-              padding: '4px 10px', borderRadius: 100, fontSize: 11, fontWeight: 500, cursor: 'pointer',
-              border: `1px solid ${activeIntent === i.intentId ? 'var(--indigo)' : 'var(--border)'}`,
-              background: activeIntent === i.intentId ? 'var(--indigo-bg)' : 'transparent',
-              color: activeIntent === i.intentId ? 'var(--indigo)' : 'var(--text-muted)',
-              fontFamily: 'var(--font-body)',
-            }}
-          >
-            {i.label}
-          </button>
-        ))}
+        {intents.map((i) => {
+          const isActive = activeIntent === i.intentId
+          const isPosition = i.group === 'position'
+          return (
+            <button
+              key={i.intentId}
+              onClick={() => ask(i.intentId)}
+              style={{
+                padding: '4px 10px', borderRadius: 100, fontSize: 11, fontWeight: 500, cursor: 'pointer',
+                border: `1px solid ${isActive ? 'var(--indigo)' : isPosition ? 'var(--accent, var(--gold-soft))' : 'var(--border)'}`,
+                background: isActive ? 'var(--indigo-bg)' : isPosition ? 'color-mix(in srgb, var(--accent, var(--gold-soft)) 10%, transparent)' : 'transparent',
+                color: isActive ? 'var(--indigo)' : isPosition ? 'var(--accent, var(--gold-soft))' : 'var(--text-muted)',
+                fontFamily: 'var(--font-body)',
+              }}
+            >
+              {i.label}
+            </button>
+          )
+        })}
         <button
           onClick={study}
           className="text-white"
@@ -302,6 +426,187 @@ function ConfirmPill({ k, v, ok }: { k: string; v: string; ok: boolean }) {
       }}>{ok ? '✓' : '–'}</span>
       <span style={{ color: 'var(--text-muted)' }}>{k}</span>
       <span style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>{v}</span>
+    </div>
+  )
+}
+
+function MiniKv({ label, value, color }: { label: string; value: string; color?: string }) {
+  return (
+    <span style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+      <span style={{ fontSize: 9, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-faint)' }}>{label}</span>
+      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 600, color: color ?? 'var(--text-primary)' }}>{value}</span>
+    </span>
+  )
+}
+
+function MiniField({ label, value, onChange, type = 'text', placeholder }: {
+  label: string; value: string; onChange: (v: string) => void; type?: string; placeholder?: string
+}) {
+  return (
+    <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <span style={{ fontSize: 9.5, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--text-faint)' }}>{label}</span>
+      <input
+        value={value} onChange={(e) => onChange(e.target.value)} type={type} placeholder={placeholder}
+        style={{
+          fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-primary)', background: 'var(--card)',
+          border: '1px solid var(--border)', borderRadius: 6, padding: '6px 8px', width: 110,
+        }}
+      />
+    </label>
+  )
+}
+
+/** "I hold this" — a saved position (bookmarkStore entry) reads instantly via
+ *  computeThesis(); no saved position yet shows the same capture form
+ *  ChartView's Thesis tab uses (qty/price/date → bookmarkStore.setPosition). */
+function HoldThisBody({
+  position, thesis, barsLoading, qty, setQty, price, setPrice, date, setDate, canSave, onSave, onClear,
+}: {
+  position: PositionInput | null
+  thesis: ThesisRead | null
+  barsLoading: boolean
+  qty: string; setQty: (v: string) => void
+  price: string; setPrice: (v: string) => void
+  date: string; setDate: (v: string) => void
+  canSave: boolean
+  onSave: () => void
+  onClear: () => void
+}) {
+  if (position) {
+    if (barsLoading || !thesis) {
+      return <div style={{ flex: '1 1 100%', fontSize: 11, color: 'var(--text-faint)' }}>Loading position risk…</div>
+    }
+    const pr = thesis.positionRisk
+    return (
+      <div style={{ flex: '1 1 100%' }}>
+        <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5, marginBottom: 10 }}>
+          {thesis.vaniLine}
+        </div>
+        {pr && (
+          <>
+            <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginBottom: 6 }}>
+              <MiniKv label="Since entry" value={`${pr.currentPct >= 0 ? '+' : ''}${pr.currentPct.toFixed(1)}%`} color={pr.currentPct >= 0 ? 'var(--bull)' : 'var(--bear)'} />
+              <MiniKv label="Peak" value={`${pr.peakPct >= 0 ? '+' : ''}${pr.peakPct.toFixed(1)}%`} />
+              <MiniKv label="Off peak" value={`${pr.drawdownFromPeak.toFixed(1)}%`} color={pr.drawdownFromPeak < -0.5 ? 'var(--bear)' : undefined} />
+              <MiniKv label="Risk" value={pr.riskTrend} color={pr.riskTrend === 'rising' ? 'var(--bear)' : pr.riskTrend === 'easing' ? 'var(--bull)' : undefined} />
+            </div>
+            <PnlChart points={pr.pnlPath} />
+          </>
+        )}
+        <button
+          onClick={onClear}
+          style={{ marginTop: 6, fontSize: 10.5, color: 'var(--text-faint)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+        >
+          ✕ Remove position
+        </button>
+      </div>
+    )
+  }
+
+  const disabled = !price || !date || !canSave
+  return (
+    <div style={{ flex: '1 1 100%', display: 'flex', gap: 12, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+      <MiniField label="Entry price ₹" value={price} onChange={setPrice} />
+      <MiniField label="Entry date" value={date} onChange={setDate} type="date" />
+      <MiniField label="Qty" value={qty} onChange={setQty} placeholder="optional" />
+      <button
+        onClick={onSave}
+        disabled={disabled}
+        style={{
+          fontSize: 12, fontWeight: 600, color: 'var(--accent, var(--gold-soft))',
+          background: 'color-mix(in srgb, var(--accent, var(--gold-soft)) 14%, transparent)',
+          border: '1px solid var(--accent, var(--gold-soft))', borderRadius: 7, padding: '6px 14px',
+          cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.55 : 1,
+        }}
+      >
+        Save position
+      </button>
+      {!canSave && <span style={{ fontSize: 10, color: 'var(--bear)' }}>Sign in to save positions.</span>}
+    </div>
+  )
+}
+
+/** "Can I enter now?" — a what-if, priced off the last EOD close, never
+ *  persisted unless the user explicitly saves it (same setPosition as
+ *  "I hold this"). */
+function CanIEnterBody({
+  latestClose, latestDate, qty, setQty, thesis, barsLoading, canSave, onSave,
+}: {
+  latestClose: number | null
+  latestDate: string
+  qty: string; setQty: (v: string) => void
+  thesis: ThesisRead | null
+  barsLoading: boolean
+  canSave: boolean
+  onSave: () => void
+}) {
+  return (
+    <div style={{ flex: '1 1 100%' }}>
+      <div style={{ display: 'flex', gap: 16, alignItems: 'flex-end', flexWrap: 'wrap', marginBottom: thesis || barsLoading ? 10 : 0 }}>
+        <MiniField label="Qty you're considering" value={qty} onChange={setQty} />
+        <span style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <span style={{ fontSize: 9.5, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--text-faint)' }}>Entry price</span>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-muted)' }}>
+            {latestClose != null ? `₹${latestClose.toFixed(2)}` : '—'}
+            <span style={{ fontSize: 9.5 }}> (last close{latestDate ? ` · ${latestDate}` : ''})</span>
+          </span>
+        </span>
+      </div>
+      {barsLoading ? (
+        <div style={{ fontSize: 11, color: 'var(--text-faint)' }}>Loading…</div>
+      ) : thesis ? (
+        <>
+          <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5, marginBottom: 10 }}>
+            {thesis.entry
+              ? `Day-zero read — ${thesis.entry.aligned}/${thesis.entry.total} pillars hold at today's close.`
+              : 'Not enough history to read a day-zero setup yet.'}
+          </div>
+          <button
+            onClick={onSave}
+            disabled={!canSave}
+            style={{
+              fontSize: 12, fontWeight: 600, color: 'var(--accent, var(--gold-soft))',
+              background: 'color-mix(in srgb, var(--accent, var(--gold-soft)) 14%, transparent)',
+              border: '1px solid var(--accent, var(--gold-soft))', borderRadius: 7, padding: '6px 14px',
+              cursor: canSave ? 'pointer' : 'default', opacity: canSave ? 1 : 0.55,
+            }}
+          >
+            Save as my position
+          </button>
+          {!canSave && <span style={{ marginLeft: 10, fontSize: 10, color: 'var(--bear)' }}>Sign in to save positions.</span>}
+        </>
+      ) : (
+        <div style={{ fontSize: 11, color: 'var(--text-faint)' }}>Enter a quantity to see the risk read.</div>
+      )}
+    </div>
+  )
+}
+
+/** "Also in these scans?" — reuses ScanPresenceCard's own rendering; the
+ *  only new logic is dropping whichever preset this popover was opened
+ *  from, so the list never names the screen the user is already on. */
+function AlsoInScansBody({
+  isLoading, stock, matchedScans, currentPresetId,
+}: {
+  isLoading: boolean
+  stock: ScanStock | null
+  matchedScans: { id: string; name: string; vani: boolean }[]
+  currentPresetId?: string
+}) {
+  if (isLoading) {
+    return <div style={{ flex: '1 1 100%', fontSize: 11, color: 'var(--text-faint)' }}>Checking scans…</div>
+  }
+  const others = matchedScans.filter((m) => m.id !== currentPresetId)
+  if (others.length === 0 && matchedScans.length > 0) {
+    return (
+      <div style={{ flex: '1 1 100%', fontSize: 11.5, color: 'var(--text-muted)' }}>
+        Only surfacing here today — not in any other active scan.
+      </div>
+    )
+  }
+  return (
+    <div style={{ flex: '1 1 100%' }}>
+      <ScanPresenceCard stock={stock} matchedScans={others} />
     </div>
   )
 }

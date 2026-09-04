@@ -403,8 +403,10 @@ function PillarList({ pillars }: { pillars: Pillar[] }) {
     </div>
   )
 }
-/** P&L% since entry — area filled between the price path and the entry line (0%). */
-function PnlChart({ points }: { points: number[] }) {
+/** P&L% since entry — area filled between the price path and the entry line
+ *  (0%). Exported so StockAskPopover.tsx's "I hold this"/"Can I enter now"
+ *  pills can reuse the exact same read instead of a second copy. */
+export function PnlChart({ points }: { points: number[] }) {
   if (points.length < 2) {
     return <div style={{ height: 60, display: 'flex', alignItems: 'center', ...MONO, fontSize: 10, color: 'var(--text-faint)' }}>Not enough history since entry.</div>
   }
