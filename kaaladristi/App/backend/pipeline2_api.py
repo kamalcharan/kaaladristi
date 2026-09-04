@@ -41,7 +41,7 @@ from lib.db_client import get_db as _get_db  # noqa: E402
 # Optional AI / assembler modules — gracefully absent if not installed
 try:
     from lib.ai_prompts import SKILLS as _AI_SKILLS          # noqa: E402
-    from lib.ai_client import complete as _ai_complete, claude_complete as _claude_complete, AI_ENABLED as _AI_ENABLED, AI_MODEL as _AI_MODEL  # noqa: E402
+    from lib.ai_client import complete as _ai_complete, complete_with_source as _ai_complete_src, claude_complete as _claude_complete, AI_ENABLED as _AI_ENABLED, AI_MODEL as _AI_MODEL  # noqa: E402
     from lib.data_assemblers import (                         # noqa: E402
         assemble_instrument_context,
         assemble_market_pulse_context,
@@ -73,6 +73,7 @@ except ImportError:
     _VANI_INTENTS = {}
     _get_intents_for_page = lambda page: {}  # noqa: E731
     _ai_complete = lambda **_: None      # noqa: E731
+    _ai_complete_src = lambda **_: (None, None)  # noqa: E731
     def _claude_complete(system, user, **_): return None  # noqa: E731
     _AI_ENABLED = False
     _AI_MODEL = ""
@@ -4850,10 +4851,24 @@ def vani_ask(req: VaNiAskRequest):
             })
             _cached_text = _vani_pcache_get(db, _pcache_key) if _pcache_key else None
             if _cached_text:
+                # Feedback must work on cache hits too, not just the first
+                # fresh compute (owner, 2026-09-04) — a persistent-cache hit
+                # previously carried no log_id, so VaNiFeedback had nothing
+                # to attach a rating to for every viewer after the first.
+                # Logged as its own lightweight interaction row (latency 0,
+                # a compact placeholder user_input) rather than reusing the
+                # original fresh-compute row, so each viewer's rating lands
+                # on its own record.
+                _hit_log_id = _log_interaction(
+                    product="dristiq", endpoint="/api/vani/ask",
+                    user_input=f"[cache-hit] intent={intent_id} entity_id={req.entity_id}",
+                    llm_response=_cached_text, model_version=_AI_MODEL, latency_ms=0,
+                )
                 return {
                     'intent_id': intent_id, 'date': date_str,
                     'response': _cached_text,
                     'ai': True, 'cached': True, 'provider': 'cache',
+                    'log_id': _hit_log_id,
                 }
             ctx = assemble_equity_context(
                 db,
@@ -4947,10 +4962,19 @@ def vani_ask(req: VaNiAskRequest):
             _pcache_key = _vani_pcache_key(intent_id, build_scanner_cache_context(intent_id, ctx))
             _cached_text = _vani_pcache_get(db, _pcache_key) if _pcache_key else None
             if _cached_text:
+                # See the equity-intent cache hit above — same fix: log a
+                # lightweight interaction row per cache serve so every
+                # viewer's VaNiFeedback click has a real log_id to rate.
+                _hit_log_id = _log_interaction(
+                    product="dristiq", endpoint="/api/vani/ask",
+                    user_input=f"[cache-hit] intent={intent_id} preset={req.preset_id}",
+                    llm_response=_cached_text, model_version=_AI_MODEL, latency_ms=0,
+                )
                 return {
                     'intent_id': intent_id, 'date': date_str,
                     'response': _cached_text,
                     'ai': True, 'cached': True, 'provider': 'cache',
+                    'log_id': _hit_log_id,
                 }
             user_msg = format_scanner_user_message(intent_id, ctx)
 
@@ -4983,7 +5007,6 @@ def vani_ask(req: VaNiAskRequest):
     # Dashboard/astro/industry intents keep _VANI_ASK_SYSTEM unchanged.
     # Both paths keep the grounding wrapper so the model can't drift
     # outside the provided data.
-    provider = os.getenv('AI_PROVIDER', 'local')
     if _is_scanner or intent_id.startswith('equity.'):
         _ask_system = intent.system_prompt + (
             "\n\nABSOLUTE GROUNDING RULES: Use ONLY the data provided between "
@@ -5002,8 +5025,9 @@ def vani_ask(req: VaNiAskRequest):
     response_text = None
     _sebi_rejected = False
     _llm_returned = False
+    _resolved_provider = None
     for _attempt in range(2):
-        raw = _ai_complete(
+        raw, _resolved_provider = _ai_complete_src(
             system=_ask_system,
             user=_wrapped_msg,
             max_tokens=intent.max_tokens,
@@ -5014,6 +5038,10 @@ def vani_ask(req: VaNiAskRequest):
             # never accepted it — every call hit the cloud provider first
             # regardless, Qwen only ever reached as a failure fallback.
             # See ai_client.py's own comment on prefer_local for the fix.
+            # complete_with_source (not complete) so _resolved_provider
+            # reflects which backend actually answered, not a static env
+            # default — the previous 'provider' var here was always
+            # os.getenv('AI_PROVIDER', ...) regardless of outcome.
             prefer_local=(intent.complexity == 'low'),
         )
         if not raw:
@@ -5049,7 +5077,7 @@ def vani_ask(req: VaNiAskRequest):
         return {
             'intent_id': intent_id, 'date': date_str,
             'response': None, 'ai': False, 'cached': False,
-            'provider': provider, 'error': err,
+            'provider': _resolved_provider, 'error': err,
         }
 
     if _is_scanner:
@@ -5072,19 +5100,19 @@ def vani_ask(req: VaNiAskRequest):
                 db, _pcache_key, intent_id,
                 _pcache_key.rsplit(':', 1)[-1],
                 response_text, intent.cache_ttl_hours,
-                llm_provider=provider, llm_model=_AI_MODEL,
+                llm_provider=_resolved_provider, llm_model=_AI_MODEL,
             )
     else:
         _intent_cache[cache_key] = {
             'text': response_text,
             'cached_at': datetime.now(),
-            'provider': provider,
+            'provider': _resolved_provider,
         }
     return {
         'intent_id': intent_id, 'date': date_str,
         'response': response_text,
         'ai': True, 'cached': False,
-        'provider': provider,
+        'provider': _resolved_provider,
         'log_id': log_id,
     }
 
@@ -5150,13 +5178,23 @@ def vani_warm_scanner_explainers(_uid: str = Depends(_get_current_user_id)):
                 "[DATA START] and [DATA END]. Never invent, assume, or extrapolate "
                 "stock names, numbers, industries, or dates not explicitly stated."
             )
-            text = _ai_complete(
+            # complete_with_source + prefer_local, matching /api/vani/ask —
+            # otherwise a pre-warmed row would always log llm_provider from
+            # a static env default (and always be cloud-first) regardless
+            # of what actually answered live requests never see, since a
+            # warm row is served on every ask as a cache hit before the
+            # live routing logic ever runs.
+            text, _src = _ai_complete_src(
                 system=system,
                 user=_wrap_vani_user_msg(format_scanner_user_message(intent_id, ctx)),
                 max_tokens=intent.max_tokens,
                 temperature=0.4,
                 no_think=True,
+                prefer_local=(intent.complexity == 'low'),
             )
+            if text is None:
+                failed.append({'preset': pid, 'reason': 'AI unavailable (Qwen — no cloud failover for low-complexity intents)'})
+                continue
             text, rejected = _sebi_post_filter(text)
             if rejected or not text or re.search(r'\d', text):
                 failed.append({'preset': pid, 'reason': 'compliance filter rejected output'})
@@ -5165,7 +5203,7 @@ def vani_warm_scanner_explainers(_uid: str = Depends(_get_current_user_id)):
             _vani_pcache_set(
                 db, key, intent_id, key.rsplit(':', 1)[-1],
                 text, intent.cache_ttl_hours,
-                llm_provider=os.getenv('AI_PROVIDER', 'local'), llm_model=_AI_MODEL,
+                llm_provider=_src, llm_model=_AI_MODEL,
             )
             generated.append(pid)
         except Exception as e:
@@ -5221,13 +5259,17 @@ def vani_warm_help_intents(_uid: str = Depends(_get_current_user_id)):
                     "[DATA START] and [DATA END]. Never invent, assume, or extrapolate "
                     "stock names, numbers, industries, or dates not explicitly stated."
                 )
-                text = _ai_complete(
+                text, _src = _ai_complete_src(
                     system=system,
                     user=_wrap_vani_user_msg(format_scanner_user_message(intent_id, ctx)),
                     max_tokens=intent.max_tokens,
                     temperature=0.4,
                     no_think=True,
+                    prefer_local=(intent.complexity == 'low'),
                 )
+                if text is None:
+                    failed.append({'intent': intent_id, 'preset': pid, 'reason': 'AI unavailable (Qwen — no cloud failover for low-complexity intents)'})
+                    break
                 text, rejected = _sebi_post_filter(text)
                 if rejected or not text or re.search(r'\d', text):
                     failed.append({'intent': intent_id, 'reason': 'compliance filter rejected output'})
@@ -5236,7 +5278,7 @@ def vani_warm_help_intents(_uid: str = Depends(_get_current_user_id)):
                 _vani_pcache_set(
                     db, key, intent_id, key.rsplit(':', 1)[-1],
                     text, intent.cache_ttl_hours,
-                    llm_provider=os.getenv('AI_PROVIDER', 'local'), llm_model=_AI_MODEL,
+                    llm_provider=_src, llm_model=_AI_MODEL,
                 )
                 generated.append(intent_id)
                 seeded = True
