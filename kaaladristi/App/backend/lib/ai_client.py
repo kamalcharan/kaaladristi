@@ -126,22 +126,57 @@ def complete(
 ) -> str | None:
     """
     Send a single chat completion. Returns the text response or None.
+    Thin wrapper over complete_with_source() for callers that don't need to
+    know which backend actually answered — see that function's docstring
+    for the prefer_local / no-Haiku-failover behavior.
+    """
+    text, _source = complete_with_source(system, user, max_tokens, temperature, no_think, prefer_local)
+    return text
+
+
+def complete_with_source(
+    system: str,
+    user: str,
+    max_tokens: int = 200,
+    temperature: float | None = None,
+    no_think: bool = False,
+    prefer_local: bool = False,
+) -> tuple[str | None, str | None]:
+    """
+    Same routing as complete(), but also returns which backend actually
+    produced the text: 'qwen-local', the configured AI_PROVIDER (e.g.
+    'anthropic'), or None if nothing answered. complete() discards this;
+    callers that log or display which model spoke (the persistent VaNi
+    cache, the /api/vani/ask response, feedback UI) should call this
+    instead — without it there is no way to tell Qwen and Haiku apart after
+    the fact, since both paths returned the same bare string.
 
     temperature  — included in the request body only when not None.
     no_think     — prepend '/no_think\\n' to system prompt (Qwen3 CoT suppression).
-    prefer_local — try LLM_BASE_URL (the self-hosted Qwen server) FIRST, only
-                   falling back to the configured cloud AI_PROVIDER if Qwen
-                   fails or LLM_BASE_URL isn't set. Callers pass this for
-                   VaNiIntent.complexity == 'low' (see vani_intents.py) —
-                   the field existed since the intent registry was first
-                   built ("'low' = local LLM fine, 'high' = prefer cloud")
-                   but nothing ever read it: every call went through the
-                   OPPOSITE order below regardless of complexity, so a
-                   'low' intent still always hit Anthropic first and only
-                   reached Qwen if Anthropic errored — the reverse of what
-                   the field was named for. Found live (2026-09-03): every
-                   scanner.* cache row showed llm_provider='anthropic', for
-                   intents whose registry entry explicitly says 'low'.
+    prefer_local — try LLM_BASE_URL (the self-hosted Qwen server) FIRST.
+                   Callers pass this for VaNiIntent.complexity == 'low' (see
+                   vani_intents.py) — the field existed since the intent
+                   registry was first built ("'low' = local LLM fine, 'high'
+                   = prefer cloud") but nothing ever read it: every call
+                   went through the OPPOSITE order regardless of
+                   complexity, so a 'low' intent still always hit Anthropic
+                   first and only reached Qwen if Anthropic errored — the
+                   reverse of what the field was named for. Found live
+                   (2026-09-03): every scanner.* cache row showed
+                   llm_provider='anthropic', for intents whose registry
+                   entry explicitly says 'low'.
+
+                   Deliberately NO fallback to the cloud provider when Qwen
+                   fails here (owner decision, 2026-09-04): while verifying
+                   Qwen is actually the one serving these intents, a silent
+                   Haiku substitution defeats the point — the owner
+                   explicitly said "we will only depend on qwen ... i am
+                   not knowing which one is working" otherwise. A failed
+                   Qwen call now surfaces as an honest "AI service
+                   unavailable" error to the caller instead of a masked
+                   cloud answer. Only prefer_local=True calls are affected;
+                   the default (cloud-first, Qwen-as-fallback) path below
+                   is unchanged for every non-registry /api/ai/* skill.
 
     All errors are caught — callers never need to handle exceptions.
     """
@@ -150,15 +185,14 @@ def complete(
 
     if prefer_local:
         result = _fallback_complete(system, user, max_tokens, temperature)
-        if result is not None:
-            return result
-        return _primary_complete(system, user, max_tokens, temperature)
+        return (result, "qwen-local") if result is not None else (None, None)
 
     result = _primary_complete(system, user, max_tokens, temperature)
     if result is not None:
-        return result
+        return result, AI_PROVIDER
 
-    return _fallback_complete(system, user, max_tokens, temperature)
+    result = _fallback_complete(system, user, max_tokens, temperature)
+    return (result, "qwen-local") if result is not None else (None, None)
 
 
 def _primary_complete(
