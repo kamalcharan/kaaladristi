@@ -16,6 +16,19 @@ function authHeaders(): Record<string, string> {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
+/** FastAPI error responses carry the real reason in a JSON `detail` field
+ *  (e.g. a Postgres "permission denied for table ..." message) — a bare
+ *  `HTTP 500` throws that away and leaves both the user and whoever's
+ *  debugging it guessing. Falls back to the status code if the body isn't
+ *  JSON or has no `detail`. */
+async function _errorDetail(res: Response): Promise<string> {
+  try {
+    const body = await res.json();
+    if (body && typeof body.detail === 'string') return body.detail;
+  } catch { /* not JSON */ }
+  return `HTTP ${res.status}`;
+}
+
 export interface BookmarkRow {
   id: string;
   equity_id: number;
@@ -49,7 +62,7 @@ export async function setPosition(
     headers: { 'Content-Type': 'application/json', ...authHeaders() },
     body: JSON.stringify(entry),
   });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  if (!res.ok) throw new Error(await _errorDetail(res));
   return res.json();
 }
 
@@ -57,7 +70,7 @@ export async function fetchBookmarks(userId: string): Promise<BookmarkRow[]> {
   const res = await fetch(`${pipelineUrl}/api/bookmarks/${userId}`, {
     headers: authHeaders(),
   });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  if (!res.ok) throw new Error(await _errorDetail(res));
   return res.json();
 }
 
@@ -67,7 +80,7 @@ export async function addBookmark(userId: string, equityId: number): Promise<Boo
     headers: { 'Content-Type': 'application/json', ...authHeaders() },
     body: JSON.stringify({ equity_id: equityId }),
   });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  if (!res.ok) throw new Error(await _errorDetail(res));
   return res.json();
 }
 
@@ -76,7 +89,7 @@ export async function removeBookmark(userId: string, equityId: number): Promise<
     method: 'DELETE',
     headers: authHeaders(),
   });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  if (!res.ok) throw new Error(await _errorDetail(res));
 }
 
 // ── Market data for bookmarked stocks ───────────────────────────────────────
