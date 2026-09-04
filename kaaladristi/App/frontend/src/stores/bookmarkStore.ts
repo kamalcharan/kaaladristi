@@ -112,7 +112,8 @@ export const useBookmarkStore = create<BookmarkState>((set, get) => ({
 
   setPosition: async (equityId: number, entry: PositionEntry) => {
     const userId = useAuthStore.getState().profile?.id;
-    if (!userId) return;
+    if (!userId) { set({ error: 'Sign in to save positions.' }); return; }
+    set({ error: null }); // clear a stale error from a previous attempt before this one runs
     try {
       const row = await apiSetPosition(userId, equityId, entry);
       set((s) => {
@@ -121,6 +122,7 @@ export const useBookmarkStore = create<BookmarkState>((set, get) => ({
         return {
           bookmarkedIds: nextIds,
           bookmarks: [row, ...s.bookmarks.filter((b) => b.equity_id !== equityId)],
+          error: null,
         };
       });
     } catch (e) {

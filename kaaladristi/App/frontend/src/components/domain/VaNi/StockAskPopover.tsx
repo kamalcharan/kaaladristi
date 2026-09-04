@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { getEquityIntents } from '@/config/vaniIntents'
 import { useVaNiAsk } from '@/hooks/useVaNiChat'
@@ -8,21 +8,19 @@ import { useScanPresence } from '@/hooks/useScanPresence'
 import { fmtDateLong } from '@/lib/dateUtils'
 import { zoneLabel, flowLabel } from '@/constants/signalScale'
 import VaNiInsight from '@/components/domain/VaNiInsight'
-import ScanPresenceCard from '@/components/domain/VisualPulse/equity/ScanPresenceCard'
 import { PnlChart } from '@/components/domain/StockCockpit/ThesisTab'
 import { computeThesis, type ThesisBar, type PositionInput, type ThesisRead } from '@/services/thesis'
 import { fetchEquityEodById } from '@/services/indicatorData'
 import { useStockAskStore } from '@/stores/stockAskStore'
 import { useBookmarkStore } from '@/stores/bookmarkStore'
 import { useAuthStore } from '@/stores/authStore'
-import type { ScanStock } from '@/types'
 
 type LlmEquityIntentKey = 'equity.explain_signals' | 'equity.why_in_context' | 'equity.risk_assessment'
-type StructuredEquityIntentKey = 'equity.i_hold_this' | 'equity.can_i_enter' | 'equity.also_in_scans'
+type StructuredEquityIntentKey = 'equity.i_hold_this' | 'equity.can_i_enter'
 type EquityIntentKey = LlmEquityIntentKey | StructuredEquityIntentKey
 
 function isStructuredIntent(id: EquityIntentKey): id is StructuredEquityIntentKey {
-  return id === 'equity.i_hold_this' || id === 'equity.can_i_enter' || id === 'equity.also_in_scans'
+  return id === 'equity.i_hold_this' || id === 'equity.can_i_enter'
 }
 
 // Provisional confirmation thresholds for the line-item read below — not
@@ -119,6 +117,7 @@ export default function StockAskPopover() {
   const loadBookmarks = useBookmarkStore((s) => s.load)
   const setPositionApi = useBookmarkStore((s) => s.setPosition)
   const clearPositionApi = useBookmarkStore((s) => s.clearPosition)
+  const positionError = useBookmarkStore((s) => s.error)
   useEffect(() => { if (!hasLoadedBookmarks) loadBookmarks() }, [hasLoadedBookmarks, loadBookmarks])
 
   const bmRow = entity ? bookmarks.find((b) => b.equity_id === entity.id) ?? null : null
@@ -163,9 +162,11 @@ export default function StockAskPopover() {
       : null
   const previewThesis: ThesisRead | null = previewPosition && bars ? computeThesis(bars, 'position', previewPosition) : null
 
-  // ── "Also in these scans?" — deterministic, no LLM call. Only fires once
-  // the pill is actually clicked (useScanPresence no-ops on a null id).
-  const scanPresence = useScanPresence(activeIntent === 'equity.also_in_scans' && entity ? entity.id : null)
+  // ── "Also in these scans" — owner (2026-09-04): "it is not an intent......
+  // this has to be shown directly into the UI without invoking any intent."
+  // Not a pill anymore — an always-visible strip, fetched as soon as the
+  // popover opens for this stock (useScanPresence no-ops on a null id).
+  const scanPresence = useScanPresence(entity ? entity.id : null)
 
   // Live position — recomputed from the anchor element's current bounding
   // rect, not a one-time snapshot, so the popover tracks the clicked row
@@ -305,6 +306,12 @@ export default function StockAskPopover() {
         >✕</button>
       </div>
 
+      <AlsoInScansStrip
+        isLoading={scanPresence.isLoading}
+        matchedScans={scanPresence.matchedScans}
+        currentPresetId={entity.currentPresetId}
+      />
+
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
         {activeIntent === 'equity.i_hold_this' ? (
           <HoldThisBody
@@ -315,6 +322,7 @@ export default function StockAskPopover() {
             price={holdPrice} setPrice={setHoldPrice}
             date={holdDate} setDate={setHoldDate}
             canSave={userId != null}
+            error={positionError}
             onSave={() => {
               const p = Number(holdPrice)
               if (!p || !holdDate) return
@@ -330,18 +338,12 @@ export default function StockAskPopover() {
             thesis={previewThesis}
             barsLoading={barsQuery.isLoading && !!enterQtyNum}
             canSave={userId != null}
+            error={positionError}
             onSave={() => {
               if (!previewPosition) return
               setPositionApi(entity.id, { entry_price: previewPosition.entryPrice, entry_date: previewPosition.entryDate, entry_qty: previewPosition.qty ?? null })
               setEnterQty('')
             }}
-          />
-        ) : activeIntent === 'equity.also_in_scans' ? (
-          <AlsoInScansBody
-            isLoading={scanPresence.isLoading}
-            stock={scanPresence.stock}
-            matchedScans={scanPresence.matchedScans}
-            currentPresetId={entity.currentPresetId}
           />
         ) : (
           <>
@@ -460,7 +462,7 @@ function MiniField({ label, value, onChange, type = 'text', placeholder }: {
  *  computeThesis(); no saved position yet shows the same capture form
  *  ChartView's Thesis tab uses (qty/price/date → bookmarkStore.setPosition). */
 function HoldThisBody({
-  position, thesis, barsLoading, qty, setQty, price, setPrice, date, setDate, canSave, onSave, onClear,
+  position, thesis, barsLoading, qty, setQty, price, setPrice, date, setDate, canSave, error, onSave, onClear,
 }: {
   position: PositionInput | null
   thesis: ThesisRead | null
@@ -469,6 +471,7 @@ function HoldThisBody({
   price: string; setPrice: (v: string) => void
   date: string; setDate: (v: string) => void
   canSave: boolean
+  error?: string | null
   onSave: () => void
   onClear: () => void
 }) {
@@ -499,6 +502,7 @@ function HoldThisBody({
         >
           ✕ Remove position
         </button>
+        {error && <div style={{ marginTop: 6, fontSize: 10, color: 'var(--bear)' }}>{error}</div>}
       </div>
     )
   }
@@ -522,6 +526,7 @@ function HoldThisBody({
         Save position
       </button>
       {!canSave && <span style={{ fontSize: 10, color: 'var(--bear)' }}>Sign in to save positions.</span>}
+      {error && <span style={{ fontSize: 10, color: 'var(--bear)' }}>{error}</span>}
     </div>
   )
 }
@@ -530,7 +535,7 @@ function HoldThisBody({
  *  persisted unless the user explicitly saves it (same setPosition as
  *  "I hold this"). */
 function CanIEnterBody({
-  latestClose, latestDate, qty, setQty, thesis, barsLoading, canSave, onSave,
+  latestClose, latestDate, qty, setQty, thesis, barsLoading, canSave, error, onSave,
 }: {
   latestClose: number | null
   latestDate: string
@@ -538,6 +543,7 @@ function CanIEnterBody({
   thesis: ThesisRead | null
   barsLoading: boolean
   canSave: boolean
+  error?: string | null
   onSave: () => void
 }) {
   return (
@@ -574,6 +580,7 @@ function CanIEnterBody({
             Save as my position
           </button>
           {!canSave && <span style={{ marginLeft: 10, fontSize: 10, color: 'var(--bear)' }}>Sign in to save positions.</span>}
+          {error && <span style={{ marginLeft: 10, fontSize: 10, color: 'var(--bear)' }}>{error}</span>}
         </>
       ) : (
         <div style={{ fontSize: 11, color: 'var(--text-faint)' }}>Enter a quantity to see the risk read.</div>
@@ -582,31 +589,42 @@ function CanIEnterBody({
   )
 }
 
-/** "Also in these scans?" — reuses ScanPresenceCard's own rendering; the
- *  only new logic is dropping whichever preset this popover was opened
- *  from, so the list never names the screen the user is already on. */
-function AlsoInScansBody({
-  isLoading, stock, matchedScans, currentPresetId,
+/** "Also in these scans" — owner (2026-09-04): not a pill, always visible.
+ *  A compact strip (not the full ScanPresenceCard box — this renders on
+ *  every popover open, so it has to stay light), dropping whichever preset
+ *  the popover was opened from so the list never names the screen the user
+ *  is already on. Renders nothing once resolved with no OTHER matches, so
+ *  it never sits there empty taking up space. */
+function AlsoInScansStrip({
+  isLoading, matchedScans, currentPresetId,
 }: {
   isLoading: boolean
-  stock: ScanStock | null
   matchedScans: { id: string; name: string; vani: boolean }[]
   currentPresetId?: string
 }) {
   if (isLoading) {
-    return <div style={{ flex: '1 1 100%', fontSize: 11, color: 'var(--text-faint)' }}>Checking scans…</div>
+    return <div style={{ fontSize: 10.5, color: 'var(--text-faint)', marginBottom: 8 }}>Checking other scans…</div>
   }
   const others = matchedScans.filter((m) => m.id !== currentPresetId)
-  if (others.length === 0 && matchedScans.length > 0) {
-    return (
-      <div style={{ flex: '1 1 100%', fontSize: 11.5, color: 'var(--text-muted)' }}>
-        Only surfacing here today — not in any other active scan.
-      </div>
-    )
-  }
+  if (others.length === 0) return null
+
+  const SHOWN = 3
+  const shown = others.slice(0, SHOWN)
+  const rest = others.length - shown.length
+
   return (
-    <div style={{ flex: '1 1 100%' }}>
-      <ScanPresenceCard stock={stock} matchedScans={others} />
+    <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 5, fontSize: 10.5, marginBottom: 10 }}>
+      <span style={{ color: 'var(--text-faint)' }}>Also in:</span>
+      {shown.map((m, i) => (
+        <span key={m.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+          <Link to={`/scanner/${m.id}`} style={{ color: 'var(--text-secondary, var(--text-muted))', textDecoration: 'none' }}>
+            {m.name}
+          </Link>
+          {m.vani && <span style={{ color: 'var(--gold)' }} title="✦ VaNi Highlight in this scan">✦</span>}
+          {i < shown.length - 1 && <span style={{ color: 'var(--text-faint)' }}>·</span>}
+        </span>
+      ))}
+      {rest > 0 && <span style={{ color: 'var(--text-faint)' }}>+{rest} more</span>}
     </div>
   )
 }

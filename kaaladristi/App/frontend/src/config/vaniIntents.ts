@@ -188,12 +188,11 @@ export const EQUITY_INTENTS: Record<string, EquityIntentDef> = {
     icon: 'shield-alert',
     displayOrder: 5,
   },
-  // Deterministic (useScanPresence), same as the position pills — no LLM call.
-  'equity.also_in_scans': {
-    labelTemplate: 'Also in these scans?',
-    icon: 'scan-search',
-    displayOrder: 6,
-  },
+  // NOTE: "Also in these scans?" is NOT a pill — owner feedback (2026-09-04):
+  // "it is not an intent......this has to be shown directly into the UI
+  // without invoking any intent." It renders as an always-visible strip in
+  // StockAskPopover.tsx instead (useScanPresence called unconditionally,
+  // not gated behind a click). Intentionally no registry entry here.
 };
 
 export function getIntentsForPage(page: VaNiPage): Array<{ intentId: string } & VaNiIntentDef> {
