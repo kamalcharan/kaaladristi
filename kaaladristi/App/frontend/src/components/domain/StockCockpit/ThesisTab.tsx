@@ -436,8 +436,10 @@ export function PnlChart({ points }: { points: number[] }) {
   )
 }
 
-/** −100..+100 posture as an area line crossing a neutral midline. */
-function PostureChart({ points }: { points: number[] }) {
+/** −100..+100 posture as an area line crossing a neutral midline. Exported
+ *  for the same reason as PnlChart — StockAskPopover's "Can I enter now?"
+ *  reuses the exact watchlist-style setup read this renders. */
+export function PostureChart({ points }: { points: number[] }) {
   if (points.length < 2) return <div style={{ height: 60 }} />
   const W = 240, H = 60, mid = H / 2
   const step = W / (points.length - 1)

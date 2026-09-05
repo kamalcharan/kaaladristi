@@ -8,7 +8,7 @@ import { useScanPresence } from '@/hooks/useScanPresence'
 import { fmtDateLong } from '@/lib/dateUtils'
 import { zoneLabel, flowLabel } from '@/constants/signalScale'
 import VaNiInsight from '@/components/domain/VaNiInsight'
-import { PnlChart } from '@/components/domain/StockCockpit/ThesisTab'
+import { PnlChart, PostureChart } from '@/components/domain/StockCockpit/ThesisTab'
 import { computeThesis, type ThesisBar, type PositionInput, type ThesisRead } from '@/services/thesis'
 import { fetchEquityEodById } from '@/services/indicatorData'
 import { useStockAskStore } from '@/stores/stockAskStore'
@@ -155,12 +155,19 @@ export default function StockAskPopover() {
   }, [activeIntent, position, latestClose, latestBarDate, latestDataDate])
 
   const [enterQty, setEnterQty] = useState('')
-  const enterQtyNum = enterQty ? Number(enterQty) : null
-  const previewPosition: PositionInput | null =
-    enterQtyNum && enterQtyNum > 0 && latestClose != null
-      ? { entryPrice: latestClose, entryDate: latestBarDate || latestDataDate || new Date().toISOString().slice(0, 10), qty: enterQtyNum }
-      : null
-  const previewThesis: ThesisRead | null = previewPosition && bars ? computeThesis(bars, 'position', previewPosition) : null
+  // "Can I enter now?" — owner (2026-09-05): "how can we say since entry
+  // +0.0% ... when user is asking can i enter now?" Right call: a same-day
+  // synthetic entry makes every entry-anchored stat trivially zero by
+  // construction (currentPct/peakPct/drawdown are all 0, "not enough
+  // history" always fires) — that's not a display bug, it was the wrong
+  // question. Someone deciding whether to enter isn't asking "how has MY
+  // position done" (there isn't one) — they're asking "is this stock's
+  // SETUP good right now," the exact read ThesisTab already gives a
+  // watchlist stock: verdict + pillars + the risk↔reward posture trend
+  // (PostureChart), none of which need an entry date at all. Computed the
+  // moment bars load — no qty required — qty only matters for the Save
+  // payload below, entirely decoupled from the read.
+  const entryThesis: ThesisRead | null = bars ? computeThesis(bars, 'watchlist') : null
 
   // ── "Also in these scans" — owner (2026-09-04): "it is not an intent......
   // this has to be shown directly into the UI without invoking any intent."
@@ -335,23 +342,20 @@ export default function StockAskPopover() {
             latestClose={latestClose}
             latestDate={latestBarDate || latestDataDate || ''}
             qty={enterQty} setQty={setEnterQty}
-            thesis={previewThesis}
-            barsLoading={barsQuery.isLoading && !!enterQtyNum}
-            canSave={userId != null}
+            entryThesis={entryThesis}
+            entryLoading={barsQuery.isLoading}
+            canSave={userId != null && latestClose != null}
             error={positionError}
             onSave={async () => {
-              if (!previewPosition) return
-              await setPositionApi(entity.id, { entry_price: previewPosition.entryPrice, entry_date: previewPosition.entryDate, entry_qty: previewPosition.qty ?? null })
+              if (latestClose == null) return
+              const entryDate = latestBarDate || latestDataDate || new Date().toISOString().slice(0, 10)
+              const qtyNum = enterQty ? Number(enterQty) : null
+              await setPositionApi(entity.id, { entry_price: latestClose, entry_date: entryDate, entry_qty: qtyNum })
               // On success, switch straight to "I hold this" — that pill's
-              // saved-position branch is the actual answer to "can I enter
-              // now?" once the answer is "yes, and now you hold it." Bug
-              // fixed here (owner, 2026-09-05): clearing enterQty right
-              // after save wiped previewPosition/previewThesis back to
-              // null, so the day-zero read vanished the instant it saved —
-              // "it won't answer the question" — even though the save
-              // itself had gone through (visible in Positions). On failure,
-              // stay put with the qty/read intact so the error text next
-              // to the button is visible and the user can retry.
+              // saved-position branch shows the real thing now that it
+              // exists. On failure, stay put with the qty/read intact so
+              // the error text next to the button is visible and the user
+              // can retry without retyping.
               if (!useBookmarkStore.getState().error) {
                 setEnterQty('')
                 setActiveIntent('equity.i_hold_this')
@@ -560,64 +564,67 @@ function HoldThisBody({
   )
 }
 
-/** "Can I enter now?" — a what-if, priced off the last EOD close, never
- *  persisted unless the user explicitly saves it (same setPosition as
- *  "I hold this"). */
+const VERDICT_TONE_COLOR: Record<ThesisRead['verdict']['tone'], string> = {
+  bull: 'var(--bull)', bear: 'var(--bear)', neutral: 'var(--text-muted)',
+}
+
+/** "Can I enter now?" — owner (2026-09-05): a same-day synthetic position
+ *  made every entry-anchored stat trivially 0% by construction ("since
+ *  entry +0.0%" for literally every stock, every time) — the wrong
+ *  question. This isn't "how has my position done," there isn't one yet —
+ *  it's "is this stock's setup good right now," so it reads the SAME
+ *  verdict/pillars/risk↔reward-posture ThesisTab already gives a watchlist
+ *  stock (computeThesis(bars, 'watchlist')) — no entry date, no qty, no
+ *  save required to see it. Saving (qty optional) is a separate step below
+ *  for anyone who decides to actually act on it. */
 function CanIEnterBody({
-  latestClose, latestDate, qty, setQty, thesis, barsLoading, canSave, error, onSave,
+  latestClose, latestDate, qty, setQty, entryThesis, entryLoading, canSave, error, onSave,
 }: {
   latestClose: number | null
   latestDate: string
   qty: string; setQty: (v: string) => void
-  thesis: ThesisRead | null
-  barsLoading: boolean
+  entryThesis: ThesisRead | null
+  entryLoading: boolean
   canSave: boolean
   error?: string | null
   onSave: () => void
 }) {
+  if (entryLoading || !entryThesis) {
+    return <div style={{ flex: '1 1 100%', fontSize: 11, color: 'var(--text-faint)' }}>Reading the setup…</div>
+  }
+  const vColor = VERDICT_TONE_COLOR[entryThesis.verdict.tone]
   return (
     <div style={{ flex: '1 1 100%' }}>
-      <div style={{ display: 'flex', gap: 16, alignItems: 'flex-end', flexWrap: 'wrap', marginBottom: thesis || barsLoading ? 10 : 0 }}>
-        <MiniField label="Qty you're considering" value={qty} onChange={setQty} />
-        <span style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-          <span style={{ fontSize: 9.5, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--text-faint)' }}>Entry price</span>
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-muted)' }}>
-            {latestClose != null ? `₹${latestClose.toFixed(2)}` : '—'}
-            <span style={{ fontSize: 9.5 }}> (last close{latestDate ? ` · ${latestDate}` : ''})</span>
-          </span>
-        </span>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 13, fontWeight: 700, color: vColor }}>{entryThesis.verdict.label}</span>
+        <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>— {entryThesis.verdict.line}</span>
       </div>
-      {barsLoading ? (
-        <div style={{ fontSize: 11, color: 'var(--text-faint)' }}>Loading…</div>
-      ) : thesis ? (
-        <>
-          {/* The full read — same one "I hold this" shows for a saved
-              position — renders as soon as a qty is typed. Nothing is saved
-              to get here: owner (2026-09-05) — "user has no way to gauge —
-              system is forcing the user to save it as a position." Save
-              below is now a clearly separate, optional step. */}
-          <PositionRiskRead thesis={thesis} />
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 4, paddingTop: 10, borderTop: '1px dashed var(--border)' }}>
-            <span style={{ fontSize: 10, color: 'var(--text-faint)' }}>Not tracked yet —</span>
-            <button
-              onClick={onSave}
-              disabled={!canSave}
-              style={{
-                fontSize: 12, fontWeight: 600, color: 'var(--accent, var(--gold-soft))',
-                background: 'color-mix(in srgb, var(--accent, var(--gold-soft)) 14%, transparent)',
-                border: '1px solid var(--accent, var(--gold-soft))', borderRadius: 7, padding: '6px 14px',
-                cursor: canSave ? 'pointer' : 'default', opacity: canSave ? 1 : 0.55,
-              }}
-            >
-              Save as my position
-            </button>
-            {!canSave && <span style={{ fontSize: 10, color: 'var(--bear)' }}>Sign in to save positions.</span>}
-            {error && <span style={{ fontSize: 10, color: 'var(--bear)' }}>{error}</span>}
-          </div>
-        </>
-      ) : (
-        <div style={{ fontSize: 11, color: 'var(--text-faint)' }}>Enter a quantity to see the risk read.</div>
-      )}
+      <PostureChart points={entryThesis.postureTrajectory.map((p) => p.posture)} />
+      <div style={{ fontSize: 10.5, color: 'var(--text-faint)', marginTop: 2, marginBottom: 10 }}>
+        {entryThesis.alignedNow}/{entryThesis.total} pillars hold, trend {entryThesis.alignedTrend}
+      </div>
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', paddingTop: 10, borderTop: '1px dashed var(--border)' }}>
+        <MiniField label="Qty (if entering)" value={qty} onChange={setQty} placeholder="optional" />
+        <span style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+          at {latestClose != null ? `₹${latestClose.toFixed(2)}` : '—'}
+          <span style={{ fontSize: 9.5 }}> (last close{latestDate ? ` · ${latestDate}` : ''})</span>
+        </span>
+        <button
+          onClick={onSave}
+          disabled={!canSave}
+          style={{
+            fontSize: 12, fontWeight: 600, color: 'var(--accent, var(--gold-soft))',
+            background: 'color-mix(in srgb, var(--accent, var(--gold-soft)) 14%, transparent)',
+            border: '1px solid var(--accent, var(--gold-soft))', borderRadius: 7, padding: '6px 14px',
+            cursor: canSave ? 'pointer' : 'default', opacity: canSave ? 1 : 0.55,
+          }}
+        >
+          Save as my position
+        </button>
+        {!canSave && <span style={{ fontSize: 10, color: 'var(--bear)' }}>Sign in to save positions.</span>}
+        {error && <span style={{ fontSize: 10, color: 'var(--bear)' }}>{error}</span>}
+      </div>
     </div>
   )
 }
