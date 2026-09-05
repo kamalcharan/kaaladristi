@@ -1,8 +1,12 @@
 /**
  * BigMoneyCard — Study cockpit rail (POA Phase 3).
- * Sessions where delivered value ran ≥5× the stock's own 66-day norm
- * (≥₹25 Cr absolute) — zones where large money changed hands. Observational
- * only: the aftermath stat is computed history, not a support claim.
+ * Sessions where delivered value ran ≥5× the stock's own 66-day norm and
+ * landed in its own top 2% — zones where large money changed hands.
+ *
+ * The events are READ from km_equity_eod.bm_event (migration 200), not
+ * detected here, so this card, the chart's ₹ markers, the story timeline, the
+ * scanners and the risk thesis all cite the same sessions. Observational only:
+ * the aftermath stat is computed history, not a support claim.
  */
 
 import { Landmark } from 'lucide-react';
@@ -36,8 +40,9 @@ export default function BigMoneyCard({ events }: { events: BigMoneyEvent[] }) {
         </div>
         <p className="text-[9px] text-muted leading-snug">
           No big-money days in this window — no session had delivered value ≥{BIG_MONEY_MIN_RATIO}×
-          this stock's 66-day norm and in its own top delivered days. These are structurally rare,
-          and stocks without delivery data (most BSE-only scrips) won't register any.
+          this stock's 66-day norm and in its own top 2% of delivered days. These are structurally
+          rare, and stocks without delivery data (most BSE-only scrips) won't register any.
+          Delivery data begins June 2024, so nothing earlier can register either.
         </p>
       </div>
     );
@@ -55,8 +60,8 @@ export default function BigMoneyCard({ events }: { events: BigMoneyEvent[] }) {
         <span className="ml-auto text-[9px] font-mono text-muted">{events.length}</span>
       </div>
       <p className="text-[9px] text-muted leading-snug mb-2.5">
-        Delivered value ≥{BIG_MONEY_MIN_RATIO}× this stock's 66-day norm and among its own top
-        delivered days — price zones where large money changed hands. Marked ₹ on the chart.
+        Delivered value ≥{BIG_MONEY_MIN_RATIO}× this stock's 66-day norm and in its own top 2% of
+        the prior 252 sessions — price zones where large money changed hands. Marked ₹ on the chart.
         Footprint is inferred from how price absorbed the handover (delivery itself is two-sided).
       </p>
 

@@ -9,6 +9,7 @@ import { fmtDateLong } from '@/lib/dateUtils'
 import { zoneLabel, flowLabel } from '@/constants/signalScale'
 import VaNiInsight from '@/components/domain/VaNiInsight'
 import { PnlChart, PostureChart } from '@/components/domain/StockCockpit/ThesisTab'
+import StructureStrip from '@/components/domain/StockCockpit/StructureStrip'
 import { computeThesis, type ThesisBar, type PositionInput, type ThesisRead } from '@/services/thesis'
 import { fetchEquityEodById } from '@/services/indicatorData'
 import { useStockAskStore } from '@/stores/stockAskStore'
@@ -490,9 +491,15 @@ function PositionRiskRead({ thesis }: { thesis: ThesisRead }) {
       <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5, marginBottom: 10 }}>
         {thesis.vaniLine}
       </div>
+      {/* The Big Money × Golden Line read — the SAME component ChartView's
+          Thesis tab renders, so "can I enter now" and the chart cannot tell
+          the user two different things about the same level. Shown before the
+          P&L block because it is the half that does not depend on having a
+          position at all. */}
+      <StructureStrip structure={thesis.structure} compact />
       {pr && (
         <>
-          <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginBottom: 6 }}>
+          <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginTop: 10, marginBottom: 6 }}>
             <MiniKv label="Since entry" value={`${pr.currentPct >= 0 ? '+' : ''}${pr.currentPct.toFixed(1)}%`} color={pr.currentPct >= 0 ? 'var(--bull)' : 'var(--bear)'} />
             <MiniKv label="Peak" value={`${pr.peakPct >= 0 ? '+' : ''}${pr.peakPct.toFixed(1)}%`} />
             <MiniKv label="Off peak" value={`${pr.drawdownFromPeak.toFixed(1)}%`} color={pr.drawdownFromPeak < -0.5 ? 'var(--bear)' : undefined} />
