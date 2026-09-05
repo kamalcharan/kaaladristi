@@ -20,7 +20,7 @@ import SectorMembershipCard from '@/components/domain/StockCockpit/SectorMembers
 import CockpitIndicatorPanels from '@/components/domain/StockCockpit/CockpitIndicatorPanels';
 import BigMoneyCard from '@/components/domain/StockCockpit/BigMoneyCard';
 import CockpitOverlayStrip from '@/components/domain/StockCockpit/CockpitOverlayStrip';
-import { detectBigMoneyDays } from '@/services/bigMoney';
+import { readBigMoneyDays } from '@/services/bigMoney';
 import { useFrameworkStore } from '@/stores/frameworkStore';
 import { useAuthStore } from '@/stores/authStore';
 import { useBookmarkStore } from '@/stores/bookmarkStore';
@@ -570,9 +570,12 @@ export default function ChartView() {
   }, [isEquity, pulseBars]);
 
 
-  // Big Money days (Phase 3) — daily equity bars only
+  // Big Money days (Phase 3) — daily equity bars only.
+  // Read, not detected: the flags come from km_equity_eod.bm_event, written by
+  // the nightly `big_money` step (migration 200), so the chart, the card, the
+  // story timeline, the scanners and the risk thesis all cite one number.
   const bigMoneyEvents = useMemo(
-    () => (isEquity && tf === 'daily' ? detectBigMoneyDays(rows) : []),
+    () => (isEquity && tf === 'daily' ? readBigMoneyDays(rows) : []),
     [isEquity, tf, rows],
   );
   const bigMoneyChartLines = useMemo(

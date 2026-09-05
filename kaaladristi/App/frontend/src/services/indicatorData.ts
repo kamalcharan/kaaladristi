@@ -130,6 +130,10 @@ export interface IndicatorRow {
   gl_event?: string | null;
   gl_days_above?: number | null;
   pct_from_gl?: number | null;
+  // Big Money day (migration 200). Equity-only, and sparse by design —
+  // bm_event is NULL on every bar that is not one.
+  bm_event?: string | null;
+  bm_ratio?: number | null;
   // Short Magic RS — the only Magic RS weekly and monthly can carry.
   magic_rs_short?: number | null;
   magic_rs_short_ma?: number | null;
@@ -345,20 +349,32 @@ export async function fetchEquityEodById(
   // Equity-only extras (NOT in shared INDICATOR_COLS — km_index_eod lacks the
   // delivery columns): the Study cockpit's stat strip + Delivery-vs-Traded
   // widget read these.
-  const EQUITY_EXTRA_COLS = 'pct_chng,value_cr,delivery_pct,delivery_qty,deliv_value_cr,ret_5d,ret_22d,ret_66d,w52_high,w52_low,delivery_surge_x,stage,stage_confirmed,gl_event,gl_days_above,pct_from_gl,is_vani_s2,is_vani_smart,is_vani_breakout,is_vani_surge,is_vani_distrib,is_vani_weakness,is_vani_oversold';
+  const EQUITY_EXTRA_COLS = 'pct_chng,value_cr,delivery_pct,delivery_qty,deliv_value_cr,ret_5d,ret_22d,ret_66d,w52_high,w52_low,delivery_surge_x,stage,stage_confirmed,gl_event,gl_days_above,pct_from_gl,bm_event,bm_ratio,is_vani_s2,is_vani_smart,is_vani_breakout,is_vani_surge,is_vani_distrib,is_vani_weakness,is_vani_oversold';
   const cols = `trade_date,open,high,low,close,volume,${INDICATOR_COLS},${EQUITY_EXTRA_COLS}`;
 
-  let query = from('km_equity_eod')
-    .select(cols)
-    .eq('equity_id', equityId)
-    .order('trade_date', { ascending: true })
-    .limit(10000);
+  const run = async (selectCols: string) => {
+    let query = from('km_equity_eod')
+      .select(selectCols)
+      .eq('equity_id', equityId)
+      .order('trade_date', { ascending: true })
+      .limit(10000);
+    if (startDate) {
+      query = query.gte('trade_date', startDate);
+    }
+    return query.execute();
+  };
 
-  if (startDate) {
-    query = query.gte('trade_date', startDate);
+  let { data, error } = await run(cols);
+
+  // Deploy-ordering guard. bm_event/bm_ratio arrive with migration 200, which
+  // the owner runs by hand — so a frontend deployed first would ask PostgREST
+  // for columns that do not exist yet and 400 the ENTIRE chart, not just the
+  // Big Money card. Retry once without them so the page degrades to "no big
+  // money days" instead of going blank. Matched on the column name, so a real
+  // error still surfaces as a real error.
+  if (error && /bm_event|bm_ratio/.test(error.message ?? '')) {
+    ({ data, error } = await run(cols.replace(',bm_event,bm_ratio', '')));
   }
-
-  const { data, error } = await query.execute();
   if (error) throw new Error(error.message);
 
   return (data ?? []) as IndicatorRow[];

@@ -84,6 +84,13 @@ DIMENSION_HEALTH: dict[str, tuple[str, str | None, list[str] | None, float | Non
     # rare by design, so measuring fill on it would report the step broken on
     # any quiet day.
     'gl_events':             ('km_equity_eod',    'equity_id', ['gl_days_above'],                                          0.90),
+    # bm_ratio is written on every bar that HAS a delivery baseline; bm_event
+    # is rare by design (~5 a year on a stock that has them at all), so
+    # measuring fill on it would report the step broken on every quiet day —
+    # the same trap gl_days_above avoids above. 98.5% of the latest bar
+    # carries avg_amt_66d (measured 2026-09-05), so 0.90 leaves margin
+    # without masking a regression to zero.
+    'big_money':             ('km_equity_eod',    'equity_id', ['bm_ratio'],                                               0.90),
     'vani_flags':            ('km_equity_eod',    'equity_id', ['is_vani_strength', 'is_vani_breakout'],                   1.0),
     # index_returns samples ret_5d only — ret_22d/ret_66d are legitimately
     # NULL for indices younger than their window, and indices with no EOD
@@ -135,6 +142,7 @@ LABELS: dict[str, str] = {
     'd365':                  'D365 % Change',
     'stage_classification':  'Stage Classification',
     'gl_events':             'Golden Line Events',
+    'big_money':             'Big Money Days',
     'vani_flags':            'VaNi Flags',
     'index_returns':         'Index Returns & Scores',
     'industry_composites':   'Industry Composites',

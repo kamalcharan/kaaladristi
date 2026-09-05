@@ -18,6 +18,7 @@ import type { StoryJourney } from '@/services/storyEvents'
 import { KIND_COLORS } from '@/services/storyEvents'
 import { narrateVani } from '@/services/vaniNarrate'
 import type { Pillar } from './VerdictHero'
+import StructureStrip from './StructureStrip'
 
 /** Assemble the deterministic facts VaNi will narrate — nothing derived here. */
 function buildThesisFacts(name: string, t: ThesisRead): string {
@@ -229,6 +230,10 @@ export default function ThesisTab({
           )}
         </div>
       </div>
+
+      {/* ── Structure: Big Money × Golden Line. Same component the VaNi inline
+          popover renders, so the chart and the popover cannot disagree. ── */}
+      <StructureStrip structure={thesis.structure} />
 
       {/* ── Add-position form ── */}
       {showForm && relationship !== 'position' && (

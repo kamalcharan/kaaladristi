@@ -15,6 +15,7 @@
  */
 
 import { buildStoryEvents, type StoryEvent, type StoryBar, type StoryJourney } from './storyEvents'
+import { readBigMoneyDays, type BigMoneyDirection, type BigMoneyEvent } from './bigMoney'
 import { buildPillars, type Pillar, type LatestRow } from '@/components/domain/StockCockpit/VerdictHero'
 
 export type Relationship = 'position' | 'watchlist' | 'none'
@@ -45,6 +46,39 @@ export interface PositionRisk {
   line: string
 }
 
+/** Where the last Big Money day sits relative to the Golden Line, and whether
+ *  price still holds it. The two structural facts the platform already stores,
+ *  read together — neither is new data, and neither is re-derived here.
+ *
+ *  SEBI: every string this produces is observational. It says where large money
+ *  changed hands and where price is now relative to that; it never says what to
+ *  do about it. */
+export interface StructureRead {
+  /** Golden Line (sma_150) on the latest bar. */
+  gl: number | null
+  pctFromGl: number | null
+  aboveGl: boolean | null
+  /** Consecutive sessions closed above the Golden Line, this bar included. */
+  daysAboveGl: number | null
+  bigMoney: {
+    date: string
+    direction: BigMoneyDirection
+    ratio: number
+    delivCr: number
+    low: number
+    high: number
+    heldAbove: number
+    sessionsSince: number
+    /** Was the event's own zone above the Golden Line at the time? */
+    aboveGlAtEvent: boolean | null
+  } | null
+  /** Does the latest close sit at or above the last Big Money zone's low? */
+  aboveZone: boolean | null
+  label: string
+  tone: 'bull' | 'bear' | 'neutral'
+  line: string
+}
+
 export interface ThesisRead {
   relationship: Relationship
   pillars: Pillar[]
@@ -58,6 +92,8 @@ export interface ThesisRead {
   /** VaNi's grounded one-line narration of the read (deterministic — spoken
    *  from the computed facts, not a raw LLM guess). */
   vaniLine: string
+  /** Big Money × Golden Line. Null only when the bars carry neither. */
+  structure: StructureRead | null
   // Position-only —
   entry?: { date: string; price: number; qty: number | null; pillars: Pillar[]; aligned: number; total: number; label: string }
   pnlPct?: number | null
@@ -76,6 +112,9 @@ export interface ThesisBar extends StoryBar {
   delivery_pct?: number | null
   delivery_surge_x?: number | null
   ret_66d?: number | null
+  deliv_value_cr?: number | null
+  bm_event?: string | null
+  bm_ratio?: number | null
 }
 
 /** −100..+100 posture for one bar: reward-vs-risk across 5 cheap reads. */
@@ -101,6 +140,130 @@ function alignedRatio(pillars: Pillar[]): { aligned: number; total: number } {
 
 function alignedCount(bar: ThesisBar): number {
   return alignedRatio(buildPillars(bar as LatestRow)).aligned
+}
+
+/**
+ * Big Money × Golden Line.
+ *
+ * The owner's question this answers: "if a Big Money day is above the Golden
+ * Line or below it, and price holds the zone or doesn't — what does that
+ * read as?" Both inputs are already stored (bm_event from migration 200,
+ * sma_150/pct_from_gl/gl_days_above from migration 194), so this composes
+ * them; it derives neither.
+ *
+ * The reading is a closed set of seven, chosen so that each names a genuinely
+ * different configuration rather than grading one axis. Every string states an
+ * observation and the arithmetic behind it — no directive verb, no target, no
+ * bull/bear label on the price itself.
+ */
+function buildStructure(bars: ThesisBar[], events: BigMoneyEvent[]): StructureRead | null {
+  const latest = bars[bars.length - 1]
+  const gl = latest.sma_150 ?? null
+  const close = latest.close
+  const aboveGl = gl != null && gl > 0 && close != null ? close > gl : null
+  const pctFromGl = latest.pct_from_gl ?? (gl != null && gl > 0 && close != null
+    ? ((close - gl) / gl) * 100
+    : null)
+  const daysAboveGl = latest.gl_days_above ?? null
+
+  const last = events.length ? events[events.length - 1] : null
+
+  // Nothing structural to say at all — no Golden Line yet (young listing) and
+  // no footprint on record. Better to return null than to render an empty card.
+  if (gl == null && last == null) return null
+
+  let bigMoney: StructureRead['bigMoney'] = null
+  let aboveZone: boolean | null = null
+  if (last) {
+    const evBar = bars.find((b) => b.trade_date === last.trade_date)
+    const evGl = evBar?.sma_150 ?? null
+    bigMoney = {
+      date: last.trade_date,
+      direction: last.direction,
+      ratio: last.ratio,
+      delivCr: last.delivCr,
+      low: last.low,
+      high: last.high,
+      heldAbove: last.heldAbove,
+      sessionsSince: last.sessionsSince,
+      // The zone counts as above the line when its LOW clears it — the whole
+      // handover happened above the 150-day mean, not merely its top wick.
+      aboveGlAtEvent: evGl != null && evGl > 0 ? last.low > evGl : null,
+    }
+    aboveZone = close != null ? close >= last.low : null
+  }
+
+  const glPhrase = gl != null && pctFromGl != null
+    ? `Price is ${pctFromGl >= 0 ? 'above' : 'below'} the Golden Line (₹${gl.toFixed(0)}) by ${Math.abs(pctFromGl).toFixed(1)}%`
+      + (aboveGl && daysAboveGl ? `, held for ${daysAboveGl} session${daysAboveGl === 1 ? '' : 's'}` : '')
+    : 'No Golden Line yet — this listing has under 150 sessions of history'
+
+  if (!bigMoney) {
+    return {
+      gl, pctFromGl, aboveGl, daysAboveGl, bigMoney: null, aboveZone: null,
+      label: 'No footprint on record',
+      tone: 'neutral',
+      line: `${glPhrase}. No session in this window has delivered ≥5× this stock's own 66-day norm, `
+          + `so there is no Big Money zone to read it against. Delivery data begins June 2024.`,
+    }
+  }
+
+  const zone = `₹${bigMoney.low.toFixed(0)}–${bigMoney.high.toFixed(0)}`
+  const held = bigMoney.sessionsSince > 0
+    ? `closed above that zone in ${bigMoney.heldAbove} of ${bigMoney.sessionsSince} sessions since`
+    : 'too recent to have an aftermath yet'
+  const moved = `₹${bigMoney.delivCr >= 100 ? bigMoney.delivCr.toFixed(0) : bigMoney.delivCr.toFixed(1)} Cr `
+              + `(${bigMoney.ratio.toFixed(1)}× its norm) changed hands at ${zone} on ${bigMoney.date}`
+
+  let label: string
+  let tone: StructureRead['tone']
+  let detail: string
+
+  if (bigMoney.direction === 'exit') {
+    if (aboveZone) {
+      label = 'Exit footprint reclaimed'
+      tone = 'neutral'
+      detail = `An exit footprint — a down session closing near its low — but price has since ${held}.`
+    } else {
+      label = 'Under the exit footprint'
+      tone = 'bear'
+      detail = `An exit footprint, and price has not regained the zone: ${held}.`
+    }
+  } else if (bigMoney.direction === 'mixed') {
+    label = 'Handover, no price verdict'
+    tone = 'neutral'
+    detail = `Price gave no clear verdict on the day — it closed mid-range — so the footprint reads as `
+           + `ownership changing hands rather than one side paying up. Price has ${held}.`
+  } else if (bigMoney.aboveGlAtEvent === false) {
+    // Entry footprint made while the stock was still under its long mean.
+    label = aboveGl ? 'Entry footprint below, line since reclaimed' : 'Entry footprint below the line'
+    tone = aboveGl ? 'bull' : 'neutral'
+    detail = aboveGl
+      ? `The buying happened while the stock was still under its Golden Line, and price has since `
+        + `crossed it${daysAboveGl ? ` and held for ${daysAboveGl} sessions` : ''}. Price has ${held}.`
+      : `The buying happened while the stock was still under its Golden Line, and it has not crossed `
+        + `since. Price has ${held}.`
+  } else if (aboveZone && aboveGl) {
+    label = 'Entry footprint holding above the line'
+    tone = 'bull'
+    detail = `The buying happened with price already above its Golden Line, and price has ${held}.`
+  } else if (!aboveZone) {
+    label = 'Back under the entry zone'
+    tone = 'bear'
+    detail = `The buying happened above the Golden Line, but price has since traded back under the `
+           + `zone: ${held}.`
+  } else {
+    label = 'Entry zone held, line lost'
+    tone = 'neutral'
+    detail = `Price still sits above the zone where the buying happened, but no longer above its `
+           + `Golden Line. Price has ${held}.`
+  }
+
+  return {
+    gl, pctFromGl, aboveGl, daysAboveGl, bigMoney, aboveZone,
+    label, tone,
+    line: `${glPhrase}. ${moved} — ${detail}`,
+  }
 }
 
 export function computeThesis(
@@ -138,7 +301,13 @@ export function computeThesis(
   // actually happened whenever the stock is also confirming higher. For a
   // position, since entry; otherwise only the recent window (so the feed is
   // actually recent, not 2-month-old events).
-  const events = buildStoryEvents(bars, undefined, undefined, journey)
+  // Big-money dates are now available on the bars themselves, so the thesis
+  // signal feed can carry them too — it previously passed `undefined` and
+  // silently dropped every big-money event from this tab's timeline while
+  // the chart's own timeline showed them.
+  const bigMoneyEvents = readBigMoneyDays(bars)
+  const bigMoneyDates = new Set(bigMoneyEvents.map((e) => e.trade_date))
+  const events = buildStoryEvents(bars, bigMoneyDates, undefined, journey)
   let signals = events
   if (relationship === 'position' && position?.entryDate) {
     signals = signals.filter((e) => e.date >= position.entryDate)
@@ -166,7 +335,8 @@ export function computeThesis(
   }
 
   const read: ThesisRead = {
-    relationship, pillars, alignedNow, total, alignedTrend, postureTrajectory, signals, verdict, vaniLine: '',
+    relationship, pillars, alignedNow, total, alignedTrend, postureTrajectory, signals, verdict,
+    vaniLine: '', structure: buildStructure(bars, bigMoneyEvents),
   }
 
   // Position layer — entry scorecard + P&L + entry-anchored risk.
@@ -219,6 +389,17 @@ export function computeThesis(
   } else {
     read.vaniLine = `${verdict.label} — ${verdict.line}.` +
       (signals.length ? ` Latest signal: ${signals[0].title.toLowerCase()}.` : '')
+  }
+
+  // The structural half, appended rather than merged: the pillars answer "is
+  // the thesis holding", the structure answers "against what level". Keeping
+  // them as separate clauses is what stops the line reading as one blended
+  // score the user cannot take apart.
+  if (read.structure?.bigMoney) {
+    const st = read.structure
+    read.vaniLine += ` ${st.label}: last big-money zone ₹${st.bigMoney!.low.toFixed(0)}–`
+      + `${st.bigMoney!.high.toFixed(0)}, price ${st.aboveZone ? 'above' : 'below'} it`
+      + (st.aboveGl != null ? ` and ${st.aboveGl ? 'above' : 'below'} the Golden Line` : '') + '.'
   }
 
   return read
