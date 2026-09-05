@@ -339,10 +339,23 @@ export default function StockAskPopover() {
             barsLoading={barsQuery.isLoading && !!enterQtyNum}
             canSave={userId != null}
             error={positionError}
-            onSave={() => {
+            onSave={async () => {
               if (!previewPosition) return
-              setPositionApi(entity.id, { entry_price: previewPosition.entryPrice, entry_date: previewPosition.entryDate, entry_qty: previewPosition.qty ?? null })
-              setEnterQty('')
+              await setPositionApi(entity.id, { entry_price: previewPosition.entryPrice, entry_date: previewPosition.entryDate, entry_qty: previewPosition.qty ?? null })
+              // On success, switch straight to "I hold this" — that pill's
+              // saved-position branch is the actual answer to "can I enter
+              // now?" once the answer is "yes, and now you hold it." Bug
+              // fixed here (owner, 2026-09-05): clearing enterQty right
+              // after save wiped previewPosition/previewThesis back to
+              // null, so the day-zero read vanished the instant it saved —
+              // "it won't answer the question" — even though the save
+              // itself had gone through (visible in Positions). On failure,
+              // stay put with the qty/read intact so the error text next
+              // to the button is visible and the user can retry.
+              if (!useBookmarkStore.getState().error) {
+                setEnterQty('')
+                setActiveIntent('equity.i_hold_this')
+              }
             }}
           />
         ) : (
