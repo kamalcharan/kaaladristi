@@ -5596,7 +5596,15 @@ def add_bookmark(
                 (user_id, req.equity_id),
             )
             cur.fetchone()
-            conn.commit()
+            # NOT committing here — set_config(..., true) (is_local) only
+            # lasts for the current transaction. Re-select still needs the
+            # user context to satisfy users_own_bookmarks (RLS); committing
+            # before it resets request.jwt.claims to the DB default (''),
+            # and ''::json blows up with "invalid input syntax for type
+            # json" — this was live (2026-09-04), and affected set_position
+            # below identically. One commit at the end of both queries is
+            # just as durable and keeps the context alive for the re-select.
+            #
             # Re-select joined with km_equity_symbols either way (new insert or
             # already-bookmarked) — the caller needs symbol/company_name/
             # industry/exchange, not just the bare km_user_bookmarks columns,
@@ -5618,6 +5626,7 @@ def add_bookmark(
             row = cur.fetchone()
             if row is None:
                 raise HTTPException(status_code=500, detail='Bookmark insert failed')
+            conn.commit()
         return dict(row)
     except HTTPException:
         raise
@@ -5691,7 +5700,11 @@ def set_position(
                 """,
                 (user_id, equity_id, req.entry_price, req.entry_date, req.entry_qty),
             )
-            conn.commit()
+            # NOT committing here — see add_bookmark's comment above: the
+            # is_local set_config() from _set_user_context resets once this
+            # transaction commits, and the re-select below still needs it to
+            # satisfy users_own_bookmarks (RLS). One commit after both
+            # queries keeps the context alive throughout.
             cur.execute(
                 """
                 SELECT b.id, b.equity_id, b.created_at,
@@ -5708,6 +5721,7 @@ def set_position(
             row = cur.fetchone()
             if row is None:
                 raise HTTPException(status_code=500, detail='Position upsert failed')
+            conn.commit()
         return dict(row)
     except HTTPException:
         raise
