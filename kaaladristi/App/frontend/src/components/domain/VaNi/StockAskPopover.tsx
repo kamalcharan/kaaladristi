@@ -471,6 +471,36 @@ function MiniField({ label, value, onChange, type = 'text', placeholder }: {
   )
 }
 
+/** The entry-anchored risk read itself — vaniLine + since-entry/peak/off-peak/
+ *  risk stats + the PnlChart sparkline. Shared by HoldThisBody (a saved
+ *  position) and CanIEnterBody (an unsaved preview of one) — owner
+ *  (2026-09-05): "user has no way to gauge — system is forcing the user to
+ *  save it as a position." Splitting this out is what fixes that: the SAME
+ *  full read now renders the moment a qty is typed, before any save, so
+ *  Save becomes a genuinely optional "track this going forward" action
+ *  instead of the only way to see the answer. */
+function PositionRiskRead({ thesis }: { thesis: ThesisRead }) {
+  const pr = thesis.positionRisk
+  return (
+    <>
+      <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5, marginBottom: 10 }}>
+        {thesis.vaniLine}
+      </div>
+      {pr && (
+        <>
+          <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginBottom: 6 }}>
+            <MiniKv label="Since entry" value={`${pr.currentPct >= 0 ? '+' : ''}${pr.currentPct.toFixed(1)}%`} color={pr.currentPct >= 0 ? 'var(--bull)' : 'var(--bear)'} />
+            <MiniKv label="Peak" value={`${pr.peakPct >= 0 ? '+' : ''}${pr.peakPct.toFixed(1)}%`} />
+            <MiniKv label="Off peak" value={`${pr.drawdownFromPeak.toFixed(1)}%`} color={pr.drawdownFromPeak < -0.5 ? 'var(--bear)' : undefined} />
+            <MiniKv label="Risk" value={pr.riskTrend} color={pr.riskTrend === 'rising' ? 'var(--bear)' : pr.riskTrend === 'easing' ? 'var(--bull)' : undefined} />
+          </div>
+          <PnlChart points={pr.pnlPath} />
+        </>
+      )}
+    </>
+  )
+}
+
 /** "I hold this" — a saved position (bookmarkStore entry) reads instantly via
  *  computeThesis(); no saved position yet shows the same capture form
  *  ChartView's Thesis tab uses (qty/price/date → bookmarkStore.setPosition). */
@@ -492,23 +522,9 @@ function HoldThisBody({
     if (barsLoading || !thesis) {
       return <div style={{ flex: '1 1 100%', fontSize: 11, color: 'var(--text-faint)' }}>Loading position risk…</div>
     }
-    const pr = thesis.positionRisk
     return (
       <div style={{ flex: '1 1 100%' }}>
-        <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5, marginBottom: 10 }}>
-          {thesis.vaniLine}
-        </div>
-        {pr && (
-          <>
-            <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginBottom: 6 }}>
-              <MiniKv label="Since entry" value={`${pr.currentPct >= 0 ? '+' : ''}${pr.currentPct.toFixed(1)}%`} color={pr.currentPct >= 0 ? 'var(--bull)' : 'var(--bear)'} />
-              <MiniKv label="Peak" value={`${pr.peakPct >= 0 ? '+' : ''}${pr.peakPct.toFixed(1)}%`} />
-              <MiniKv label="Off peak" value={`${pr.drawdownFromPeak.toFixed(1)}%`} color={pr.drawdownFromPeak < -0.5 ? 'var(--bear)' : undefined} />
-              <MiniKv label="Risk" value={pr.riskTrend} color={pr.riskTrend === 'rising' ? 'var(--bear)' : pr.riskTrend === 'easing' ? 'var(--bull)' : undefined} />
-            </div>
-            <PnlChart points={pr.pnlPath} />
-          </>
-        )}
+        <PositionRiskRead thesis={thesis} />
         <button
           onClick={onClear}
           style={{ marginTop: 6, fontSize: 10.5, color: 'var(--text-faint)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
@@ -575,25 +591,29 @@ function CanIEnterBody({
         <div style={{ fontSize: 11, color: 'var(--text-faint)' }}>Loading…</div>
       ) : thesis ? (
         <>
-          <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5, marginBottom: 10 }}>
-            {thesis.entry
-              ? `Day-zero read — ${thesis.entry.aligned}/${thesis.entry.total} pillars hold at today's close.`
-              : 'Not enough history to read a day-zero setup yet.'}
+          {/* The full read — same one "I hold this" shows for a saved
+              position — renders as soon as a qty is typed. Nothing is saved
+              to get here: owner (2026-09-05) — "user has no way to gauge —
+              system is forcing the user to save it as a position." Save
+              below is now a clearly separate, optional step. */}
+          <PositionRiskRead thesis={thesis} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 4, paddingTop: 10, borderTop: '1px dashed var(--border)' }}>
+            <span style={{ fontSize: 10, color: 'var(--text-faint)' }}>Not tracked yet —</span>
+            <button
+              onClick={onSave}
+              disabled={!canSave}
+              style={{
+                fontSize: 12, fontWeight: 600, color: 'var(--accent, var(--gold-soft))',
+                background: 'color-mix(in srgb, var(--accent, var(--gold-soft)) 14%, transparent)',
+                border: '1px solid var(--accent, var(--gold-soft))', borderRadius: 7, padding: '6px 14px',
+                cursor: canSave ? 'pointer' : 'default', opacity: canSave ? 1 : 0.55,
+              }}
+            >
+              Save as my position
+            </button>
+            {!canSave && <span style={{ fontSize: 10, color: 'var(--bear)' }}>Sign in to save positions.</span>}
+            {error && <span style={{ fontSize: 10, color: 'var(--bear)' }}>{error}</span>}
           </div>
-          <button
-            onClick={onSave}
-            disabled={!canSave}
-            style={{
-              fontSize: 12, fontWeight: 600, color: 'var(--accent, var(--gold-soft))',
-              background: 'color-mix(in srgb, var(--accent, var(--gold-soft)) 14%, transparent)',
-              border: '1px solid var(--accent, var(--gold-soft))', borderRadius: 7, padding: '6px 14px',
-              cursor: canSave ? 'pointer' : 'default', opacity: canSave ? 1 : 0.55,
-            }}
-          >
-            Save as my position
-          </button>
-          {!canSave && <span style={{ marginLeft: 10, fontSize: 10, color: 'var(--bear)' }}>Sign in to save positions.</span>}
-          {error && <span style={{ marginLeft: 10, fontSize: 10, color: 'var(--bear)' }}>{error}</span>}
         </>
       ) : (
         <div style={{ fontSize: 11, color: 'var(--text-faint)' }}>Enter a quantity to see the risk read.</div>
