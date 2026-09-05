@@ -474,6 +474,30 @@ def handle_gl_events(conn, trade_date: date, force: bool,
                           compute_gl_events_for_date)
 
 
+def handle_big_money(conn, trade_date: date, force: bool,
+                     exchange: Optional[str], on_progress: ProgressFn) -> HandlerResult:
+    """Big Money days — sessions where delivered value ran >= 5x the stock's
+    own 66-day norm and landed in its own top 2%.
+
+    Ordered AFTER `rolling_metrics` in DAILY_STEPS: the baseline it measures
+    against IS avg_amt_66d, so running it earlier would score today's delivered
+    value against a norm that stops at yesterday. Ordered BEFORE `scan_refresh`
+    because the matview's bm_* rollup columns read the bm_event this writes.
+
+    Same pre-flight column check as handle_gl_events, for the same reason:
+    _handle_script's first act is a fill_rate query on bm_ratio, so without
+    this the step would fail on the health probe before the compute it guards
+    ever runs.
+    """
+    if not _columns_exist(conn, 'km_equity_eod', ['bm_event', 'bm_ratio']):
+        return HandlerResult('partial', 0.0, 0.0, 0,
+                             error_msg='Big Money columns absent '
+                                       '(migration 200 not applied) — step skipped')
+    from scripts.backfill_big_money import compute_big_money_for_date
+    return _handle_script('big_money', conn, trade_date, force, on_progress,
+                          compute_big_money_for_date)
+
+
 def handle_vani_flags(conn, trade_date: date, force: bool,
                       exchange: Optional[str], on_progress: ProgressFn) -> HandlerResult:
     from scripts.backfill_vani_flags import compute_vani_flags_for_date
@@ -1119,6 +1143,8 @@ def handle(dimension: str, conn, trade_date: date, force: bool,
         return handle_d365(conn, trade_date, force, exchange, on_progress)
     if dimension == 'gl_events':
         return handle_gl_events(conn, trade_date, force, exchange, on_progress)
+    if dimension == 'big_money':
+        return handle_big_money(conn, trade_date, force, exchange, on_progress)
     if dimension == 'stage_classification':
         return handle_stage_classification(conn, trade_date, force, exchange, on_progress)
     if dimension == 'vani_flags':
@@ -1164,6 +1190,7 @@ KNOWN_DIMENSIONS = [
     'd365',
     'stage_classification',
     'gl_events',
+    'big_money',
     'vani_flags',
     'equity_weekly',
     'equity_monthly',

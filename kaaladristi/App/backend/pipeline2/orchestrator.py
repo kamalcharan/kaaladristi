@@ -68,6 +68,12 @@ DAILY_STEPS: list[tuple[str, Optional[str]]] = [
     ('breadth_roc',           None),
     ('dots',                  None),   # SVD/SBD/SYD — Volume Drive selects on these; must precede scan_refresh
     ('gl_events',             None),   # Golden Line breakout/retest — reads sma_150 AND the dots, so AFTER `dots`
+    # Big Money days — delivered value vs the stock's own 66-day norm. AFTER
+    # `rolling_metrics`, which writes the avg_amt_66d baseline it measures
+    # against; BEFORE `scan_refresh`, whose bm_* rollup columns read the
+    # bm_event this writes. Reads no dots, so its position relative to
+    # `dots`/`gl_events` is grouping, not dependency.
+    ('big_money',             None),
     ('scan_refresh',          None),   # matview reads all equity/industry compute above
     ('scan_membership_snapshot', None),  # freezes today's scan membership + magic_rs_zone for day-over-day VaNi intents; after scan_refresh (same data), before wg_journeys
     ('wg_journeys',           None),   # journey state reads final daily zones + weekly/monthly aggregates
