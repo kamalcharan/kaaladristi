@@ -11,20 +11,29 @@ assumed away in the plan.
 
 ## 0. Next session starts here
 
-**Done and on `main`:** the refactor (§12), scanner 1 `weekly_movers`, and
-scanner 2 `monthly_movers`. Both strength-side presets are finished; the two
-edits each needed were exactly the two §0 predicted.
+**Done and on `main`:** the refactor (§12), scanners 1–3 — `weekly_movers`,
+`monthly_movers`, `weekly_decliners`. The whole caution side is now written:
+`computeWeaknessExplainFacts`, the `isDecelerating` pace predicate, the
+`gapBehind` orientation, the `rs_flip` polarity switch, the "Not oversold"
+toggle, and the `scanner.why_highlighted_weakness` prompt.
 
-**Next:** scanner 3, `weekly_decliners` — the first caution-side scan, and the
-only one of the three that costs real design. It is where §4's weakness-side
-work gets written: a highlight-explain builder for `is_vani_weakness`, the
-mirrored pace predicate, the "Not oversold" quick toggle, the `rs_flip`
-polarity, and caution stat-tile labels. `monthly_decliners` then reuses all of
-it, and `breakdown_watch` goes last behind the §5 history gap.
+**Next:** scanner 4, `monthly_decliners`. It reuses every one of those
+unchanged — same `vani_rule`, same caution constants — so it is back to the
+two-edit shape scanners 1 and 2 had: a descriptor entry (copy
+`weekly_decliners`, swap `pct_wtd` → `pct_mtd` and `prev_week_close` →
+`prev_month_close`, relabel) and one `PRESET_MEMBERSHIP_FNS` entry
+(`qualify='pct_mtd < 0'`, `order='pct_mtd ASC, equity_id'`, cap 500).
 
-§9.2 settles the wording before it is written: the caution side speaks in
-`ZONE_LABELS` (Leading / Improving / Neutral / Weakening / Lagging) and the D39
-badge set. Nothing invented, no new compliance review.
+**Mind the ASC.** Both decliner arms rank the largest LOSS first. Copying the
+`DESC` from a movers twin would snapshot the 500 smallest declines while the UI
+shows the 500 largest — two disjoint sets, and every day-over-day diff
+meaningless.
+
+Then `breakdown_watch` last, behind the §5 history gap. Its descriptor is a
+third copy of the same caution constants; only its `cardLevels`
+(`breakdown_level` / `pct_from_breakdown`) and its membership arm
+(`pct_chng < 0 AND pct_from_breakdown < 0`, `ORDER BY pct_from_breakdown ASC`)
+differ.
 
 **Owner action still outstanding** — nothing downstream is blocked on it, but
 three intent cards stay hidden until it runs:
@@ -34,7 +43,8 @@ cd App/backend
 python scripts/compute_scan_membership_snapshot.py --from 2026-08-20
 ```
 
-This backfills `weekly_movers` and `monthly_movers`, AND re-writes
+This backfills `weekly_movers`, `monthly_movers` and `weekly_decliners`,
+AND re-writes
 `breakout_surge`'s existing 12 days under the corrected membership rule.
 **Read §12's bug note before assuming any snapshot history is comparable** —
 history written before 2026-09-05 used a wider pool than the matview actually
@@ -534,3 +544,99 @@ cards. The three day-over-day builders return `null` on empty history
 `computeIsUnusualFacts` on `countHistory.length < 3`) and `readyByIntent`
 hides the card rather than showing a fabricated count — inherited, not
 re-implemented.
+
+### 2026-09-06 — Scanner 3 (`weekly_decliners`) + two live bugs
+
+The first caution-side scan, and the one §4 said would cost real design. It
+did, but not only in the places §4 predicted — two shipped bugs had to be
+fixed before the caution side could be honest, and both were found by reading
+what the code actually does rather than by trusting the plan.
+
+**Bug 1 — the weakness presets showed zero VaNi highlights, and always had.**
+`fetchPeriodMovers` and `fetchBreakdownWatch` compute `vaniOpportunity` from
+each preset's own `kd_scan_presets.vani_rule`, and all three weakness presets
+carry `is_vani_weakness` — but neither query ever SELECTed that column. So
+`computeVaniOpportunity` read `undefined` and returned false for every row.
+Measured on 2026-09-04 against `km_scan_results`, whose migration-197 arms
+select `is_vani_weakness` and had it right all along:
+
+| Preset | UI showed | Truth |
+|---|---|---|
+| `weekly_decliners` | 0 | 9 |
+| `monthly_decliners` | 0 | 10 |
+| `breakdown_watch` | 0 | 5 of 210 |
+
+This is the same class as the bug `isHighlight`'s own docstring records (the
+flags are fetched but never copied onto `ScanStock`), one layer earlier. It had
+to be fixed first: `why_flagged` is computed entirely over the highlighted
+cohort, so on an empty cohort the new builder would have reported a truthful
+zero about a false premise. Fixing it also lights the VaNi chip and the VaNi
+filter on all three presets, which is a user-visible change independent of
+Level 2.
+
+**Bug 2 — `rs_flip` was telling the model to print "Strong Bull".** The
+examples carried RAW `magic_rs_zone` values and the prompt said to reproduce
+them verbatim, so the narration said bull/bear outright — which D39 forbids in
+any displayed label. Latent on the strength side, unshippable on the caution
+side, where a row reads `Neutral Bull → Strong Bear`. The examples now map
+through `signalScale`'s `ZONE_LABELS` at the source, so both sides narrate
+Leading / Improving / Neutral / Weakening / Lagging. **This changes
+`breakout_surge`'s rs_flip narration** — the one place scanners 1–3 do not
+leave it byte-identical, and deliberately so; the cache version is bumped to
+v2 so no v1 answer written against the raw labels can be served.
+
+**The caution side proper.** `computeWeaknessExplainFacts` is grounded in what
+`is_vani_weakness` actually gates on, read off `backfill_vani_flags.py`:
+
+```
+magic_rs_zone IN ('Strong Bear','Mild Bear')
+AND flow_type IN ('FRESH_SHORTS','LONG_LIQUIDATION')
+AND rvol > 1.5 AND magic_rs < -10
+```
+
+So the facts are those four terms and nothing else: RVOL, the relative-strength
+reading, and the band/flow composition that distinguishes this rule from every
+other one. **§4a's suggested "proximity to the 52-week LOW" is deliberately
+NOT included** — it is the tidy mirror of the strength builder's 52-week high,
+but `is_vani_weakness` does not measure it, and reporting it as part of the bar
+would repeat exactly the mistake `computeHighlightExplainFacts`'s docstring
+warns against. (`is_vani_52wl` is a separate flag no preset here uses.)
+
+Three things became per-side rather than assumed, all defaulting to the shipped
+strength behaviour:
+
+- `computeMomentumGapFacts(rows, pace, gapOf)` — the previous session left a
+  note that a weakness cohort produces negative gaps and would sort smallest-
+  divergence-first. `gapBehind` is the fix; both sides now sort "furthest from
+  its own pace first" and `avgGap` is a positive distance either way. The
+  Studio's table sort had duplicated the strength expression inline and now
+  reads the same `gapOf`, so sort and narration cannot disagree.
+- `computeRsFlipFacts(rows, ctx, into)` — same crossed-in-from-outside test,
+  run against `BEARISH_ZONES`.
+- `descriptor.highlight` pairs the intent id with its payload builder in ONE
+  field, so a preset cannot get the weakness facts with the strength prompt.
+
+**Wording, all from the approved sets (§9.2).** `Contracting` for the caution
+pace tile — deliberately not "Slowing", which would say the opposite: on a
+decliners cohort a 5-day score below the 22-day pace means the move is
+steepening. `Not oversold` reuses the platform's own `is_vani_oversold` bar
+(`rsi_14 < 30`), not a fresh threshold. The `leading_industry` question is
+overridable and reads "Which industry is most represented here?" on the caution
+side, because the fact underneath is representation, not leadership.
+
+**Backend.** `scanner.why_highlighted_weakness` is a new intent rather than a
+reworded shared one, because the FACTS differ and not just the tone.
+`scanner.momentum_gap` and `scanner.rs_flip` ARE shared, so both were reworded
+neutrally per §9.2 and both had their cache version bumped to v2.
+
+**Verified.** Membership for `weekly_decliners` diffed set-wise against
+`km_scan_results` on 2026-09-04: 500 vs 500, zero rows on either side. The
+weakness prompt path was exercised end to end (sanitizer → cache key →
+rendered prompt) on both a populated and an empty cohort; the rendered message
+contains only approved band and flow labels. `npm run typecheck` and
+`npm run build` clean.
+
+**Still open, and now cheap.** `buildWhyTags` is strength-only, as §4c says —
+but it is exported and called from nowhere. No caution twin was written rather
+than add a second dead function; delete it or wire it before mirroring it.
+

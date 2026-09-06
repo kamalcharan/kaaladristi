@@ -833,6 +833,66 @@ INTENTS: dict[str, VaNiIntent] = {
         complexity="low",
     ),
 
+    # ── 21e-bis. Why highlighted — CAUTION side ─────────────────────────────
+    # The twin of scanner.why_highlighted, for the presets whose vani_rule is
+    # is_vani_weakness (weekly_decliners, monthly_decliners, breakdown_watch).
+    #
+    # A separate intent rather than a reworded shared one because the FACTS
+    # differ, not just the tone: is_vani_weakness gates on bear-side band +
+    # short-side order flow + RVOL > 1.5 + magic_rs < -10 and does NOT measure
+    # closeness to the 52-week high at all. Feeding this cohort the strength
+    # prompt would produce a confidently wrong answer, not a softer one — the
+    # exact reuse computeHighlightExplainFacts's own docstring forbids.
+    #
+    # Every band/flow label reaching this prompt is already mapped through
+    # signalScale's ZONE_LABELS / FLOW_LABELS on the client, so the raw
+    # 'Strong Bear' vocabulary never appears; the instructions below hold the
+    # model to those labels (D39).
+    "scanner.why_highlighted_weakness": VaNiIntent(
+        page="scanner",
+        label="Why are these highlighted?",
+        required_context=["preset", "data_date", "weakness_facts"],
+        system_prompt=(
+            _VANI_IDENTITY
+            + "The user clicked into today's VaNi-highlighted stocks on a "
+            "screener that tracks weakening participation, and wants to "
+            "know WHY they got flagged — grounded in real numbers for THIS "
+            "screener today, not a generic definition. You will receive: "
+            "how many stocks are highlighted today, their average volume "
+            "surge (RVOL), their average relative-strength reading, which "
+            "relative-strength bands and order-flow readings are "
+            "represented, and up to 2 named examples with their own "
+            "numbers."
+            "\n\n"
+            "Write ONE opening line stating the count and the shared shape "
+            "(elevated volume alongside a weak relative-strength reading), "
+            "then 2 bullet points, each starting with '• ', each ONE short "
+            "line: (1) name the 1-2 examples given, citing their own RVOL "
+            "and band as illustration of the same shared pattern — never "
+            "call them picks, recommendations, or things to avoid; (2) "
+            "state plainly this is a measurement of unusual participation, "
+            "not a signal to act.\n"
+            "\n"
+            "IMPORTANT: Use the band and order-flow labels exactly as "
+            "given — never substitute the words bull, bullish, bear or "
+            "bearish for them, and never describe the stocks with "
+            "directional or advisory language of your own. Never name more "
+            "than the 1-2 examples given. Never invent a number not "
+            "provided. If the count is zero, say plainly that nothing is "
+            "highlighted today rather than describing the criteria in the "
+            "abstract."
+            + _VANI_RULES.replace(
+                "No bullet points — write flowing paragraphs. About 150 words.",
+                "Short bullet points are REQUIRED here (see the format "
+                "instructions above) — this overrides the no-bullets house "
+                "rule for this one intent. About 80 words total.",
+            )
+        ),
+        max_tokens=320,
+        cache_ttl_hours=24,
+        complexity="low",
+    ),
+
     # ── 21e. Momentum Gap ───────────────────────────────────────────────────
     # First of the 7 predefined "scanner-level" questions from the VaNi Two
     # Levels design (owner, 2026-09-03): a closed set of NLP-phrased intents
@@ -852,20 +912,23 @@ INTENTS: dict[str, VaNiIntent] = {
         system_prompt=(
             _VANI_IDENTITY
             + "The user clicked a question asking which stocks on this "
-            "screener have pulled furthest ahead of their own recent pace — "
+            "screener have moved furthest from their own recent pace — "
             "grounded in real numbers for THIS screener today, not a "
             "generic definition. You will receive: how many stocks today "
-            "show 5-day momentum outpacing their 22-day pace, the average "
-            "gap between those two scores across that group, and up to 2 "
-            "named examples with their own 5-day score, 22-day score, and "
-            "gap.\n\n"
+            "show their 5-day momentum diverging from their 22-day pace, "
+            "the average distance between those two scores across that "
+            "group, and up to 2 named examples with their own 5-day score, "
+            "22-day score, and distance.\n\n"
+            "The distance is a MAGNITUDE — this screener may track either "
+            "direction, so read the shape from the scores you are given and "
+            "never assume the divergence is favourable.\n\n"
             "Write ONE opening line stating the count, then 2 bullet "
             "points, each starting with '• ', each ONE short line: (1) "
-            "name the 1-2 examples given, citing their own 5-day/22-day/gap "
-            "numbers as illustration; (2) state plainly this measures how "
-            "far ahead of its own recent pace a stock has moved, not a "
-            "signal to act. If the count is zero, say plainly that nothing "
-            "shows a meaningful gap today rather than describing the "
+            "name the 1-2 examples given, citing their own 5-day/22-day/"
+            "distance numbers as illustration; (2) state plainly this "
+            "measures how far a stock has moved from its own recent pace, "
+            "not a signal to act. If the count is zero, say plainly that "
+            "nothing diverges meaningfully today rather than describing the "
             "criteria in the abstract. Never name a stock not provided."
             + _VANI_RULES.replace(
                 "No bullet points — write flowing paragraphs. About 150 words.",
@@ -996,26 +1059,34 @@ INTENTS: dict[str, VaNiIntent] = {
 
     "scanner.rs_flip": VaNiIntent(
         page="scanner",
-        label="Which stocks just turned RS-green?",
+        # The per-preset question text the user actually sees comes from
+        # config/scannerStudio.ts's descriptor (`rsFlip.question`), because the
+        # crossing that matters is side-specific. This registry label is the
+        # neutral form covering both.
+        label="Which stocks just crossed into a new relative-strength band?",
         required_context=["preset", "data_date", "rs_flip_facts"],
         system_prompt=(
             _VANI_IDENTITY
             + "The user clicked a question asking which stocks, present in "
             "both today's and the prior session's screener results, crossed "
-            "from outside the bull-side relative-strength zones into one of "
-            "them since the prior session — a real day-over-day zone "
-            "comparison. You will receive: how many stocks made that "
-            "crossing, the prior session's date, and up to 3 named examples "
-            "with their from-zone and to-zone.\n\n"
+            "into a different band of the relative-strength scale since the "
+            "prior session — a real day-over-day comparison. You will "
+            "receive: how many stocks made that crossing, the prior "
+            "session's date, and up to 3 named examples with their from-band "
+            "and to-band.\n\n"
+            "Which crossing this screener tracks depends on the screener — "
+            "the band labels you are given say where each stock moved from "
+            "and to. Read the direction from those labels; never assume the "
+            "crossing is an improvement.\n\n"
             "Write ONE opening line stating the count and the prior "
             "session's date, then AT MOST ONE bullet point naming the "
-            "example(s) given with their from → to zones (starting with "
-            "'• '). State plainly this is a measurement of a zone crossing, "
+            "example(s) given with their from → to bands (starting with "
+            "'• '). State plainly this is a measurement of a band crossing, "
             "not a signal to act. If the count is zero, say plainly that no "
             "stocks made that crossing since the prior session. Never name "
             "a stock not provided, and never use the words bull/bullish/"
-            "bear/bearish for the zone names themselves — use the exact "
-            "zone labels given."
+            "bear/bearish for the band names themselves — use the exact "
+            "band labels given."
             + _VANI_RULES.replace(
                 "No bullet points — write flowing paragraphs. About 150 words.",
                 "At most one short bullet point, as described above — this "

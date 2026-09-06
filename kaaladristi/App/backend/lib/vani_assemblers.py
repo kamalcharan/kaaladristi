@@ -1260,6 +1260,7 @@ def assemble_scanner_context(
     bookmarked_symbols: list | None = None,
     top_accelerators: list | None = None,
     highlight_facts: dict | None = None,
+    weakness_facts: dict | None = None,
     momentum_gap_facts: dict | None = None,
     leading_industry_facts: dict | None = None,
     sector_leading_facts: dict | None = None,
@@ -1287,6 +1288,14 @@ def assemble_scanner_context(
     computeHighlightExplainFacts() (breakoutSurgeInsights.ts). Not the
     generic "reward-to-risk" story legend_vani_dot used to (wrongly) claim;
     this is the real per-preset gate's numbers for today specifically.
+
+    weakness_facts (scanner.why_highlighted_weakness only): the caution-side
+    twin of highlight_facts, for the presets whose vani_rule is
+    is_vani_weakness. Deliberately a DIFFERENT shape, because the rule is a
+    different measurement: no closeness-to-52-week-high term (is_vani_weakness
+    does not gate on it), and instead the zone/flow composition it does gate
+    on, carried as display labels. Computed client-side by
+    computeWeaknessExplainFacts() (breakoutSurgeInsights.ts).
 
     momentum_gap_facts (scanner.momentum_gap only): count of stocks whose
     5-day score outpaces their 22-day score (the same `isAccelerating()`
@@ -1355,6 +1364,7 @@ def assemble_scanner_context(
             for a in (top_accelerators or []) if isinstance(a, dict) and a.get('symbol')
         ][:5],
         'highlight_facts': _clean_highlight_facts(highlight_facts),
+        'weakness_facts': _clean_weakness_facts(weakness_facts),
         'momentum_gap_facts': _clean_momentum_gap_facts(momentum_gap_facts),
         'leading_industry_facts': _clean_leading_industry_facts(leading_industry_facts),
         'sector_leading_facts': _clean_sector_leading_facts(sector_leading_facts),
@@ -1491,6 +1501,46 @@ def _clean_highlight_facts(facts: dict | None) -> dict | None:
     }
 
 
+def _clean_weakness_facts(facts: dict | None) -> dict | None:
+    """Sanitize the client-computed weakness-explain payload — same discipline
+    as _clean_highlight_facts, against the keys THIS rule measures.
+
+    The zone/flow labels arrive already mapped through signalScale's
+    ZONE_LABELS / FLOW_LABELS on the client, so a raw DB value like
+    'Strong Bear' can never reach a prompt; they are length-capped here and
+    otherwise passed through as the display strings they are."""
+    if not isinstance(facts, dict):
+        return None
+
+    def _mix(key: str) -> list:
+        out = []
+        for m in (facts.get(key) or [])[:4]:
+            if not isinstance(m, dict) or not m.get('label'):
+                continue
+            out.append({'label': str(m['label'])[:40], 'count': int(m.get('count') or 0)})
+        return out
+
+    examples = []
+    for e in (facts.get('examples') or [])[:2]:
+        if not isinstance(e, dict) or not e.get('symbol'):
+            continue
+        examples.append({
+            'symbol': str(e['symbol'])[:40],
+            'rvol': _safe_float(e.get('rvol')),
+            'magic_rs': _safe_float(e.get('magic_rs')),
+            'zone': str(e.get('zone') or '')[:40],
+            'flow': str(e.get('flow') or '')[:40],
+        })
+    return {
+        'count': int(facts.get('count') or 0),
+        'avg_rvol': _safe_float(facts.get('avg_rvol')),
+        'avg_magic_rs': _safe_float(facts.get('avg_magic_rs')),
+        'zone_mix': _mix('zone_mix'),
+        'flow_mix': _mix('flow_mix'),
+        'examples': examples,
+    }
+
+
 def build_scanner_cache_context(intent_id: str, ctx: dict) -> dict:
     """Bucketed values for km_vani_cache context hashing.
 
@@ -1531,6 +1581,17 @@ def build_scanner_cache_context(intent_id: str, ctx: dict) -> dict:
             'avg_pct_52wh_bucket': round(f['avg_pct_of_52w_high']) if f.get('avg_pct_of_52w_high') is not None else None,
             'examples': [e['symbol'] for e in (f.get('examples') or [])],
         }
+    if intent_id == 'scanner.why_highlighted_weakness':
+        f = ctx.get('weakness_facts') or {}
+        return {
+            'v': 1,
+            'preset_id': ctx['preset_id'],
+            'date': ctx['data_date'],
+            'count': f.get('count', 0),
+            'avg_rvol_bucket': round(f['avg_rvol']) if f.get('avg_rvol') is not None else None,
+            'avg_magic_rs_bucket': round(f['avg_magic_rs']) if f.get('avg_magic_rs') is not None else None,
+            'examples': [e['symbol'] for e in (f.get('examples') or [])],
+        }
     if intent_id == 'scanner.your_view':
         return {
             'v': 1,
@@ -1542,8 +1603,11 @@ def build_scanner_cache_context(intent_id: str, ctx: dict) -> dict:
         }
     if intent_id == 'scanner.momentum_gap':
         f = ctx.get('momentum_gap_facts') or {}
+        # v2: prompt reworded to serve both directions ("moved furthest from
+        # its own recent pace" rather than "pulled ahead"), so v1 answers —
+        # written for a strength cohort — must never be served again.
         return {
-            'v': 1,
+            'v': 2,
             'preset_id': ctx['preset_id'],
             'date': ctx['data_date'],
             'count': f.get('count', 0),
@@ -1581,8 +1645,12 @@ def build_scanner_cache_context(intent_id: str, ctx: dict) -> dict:
         }
     if intent_id == 'scanner.rs_flip':
         f = ctx.get('rs_flip_facts') or {}
+        # v2: the prompt is now direction-neutral (it serves the caution
+        # presets too) and the examples carry ZONE_LABELS display labels
+        # instead of raw 'Strong Bull'/'Strong Bear' DB values. v1 answers
+        # were written against both of the old behaviours — never serve them.
         return {
-            'v': 1,
+            'v': 2,
             'preset_id': ctx['preset_id'],
             'date': ctx['data_date'],
             'prior_date': f.get('prior_date'),
@@ -1740,13 +1808,61 @@ def format_scanner_user_message(intent_id: str, ctx: dict) -> str:
             f"above — never manufacture names."
         )
 
+    if intent_id == 'scanner.why_highlighted_weakness':
+        f = ctx.get('weakness_facts') or {}
+        count = f.get('count', 0)
+        if not count:
+            return (
+                f"Screener: {p['name']}\n"
+                f"Highlighted today: 0\n"
+                f"\nInstructions: In ONE line, say plainly that nothing is "
+                f"highlighted on this screener today — no bullets needed."
+            )
+        avg_rvol = f.get('avg_rvol')
+        avg_rs = f.get('avg_magic_rs')
+        zone_mix = f.get('zone_mix') or []
+        flow_mix = f.get('flow_mix') or []
+        zone_line = ', '.join(f"{m['label']} {m['count']}" for m in zone_mix) or 'not available'
+        flow_line = ', '.join(f"{m['label']} {m['count']}" for m in flow_mix) or 'not available'
+        examples = f.get('examples') or []
+        ex_lines = '\n'.join(
+            f"  {e['symbol']}: RVOL {e['rvol']:.1f}x normal, band {e['zone']}, flow {e['flow']}"
+            + (f", Magic RS {e['magic_rs']:.0f}" if e.get('magic_rs') is not None else '')
+            for e in examples if e.get('rvol') is not None
+        ) or '  (no example detail available)'
+        return (
+            f"Screener: {p['name']}\n"
+            f"Highlighted today: {count} stocks\n"
+            f"Average RVOL among them: "
+            + (f"{avg_rvol:.1f}x normal\n" if avg_rvol is not None else "not available\n")
+            + f"Average relative-strength reading: "
+            + (f"{avg_rs:.0f}\n" if avg_rs is not None else "not available\n")
+            + f"Relative-strength bands represented: {zone_line}\n"
+            f"Order-flow readings represented: {flow_line}\n"
+            f"\n--- Named examples (use ONLY these, at most these 2) ---\n"
+            f"{ex_lines}\n"
+            f"\nInstructions: Write ONE opening line stating the count and "
+            f"the shared shape these stocks have in common — elevated volume "
+            f"alongside a weak relative-strength reading and the order-flow "
+            f"readings listed. Then 2 bullet points, each starting with "
+            f"'• ', each ONE short line: (1) name the example(s) above, "
+            f"citing their own RVOL and band as illustration of that same "
+            f"shared pattern — never call them picks or recommendations; "
+            f"(2) state plainly this is a measurement of unusual "
+            f"participation, not a signal to act. Use the band and flow "
+            f"labels exactly as given above; never substitute "
+            f"bull/bullish/bear/bearish for them. Never name a stock not "
+            f"listed above, and never invent a number not provided."
+        )
+
     if intent_id == 'scanner.momentum_gap':
         f = ctx.get('momentum_gap_facts') or {}
         count = f.get('count', 0)
         if not count:
             return (
                 f"Screener: {p['name']}\n"
-                f"Stocks with 5-day momentum ahead of 22-day pace today: 0\n"
+                f"Stocks whose 5-day momentum diverges from their own "
+                f"22-day pace today: 0\n"
                 f"\nInstructions: In ONE line, say plainly that nothing "
                 f"shows a meaningful momentum gap on this screener today — "
                 f"no bullets needed."
@@ -1755,22 +1871,26 @@ def format_scanner_user_message(intent_id: str, ctx: dict) -> str:
         examples = f.get('examples') or []
         ex_lines = '\n'.join(
             f"  {e['symbol']}: 5-day score {e['score_5d']:.0f}, "
-            f"22-day score {e['score_22d']:.0f}, gap {e['gap']:+.0f}"
+            f"22-day score {e['score_22d']:.0f}, distance from own pace "
+            f"{e['gap']:.0f}"
             for e in examples if e.get('score_5d') is not None and e.get('score_22d') is not None
         ) or '  (no example detail available)'
         return (
             f"Screener: {p['name']}\n"
-            f"Stocks with 5-day momentum ahead of 22-day pace today: {count}\n"
-            f"Average gap among them: "
-            f"{f'{avg_gap:+.0f} points' if avg_gap is not None else 'not available'}\n"
+            f"Stocks whose 5-day momentum diverges from their own "
+            f"22-day pace today: {count}\n"
+            f"Average distance from own pace among them: "
+            f"{f'{avg_gap:.0f} points' if avg_gap is not None else 'not available'}\n"
             f"\n--- Named examples (use ONLY these, at most these 2) ---\n"
             f"{ex_lines}\n"
             f"\nInstructions: Write ONE opening line stating the count, "
             f"then 2 bullet points (each starting with '• ', each one "
             f"short line): (1) name the example(s) above with their own "
-            f"5-day/22-day/gap numbers; (2) state plainly this measures how "
-            f"far ahead of its own recent pace a stock has moved, not a "
-            f"signal to act. Never name a stock not listed above."
+            f"5-day/22-day/distance numbers; (2) state plainly this "
+            f"measures how far a stock has moved from its own recent pace, "
+            f"not a signal to act. The distance is reported as a magnitude — "
+            f"do not describe its direction as favourable or unfavourable. "
+            f"Never name a stock not listed above."
         )
 
     if intent_id == 'scanner.leading_industry':
@@ -1854,9 +1974,9 @@ def format_scanner_user_message(intent_id: str, ctx: dict) -> str:
         if not count:
             return (
                 f"Screener: {p['name']}\n"
-                f"Turned RS-green since {prior_date}: 0\n"
+                f"Crossed into a new relative-strength band since {prior_date}: 0\n"
                 f"\nInstructions: In ONE line, say plainly that no stocks "
-                f"crossed into a bull-side relative-strength zone since "
+                f"crossed into a new relative-strength band since "
                 f"{prior_date} — no bullets needed."
             )
         examples = f.get('examples') or []
@@ -1866,16 +1986,18 @@ def format_scanner_user_message(intent_id: str, ctx: dict) -> str:
         ) or '  (no example detail available)'
         return (
             f"Screener: {p['name']}\n"
-            f"Turned RS-green since {prior_date}: {count} stocks\n"
+            f"Crossed into a new relative-strength band since {prior_date}: {count} stocks\n"
             f"\n--- Named examples (use ONLY these, at most these 3) ---\n"
             f"{ex_lines}\n"
             f"\nInstructions: Write ONE opening line stating the count and "
             f"{prior_date} as the comparison date, then AT MOST ONE bullet "
             f"point (starting with '• ') naming the example(s) above with "
-            f"their from → to zone labels exactly as given. State plainly "
-            f"this is a zone-crossing measurement, not a signal to act. "
-            f"Never name a stock not listed above, and never substitute "
-            f"bull/bullish/bear/bearish for the zone labels given."
+            f"their from → to band labels exactly as given. The direction of "
+            f"the crossing is whatever those labels say — do not assume it "
+            f"is an improvement. State plainly this is a band-crossing "
+            f"measurement, not a signal to act. Never name a stock not "
+            f"listed above, and never substitute bull/bullish/bear/bearish "
+            f"for the band labels given."
         )
 
     if intent_id == 'scanner.is_unusual':

@@ -278,6 +278,12 @@ class VaNiAskRequest(BaseModel):
     # scanner.why_highlighted only — real facts over the full day's
     # VaNi-highlighted cohort, computed client-side (computeHighlightExplainFacts).
     highlight_facts: Optional[dict] = None
+    # scanner.why_highlighted_weakness only — the caution-side twin, for the
+    # presets whose vani_rule is is_vani_weakness (computeWeaknessExplainFacts).
+    # Separate from highlight_facts because each payload is sanitized against a
+    # fixed key set and the two rules measure different things: no 52-week-high
+    # term here, zone/flow composition instead.
+    weakness_facts: Optional[dict] = None
     # scanner.momentum_gap only — computed client-side (computeMomentumGapFacts).
     momentum_gap_facts: Optional[dict] = None
     # scanner.leading_industry only — computed client-side (computeLeadingIndustryFacts).
@@ -4929,6 +4935,7 @@ def vani_ask(req: VaNiAskRequest):
                 bookmarked_symbols=req.bookmarked_symbols,
                 top_accelerators=req.top_accelerators,
                 highlight_facts=req.highlight_facts,
+                weakness_facts=req.weakness_facts,
                 momentum_gap_facts=req.momentum_gap_facts,
                 leading_industry_facts=req.leading_industry_facts,
                 sector_leading_facts=req.sector_leading_facts,

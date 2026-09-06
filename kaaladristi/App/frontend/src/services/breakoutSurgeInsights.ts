@@ -1,5 +1,6 @@
 import type { ScanStock } from '@/types'
 import { displaySymbol } from '@/lib/symbolUtils'
+import { zoneLabel, flowLabel } from '@/constants/signalScale'
 
 /**
  * Phase 1/2-Tier-A computed facts for the Breakout Surge preview — pure
@@ -31,7 +32,31 @@ export function isAccelerating(r: ScanStock): boolean {
   return (r.score_5d ?? 0) > 0 && (r.score_5d ?? 0) >= (r.score_22d ?? 0)
 }
 
+/**
+ * The CAUTION-side mirror: the 5-day score is negative and at or BELOW the
+ * stock's own 22-day pace — the recent stretch is worse than the medium-term
+ * one. Deliberately not called "slowing": on a decliners cohort a 5-day score
+ * below the 22-day pace means the move is steepening, and "slowing" would
+ * read as the opposite. The descriptor labels this tile with D39's
+ * `contracting`, which is the approved word for a shrinking measure.
+ */
+export function isDecelerating(r: ScanStock): boolean {
+  return (r.score_5d ?? 0) < 0 && (r.score_5d ?? 0) <= (r.score_22d ?? 0)
+}
+
 export type PacePredicate = (r: ScanStock) => boolean
+
+/**
+ * How far a row sits from its own recent pace, as a POSITIVE distance on
+ * either side. Strength reads `score_5d - score_22d` (ahead of its pace);
+ * caution reads the negation (behind it). Both sort descending on the same
+ * "furthest from its own pace first" rule, which is why this is a function
+ * on the descriptor rather than a sign flip at each call site.
+ */
+export type GapFn = (r: ScanStock) => number
+
+export const gapAhead: GapFn = (r) => (r.score_5d ?? 0) - (r.score_22d ?? 0)
+export const gapBehind: GapFn = (r) => (r.score_22d ?? 0) - (r.score_5d ?? 0)
 
 /**
  * NOT `r.is_vani_surge || r.is_vani_breakout` — those raw DB flags are
@@ -126,6 +151,80 @@ export function computeHighlightExplainFacts(rows: ScanStock[]): HighlightExplai
   }
 }
 
+export interface WeaknessExplainFacts {
+  count: number
+  avgRvol: number | null
+  avgMagicRs: number | null
+  /** Composition of the highlighted cohort across the two dimensions the
+   *  rule actually gates on, carried as DISPLAY labels (Weakening/Lagging,
+   *  Fresh Shorts/Long Liquidation) so no raw DB value can reach a prompt. */
+  zoneMix: { label: string; count: number }[]
+  flowMix: { label: string; count: number }[]
+  examples: { symbol: string; rvol: number | null; magicRs: number | null; zone: string; flow: string }[]
+}
+
+function _mix(rows: ScanStock[], pick: (r: ScanStock) => string | null): { label: string; count: number }[] {
+  const counts = new Map<string, number>()
+  for (const r of rows) {
+    const label = pick(r)
+    if (!label) continue
+    counts.set(label, (counts.get(label) ?? 0) + 1)
+  }
+  return [...counts.entries()]
+    .map(([label, count]) => ({ label, count }))
+    .sort((a, b) => b.count - a.count)
+}
+
+/**
+ * The CAUTION-side twin of computeHighlightExplainFacts, for the presets whose
+ * vani_rule is `is_vani_weakness` (weekly_decliners, monthly_decliners,
+ * breakdown_watch).
+ *
+ * It exists because the strength builder must NOT be reused here: its own
+ * docstring says it is grounded in what `is_vani_surge_or_breakout` measures,
+ * and `avgPctOf52wHigh` on a decliners cohort is a confidently wrong answer
+ * rather than a degraded one.
+ *
+ * What `is_vani_weakness` actually gates on (backfill_vani_flags.py, read
+ * 2026-09-06 — this list IS the bar, nothing else):
+ *
+ *     magic_rs_zone IN ('Strong Bear', 'Mild Bear')
+ *     AND flow_type IN ('FRESH_SHORTS', 'LONG_LIQUIDATION')
+ *     AND rvol > 1.5
+ *     AND magic_rs < -10
+ *
+ * So the facts are the four terms of that rule and nothing more: volume,
+ * relative-strength reading, and the zone/flow composition that separates this
+ * rule from every other one. The 52-week LOW is deliberately absent even
+ * though it is the tidy mirror of the strength builder's 52-week high — the
+ * weakness rule does not measure it, and reporting it as though it were part
+ * of the bar would repeat exactly the mistake the strength docstring warns
+ * against. (`is_vani_52wl` is a separate flag that no preset here uses.)
+ *
+ * Always computed over the FULL day's cohort, matching computeCohortStats().
+ */
+export function computeWeaknessExplainFacts(rows: ScanStock[]): WeaknessExplainFacts {
+  const hl = rows.filter(isHighlight)
+  const examples = [...hl]
+    .sort((a, b) => (b.rvol ?? 0) - (a.rvol ?? 0))
+    .slice(0, 2)
+    .map((r) => ({
+      symbol: displaySymbol(r),
+      rvol: r.rvol ?? null,
+      magicRs: r.magic_rs ?? null,
+      zone: zoneLabel(r.magic_rs_zone).label,
+      flow: flowLabel(r.flow_type).label,
+    }))
+  return {
+    count: hl.length,
+    avgRvol: _avg(hl.map((r) => r.rvol)),
+    avgMagicRs: _avg(hl.map((r) => r.magic_rs)),
+    zoneMix: _mix(hl, (r) => (r.magic_rs_zone ? zoneLabel(r.magic_rs_zone).label : null)),
+    flowMix: _mix(hl, (r) => (r.flow_type ? flowLabel(r.flow_type).label : null)),
+    examples,
+  }
+}
+
 export interface MomentumGapFacts {
   count: number
   avgGap: number | null
@@ -143,15 +242,20 @@ export interface MomentumGapFacts {
  * lesson; there's no live data access at build time to calibrate a fresh
  * cutoff, so this rides on an already-shipped, already-live one instead.
  */
-export function computeMomentumGapFacts(rows: ScanStock[], pace: PacePredicate = isAccelerating): MomentumGapFacts {
-  // NOTE for the caution side (weekly_decliners onward): `gap` here is
-  // score_5d − score_22d, so a weakness cohort produces NEGATIVE gaps and this
-  // descending sort would surface the SMALLEST divergence first. That preset
-  // needs the gap expressed as distance-from-own-pace (score_22d − score_5d)
-  // before it can reuse this. Left explicit rather than silently mis-ordering.
+export function computeMomentumGapFacts(
+  rows: ScanStock[],
+  pace: PacePredicate = isAccelerating,
+  gapOf: GapFn = gapAhead,
+): MomentumGapFacts {
+  // The note this replaces was right: with the strength `gap`
+  // (score_5d − score_22d) a weakness cohort produces NEGATIVE gaps, so the
+  // descending sort below would surface the SMALLEST divergence first — the
+  // least interesting rows, presented as the most. `gapOf` is what fixes it:
+  // caution passes gapBehind, so both sides sort "furthest from its own pace
+  // first" and `avgGap` is a positive distance on either side.
   const gapped = rows
     .filter(pace)
-    .map((r) => ({ r, gap: (r.score_5d ?? 0) - (r.score_22d ?? 0) }))
+    .map((r) => ({ r, gap: gapOf(r) }))
     .sort((a, b) => b.gap - a.gap)
   const examples = gapped.slice(0, 2).map(({ r, gap }) => ({
     symbol: displaySymbol(r),
@@ -231,6 +335,15 @@ export function computeSectorLeadingFacts(
  *  them, never merely for sitting in one already. */
 export const BULLISH_ZONES = ['Strong Bull', 'Mild Bull', 'Neutral Bull']
 
+/** The bear-side mirror, same 7-band scale. Displayed via signalScale's
+ *  ZONE_LABELS as Weakening / Lagging — the raw DB values are never shown.
+ *  'Neutral Bear' is included for the same reason 'Neutral Bull' is on the
+ *  other side: the pipeline emits a 7-band scheme and a consumer that knows
+ *  only 5 blanks ~47% of the universe (CLAUDE.md's MagicRS zone note). */
+export const BEARISH_ZONES = ['Strong Bear', 'Mild Bear', 'Neutral Bear']
+
+export type FlipInto = 'bullish' | 'bearish'
+
 export interface DayOverDayContext {
   /** Most recent trade_date strictly before today with a snapshot row —
    *  null when no history exists yet (fresh deploy, or the very first day
@@ -297,38 +410,53 @@ export function computeNewSinceYesterdayFacts(
 export interface RsFlipFacts {
   count: number
   priorDate: string
+  /** fromZone/toZone are DISPLAY labels (ZONE_LABELS), never the raw DB
+   *  values. The prompt instructs the model to print these verbatim, and the
+   *  raw scale is spelled Strong Bull / Strong Bear — sending those made the
+   *  narration say "bull"/"bear" outright, which D39 forbids in any displayed
+   *  label. Mapping here fixes it for both sides at the source. */
   examples: { symbol: string; fromZone: string | null; toZone: string | null }[]
 }
 
 /**
- * For scanner.rs_flip ("Which stocks just turned RS-green?") — a stock
- * present both yesterday and today whose zone crossed from outside
- * BULLISH_ZONES into one of them. A stock that WASN'T in yesterday's
- * snapshot at all doesn't count as a flip (it's new_since_yesterday's
- * concern, not this one) — only equities present on both days qualify.
+ * For scanner.rs_flip — a stock present both yesterday and today whose zone
+ * crossed from OUTSIDE the target side INTO it. A stock that WASN'T in
+ * yesterday's snapshot at all doesn't count as a flip (it's
+ * new_since_yesterday's concern, not this one) — only equities present on
+ * both days qualify.
+ *
+ * `into` picks the side, because on a decliners scan the meaningful crossing
+ * is the opposite one: the same "crossed in from outside" test, run against
+ * BEARISH_ZONES. Defaults to the shipped bullish behaviour so every existing
+ * caller is unchanged.
  */
 export function computeRsFlipFacts(
   rows: ScanStock[],
   ctx: DayOverDayContext,
+  into: FlipInto = 'bullish',
 ): { facts: RsFlipFacts; isFlip: (r: ScanStock) => boolean } | null {
   if (!ctx.priorDate) return null
+  const target = into === 'bullish' ? BULLISH_ZONES : BEARISH_ZONES
   const isFlip = (r: ScanStock): boolean => {
     if (!ctx.priorZoneByEquity.has(r.equity_id)) return false
     const fromZone = ctx.priorZoneByEquity.get(r.equity_id) ?? null
-    const wasBullish = !!fromZone && BULLISH_ZONES.includes(fromZone)
-    const isBullishNow = !!r.magic_rs_zone && BULLISH_ZONES.includes(r.magic_rs_zone)
-    return !wasBullish && isBullishNow
+    const wasInside = !!fromZone && target.includes(fromZone)
+    const isInsideNow = !!r.magic_rs_zone && target.includes(r.magic_rs_zone)
+    return !wasInside && isInsideNow
   }
   const matched = rows.filter(isFlip)
   return {
     facts: {
       count: matched.length,
       priorDate: ctx.priorDate,
-      examples: matched.slice(0, 3).map((r) => ({
-        symbol: displaySymbol(r),
-        fromZone: ctx.priorZoneByEquity.get(r.equity_id) ?? null,
-        toZone: r.magic_rs_zone ?? null,
-      })),
+      examples: matched.slice(0, 3).map((r) => {
+        const from = ctx.priorZoneByEquity.get(r.equity_id) ?? null
+        return {
+          symbol: displaySymbol(r),
+          fromZone: from ? zoneLabel(from).label : null,
+          toZone: r.magic_rs_zone ? zoneLabel(r.magic_rs_zone).label : null,
+        }
+      }),
     },
     isFlip,
   }

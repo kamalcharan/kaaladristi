@@ -9,9 +9,9 @@ import { DownloadXlsButton, TradingViewExportButton } from '@/components/domain/
 import { ExchangeTabs } from '@/components/domain/ExchangeTabs'
 import { ScanFilterBar, applyFilters, DEFAULT_FILTERS, hasActiveFilters, type ScanFilters } from '@/components/domain/ScanFilterBar'
 import {
-  computeCohortStats, computeHighlightExplainFacts, computeMomentumGapFacts, computeLeadingIndustryFacts,
+  computeCohortStats, computeMomentumGapFacts, computeLeadingIndustryFacts,
   computeSectorLeadingFacts, buildDayOverDayContext, computeNewSinceYesterdayFacts, computeRsFlipFacts,
-  computeIsUnusualFacts, isHighlight, isAccelerating,
+  computeIsUnusualFacts, isHighlight, isAccelerating, gapAhead,
   type SectorLeadingFacts, type NewSinceYesterdayFacts, type RsFlipFacts, type IsUnusualFacts,
 } from '@/services/breakoutSurgeInsights'
 import ScanTable from '@/components/domain/ScanTable'
@@ -129,16 +129,20 @@ export default function ScannerStudio({ presetId }: { presetId: string }) {
   const { data: membershipHistory } = useScanMembershipHistory(presetId, dataDate, 10)
   const dayOverDay = buildDayOverDayContext(membershipHistory ?? [])
   const newSinceYesterday = computeNewSinceYesterdayFacts(all, dayOverDay)
-  const rsFlip = computeRsFlipFacts(all, dayOverDay)
+  const rsFlip = computeRsFlipFacts(all, dayOverDay, descriptor?.rsFlip?.into)
   const isUnusual = computeIsUnusualFacts(all.length, dayOverDay)
 
   let filtered = applyFilters(all, filters)
   if (scanIntent === 'why_flagged') {
     filtered = filtered.filter(isHighlight)
   } else if (scanIntent === 'momentum_gap') {
+    // Same gapOf the intent's facts use — the sort and the narration must
+    // agree, and on the caution side the strength expression would have put
+    // the SMALLEST divergence at the top of the table.
+    const gapOf = descriptor?.gapOf ?? gapAhead
     filtered = filtered
       .filter(descriptor?.pace ?? isAccelerating)
-      .sort((a, b) => ((b.score_5d ?? 0) - (b.score_22d ?? 0)) - ((a.score_5d ?? 0) - (a.score_22d ?? 0)))
+      .sort((a, b) => gapOf(b) - gapOf(a))
   } else if (scanIntent === 'leading_industry' && stats.leadingIndustry) {
     filtered = filtered.filter((r) => r.industry === stats.leadingIndustry!.name)
   } else if (scanIntent === 'sector_leading' && sectorLeading) {
@@ -425,7 +429,7 @@ function intentsOrdered(d: StudioDescriptor): { key: ScannerIntentKey; question:
     { key: 'sector_leading', question: "Which sectors' stocks are leading today?" },
     { key: 'momentum_gap', question: 'Stocks with a momentum gap' },
     { key: 'rs_flip', question: d.rsFlip?.question ?? null },
-    { key: 'leading_industry', question: 'Which industry is leading this scan?' },
+    { key: 'leading_industry', question: d.industryQuestion ?? 'Which industry is leading this scan?' },
     { key: 'why_flagged', question: 'Why did VaNi flag these stocks?' },
     { key: 'is_unusual', question: 'Is today unusual compared to recent sessions?' },
   ]
@@ -494,7 +498,7 @@ function ScannerVaNiCard({
     const mutation = mutationByIntent[key]
     if (!dataDate || mutation.data || mutation.isPending) return
     if (key === 'momentum_gap') {
-      const facts = computeMomentumGapFacts(allStocks, descriptor.pace)
+      const facts = computeMomentumGapFacts(allStocks, descriptor.pace, descriptor.gapOf)
       mutation.mutate({
         intent_id: 'scanner.momentum_gap', preset_id: presetId, data_date: dataDate,
         timeframe: 'daily', exchange: exchangeFilter,
@@ -514,14 +518,12 @@ function ScannerVaNiCard({
         } : { name: '', count: 0, total_count: 0, runner_up: null },
       })
     } else if (key === 'why_flagged') {
-      const facts = computeHighlightExplainFacts(allStocks)
+      // Which builder and which prompt both follow the preset's vani_rule,
+      // paired in one descriptor field so they cannot drift apart.
       mutation.mutate({
-        intent_id: 'scanner.why_highlighted', preset_id: presetId, data_date: dataDate,
+        intent_id: descriptor.highlight.intentId, preset_id: presetId, data_date: dataDate,
         timeframe: 'daily', exchange: exchangeFilter,
-        highlight_facts: {
-          count: facts.count, avg_rvol: facts.avgRvol, avg_pct_of_52w_high: facts.avgPctOf52wHigh, avg_magic_rs: facts.avgMagicRs,
-          examples: facts.examples.map((e) => ({ symbol: e.symbol, rvol: e.rvol, pct_of_52w_high: e.pctOf52wHigh, magic_rs: e.magicRs })),
-        },
+        ...descriptor.highlight.payload(allStocks),
       })
     } else if (key === 'sector_leading' && sectorLeadingFacts) {
       mutation.mutate({

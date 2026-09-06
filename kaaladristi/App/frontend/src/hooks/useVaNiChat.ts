@@ -65,6 +65,21 @@ export interface VaNiAskRequest {
     avg_magic_rs: number | null;
     examples: Array<{ symbol: string; rvol: number | null; pct_of_52w_high: number | null; magic_rs: number | null }>;
   };
+  // scanner.why_highlighted_weakness only — the caution-side twin, for the
+  // presets whose vani_rule is is_vani_weakness (computeWeaknessExplainFacts).
+  // A separate field rather than a reshaped highlight_facts: the server
+  // sanitizes each fact payload against a fixed key set, and the two rules
+  // measure different things (no 52-week-high term here; zone/flow mix
+  // instead), so one loose shape would silently drop half of whichever side
+  // it wasn't written for.
+  weakness_facts?: {
+    count: number;
+    avg_rvol: number | null;
+    avg_magic_rs: number | null;
+    zone_mix: Array<{ label: string; count: number }>;
+    flow_mix: Array<{ label: string; count: number }>;
+    examples: Array<{ symbol: string; rvol: number | null; magic_rs: number | null; zone: string; flow: string }>;
+  };
   // scanner.momentum_gap only — computeMomentumGapFacts(), breakoutSurgeInsights.ts.
   momentum_gap_facts?: {
     count: number;

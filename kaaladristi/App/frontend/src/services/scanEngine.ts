@@ -591,7 +591,13 @@ async function fetchBreakdownWatch(exchangeFilter: ExchangeFilter): Promise<Scan
       'breakout_level', 'pct_from_breakout', 'pct_below_52w_high',
       'breakdown_level', 'pct_from_breakdown',
       'prev_week_close', 'pct_wtd', 'prev_month_close', 'pct_mtd',
-      'is_vani_surge', 'is_vani_breakout',
+      // is_vani_weakness is this preset's OWN vani_rule (kd_scan_presets), and
+      // computeVaniOpportunity below reads it off the row. Selecting only the
+      // two strength flags left it `undefined`, so vaniOpportunity was false
+      // for every row and the VaNi highlight count read 0. Measured on
+      // 2026-09-04 against km_scan_results, whose migration-197 arm selects
+      // is_vani_weakness and had it right all along: breakdown_watch showed 0 highlights where 5 of its 210 rows carry the flag.
+      'is_vani_surge', 'is_vani_breakout', 'is_vani_weakness',
       'km_equity_symbols(id,symbol,company_name,exchange,industry,mcap_cr,isin)',
     ].join(','))
     .eq('trade_date', latestDate)
@@ -774,7 +780,15 @@ async function fetchPeriodMovers(
       'breakout_level', 'pct_from_breakout', 'pct_below_52w_high',
       'breakdown_level', 'pct_from_breakdown',
       'prev_week_close', 'pct_wtd', 'prev_month_close', 'pct_mtd',
-      'is_vani_surge', 'is_vani_breakout',
+      // is_vani_weakness is this preset's OWN vani_rule (kd_scan_presets), and
+      // computeVaniOpportunity below reads it off the row. Selecting only the
+      // two strength flags left it `undefined`, so vaniOpportunity was false
+      // for every row and the VaNi highlight count read 0. Measured on
+      // 2026-09-04 against km_scan_results, whose migration-197 arm selects
+      // is_vani_weakness and had it right all along: weekly_decliners
+      // showed 0 highlights where 9 stocks really carry the flag, and
+      // monthly_decliners 0 where 10 do.
+      'is_vani_surge', 'is_vani_breakout', 'is_vani_weakness',
       'km_equity_symbols(id,symbol,company_name,exchange,industry,mcap_cr,isin)',
     ].join(','))
     .eq('trade_date', latestDate)

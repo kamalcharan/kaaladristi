@@ -65,7 +65,8 @@ def get_conn():
     return psycopg2.connect(DATABASE_URL, connect_timeout=30)
 
 
-SNAPSHOT_PRESET_IDS = ['breakout_surge', 'weekly_movers', 'monthly_movers']
+SNAPSHOT_PRESET_IDS = ['breakout_surge', 'weekly_movers', 'monthly_movers',
+                       'weekly_decliners']
 
 # Display cap per preset (kd_scan_presets.limit / SCAN_PRESETS in
 # scanEngine.ts) — matches each arm's `WHERE rnk <= N` in migration 197, so a
@@ -75,6 +76,7 @@ DISPLAY_CAP = {
     'breakout_surge': 500,
     'weekly_movers': 500,
     'monthly_movers': 500,
+    'weekly_decliners': 500,
 }
 
 # ---------------------------------------------------------------------------
@@ -170,6 +172,16 @@ PRESET_MEMBERSHIP_FNS = {
         'monthly_movers',
         qualify='pct_mtd > 0',
         order='pct_mtd DESC, equity_id',
+    ),
+    # migration 197: `WHERE p.pct_wtd < 0`,
+    # `ORDER BY p.pct_wtd ASC, p.equity_id` -- ASC, because this arm ranks the
+    # largest LOSS first. Copying the DESC from its weekly_movers twin would
+    # have snapshotted the 500 SMALLEST declines while the UI showed the 500
+    # largest: two disjoint sets, and every day-over-day diff meaningless.
+    'weekly_decliners': _membership(
+        'weekly_decliners',
+        qualify='pct_wtd < 0',
+        order='pct_wtd ASC, equity_id',
     ),
 }
 
