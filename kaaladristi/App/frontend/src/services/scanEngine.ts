@@ -592,11 +592,19 @@ async function fetchBreakdownWatch(exchangeFilter: ExchangeFilter): Promise<Scan
       'breakdown_level', 'pct_from_breakdown',
       'prev_week_close', 'pct_wtd', 'prev_month_close', 'pct_mtd',
       // is_vani_weakness is this preset's OWN vani_rule (kd_scan_presets), and
-      // computeVaniOpportunity below reads it off the row. Selecting only the
-      // two strength flags left it `undefined`, so vaniOpportunity was false
-      // for every row and the VaNi highlight count read 0. Measured on
-      // 2026-09-04 against km_scan_results, whose migration-197 arm selects
-      // is_vani_weakness and had it right all along: breakdown_watch showed 0 highlights where 5 of its 210 rows carry the flag.
+      // computeVaniOpportunity below reads it off the row -- selecting only the
+      // two strength flags left it `undefined`, so vaniOpportunity was false for
+      // every row ON THIS PATH.
+      //
+      // Scope, stated precisely because it is easy to overstate: this is the
+      // FALLBACK. executeScan prefers km_scan_results, whose migration-197 arm
+      // selects is_vani_weakness and is correct -- 9 / 10 / 5 flagged rows for
+      // weekly_decliners / monthly_decliners / breakdown_watch on 2026-09-04 --
+      // and scanRowToScanStock takes vaniOpportunity straight from that
+      // vani_flag column. So users on a healthy matview never saw the zero.
+      // The fault surfaced only when the matview was empty or migration 195/197
+      // unapplied, which is precisely when this fallback runs and precisely
+      // when it still has to be right.
       'is_vani_surge', 'is_vani_breakout', 'is_vani_weakness',
       'km_equity_symbols(id,symbol,company_name,exchange,industry,mcap_cr,isin)',
     ].join(','))
@@ -604,6 +612,8 @@ async function fetchBreakdownWatch(exchangeFilter: ExchangeFilter): Promise<Scan
     .lt('pct_chng', 0)
     .gte('close', 50)
     .lt('pct_from_breakdown', 0)
+    // 448 rows qualify today, well inside the ceiling. The movers' shared
+    // fetcher is the one that can exceed it -- see the note there.
     .limit(2000)
     .execute();
 
@@ -781,19 +791,39 @@ async function fetchPeriodMovers(
       'breakdown_level', 'pct_from_breakdown',
       'prev_week_close', 'pct_wtd', 'prev_month_close', 'pct_mtd',
       // is_vani_weakness is this preset's OWN vani_rule (kd_scan_presets), and
-      // computeVaniOpportunity below reads it off the row. Selecting only the
-      // two strength flags left it `undefined`, so vaniOpportunity was false
-      // for every row and the VaNi highlight count read 0. Measured on
-      // 2026-09-04 against km_scan_results, whose migration-197 arm selects
-      // is_vani_weakness and had it right all along: weekly_decliners
-      // showed 0 highlights where 9 stocks really carry the flag, and
-      // monthly_decliners 0 where 10 do.
+      // computeVaniOpportunity below reads it off the row -- selecting only the
+      // two strength flags left it `undefined`, so vaniOpportunity was false for
+      // every row ON THIS PATH.
+      //
+      // Scope, stated precisely because it is easy to overstate: this is the
+      // FALLBACK. executeScan prefers km_scan_results, whose migration-197 arm
+      // selects is_vani_weakness and is correct -- 9 / 10 / 5 flagged rows for
+      // weekly_decliners / monthly_decliners / breakdown_watch on 2026-09-04 --
+      // and scanRowToScanStock takes vaniOpportunity straight from that
+      // vani_flag column. So users on a healthy matview never saw the zero.
+      // The fault surfaced only when the matview was empty or migration 195/197
+      // unapplied, which is precisely when this fallback runs and precisely
+      // when it still has to be right.
       'is_vani_surge', 'is_vani_breakout', 'is_vani_weakness',
       'km_equity_symbols(id,symbol,company_name,exchange,industry,mcap_cr,isin)',
     ].join(','))
     .eq('trade_date', latestDate)
     .gte('close', 50);
-  const { data: rows } = await (direction === 'up' ? base.gt(pctCol, 0) : base.lt(pctCol, 0))
+  // ORDER BY in the DB, not just in JS afterwards. Without it this asked for
+  // "any 2000 qualifying rows" and then ranked THOSE -- and the qualifying set
+  // is bigger than the ceiling on every one of the four: 2,894 / 2,605 / 2,493
+  // / 2,202 rows on 2026-09-04. The ~900 dropped were arbitrary, so the top 500
+  // it displayed was drawn from an arbitrary sample of the real cohort (a
+  // representative simulation lost 250 of the true top 500). Ordering server-
+  // side makes the truncation take the tail instead of a random slice, which is
+  // what the LIMIT was always meant to do.
+  //
+  // Fallback path only -- executeScan prefers km_scan_results, which ranks
+  // correctly server-side -- but a fallback that silently disagrees with the
+  // matview is worse than no fallback, because nothing surfaces the difference.
+  const ordered = (direction === 'up' ? base.gt(pctCol, 0) : base.lt(pctCol, 0))
+    .order(pctCol, { ascending: direction === 'down' });
+  const { data: rows } = await ordered
     .limit(2000)
     .execute();
 

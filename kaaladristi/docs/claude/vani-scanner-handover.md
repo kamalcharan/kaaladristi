@@ -32,13 +32,21 @@ fake baseline. The membership function carries this warning in a comment at
 its own definition, where the next person editing it will meet it. Every other
 preset is safe to backfill to full history.
 
-**Open, and worth a decision now that the build is done:** §6 Step 0, the
-Discovery-board opt-in. All five presets still have a `vani_rule` but no
-`vani_side` / `vani_short_label`, so they never reach `fetchVaniHighlights`.
-One SQL statement, and it now has a natural `vani_side` for each: the two
-movers are `strength`, the three caution scans are `caution` — the same split
-`config/scannerStudio.ts` already encodes. Still needs a `vani_cap` decision
-(these are 500-row scans against `gl_breakout`'s cap of 12).
+**§6 Step 0 is written and waiting to be run:**
+`km_migration_201_pa_vani_discovery_optin.sql`. It sets `vani_side` /
+`vani_short_label` on the five, using the same strength/caution split
+`config/scannerStudio.ts` encodes.
+
+Its open question — the `vani_cap` — is **closed, with evidence in the
+migration header**. The worry was that 500-row scans would swamp the board;
+that aimed at the wrong number. `fetchVaniHighlights` filters to
+`vaniOpportunity` first and `vani_cap` slices what remains, and the flagged
+counts are 14 / 14 / 10 / 9 / 5 — in line with `breakout_surge`'s 14 and
+`power_sell`'s 25, both already on the board uncapped. The board then
+deduplicates by `equity_id`, so the strength trio's 42 slots collapse to 14
+distinct stocks and the caution trio's 24 to 11. The movers add no new names at
+all, only extra chips on rows already there. **No cap** — one would silently
+drop real names.
 
 **Owner action still outstanding** — nothing downstream is blocked on it, but
 three intent cards stay hidden until it runs:
@@ -556,27 +564,31 @@ did, but not only in the places §4 predicted — two shipped bugs had to be
 fixed before the caution side could be honest, and both were found by reading
 what the code actually does rather than by trusting the plan.
 
-**Bug 1 — the weakness presets showed zero VaNi highlights, and always had.**
-`fetchPeriodMovers` and `fetchBreakdownWatch` compute `vaniOpportunity` from
-each preset's own `kd_scan_presets.vani_rule`, and all three weakness presets
-carry `is_vani_weakness` — but neither query ever SELECTed that column. So
-`computeVaniOpportunity` read `undefined` and returned false for every row.
-Measured on 2026-09-04 against `km_scan_results`, whose migration-197 arms
-select `is_vani_weakness` and had it right all along:
+**Bug 1 — the weakness presets computed no VaNi highlight on the fallback
+path.** `fetchPeriodMovers` and `fetchBreakdownWatch` compute `vaniOpportunity`
+from each preset's own `kd_scan_presets.vani_rule`, and all three weakness
+presets carry `is_vani_weakness` — but neither query ever SELECTed that column,
+so `computeVaniOpportunity` read `undefined` and returned false for every row.
 
-| Preset | UI showed | Truth |
-|---|---|---|
-| `weekly_decliners` | 0 | 9 |
-| `monthly_decliners` | 0 | 10 |
-| `breakdown_watch` | 0 | 5 of 210 |
+**Corrected 2026-09-06, same day, and the correction matters** — this entry
+first claimed the three presets "showed zero VaNi highlights, and always had",
+which is wrong about production. `executeScan` prefers `km_scan_results` for
+all six price-action presets (`MATVIEW_PRICE_ACTION_PRESETS`), migration 197's
+arms select `is_vani_weakness` correctly, and `scanRowToScanStock` takes
+`vaniOpportunity` straight from that `vani_flag` column. On a healthy matview —
+which is production, and which carries 9 / 10 / 5 flagged rows for
+`weekly_decliners` / `monthly_decliners` / `breakdown_watch` on 2026-09-04 —
+users always saw the right count.
 
-This is the same class as the bug `isHighlight`'s own docstring records (the
-flags are fetched but never copied onto `ScanStock`), one layer earlier. It had
-to be fixed first: `why_flagged` is computed entirely over the highlighted
-cohort, so on an empty cohort the new builder would have reported a truthful
-zero about a false premise. Fixing it also lights the VaNi chip and the VaNi
-filter on all three presets, which is a user-visible change independent of
-Level 2.
+The defect is real but **fallback-only**: it surfaces when the matview is empty
+or migration 195/197 is unapplied, which is exactly when the fallback runs and
+exactly when it still has to be right. Worth fixing, not worth the severity the
+first draft gave it. **Do not expect a visible 0 → 9 change when testing the
+Weekly Decliners page.**
+
+The lesson is the one this document keeps re-learning: the earlier claim was
+built by reading one code path and one live-DB query that agreed with each
+other, without first asking which path production actually takes.
 
 **Bug 2 — `rs_flip` was telling the model to print "Strong Bull".** The
 examples carried RAW `magic_rs_zone` values and the prompt said to reproduce
@@ -717,16 +729,25 @@ one, `breakdown_watch` excepted for its own data reason.
 What the plan did not contain were the three bugs, all found by reading what
 the code does rather than trusting the design:
 
-- the weakness presets never selected `is_vani_weakness`, so all three showed
-  **zero** VaNi highlights against a real 9 / 10 / 5;
+- the weakness presets never selected `is_vani_weakness`, so their fallback
+  path computed no highlight at all (matview path was always correct — see the
+  correction in the scanner-3 entry);
 - `rs_flip` told the model to print raw `Strong Bull` / `Strong Bear` zone
   values, a D39 leak that was latent on the strength side and unshippable on
-  the caution side;
+  the caution side — this one IS user-visible on every preset;
+- the period-movers fallback asked for 2,000 rows with **no `ORDER BY`** while
+  2,894 / 2,605 / 2,493 / 2,202 qualified, so it ranked an arbitrary sample and
+  called the result a top 500;
 - `_membership_breakout_surge` over-collected by 5% a day (fixed in the
   previous session, §12's first entry).
 
-All three were in shipped code, and none would have been caught by the
+All four were in shipped code, and none would have been caught by the
 verification §7 asked for. The pattern worth carrying forward: each surfaced
 while mirroring an existing behaviour for a new case, which is exactly when an
 assumption that was never true gets tested for the first time.
+
+And one anti-pattern, from getting the first one wrong before getting it right:
+**a code path that is wrong and a live query that agrees with it still do not
+tell you what production does.** Check which path actually runs before writing
+down a severity.
 
