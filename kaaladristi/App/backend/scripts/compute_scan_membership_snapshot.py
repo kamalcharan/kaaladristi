@@ -66,7 +66,7 @@ def get_conn():
 
 
 SNAPSHOT_PRESET_IDS = ['breakout_surge', 'weekly_movers', 'monthly_movers',
-                       'weekly_decliners']
+                       'weekly_decliners', 'monthly_decliners']
 
 # Display cap per preset (kd_scan_presets.limit / SCAN_PRESETS in
 # scanEngine.ts) — matches each arm's `WHERE rnk <= N` in migration 197, so a
@@ -77,6 +77,7 @@ DISPLAY_CAP = {
     'weekly_movers': 500,
     'monthly_movers': 500,
     'weekly_decliners': 500,
+    'monthly_decliners': 500,
 }
 
 # ---------------------------------------------------------------------------
@@ -182,6 +183,13 @@ PRESET_MEMBERSHIP_FNS = {
         'weekly_decliners',
         qualify='pct_wtd < 0',
         order='pct_wtd ASC, equity_id',
+    ),
+    # migration 197: `WHERE p.pct_mtd < 0`,
+    # `ORDER BY p.pct_mtd ASC, p.equity_id` -- ASC again, same reason.
+    'monthly_decliners': _membership(
+        'monthly_decliners',
+        qualify='pct_mtd < 0',
+        order='pct_mtd ASC, equity_id',
     ),
 }
 

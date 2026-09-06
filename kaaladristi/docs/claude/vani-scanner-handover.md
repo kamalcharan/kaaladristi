@@ -11,29 +11,38 @@ assumed away in the plan.
 
 ## 0. Next session starts here
 
-**Done and on `main`:** the refactor (§12), scanners 1–3 — `weekly_movers`,
-`monthly_movers`, `weekly_decliners`. The whole caution side is now written:
+**Done and on `main`:** the refactor (§12) and scanners 1–4 —
+`weekly_movers`, `monthly_movers`, `weekly_decliners`, `monthly_decliners`.
+Four of the five targets are finished, and the whole caution side is written:
 `computeWeaknessExplainFacts`, the `isDecelerating` pace predicate, the
 `gapBehind` orientation, the `rs_flip` polarity switch, the "Not oversold"
 toggle, and the `scanner.why_highlighted_weakness` prompt.
 
-**Next:** scanner 4, `monthly_decliners`. It reuses every one of those
-unchanged — same `vani_rule`, same caution constants — so it is back to the
-two-edit shape scanners 1 and 2 had: a descriptor entry (copy
-`weekly_decliners`, swap `pct_wtd` → `pct_mtd` and `prev_week_close` →
-`prev_month_close`, relabel) and one `PRESET_MEMBERSHIP_FNS` entry
-(`qualify='pct_mtd < 0'`, `order='pct_mtd ASC, equity_id'`, cap 500).
+**Next:** scanner 5, `breakdown_watch` — the last one, deliberately last
+because of the §5 history gap. It is another two-edit preset, reusing every
+caution constant unchanged:
 
-**Mind the ASC.** Both decliner arms rank the largest LOSS first. Copying the
-`DESC` from a movers twin would snapshot the 500 smallest declines while the UI
-shows the 500 largest — two disjoint sets, and every day-over-day diff
-meaningless.
+- a descriptor entry, differing from `weekly_decliners` only in `countLabel`,
+  `exportName`, `displayName` and its `cardLevels` (`breakdown_level` /
+  `pct_from_breakdown`);
+- one `PRESET_MEMBERSHIP_FNS` entry copied from migration 197's arm —
+  `qualify='pct_chng < 0 AND pct_from_breakdown < 0'`,
+  `order='pct_from_breakdown ASC, equity_id'`, cap 500. Note the pool must
+  also project `e.pct_from_breakdown`, the way `pct_mtd` had to be added for
+  scanner 2.
 
-Then `breakdown_watch` last, behind the §5 history gap. Its descriptor is a
-third copy of the same caution constants; only its `cardLevels`
-(`breakdown_level` / `pct_from_breakdown`) and its membership arm
-(`pct_chng < 0 AND pct_from_breakdown < 0`, `ORDER BY pct_from_breakdown ASC`)
-differ.
+**Its Studio works on day one; its day-over-day cards do not.**
+`pct_from_breakdown` is ~6% populated before 2026-08-27 (§5), so a membership
+backfill run today writes a 6% sample as "history" and `is_unusual` would
+compare a real count against a fake baseline. Run
+`backfill_rolling_metrics_fast.py` BEFORE backfilling this preset's
+membership. Registering it and backfilling only from 2026-08-27 forward is the
+safe alternative if that script still has not run.
+
+**Mind the ASC** on every one of the three caution arms — they rank the
+largest LOSS (or the deepest breakdown) first. Copying the `DESC` from a movers
+twin would snapshot the 500 smallest moves while the UI shows the 500 largest:
+two disjoint sets, and every day-over-day diff meaningless.
 
 **Owner action still outstanding** — nothing downstream is blocked on it, but
 three intent cards stay hidden until it runs:
@@ -43,8 +52,8 @@ cd App/backend
 python scripts/compute_scan_membership_snapshot.py --from 2026-08-20
 ```
 
-This backfills `weekly_movers`, `monthly_movers` and `weekly_decliners`,
-AND re-writes
+This backfills `weekly_movers`, `monthly_movers`, `weekly_decliners` and
+`monthly_decliners`, AND re-writes
 `breakout_surge`'s existing 12 days under the corrected membership rule.
 **Read §12's bug note before assuming any snapshot history is comparable** —
 history written before 2026-09-05 used a wider pool than the matview actually
@@ -639,4 +648,30 @@ contains only approved band and flow labels. `npm run typecheck` and
 **Still open, and now cheap.** `buildWhyTags` is strength-only, as §4c says —
 but it is exported and called from nowhere. No caution twin was written rather
 than add a second dead function; delete it or wire it before mirroring it.
+
+### 2026-09-06 — Scanner 4 (`monthly_decliners`)
+
+Two edits and nothing else, which is the point: it carries `is_vani_weakness`,
+so it reuses `CAUTION_PACE`, `CAUTION_RSI_QUICK`, `CAUTION_HIGHLIGHT` and
+`CAUTION_RS_FLIP` exactly as scanner 3 wrote them. No new fact builder, no new
+prompt, no new intent. The caution-side design cost was paid once.
+
+The descriptor differs from `weekly_decliners` in four strings and its
+`cardLevels` (`prev_month_close` / `pct_mtd`). The membership arm is
+`pct_mtd < 0` ordered `pct_mtd ASC` — ASC for the same reason its weekly twin
+is: the arm ranks the largest loss first. The industry-question override was
+hoisted to a shared `CAUTION_INDUSTRY_Q` now that a second preset uses it.
+
+**Verified.** All five registered arms diffed set-wise against
+`km_scan_results` on 2026-09-04 in one query:
+
+| Preset | membership fn | matview | only in fn | only in matview |
+|---|---|---|---|---|
+| `breakout_surge` | 270 | 270 | 0 | 0 |
+| `weekly_movers` | 500 | 500 | 0 | 0 |
+| `monthly_movers` | 500 | 500 | 0 | 0 |
+| `weekly_decliners` | 500 | 500 | 0 | 0 |
+| `monthly_decliners` | 500 | 500 | 0 | 0 |
+
+`npm run typecheck` and `npm run build` clean.
 

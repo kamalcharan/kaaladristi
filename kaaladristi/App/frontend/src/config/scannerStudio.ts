@@ -211,6 +211,10 @@ const CAUTION_RS_FLIP = {
   into: 'bearish' as const,
 }
 
+/** "Leading" asserts something the underlying count does not say once the
+ *  cohort is a weakening one — the fact is representation. */
+const CAUTION_INDUSTRY_Q = 'Which industry is most represented here?'
+
 export const STUDIO_DESCRIPTORS: Record<string, StudioDescriptor> = {
   breakout_surge: {
     presetId: 'breakout_surge',
@@ -281,7 +285,7 @@ export const STUDIO_DESCRIPTORS: Record<string, StudioDescriptor> = {
     rsiQuick: CAUTION_RSI_QUICK,
     highlight: CAUTION_HIGHLIGHT,
     rsFlip: CAUTION_RS_FLIP,
-    industryQuestion: 'Which industry is most represented here?',
+    industryQuestion: CAUTION_INDUSTRY_Q,
     exportName: 'Weekly_Decliners',
     xlsVariant: 'default',
     cardLevels: [
@@ -289,6 +293,24 @@ export const STUDIO_DESCRIPTORS: Record<string, StudioDescriptor> = {
       { label: 'WTD%', value: (r) => r.pct_wtd, colorKey: 'pct_wtd' },
     ],
     displayName: 'Weekly Decliners',
+  },
+
+  monthly_decliners: {
+    presetId: 'monthly_decliners',
+    side: 'caution',
+    countLabel: "Below Last Month's Close",
+    ...CAUTION_PACE,
+    rsiQuick: CAUTION_RSI_QUICK,
+    highlight: CAUTION_HIGHLIGHT,
+    rsFlip: CAUTION_RS_FLIP,
+    industryQuestion: CAUTION_INDUSTRY_Q,
+    exportName: 'Monthly_Decliners',
+    xlsVariant: 'default',
+    cardLevels: [
+      { label: 'Prev Mth', value: (r) => r.prev_month_close },
+      { label: 'MTD%', value: (r) => r.pct_mtd, colorKey: 'pct_mtd' },
+    ],
+    displayName: 'Monthly Decliners',
   },
 }
 
