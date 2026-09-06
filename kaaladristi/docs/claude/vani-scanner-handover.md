@@ -11,19 +11,20 @@ assumed away in the plan.
 
 ## 0. Next session starts here
 
-**Done and on `main`:** the refactor (§12) and scanner 1, `weekly_movers`.
+**Done and on `main`:** the refactor (§12), scanner 1 `weekly_movers`, and
+scanner 2 `monthly_movers`. Both strength-side presets are finished; the two
+edits each needed were exactly the two §0 predicted.
 
-**Next:** scanner 2, `monthly_movers`. It should be two edits — a descriptor
-entry in `App/frontend/src/config/scannerStudio.ts` (copy `weekly_movers`,
-swap `pct_wtd` → `pct_mtd`, `prev_week_close` → `prev_month_close`, and the
-labels), and one entry in `PRESET_MEMBERSHIP_FNS` in
-`App/backend/scripts/compute_scan_membership_snapshot.py`
-(`qualify='pct_mtd > 0'`, `order='pct_mtd DESC, equity_id'`, cap 500, copied
-from that arm in migration 197). No new fact builder and no new prompt wording:
-it carries `breakout_surge`'s exact `vani_rule`.
+**Next:** scanner 3, `weekly_decliners` — the first caution-side scan, and the
+only one of the three that costs real design. It is where §4's weakness-side
+work gets written: a highlight-explain builder for `is_vani_weakness`, the
+mirrored pace predicate, the "Not oversold" quick toggle, the `rs_flip`
+polarity, and caution stat-tile labels. `monthly_decliners` then reuses all of
+it, and `breakdown_watch` goes last behind the §5 history gap.
 
-Then §10's order: `weekly_decliners` (writes the weakness-side builder that
-serves all three caution scans), `monthly_decliners`, `breakdown_watch`.
+§9.2 settles the wording before it is written: the caution side speaks in
+`ZONE_LABELS` (Leading / Improving / Neutral / Weakening / Lagging) and the D39
+badge set. Nothing invented, no new compliance review.
 
 **Owner action still outstanding** — nothing downstream is blocked on it, but
 three intent cards stay hidden until it runs:
@@ -33,10 +34,11 @@ cd App/backend
 python scripts/compute_scan_membership_snapshot.py --from 2026-08-20
 ```
 
-This backfills `weekly_movers` AND re-writes `breakout_surge`'s existing 12 days
-under the corrected membership rule. **Read §12's bug note before assuming any
-snapshot history is comparable** — history written before 2026-09-05 used a
-wider pool than the matview actually showed.
+This backfills `weekly_movers` and `monthly_movers`, AND re-writes
+`breakout_surge`'s existing 12 days under the corrected membership rule.
+**Read §12's bug note before assuming any snapshot history is comparable** —
+history written before 2026-09-05 used a wider pool than the matview actually
+showed.
 
 Two other owner-run items are carried from earlier work and are unrelated to
 this task, but a session touching the pipeline will meet them:
@@ -485,3 +487,50 @@ runs, `weekly_movers` shows four of seven intent cards; the three day-over-day
 ones stay hidden by their existing null-guards rather than showing a wrong
 number. A wider `--from` is fine and cheap; `is_unusual` only reads the trailing
 few sessions.
+
+### 2026-09-06 — Scanner 2 (`monthly_movers`)
+
+Exactly the two edits §0 predicted, and nothing else — the refactor held, so
+this scanner cost no new fact builder, no prompt wording and no new branch.
+
+**Descriptor** (`config/scannerStudio.ts`). `monthly_movers` is the third
+preset on `is_vani_surge_or_breakout`, so `computeHighlightExplainFacts`,
+`STRENGTH_PACE`, `STRENGTH_RSI_QUICK` and the cleared `rs_flip` question text
+all apply unchanged. What differs is only what the scan MEANS: the count tile
+reads "Above Last Month's Close" (the gate is a position against the prior
+month's close, not a claim about the month's path — same construction as
+`weekly_movers`), and the card levels carry `prev_month_close` / `pct_mtd`.
+Registration in `STUDIO_PRESET_IDS` is automatic, being `Object.keys`, so
+`ScanView` routed it with no edit.
+
+**Membership** (`compute_scan_membership_snapshot.py`). One
+`PRESET_MEMBERSHIP_FNS` entry — `qualify='pct_mtd > 0'`,
+`order='pct_mtd DESC, equity_id'`, cap 500 — copied from migration 197's
+`monthly_movers` CTE, plus its id in `SNAPSHOT_PRESET_IDS` and `DISPLAY_CAP`.
+The shared `_PA_POOL` had to project one more column (`e.pct_mtd`): the pool
+must carry every field an arm's `qualify`/`order` names, which is the one part
+of adding a preset that is not purely additive.
+
+**Verified against the live DB, not assumed.** The generated SQL was run on
+2026-09-04 and diffed set-wise against `km_scan_results`:
+
+| Preset | membership fn | matview | only in fn | only in matview |
+|---|---|---|---|---|
+| `breakout_surge` | 270 | 270 | 0 | 0 |
+| `weekly_movers` | 500 | 500 | 0 | 0 |
+| `monthly_movers` | 500 | 500 | 0 | 0 |
+
+The first two rows are the regression check that matters: widening the shared
+pool's projection changed neither of the arms already shipped. Confirmed too
+that `kd_scan_presets.monthly_movers` is active with `result_limit` 500 and
+`vani_rule = 'is_vani_surge_or_breakout'`, so the cap and the rule are read off
+the DB rather than inferred from `weekly_movers`.
+
+`npm run typecheck` and `npm run build` clean (theme ratchet passes).
+
+**Until the §0 backfill runs**, `monthly_movers` shows four of seven intent
+cards. The three day-over-day builders return `null` on empty history
+(`computeNewSinceYesterdayFacts`/`computeRsFlipFacts` on `!ctx.priorDate`,
+`computeIsUnusualFacts` on `countHistory.length < 3`) and `readyByIntent`
+hides the card rather than showing a fabricated count — inherited, not
+re-implemented.

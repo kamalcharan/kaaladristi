@@ -65,7 +65,7 @@ def get_conn():
     return psycopg2.connect(DATABASE_URL, connect_timeout=30)
 
 
-SNAPSHOT_PRESET_IDS = ['breakout_surge', 'weekly_movers']
+SNAPSHOT_PRESET_IDS = ['breakout_surge', 'weekly_movers', 'monthly_movers']
 
 # Display cap per preset (kd_scan_presets.limit / SCAN_PRESETS in
 # scanEngine.ts) — matches each arm's `WHERE rnk <= N` in migration 197, so a
@@ -74,6 +74,7 @@ SNAPSHOT_PRESET_IDS = ['breakout_surge', 'weekly_movers']
 DISPLAY_CAP = {
     'breakout_surge': 500,
     'weekly_movers': 500,
+    'monthly_movers': 500,
 }
 
 # ---------------------------------------------------------------------------
@@ -105,7 +106,7 @@ DISPLAY_CAP = {
 _PA_POOL = """
     WITH pool AS (
         SELECT e.equity_id, e.magic_rs_zone,
-               e.pct_wtd, e.pct_chng, e.pct_from_breakout,
+               e.pct_wtd, e.pct_mtd, e.pct_chng, e.pct_from_breakout,
                row_number() OVER (
                    PARTITION BY COALESCE(s.isin, 'EQ:' || e.equity_id::text)
                    ORDER BY (s.exchange = 'NSE') DESC, e.equity_id
@@ -162,6 +163,13 @@ PRESET_MEMBERSHIP_FNS = {
         'weekly_movers',
         qualify='pct_wtd > 0',
         order='pct_wtd DESC, equity_id',
+    ),
+    # migration 197: `WHERE p.pct_mtd > 0`,
+    # `ORDER BY p.pct_mtd DESC, p.equity_id`
+    'monthly_movers': _membership(
+        'monthly_movers',
+        qualify='pct_mtd > 0',
+        order='pct_mtd DESC, equity_id',
     ),
 }
 

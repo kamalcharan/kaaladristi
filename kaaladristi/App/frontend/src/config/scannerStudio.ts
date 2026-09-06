@@ -147,6 +147,26 @@ export const STUDIO_DESCRIPTORS: Record<string, StudioDescriptor> = {
     ],
     displayName: 'Weekly Movers',
   },
+
+  monthly_movers: {
+    presetId: 'monthly_movers',
+    side: 'strength',
+    // Same construction as weekly_movers: the gate is close > prior month's
+    // close, a position rather than a claim about the month's path.
+    countLabel: "Above Last Month's Close",
+    ...STRENGTH_PACE,
+    rsiQuick: STRENGTH_RSI_QUICK,
+    // Third preset on is_vani_surge_or_breakout, so the cleared question text
+    // and computeHighlightExplainFacts both apply unchanged.
+    rsFlip: { question: 'Which stocks just turned RS-green?', into: 'bullish' },
+    exportName: 'Monthly_Movers',
+    xlsVariant: 'default',
+    cardLevels: [
+      { label: 'Prev Mth', value: (r) => r.prev_month_close },
+      { label: 'MTD%', value: (r) => r.pct_mtd, colorKey: 'pct_mtd' },
+    ],
+    displayName: 'Monthly Movers',
+  },
 }
 
 export function getStudioDescriptor(presetId: string): StudioDescriptor | null {
