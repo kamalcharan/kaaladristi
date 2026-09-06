@@ -312,6 +312,28 @@ export const STUDIO_DESCRIPTORS: Record<string, StudioDescriptor> = {
     ],
     displayName: 'Monthly Decliners',
   },
+
+  breakdown_watch: {
+    presetId: 'breakdown_watch',
+    side: 'caution',
+    // The mirror of breakout_surge's tile. "20-day floor" is fieldConfig's own
+    // wording for breakdown_level (the lowest close over the prior 20 bars),
+    // reused rather than reinvented.
+    countLabel: 'Below Their 20-Day Floor',
+    ...CAUTION_PACE,
+    rsiQuick: CAUTION_RSI_QUICK,
+    highlight: CAUTION_HIGHLIGHT,
+    rsFlip: CAUTION_RS_FLIP,
+    industryQuestion: CAUTION_INDUSTRY_Q,
+    exportName: 'Breakdown_Surge',
+    xlsVariant: 'default',
+    cardLevels: [
+      { label: 'Brk Dn Lvl', value: (r) => r.breakdown_level },
+      { label: '% Below', value: (r) => r.pct_from_breakdown, colorKey: 'pct_from_breakdown' },
+    ],
+    // kd_scan_presets calls this one "Breakdown Surge"; the id is the outlier.
+    displayName: 'Breakdown Surge',
+  },
 }
 
 export function getStudioDescriptor(presetId: string): StudioDescriptor | null {

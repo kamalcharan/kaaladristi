@@ -11,38 +11,34 @@ assumed away in the plan.
 
 ## 0. Next session starts here
 
-**Done and on `main`:** the refactor (§12) and scanners 1–4 —
-`weekly_movers`, `monthly_movers`, `weekly_decliners`, `monthly_decliners`.
-Four of the five targets are finished, and the whole caution side is written:
-`computeWeaknessExplainFacts`, the `isDecelerating` pace predicate, the
-`gapBehind` orientation, the `rs_flip` polarity switch, the "Not oversold"
-toggle, and the `scanner.why_highlighted_weakness` prompt.
+**All five targets are done and on `main`** — `weekly_movers`,
+`monthly_movers`, `weekly_decliners`, `monthly_decliners`, `breakdown_watch`,
+plus the Studio refactor they all ride on. `breakout_surge` remains the
+control. There is no scanner 6: `flower_pot_burst` and the two Golden Line
+presets are out of scope by §9.1.
 
-**Next:** scanner 5, `breakdown_watch` — the last one, deliberately last
-because of the §5 history gap. It is another two-edit preset, reusing every
-caution constant unchanged:
+**What is left is not code.** Two owner-run items, in this order:
 
-- a descriptor entry, differing from `weekly_decliners` only in `countLabel`,
-  `exportName`, `displayName` and its `cardLevels` (`breakdown_level` /
-  `pct_from_breakdown`);
-- one `PRESET_MEMBERSHIP_FNS` entry copied from migration 197's arm —
-  `qualify='pct_chng < 0 AND pct_from_breakdown < 0'`,
-  `order='pct_from_breakdown ASC, equity_id'`, cap 500. Note the pool must
-  also project `e.pct_from_breakdown`, the way `pct_mtd` had to be added for
-  scanner 2.
+1. `python scripts/backfill_rolling_metrics_fast.py` — fills
+   `pct_from_breakdown`, which is only ~6% populated before 2026-08-27 (6.5%
+   Jun, 6.3% Jul, 19.7% Aug, 99.9% Sep, measured 2026-09-06). The Big Money
+   work wants this run too.
+2. the membership backfill below.
 
-**Its Studio works on day one; its day-over-day cards do not.**
-`pct_from_breakdown` is ~6% populated before 2026-08-27 (§5), so a membership
-backfill run today writes a 6% sample as "history" and `is_unusual` would
-compare a real count against a fake baseline. Run
-`backfill_rolling_metrics_fast.py` BEFORE backfilling this preset's
-membership. Registering it and backfilling only from 2026-08-27 forward is the
-safe alternative if that script still has not run.
+Until step 1 runs, backfill `breakdown_watch` no earlier than **2026-08-27** —
+over the earlier months the snapshot would record a 6% sample as if it were
+the day's membership, and `is_unusual` would compare a real count against a
+fake baseline. The membership function carries this warning in a comment at
+its own definition, where the next person editing it will meet it. Every other
+preset is safe to backfill to full history.
 
-**Mind the ASC** on every one of the three caution arms — they rank the
-largest LOSS (or the deepest breakdown) first. Copying the `DESC` from a movers
-twin would snapshot the 500 smallest moves while the UI shows the 500 largest:
-two disjoint sets, and every day-over-day diff meaningless.
+**Open, and worth a decision now that the build is done:** §6 Step 0, the
+Discovery-board opt-in. All five presets still have a `vani_rule` but no
+`vani_side` / `vani_short_label`, so they never reach `fetchVaniHighlights`.
+One SQL statement, and it now has a natural `vani_side` for each: the two
+movers are `strength`, the three caution scans are `caution` — the same split
+`config/scannerStudio.ts` already encodes. Still needs a `vani_cap` decision
+(these are 500-row scans against `gl_breakout`'s cap of 12).
 
 **Owner action still outstanding** — nothing downstream is blocked on it, but
 three intent cards stay hidden until it runs:
@@ -52,8 +48,7 @@ cd App/backend
 python scripts/compute_scan_membership_snapshot.py --from 2026-08-20
 ```
 
-This backfills `weekly_movers`, `monthly_movers`, `weekly_decliners` and
-`monthly_decliners`, AND re-writes
+This backfills all five new presets AND re-writes
 `breakout_surge`'s existing 12 days under the corrected membership rule.
 **Read §12's bug note before assuming any snapshot history is comparable** —
 history written before 2026-09-05 used a wider pool than the matview actually
@@ -674,4 +669,64 @@ hoisted to a shared `CAUTION_INDUSTRY_Q` now that a second preset uses it.
 | `monthly_decliners` | 500 | 500 | 0 | 0 |
 
 `npm run typecheck` and `npm run build` clean.
+
+### 2026-09-06 — Scanner 5 (`breakdown_watch`) — the last one
+
+Two edits, reusing every caution constant unchanged. The descriptor differs
+from `weekly_decliners` only in its four strings and its `cardLevels`
+(`breakdown_level` / `% Below`); `countLabel` reads "Below Their 20-Day Floor",
+which is fieldConfig's own wording for `breakdown_level` rather than a new
+phrase. Its `displayName` is **Breakdown Surge** — `kd_scan_presets` names it
+that, and the id is the outlier.
+
+The membership arm is `pct_chng < 0 AND pct_from_breakdown < 0` ordered
+`pct_from_breakdown ASC` — ASC ranks the deepest break first, the mirror of
+`breakout_surge`'s DESC. The shared pool gained one projection
+(`e.pct_from_breakdown`), the same additive step `pct_mtd` needed for scanner 2.
+
+**The §5 history gap is handled where it will actually be read.** Rather than
+leave it in this document alone, the backfill-horizon warning and the measured
+coverage numbers sit in a comment on the `breakdown_watch` membership function
+itself — the next person to touch that file meets it without having found this
+handover first.
+
+**Verified — all six arms, one query, 2026-09-04:**
+
+| Preset | membership fn | matview | only in fn | only in matview |
+|---|---|---|---|---|
+| `breakout_surge` | 270 | 270 | 0 | 0 |
+| `weekly_movers` | 500 | 500 | 0 | 0 |
+| `monthly_movers` | 500 | 500 | 0 | 0 |
+| `weekly_decliners` | 500 | 500 | 0 | 0 |
+| `monthly_decliners` | 500 | 500 | 0 | 0 |
+| `breakdown_watch` | 210 | 210 | 0 | 0 |
+
+`npm run typecheck` and `npm run build` clean.
+
+---
+
+## Closing note — what this build actually cost
+
+The plan's shape held. The two strength presets were two edits each, as §0
+predicted; the caution side cost real design once, at `weekly_decliners`, and
+the two presets after it were two edits again. §3's finding — that
+`compute_scan_membership_snapshot.py` reads `km_equity_eod` rather than the
+matview — is what made every one of them backfillable to full history on day
+one, `breakdown_watch` excepted for its own data reason.
+
+What the plan did not contain were the three bugs, all found by reading what
+the code does rather than trusting the design:
+
+- the weakness presets never selected `is_vani_weakness`, so all three showed
+  **zero** VaNi highlights against a real 9 / 10 / 5;
+- `rs_flip` told the model to print raw `Strong Bull` / `Strong Bear` zone
+  values, a D39 leak that was latent on the strength side and unshippable on
+  the caution side;
+- `_membership_breakout_surge` over-collected by 5% a day (fixed in the
+  previous session, §12's first entry).
+
+All three were in shipped code, and none would have been caught by the
+verification §7 asked for. The pattern worth carrying forward: each surfaced
+while mirroring an existing behaviour for a new case, which is exactly when an
+assumption that was never true gets tested for the first time.
 

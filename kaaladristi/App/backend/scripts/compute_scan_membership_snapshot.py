@@ -66,7 +66,8 @@ def get_conn():
 
 
 SNAPSHOT_PRESET_IDS = ['breakout_surge', 'weekly_movers', 'monthly_movers',
-                       'weekly_decliners', 'monthly_decliners']
+                       'weekly_decliners', 'monthly_decliners',
+                       'breakdown_watch']
 
 # Display cap per preset (kd_scan_presets.limit / SCAN_PRESETS in
 # scanEngine.ts) — matches each arm's `WHERE rnk <= N` in migration 197, so a
@@ -78,6 +79,7 @@ DISPLAY_CAP = {
     'monthly_movers': 500,
     'weekly_decliners': 500,
     'monthly_decliners': 500,
+    'breakdown_watch': 500,
 }
 
 # ---------------------------------------------------------------------------
@@ -109,7 +111,8 @@ DISPLAY_CAP = {
 _PA_POOL = """
     WITH pool AS (
         SELECT e.equity_id, e.magic_rs_zone,
-               e.pct_wtd, e.pct_mtd, e.pct_chng, e.pct_from_breakout,
+               e.pct_wtd, e.pct_mtd, e.pct_chng,
+               e.pct_from_breakout, e.pct_from_breakdown,
                row_number() OVER (
                    PARTITION BY COALESCE(s.isin, 'EQ:' || e.equity_id::text)
                    ORDER BY (s.exchange = 'NSE') DESC, e.equity_id
@@ -190,6 +193,23 @@ PRESET_MEMBERSHIP_FNS = {
         'monthly_decliners',
         qualify='pct_mtd < 0',
         order='pct_mtd ASC, equity_id',
+    ),
+    # migration 197: `WHERE p.pct_chng < 0 AND p.pct_from_breakdown < 0`,
+    # `ORDER BY p.pct_from_breakdown ASC, p.equity_id` -- ASC ranks the DEEPEST
+    # break first, the mirror of breakout_surge's DESC.
+    #
+    # BACKFILL HORIZON, and it is not a detail: pct_from_breakdown is only
+    # ~6% populated before 2026-08-27 (6.5% Jun, 6.3% Jul, 19.7% Aug, 99.9%
+    # Sep -- measured 2026-09-06). Backfilling this preset over those months
+    # writes a 6% sample AS IF it were the day's membership, and is_unusual
+    # would then compare a real count against a fake baseline. Run
+    # scripts/backfill_rolling_metrics_fast.py first, or pass a --from no
+    # earlier than 2026-08-27. Every other preset here is safe to backfill to
+    # full history; this is the only one that is not.
+    'breakdown_watch': _membership(
+        'breakdown_watch',
+        qualify='pct_chng < 0 AND pct_from_breakdown < 0',
+        order='pct_from_breakdown ASC, equity_id',
     ),
 }
 
