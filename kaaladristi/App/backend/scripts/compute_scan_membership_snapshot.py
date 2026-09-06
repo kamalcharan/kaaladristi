@@ -34,9 +34,11 @@ no-op once already filtered to a single exchange (a dual-listed stock's
 NSE and BSE rows are two distinct equity_ids from km_equity_symbols; the
 exchange filter alone drops the BSE one, nothing left to dedupe).
 
-Scope: breakout_surge only for now — the one preset with Phase 3 VaNi
-intents (scannerenhancement.md's Tier B). Add a preset_id + its qualifying
-WHERE clause to extend to another preset.
+Scope: the presets carrying Phase 3 VaNi intents (scannerenhancement.md's
+Tier B) — i.e. the ones with a Studio descriptor in
+App/frontend/src/config/scannerStudio.ts. Adding another is one entry in
+PRESET_MEMBERSHIP_FNS: its qualifying WHERE and ORDER BY, copied from its arm
+in migration 197. The pool and its gates are shared.
 """
 
 import argparse
@@ -63,43 +65,104 @@ def get_conn():
     return psycopg2.connect(DATABASE_URL, connect_timeout=30)
 
 
-SNAPSHOT_PRESET_IDS = ['breakout_surge']
+SNAPSHOT_PRESET_IDS = ['breakout_surge', 'weekly_movers']
 
-# Preset display cap (kd_scan_presets.limit / SCAN_PRESETS in scanEngine.ts)
-# — matches migration 197's `FROM breakout_surge WHERE rnk <= 500`, so a
-# backfilled date's "membership" means the same top-N the UI would have
-# shown, not an unbounded technical superset.
-BREAKOUT_SURGE_DISPLAY_CAP = 500
+# Display cap per preset (kd_scan_presets.limit / SCAN_PRESETS in
+# scanEngine.ts) — matches each arm's `WHERE rnk <= N` in migration 197, so a
+# backfilled date's "membership" means the same top-N the UI would have shown,
+# not an unbounded technical superset.
+DISPLAY_CAP = {
+    'breakout_surge': 500,
+    'weekly_movers': 500,
+}
+
+# ---------------------------------------------------------------------------
+# The shared pool every price-action arm ranks within.
+#
+# Mirrors migration 197's `pa_pool` / `pa` CTEs exactly, and the exactness is
+# the point — this table is diffed day over day, so a pool that is wider than
+# what the UI showed silently UNDER-reports tomorrow's new arrivals (a stock
+# already in yesterday's over-wide snapshot never reads as new).
+#
+# TWO GATES THE ORIGINAL breakout_surge FUNCTION MISSED, both restored here:
+#
+#   ema_20 IS NOT NULL  -- `eq_base` carries it and every matview arm inherits
+#       it. Measured on 2026-09-04: the faithful rule yields 270 rows for
+#       breakout_surge, exactly matching km_scan_results; the old function
+#       wrote 284. A 5% over-collection, every day since 2026-08-20.
+#
+#   ISIN de-duplication -- `pa_pool`'s row_number() keeps one row per ISIN,
+#       NSE preferred. It changes nothing on today's data (both readings give
+#       1,012 for weekly_movers) because the pool is already NSE-only, but two
+#       NSE listings sharing an ISIN would otherwise both enter, and matching
+#       the matview costs nothing.
+#
+# ANY EXISTING breakout_surge HISTORY WRITTEN BEFORE THIS CHANGE IS WIDER than
+# what this now produces. Re-backfill it so the day-over-day diff compares like
+# with like:
+#     python scripts/compute_scan_membership_snapshot.py --from 2026-08-20
+# ---------------------------------------------------------------------------
+_PA_POOL = """
+    WITH pool AS (
+        SELECT e.equity_id, e.magic_rs_zone,
+               e.pct_wtd, e.pct_chng, e.pct_from_breakout,
+               row_number() OVER (
+                   PARTITION BY COALESCE(s.isin, 'EQ:' || e.equity_id::text)
+                   ORDER BY (s.exchange = 'NSE') DESC, e.equity_id
+               ) AS isin_rnk
+        FROM km_equity_eod e
+        JOIN km_equity_symbols s ON s.id = e.equity_id
+        WHERE e.trade_date = %(d)s
+          AND s.exchange = 'NSE'
+          AND e.close >= 50
+          AND e.ema_20 IS NOT NULL
+    )
+    SELECT equity_id, magic_rs_zone
+    FROM pool
+    WHERE isin_rnk = 1
+      AND {qualify}
+    ORDER BY {order}
+    LIMIT %(cap)s
+"""
 
 
-def _membership_breakout_surge(conn, trade_date) -> list[tuple[int, str | None]]:
-    """(equity_id, magic_rs_zone) for every equity that qualifies for
-    Breakout Surge on `trade_date`, ranked and capped exactly like migration
-    197's `breakout_surge` CTE (NSE-only, close >= 50, pct_chng > 0,
-    pct_from_breakout > 0, top BREAKOUT_SURGE_DISPLAY_CAP by
-    pct_from_breakout DESC). Works identically for today or any past date —
-    km_equity_eod carries full history, unlike km_scan_results."""
-    with conn.cursor() as cur:
-        cur.execute(
-            """
-            SELECT e.equity_id, e.magic_rs_zone
-            FROM km_equity_eod e
-            JOIN km_equity_symbols s ON s.id = e.equity_id
-            WHERE e.trade_date = %(d)s
-              AND s.exchange = 'NSE'
-              AND e.close >= 50
-              AND e.pct_chng > 0
-              AND e.pct_from_breakout > 0
-            ORDER BY e.pct_from_breakout DESC, e.equity_id
-            LIMIT %(cap)s
-            """,
-            {'d': str(trade_date), 'cap': BREAKOUT_SURGE_DISPLAY_CAP},
-        )
-        return cur.fetchall()
+def _membership(preset_id: str, qualify: str, order: str):
+    """Build a membership function for one arm.
+
+    `qualify` and `order` are the ONLY things that differ between arms — they
+    are copied verbatim from that preset's CTE in migration 197. Everything
+    else (the pool, the gates, the cap) is shared, which is what keeps the two
+    definitions from drifting apart one edit at a time.
+
+    Works identically for today or any past date: km_equity_eod carries full
+    history, unlike km_scan_results.
+    """
+    sql = _PA_POOL.format(qualify=qualify, order=order)
+
+    def _fn(conn, trade_date) -> list[tuple[int, str | None]]:
+        with conn.cursor() as cur:
+            cur.execute(sql, {'d': str(trade_date), 'cap': DISPLAY_CAP[preset_id]})
+            return cur.fetchall()
+
+    _fn.__name__ = f'_membership_{preset_id}'
+    return _fn
 
 
 PRESET_MEMBERSHIP_FNS = {
-    'breakout_surge': _membership_breakout_surge,
+    # migration 197: `WHERE p.pct_chng > 0 AND p.pct_from_breakout > 0`,
+    # `ORDER BY p.pct_from_breakout DESC, p.equity_id`
+    'breakout_surge': _membership(
+        'breakout_surge',
+        qualify='pct_chng > 0 AND pct_from_breakout > 0',
+        order='pct_from_breakout DESC, equity_id',
+    ),
+    # migration 197: `WHERE p.pct_wtd > 0`,
+    # `ORDER BY p.pct_wtd DESC, p.equity_id`
+    'weekly_movers': _membership(
+        'weekly_movers',
+        qualify='pct_wtd > 0',
+        order='pct_wtd DESC, equity_id',
+    ),
 }
 
 

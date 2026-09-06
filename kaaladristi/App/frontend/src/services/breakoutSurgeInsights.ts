@@ -17,9 +17,21 @@ export interface CohortStats {
   leadingIndustry: { name: string; count: number } | null
 }
 
+/**
+ * The STRENGTH-side pace predicate: the 5-day score is positive and at or
+ * ahead of the stock's own 22-day pace.
+ *
+ * Kept as the default so every existing caller behaves exactly as before, but
+ * the pace test is now injectable — a weakness scan measures the mirror, and
+ * running this one over a decliners cohort would report "accelerating" for
+ * stocks that are doing the opposite. The per-preset predicate lives in
+ * config/scannerStudio.ts.
+ */
 export function isAccelerating(r: ScanStock): boolean {
   return (r.score_5d ?? 0) > 0 && (r.score_5d ?? 0) >= (r.score_22d ?? 0)
 }
+
+export type PacePredicate = (r: ScanStock) => boolean
 
 /**
  * NOT `r.is_vani_surge || r.is_vani_breakout` — those raw DB flags are
@@ -46,14 +58,17 @@ export function industryBreakdown(rows: ScanStock[]): { name: string; count: num
     .sort((a, b) => b.count - a.count)
 }
 
-export function computeCohortStats(rows: ScanStock[]): CohortStats {
+export function computeCohortStats(
+  rows: ScanStock[],
+  pace: PacePredicate = isAccelerating,
+): CohortStats {
   const total = rows.length
-  const pct = (n: number) => (total === 0 ? 0 : Math.round((n / total) * 100))
+  const pct = (n: number) => (total === 0 ? 0 : Math.round((n / total) * 100));
 
   return {
     brokeOutCount: total,
     highlightCount: rows.filter(isHighlight).length,
-    acceleratingPct: pct(rows.filter(isAccelerating).length),
+    acceleratingPct: pct(rows.filter(pace).length),
     realVolumePct: pct(rows.filter((r) => (r.rvol ?? 0) > 3).length),
     leadingIndustry: industryBreakdown(rows)[0] ?? null,
   }
@@ -128,9 +143,14 @@ export interface MomentumGapFacts {
  * lesson; there's no live data access at build time to calibrate a fresh
  * cutoff, so this rides on an already-shipped, already-live one instead.
  */
-export function computeMomentumGapFacts(rows: ScanStock[]): MomentumGapFacts {
+export function computeMomentumGapFacts(rows: ScanStock[], pace: PacePredicate = isAccelerating): MomentumGapFacts {
+  // NOTE for the caution side (weekly_decliners onward): `gap` here is
+  // score_5d − score_22d, so a weakness cohort produces NEGATIVE gaps and this
+  // descending sort would surface the SMALLEST divergence first. That preset
+  // needs the gap expressed as distance-from-own-pace (score_22d − score_5d)
+  // before it can reuse this. Left explicit rather than silently mis-ordering.
   const gapped = rows
-    .filter(isAccelerating)
+    .filter(pace)
     .map((r) => ({ r, gap: (r.score_5d ?? 0) - (r.score_22d ?? 0) }))
     .sort((a, b) => b.gap - a.gap)
   const examples = gapped.slice(0, 2).map(({ r, gap }) => ({

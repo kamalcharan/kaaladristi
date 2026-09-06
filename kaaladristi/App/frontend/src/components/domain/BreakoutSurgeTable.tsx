@@ -3,6 +3,7 @@ import type { ScanStock } from '@/types';
 import { ScanCardWrapper, VaniBadge, ScanSectionLabel, CardExchangeBadge } from './ScanCardShell';
 import { displaySymbol } from '@/lib/symbolUtils';
 import { getColor } from '@/config/fieldConfig';
+import type { StudioDescriptor } from '@/config/scannerStudio';
 
 // ── Formatters ────────────────────────────────────────────────────────────────
 
@@ -22,9 +23,13 @@ function fmtRvol(n: number | null | undefined): string {
   return n.toFixed(1) + '×';
 }
 
-function fmtBrkPct(n: number | null | undefined): string {
+/** Signed percentage. Replaces the old fmtBrkPct, which hardcoded a '+' —
+ *  correct for a breakout distance (positive by the scan's own gate) but wrong
+ *  for any preset whose level move can be negative. */
+function fmtSignedPct(n: number | null | undefined): string {
   if (n == null) return '—';
-  return `+${n.toFixed(2)}%`;
+  const sign = n >= 0 ? '+' : '';
+  return `${sign}${n.toFixed(2)}%`;
 }
 
 // ── Colors ────────────────────────────────────────────────────────────────────
@@ -80,7 +85,7 @@ function DataRow({ items }: { items: DataItem[] }) {
 
 // ── Individual card ───────────────────────────────────────────────────────────
 
-function BurstCard({ stock }: { stock: ScanStock }) {
+function BurstCard({ stock, descriptor }: { stock: ScanStock; descriptor: StudioDescriptor }) {
   const isVani = stock.vaniOpportunity;
   const rvol = stock.rvol ?? null;
 
@@ -88,7 +93,7 @@ function BurstCard({ stock }: { stock: ScanStock }) {
     <ScanCardWrapper
       isVani={isVani}
       symbol={stock.symbol}
-      vaniEntity={{ type: 'equity', id: stock.equity_id, symbol: displaySymbol(stock), pageContext: 'Scanner / Breakout Surge' }}
+      vaniEntity={{ type: 'equity', id: stock.equity_id, symbol: displaySymbol(stock), pageContext: `Scanner / ${descriptor.displayName}` }}
     >
       {/* Info */}
       <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' as const, gap: '5px' }}>
@@ -132,10 +137,21 @@ function BurstCard({ stock }: { stock: ScanStock }) {
           { label: 'RSI',    value: fmt2(stock.rsi_14),       color: getColor('rsi_14', stock.rsi_14) },
         ]} />
 
-        {/* Row 3 — Breakout levels + returns */}
+        {/* Row 3 — the preset's own two level fields (breakout level and
+            distance from it on Breakout Surge; the prior period's close and
+            the move since it on the movers) */}
         <DataRow items={[
-          { label: 'Brk Lvl',   value: fmt2(stock.breakout_level) },
-          { label: 'Brk%',      value: fmtBrkPct(stock.pct_from_breakout), color: getColor('pct_from_breakout', stock.pct_from_breakout) },
+          ...descriptor.cardLevels.map((lvl, i) => {
+            const v = lvl.value(stock);
+            return {
+              label: lvl.label,
+              // The first level is an absolute price, the second a percentage
+              // move — the shape is the same on every preset, only the field
+              // and the label change.
+              value: i === 0 ? fmt2(v) : fmtSignedPct(v),
+              color: lvl.colorKey ? getColor(lvl.colorKey, v ?? null) : undefined,
+            };
+          }),
           { label: '5D%',       value: fmtPct(stock.ret_5d),               color: pctColor(stock.ret_5d) },
           { label: '22D%',      value: fmtPct(stock.ret_22d),              color: pctColor(stock.ret_22d) },
         ]} />
@@ -185,7 +201,7 @@ function BurstCard({ stock }: { stock: ScanStock }) {
 
 // ── Main export ───────────────────────────────────────────────────────────────
 
-export default function BreakoutSurgeCards({ stocks }: { stocks: ScanStock[] }) {
+export default function BreakoutSurgeCards({ stocks, descriptor }: { stocks: ScanStock[]; descriptor: StudioDescriptor }) {
   const vani = stocks.filter((s) => s.vaniOpportunity);
   const rest = stocks.filter((s) => !s.vaniOpportunity);
 
@@ -196,7 +212,7 @@ export default function BreakoutSurgeCards({ stocks }: { stocks: ScanStock[] }) 
         background: 'var(--card)', border: '1px solid var(--border)',
         borderRadius: '12px', color: 'var(--text-muted)', fontSize: '14px',
       }}>
-        No stocks match Breakout Surge criteria today.
+        {`No stocks match ${descriptor.displayName} criteria today.`}
       </div>
     );
   }
@@ -213,7 +229,7 @@ export default function BreakoutSurgeCards({ stocks }: { stocks: ScanStock[] }) 
             </span>
           </ScanSectionLabel>
           <div style={{ display: 'flex', flexDirection: 'column' as const, gap: '8px', marginBottom: '24px' }}>
-            {vani.map((s) => <BurstCard key={s.equity_id} stock={s} />)}
+            {vani.map((s) => <BurstCard descriptor={descriptor} key={s.equity_id} stock={s} />)}
           </div>
         </>
       )}
@@ -224,7 +240,7 @@ export default function BreakoutSurgeCards({ stocks }: { stocks: ScanStock[] }) 
             All Results · {stocks.length} stock{stocks.length !== 1 ? 's' : ''} · sorted by RVOL ↓
           </ScanSectionLabel>
           <div style={{ display: 'flex', flexDirection: 'column' as const, gap: '8px' }}>
-            {rest.map((s) => <BurstCard key={s.equity_id} stock={s} />)}
+            {rest.map((s) => <BurstCard descriptor={descriptor} key={s.equity_id} stock={s} />)}
           </div>
         </>
       )}
