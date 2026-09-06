@@ -429,7 +429,7 @@ function useMinVaNiLoading(isPending: boolean): boolean {
  *  (and a descriptor with `rsFlip: null` drops the question entirely). */
 function intentsOrdered(d: StudioDescriptor): { key: ScannerIntentKey; question: string }[] {
   const all: { key: ScannerIntentKey; question: string | null }[] = [
-    { key: 'new_since_yesterday', question: "Show me what's new since yesterday" },
+    { key: 'new_since_yesterday', question: d.newSinceYesterday === false ? null : "Show me what's new since yesterday" },
     { key: 'sector_leading', question: "Which sectors' stocks are leading today?" },
     { key: 'momentum_gap', question: 'Stocks with a momentum gap' },
     { key: 'rs_flip', question: d.rsFlip?.question ?? null },
@@ -492,7 +492,7 @@ function ScannerVaNiCard({
     leading_industry: true,
     why_flagged: true,
     sector_leading: sectorLeadingReady,
-    new_since_yesterday: !!newSinceYesterdayFacts,
+    new_since_yesterday: !!newSinceYesterdayFacts && descriptor.newSinceYesterday !== false,
     rs_flip: !!rsFlipFacts && descriptor.rsFlip != null,
     is_unusual: !!isUnusualFacts,
   }

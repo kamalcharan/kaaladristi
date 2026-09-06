@@ -41,6 +41,8 @@ async function run() {
       return json(wantsObject ? row : [row]);
     }
     if (p.includes('/db/kd_scan_presets')) return json(PRESETS);
+    // Direct-query presets (Golden Line, movers fallback) start from the trading calendar.
+    if (p.includes('/db/km_trading_calendar')) return json(['2026-09-04','2026-09-03','2026-09-02','2026-09-01','2026-08-29'].map(d => ({ trade_date: d, exchange: 'NSE', is_trading_day: true })));
     if (p.includes('/db/km_scan_results')) {
       const pid = (url.searchParams.get('preset_id') || 'eq.power_buy').replace(/^eq\./, '');
       if (url.searchParams.get('select')?.includes('preset_id,exchange')) {

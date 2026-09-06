@@ -11,11 +11,13 @@ assumed away in the plan.
 
 ## 0. Next session starts here
 
-**All five targets are done and on `main`** — `weekly_movers`,
-`monthly_movers`, `weekly_decliners`, `monthly_decliners`, `breakdown_watch`,
-plus the Studio refactor they all ride on. `breakout_surge` remains the
-control. There is no scanner 6: `flower_pot_burst` and the two Golden Line
-presets are out of scope by §9.1.
+**All five targets plus the Golden Line pair are done and on `main`** —
+`weekly_movers`, `monthly_movers`, `weekly_decliners`, `monthly_decliners`,
+`breakdown_watch`, and (owner reversed §9.1 on 2026-09-06) `gl_breakout`,
+`gl_retest` — plus the Studio refactor they all ride on. `breakout_surge`
+remains the control. Eight of nine active `price_action` presets carry the
+Studio; the ninth, `flower_pot_burst`, stays excluded (it has no `vani_rule`
+at all, so "why flagged" has nothing to compute until that is decided).
 
 **What is left is not code.** Two owner-run items, in this order:
 
@@ -56,7 +58,7 @@ cd App/backend
 python scripts/compute_scan_membership_snapshot.py --from 2026-08-20
 ```
 
-This backfills all five new presets AND re-writes
+This backfills all seven new presets AND re-writes
 `breakout_surge`'s existing 12 days under the corrected membership rule.
 **Read §12's bug note before assuming any snapshot history is comparable** —
 history written before 2026-09-05 used a wider pool than the matview actually
@@ -811,4 +813,52 @@ the island on a phone when the backend is down — not a scanner component.
 `useVaNiIntents` and `buildWhyTags` remain unused exports. The phone default
 is still table view with a sticky symbol column; cards may be the better
 phone default, but that is a product call, not a layout one.
+
+### 2026-09-06 — Golden Line pair (`gl_breakout`, `gl_retest`), owner reversed §9.1
+
+A third `vani_rule` (`gl_event_any`) and therefore a third highlight builder,
+`computeGlExplainFacts`, plus its own intent `scanner.why_highlighted_gl`.
+Everything else is the strength constants unchanged. Three things made this
+pair unlike the other seven, all found by reading rather than assuming:
+
+**No matview arm.** `km_scan_results` holds no rows for either preset; they
+are served by `fetchGlEvents` (scanEngine.ts). So the membership function
+mirrors the FETCHER, in its own `_GL_POOL`: NSE-only, ISIN-deduped, **no
+close ≥ 50 and no `ema_20` gate** (the fetcher applies neither — adding the
+shared pool's gates "for consistency" would snapshot a narrower set than the
+UI shows), ordered by the scan's own rank (distance above the line for a
+breakout, sessions held for a retest), cap 200. Generated SQL run live on
+2026-09-04: 17 breakouts, 2 retests, 0 ISIN duplicates.
+
+**Every row is the highlight.** The scan filters on the event, and
+`fetchGlEvents` sets `vaniOpportunity: true` on all rows. So "why did VaNi
+flag these" is really "what is this event", and the builder reports the
+event's own measurements — distance above the line, sessions held, RVOL —
+with the rule stated in words in the prompt. The "VaNi Highlights" tile reads
+N of N, which is honest, if unsurprising.
+
+**The dots disagree with the event after the fact — a real pipeline finding,
+not fixed here.** `gl_events` reads `dot_svd OR dot_sbd` on the bar when it
+stamps the event, yet by the time the scan reads the row **19% of event bars
+carry neither dot** (91 of 479 over 2026-08-07 → 09-04; 10 of 34 breakouts
+on 09-04 alone). The dots are being rewritten after `gl_events` runs. Two
+consequences: the builder deliberately cites **no per-stock volume
+signature** (the prompt forbids the model attributing one), and the owner
+should look at why `compute_dots` re-runs alter already-stamped bars — the
+`dots` → `gl_events` ordering in the orchestrator is right, so it is a later
+run changing history.
+
+**`new_since_yesterday` is hidden for `gl_breakout`, by a new descriptor
+switch.** A BREAKOUT requires the prior close at or below the line, so no
+stock can print one on consecutive sessions: every row is "new" every day,
+structurally. That is the "true but meaningless" answer
+`computeNewSinceYesterdayFacts` already refuses on day one, so the card is
+dropped for this preset (`newSinceYesterday: false`). `gl_retest` keeps it — a
+retest can repeat. **Owner call**: §9.3 asked for full parity; this is a
+deliberate, one-line, reversible exception with the reason on the field.
+
+**Verified.** typecheck + build clean; both Studios hold a 390px layout
+viewport (table and cards); the prompt path exercised for BREAKOUT, RETEST
+and the empty cohort. Both presets were already on the Discovery board
+(`vani_side = strength`, cap 12) — migration 201 does not touch them.
 

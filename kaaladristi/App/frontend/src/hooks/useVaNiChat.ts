@@ -80,6 +80,17 @@ export interface VaNiAskRequest {
     flow_mix: Array<{ label: string; count: number }>;
     examples: Array<{ symbol: string; rvol: number | null; magic_rs: number | null; zone: string; flow: string }>;
   };
+  // scanner.why_highlighted_gl only — the Golden Line pair (vani_rule
+  // gl_event_any, computeGlExplainFacts). Its own field for the same reason
+  // weakness_facts has one: the server sanitizes against a fixed key set.
+  gl_facts?: {
+    count: number;
+    event: 'BREAKOUT' | 'RETEST';
+    avg_pct_from_gl: number | null;
+    avg_days_above: number | null;
+    avg_rvol: number | null;
+    examples: Array<{ symbol: string; pct_from_gl: number | null; days_above: number | null; rvol: number | null }>;
+  };
   // scanner.momentum_gap only — computeMomentumGapFacts(), breakoutSurgeInsights.ts.
   momentum_gap_facts?: {
     count: number;

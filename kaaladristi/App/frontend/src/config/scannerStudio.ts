@@ -33,7 +33,7 @@ import type { ScanVariant } from '@/utils/downloadXls'
 import type { VaNiAskRequest } from '@/hooks/useVaNiChat'
 import {
   isAccelerating, isDecelerating, gapAhead, gapBehind, type GapFn,
-  computeHighlightExplainFacts, computeWeaknessExplainFacts,
+  computeHighlightExplainFacts, computeWeaknessExplainFacts, computeGlExplainFacts, type GlEvent,
 } from '@/services/breakoutSurgeInsights'
 
 export type StudioSide = 'strength' | 'caution'
@@ -94,6 +94,17 @@ export interface StudioDescriptor {
     intentId: string
     payload: (rows: ScanStock[]) => Partial<VaNiAskRequest>
   }
+
+  /**
+   * Set false to drop the `new_since_yesterday` card for a preset where the
+   * answer is structurally constant. A Golden Line BREAKOUT requires the
+   * prior close to be at or below the line, so no stock can break out on two
+   * consecutive sessions: every row is "new since yesterday", every day. A
+   * card that always says "all N are new" is the "true but meaningless"
+   * answer computeNewSinceYesterdayFacts already refuses to give on day one.
+   * Omit (default true) everywhere else.
+   */
+  newSinceYesterday?: boolean
 
   /**
    * Override for the `leading_industry` question. The default reads "Which
@@ -203,6 +214,37 @@ const CAUTION_HIGHLIGHT = {
     }
   },
 }
+
+// ── Golden Line pair ───────────────────────────────────────────────────────
+// A third vani_rule, `gl_event_any`, and a third highlight builder to match.
+// Every row of these scans IS the highlight (the scan filters on the event),
+// so the builder describes the event's own measurements — distance above the
+// line, sessions held, RVOL — rather than a subset. See computeGlExplainFacts
+// for why today's SVD/SBD dots are deliberately NOT cited.
+const glHighlight = (event: GlEvent) => ({
+  intentId: 'scanner.why_highlighted_gl',
+  payload: (rows: ScanStock[]): Partial<VaNiAskRequest> => {
+    const f = computeGlExplainFacts(rows, event)
+    return {
+      gl_facts: {
+        count: f.count,
+        event: f.event,
+        avg_pct_from_gl: f.avgPctFromGl,
+        avg_days_above: f.avgDaysAbove,
+        avg_rvol: f.avgRvol,
+        examples: f.examples.map((e) => ({
+          symbol: e.symbol, pct_from_gl: e.pctFromGl, days_above: e.daysAbove, rvol: e.rvol,
+        })),
+      },
+    }
+  },
+})
+
+/** The Golden Line is sma_150; `pct_from_gl` is the close's distance above it. */
+const GL_CARD_LEVELS: [StudioLevel, StudioLevel] = [
+  { label: 'GL', value: (r) => r.sma_150 },
+  { label: 'vs GL', value: (r) => r.pct_from_gl, colorKey: 'pct_from_gl' },
+]
 
 /** Shared by all three caution presets — the crossing that matters there is
  *  into the bear side, worded in ZONE_LABELS' own terms. */
@@ -333,6 +375,40 @@ export const STUDIO_DESCRIPTORS: Record<string, StudioDescriptor> = {
     ],
     // kd_scan_presets calls this one "Breakdown Surge"; the id is the outlier.
     displayName: 'Breakdown Surge',
+  },
+
+  gl_breakout: {
+    presetId: 'gl_breakout',
+    side: 'strength',
+    // The gate: prior close at or below the 150-day line, this close above it.
+    countLabel: 'Reclaimed the Golden Line',
+    ...STRENGTH_PACE,
+    rsiQuick: STRENGTH_RSI_QUICK,
+    highlight: glHighlight('BREAKOUT'),
+    rsFlip: { question: 'Which stocks just turned RS-green?', into: 'bullish' },
+    // Structurally 100% every day — see the field's doc.
+    newSinceYesterday: false,
+    exportName: 'Golden_Line_Breakout',
+    xlsVariant: 'default',
+    cardLevels: GL_CARD_LEVELS,
+    displayName: 'Golden Line Breakout',
+  },
+
+  gl_retest: {
+    presetId: 'gl_retest',
+    side: 'strength',
+    // The gate: touched the line intraday, closed above it, after ≥ 10
+    // sessions already above — a retest of an established reclaim.
+    countLabel: 'Held the Golden Line',
+    ...STRENGTH_PACE,
+    rsiQuick: STRENGTH_RSI_QUICK,
+    highlight: glHighlight('RETEST'),
+    rsFlip: { question: 'Which stocks just turned RS-green?', into: 'bullish' },
+    // A retest CAN repeat on consecutive sessions, so the card is real here.
+    exportName: 'Golden_Line_Retest',
+    xlsVariant: 'default',
+    cardLevels: GL_CARD_LEVELS,
+    displayName: 'Golden Line Retest',
   },
 }
 

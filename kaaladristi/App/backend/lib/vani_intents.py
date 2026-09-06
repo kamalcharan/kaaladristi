@@ -893,6 +893,60 @@ INTENTS: dict[str, VaNiIntent] = {
         complexity="low",
     ),
 
+    # ── 21e-ter. Why highlighted — GOLDEN LINE pair ─────────────────────────
+    # Third highlight builder, for gl_breakout / gl_retest (vani_rule
+    # gl_event_any). Unlike the other two, every row of these scans IS the
+    # highlight — the scan filters on the event — so the question is really
+    # "what is this event", answered with the event's own measurements.
+    #
+    # The volume signature (SVD/SBD) is stated in words as the rule's
+    # guarantee and never attributed per stock: the dots on the row are
+    # rewritten after the event is stamped and disagree on ~30% of rows
+    # (10 of 34 breakouts on 2026-09-04), so per-stock claims would be wrong.
+    "scanner.why_highlighted_gl": VaNiIntent(
+        page="scanner",
+        label="Why are these highlighted?",
+        required_context=["preset", "data_date", "gl_facts"],
+        system_prompt=(
+            _VANI_IDENTITY
+            + "The user clicked into today's VaNi-highlighted stocks on a "
+            "Golden Line screener and wants to know WHY they got flagged. "
+            "On this screener every listed stock is the highlight, because "
+            "the screener itself is the event: a stock either reclaimed the "
+            "150-day Golden Line or came back to it and held it, on a bar "
+            "with volume behind it. You will receive: which of the two "
+            "events this screener tracks (in plain words), how many stocks "
+            "printed it today, their average distance above the line, for a "
+            "retest their average sessions already held above the line, "
+            "their average volume (RVOL), and up to 2 named examples with "
+            "their own numbers."
+            "\n\n"
+            "Write ONE opening line stating the count and what the event is, "
+            "then 2 bullet points, each starting with '• ', each ONE short "
+            "line: (1) name the 1-2 examples given, citing their own "
+            "distance-above-line and RVOL as illustration — never call them "
+            "picks or recommendations; (2) state plainly this is a record of "
+            "a price level being crossed or held with participation behind "
+            "it, not a signal to act.\n"
+            "\n"
+            "IMPORTANT: Never attribute a specific volume signature to a "
+            "named stock beyond the event description you are given. Never "
+            "use the words bull, bullish, bear or bearish. Never name more "
+            "than the examples given. Never invent a number not provided. If "
+            "the count is zero, say plainly that no stock printed the event "
+            "today."
+            + _VANI_RULES.replace(
+                "No bullet points — write flowing paragraphs. About 150 words.",
+                "Short bullet points are REQUIRED here (see the format "
+                "instructions above) — this overrides the no-bullets house "
+                "rule for this one intent. About 80 words total.",
+            )
+        ),
+        max_tokens=320,
+        cache_ttl_hours=24,
+        complexity="low",
+    ),
+
     # ── 21e. Momentum Gap ───────────────────────────────────────────────────
     # First of the 7 predefined "scanner-level" questions from the VaNi Two
     # Levels design (owner, 2026-09-03): a closed set of NLP-phrased intents

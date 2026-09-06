@@ -225,6 +225,70 @@ export function computeWeaknessExplainFacts(rows: ScanStock[]): WeaknessExplainF
   }
 }
 
+export type GlEvent = 'BREAKOUT' | 'RETEST'
+
+export interface GlExplainFacts {
+  count: number
+  event: GlEvent
+  /** Average close vs the Golden Line (sma_150), as a % above it. */
+  avgPctFromGl: number | null
+  /** Average sessions closed above the line before the bar. Meaningful on a
+   *  RETEST (the rule requires ≥ 10 prior sessions); on a BREAKOUT it is the
+   *  crossing bar itself and reads ~1. */
+  avgDaysAbove: number | null
+  avgRvol: number | null
+  examples: { symbol: string; pctFromGl: number | null; daysAbove: number | null; rvol: number | null }[]
+}
+
+/**
+ * The third highlight-explain builder, for the two Golden Line presets whose
+ * vani_rule is `gl_event_any`.
+ *
+ * What the rule is (backfill_gl_events.py, owner-specified):
+ *
+ *   BREAKOUT  prior close ≤ prior GL, this close > GL, on an SVD/SBD bar.
+ *   RETEST    low ≤ GL while close > GL (touched and held), on an SVD/SBD
+ *             bar, after ≥ 10 PRIOR sessions closed above the line.
+ *
+ * Two things follow that make this builder unlike the other two.
+ *
+ * Every row is a highlight. fetchGlEvents filters on `gl_event = <event>` and
+ * sets vaniOpportunity true for all — the scan IS the highlight rule. So the
+ * question "why did VaNi flag these" is really "what is this event", and the
+ * facts describe the event's own measurements rather than pick a subset.
+ *
+ * No volume-signature mix, deliberately. The rule reads dot_svd/dot_sbd on
+ * the bar when the event is stamped, but the dots are rewritten afterwards:
+ * measured 2026-09-04, 10 of 34 BREAKOUT rows carried NEITHER dot by the
+ * time the scan read them. Citing today's dots as "the signature behind the
+ * move" would be wrong for a third of the cohort, so the prompt states the
+ * rule's guarantee in words and the numbers here are only ones read off the
+ * row as it stands: distance above the line, sessions held, RVOL.
+ *
+ * Examples follow the scan's own ranking — furthest above the line for a
+ * breakout, longest hold for a retest — so the named stocks are the ones at
+ * the top of the table the user is looking at.
+ */
+export function computeGlExplainFacts(rows: ScanStock[], event: GlEvent): GlExplainFacts {
+  const hl = rows.filter(isHighlight)
+  const ranked = [...hl].sort((a, b) => event === 'BREAKOUT'
+    ? (b.pct_from_gl ?? -Infinity) - (a.pct_from_gl ?? -Infinity)
+    : (b.gl_days_above ?? 0) - (a.gl_days_above ?? 0))
+  return {
+    count: hl.length,
+    event,
+    avgPctFromGl: _avg(hl.map((r) => r.pct_from_gl)),
+    avgDaysAbove: _avg(hl.map((r) => r.gl_days_above)),
+    avgRvol: _avg(hl.map((r) => r.rvol)),
+    examples: ranked.slice(0, 2).map((r) => ({
+      symbol: displaySymbol(r),
+      pctFromGl: r.pct_from_gl ?? null,
+      daysAbove: r.gl_days_above ?? null,
+      rvol: r.rvol ?? null,
+    })),
+  }
+}
+
 export interface MomentumGapFacts {
   count: number
   avgGap: number | null

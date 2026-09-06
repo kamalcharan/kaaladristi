@@ -8,11 +8,13 @@ const NAMES = [['BODALCHEM','Bodal Chemicals Limited'],['PVP','PVP Ventures Limi
 export function rowsFor(presetId) {
   return NAMES.map(([sym, name], i) => ({
     ...TEMPLATE, preset_id: presetId, rank: i + 1, equity_id: 30000 + i,
-    symbol: sym, company_name: name, vani_flag: i % 3 === 0,
+    // Distinct ISINs: the direct fetchers (Golden Line, movers fallback) dedupe by ISIN,
+    // so clones sharing the template's collapse to one row.
+    symbol: sym, company_name: name, vani_flag: i % 3 === 0, isin: `INE${String(i).padStart(6, '0')}01`,
     close: +(TEMPLATE.close * (1 + i * 0.07)).toFixed(2), pct_chng: +(3.2 - i * 0.4).toFixed(2),
     score_5d: +(484 - i * 31).toFixed(1), rvol: +(3.26 - i * 0.2).toFixed(2), rsi_14: +(95 - i * 3).toFixed(1),
     magic_rs_zone: ['Strong Bull','Mild Bull','Neutral Bull','Neutral Bear','Mild Bear','Strong Bear'][i % 6],
-    km_equity_symbols: { ...TEMPLATE.km_equity_symbols, id: 30000 + i, symbol: sym, company_name: name },
+    km_equity_symbols: { ...TEMPLATE.km_equity_symbols, id: 30000 + i, symbol: sym, company_name: name, isin: `INE${String(i).padStart(6, '0')}01` },
   }));
 }
 

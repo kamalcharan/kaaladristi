@@ -1261,6 +1261,7 @@ def assemble_scanner_context(
     top_accelerators: list | None = None,
     highlight_facts: dict | None = None,
     weakness_facts: dict | None = None,
+    gl_facts: dict | None = None,
     momentum_gap_facts: dict | None = None,
     leading_industry_facts: dict | None = None,
     sector_leading_facts: dict | None = None,
@@ -1296,6 +1297,13 @@ def assemble_scanner_context(
     does not gate on it), and instead the zone/flow composition it does gate
     on, carried as display labels. Computed client-side by
     computeWeaknessExplainFacts() (breakoutSurgeInsights.ts).
+
+    gl_facts (scanner.why_highlighted_gl only): the Golden Line pair, where
+    every row IS the highlight (the scan filters on the event). Count, event
+    type, average distance above the line, average sessions held above it,
+    average RVOL, up to 2 examples — computed client-side by
+    computeGlExplainFacts(). No volume-signature mix, on purpose: the dots
+    are rewritten after the event is stamped and disagree on ~30% of rows.
 
     momentum_gap_facts (scanner.momentum_gap only): count of stocks whose
     5-day score outpaces their 22-day score (the same `isAccelerating()`
@@ -1365,6 +1373,7 @@ def assemble_scanner_context(
         ][:5],
         'highlight_facts': _clean_highlight_facts(highlight_facts),
         'weakness_facts': _clean_weakness_facts(weakness_facts),
+        'gl_facts': _clean_gl_facts(gl_facts),
         'momentum_gap_facts': _clean_momentum_gap_facts(momentum_gap_facts),
         'leading_industry_facts': _clean_leading_industry_facts(leading_industry_facts),
         'sector_leading_facts': _clean_sector_leading_facts(sector_leading_facts),
@@ -1541,6 +1550,33 @@ def _clean_weakness_facts(facts: dict | None) -> dict | None:
     }
 
 
+def _clean_gl_facts(facts: dict | None) -> dict | None:
+    """Sanitize the client-computed Golden Line explain payload."""
+    if not isinstance(facts, dict):
+        return None
+    event = facts.get('event')
+    if event not in ('BREAKOUT', 'RETEST'):
+        return None
+    examples = []
+    for e in (facts.get('examples') or [])[:2]:
+        if not isinstance(e, dict) or not e.get('symbol'):
+            continue
+        examples.append({
+            'symbol': str(e['symbol'])[:40],
+            'pct_from_gl': _safe_float(e.get('pct_from_gl')),
+            'days_above': _safe_float(e.get('days_above')),
+            'rvol': _safe_float(e.get('rvol')),
+        })
+    return {
+        'count': int(facts.get('count') or 0),
+        'event': event,
+        'avg_pct_from_gl': _safe_float(facts.get('avg_pct_from_gl')),
+        'avg_days_above': _safe_float(facts.get('avg_days_above')),
+        'avg_rvol': _safe_float(facts.get('avg_rvol')),
+        'examples': examples,
+    }
+
+
 def build_scanner_cache_context(intent_id: str, ctx: dict) -> dict:
     """Bucketed values for km_vani_cache context hashing.
 
@@ -1590,6 +1626,18 @@ def build_scanner_cache_context(intent_id: str, ctx: dict) -> dict:
             'count': f.get('count', 0),
             'avg_rvol_bucket': round(f['avg_rvol']) if f.get('avg_rvol') is not None else None,
             'avg_magic_rs_bucket': round(f['avg_magic_rs']) if f.get('avg_magic_rs') is not None else None,
+            'examples': [e['symbol'] for e in (f.get('examples') or [])],
+        }
+    if intent_id == 'scanner.why_highlighted_gl':
+        f = ctx.get('gl_facts') or {}
+        return {
+            'v': 1,
+            'preset_id': ctx['preset_id'],
+            'date': ctx['data_date'],
+            'event': f.get('event'),
+            'count': f.get('count', 0),
+            'avg_pct_bucket': round(f['avg_pct_from_gl']) if f.get('avg_pct_from_gl') is not None else None,
+            'avg_days_bucket': round(f['avg_days_above']) if f.get('avg_days_above') is not None else None,
             'examples': [e['symbol'] for e in (f.get('examples') or [])],
         }
     if intent_id == 'scanner.your_view':
@@ -1853,6 +1901,60 @@ def format_scanner_user_message(intent_id: str, ctx: dict) -> str:
             f"labels exactly as given above; never substitute "
             f"bull/bullish/bear/bearish for them. Never name a stock not "
             f"listed above, and never invent a number not provided."
+        )
+
+    if intent_id == 'scanner.why_highlighted_gl':
+        f = ctx.get('gl_facts') or {}
+        count = f.get('count', 0)
+        event = f.get('event') or 'BREAKOUT'
+        rule = (
+            "closed back above the 150-day Golden Line from at or below it, on a "
+            "volume-drive or accumulation bar"
+            if event == 'BREAKOUT' else
+            "touched the 150-day Golden Line intraday and closed above it, on a "
+            "volume-drive or accumulation bar, after at least ten prior sessions "
+            "already above the line"
+        )
+        if not count:
+            return (
+                f"Screener: {p['name']}\n"
+                f"Golden Line {event.lower()}s today: 0\n"
+                f"\nInstructions: In ONE line, say plainly that no stock printed "
+                f"this event today — no bullets needed."
+            )
+        avg_pct = f.get('avg_pct_from_gl')
+        avg_days = f.get('avg_days_above')
+        avg_rvol = f.get('avg_rvol')
+        examples = f.get('examples') or []
+        ex_lines = '\n'.join(
+            f"  {e['symbol']}: "
+            + (f"{e['pct_from_gl']:.1f}% above the line" if e.get('pct_from_gl') is not None else "distance not available")
+            + (f", held {e['days_above']:.0f} sessions above it" if event == 'RETEST' and e.get('days_above') is not None else '')
+            + (f", RVOL {e['rvol']:.1f}x normal" if e.get('rvol') is not None else '')
+            for e in examples
+        ) or '  (no example detail available)'
+        return (
+            f"Screener: {p['name']}\n"
+            f"What every stock here did today: {rule}.\n"
+            f"Golden Line {event.lower()}s today: {count} stocks (every row on this "
+            f"screener is one — the event IS the highlight)\n"
+            f"Average distance above the line: "
+            + (f"{avg_pct:.1f}%\n" if avg_pct is not None else "not available\n")
+            + (f"Average sessions held above the line before the touch: {avg_days:.0f}\n"
+               if event == 'RETEST' and avg_days is not None else '')
+            + f"Average RVOL: "
+            + (f"{avg_rvol:.1f}x normal\n" if avg_rvol is not None else "not available\n")
+            + f"\n--- Named examples (use ONLY these, at most these 2) ---\n"
+            f"{ex_lines}\n"
+            f"\nInstructions: Write ONE opening line stating the count and what the "
+            f"event is, in the words given above. Then 2 bullet points, each "
+            f"starting with '• ', each ONE short line: (1) name the example(s) "
+            f"above with their own numbers as illustration — never call them picks "
+            f"or recommendations; (2) state plainly this is a record of a price "
+            f"level being crossed or held with participation behind it, not a "
+            f"signal to act. Do not describe a volume signature for any named stock "
+            f"beyond the words given above. Never name a stock not listed, and "
+            f"never invent a number not provided."
         )
 
     if intent_id == 'scanner.momentum_gap':

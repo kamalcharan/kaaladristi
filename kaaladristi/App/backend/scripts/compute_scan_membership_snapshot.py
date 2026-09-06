@@ -67,7 +67,8 @@ def get_conn():
 
 SNAPSHOT_PRESET_IDS = ['breakout_surge', 'weekly_movers', 'monthly_movers',
                        'weekly_decliners', 'monthly_decliners',
-                       'breakdown_watch']
+                       'breakdown_watch',
+                       'gl_breakout', 'gl_retest']
 
 # Display cap per preset (kd_scan_presets.limit / SCAN_PRESETS in
 # scanEngine.ts) — matches each arm's `WHERE rnk <= N` in migration 197, so a
@@ -80,6 +81,8 @@ DISPLAY_CAP = {
     'weekly_decliners': 500,
     'monthly_decliners': 500,
     'breakdown_watch': 500,
+    'gl_breakout': 200,
+    'gl_retest': 200,
 }
 
 # ---------------------------------------------------------------------------
@@ -131,6 +134,61 @@ _PA_POOL = """
     ORDER BY {order}
     LIMIT %(cap)s
 """
+
+
+# ---------------------------------------------------------------------------
+# The Golden Line pair has NO matview arm — km_scan_results holds no rows for
+# either preset. They are served by fetchGlEvents (scanEngine.ts), so THAT is
+# what this mirrors, and it differs from the price-action pool in two ways
+# that must not be "corrected" for consistency:
+#
+#   no close >= 50 and no ema_20 gate -- the fetcher applies neither; the
+#       event flag is the whole filter. Adding the shared pool's gates here
+#       would snapshot a narrower set than the UI shows, the exact under-
+#       reporting this file's header describes.
+#   ordering is the scan's own -- breakouts by distance above the line
+#       (pct_from_gl DESC), retests by sessions held (gl_days_above DESC).
+#
+# NSE-only and ISIN dedup, NSE preferred, match the fetcher. Cap 200 is
+# kd_scan_presets.result_limit for both. Measured 2026-09-04: 17 breakouts,
+# 2 retests, 0 ISIN duplicates -- small cohorts, and a BREAKOUT cannot repeat
+# on consecutive sessions (its prior close must be at or below the line), so
+# gl_breakout's day-over-day diff is structurally "all new"; the Studio hides
+# that card for it.
+# ---------------------------------------------------------------------------
+_GL_POOL = """
+    WITH pool AS (
+        SELECT e.equity_id, e.magic_rs_zone, e.pct_from_gl, e.gl_days_above,
+               row_number() OVER (
+                   PARTITION BY COALESCE(s.isin, 'EQ:' || e.equity_id::text)
+                   ORDER BY (s.exchange = 'NSE') DESC, e.equity_id
+               ) AS isin_rnk
+        FROM km_equity_eod e
+        JOIN km_equity_symbols s ON s.id = e.equity_id
+        WHERE e.trade_date = %(d)s
+          AND s.exchange = 'NSE'
+          AND e.gl_event = %(event)s
+    )
+    SELECT equity_id, magic_rs_zone
+    FROM pool
+    WHERE isin_rnk = 1
+    ORDER BY {order}
+    LIMIT %(cap)s
+"""
+
+
+def _membership_gl(preset_id: str, event: str, order: str):
+    """Membership for one Golden Line preset — mirrors fetchGlEvents, not a
+    matview arm (there is none). See the note above _GL_POOL."""
+    sql = _GL_POOL.format(order=order)
+
+    def _fn(conn, trade_date) -> list[tuple[int, str | None]]:
+        with conn.cursor() as cur:
+            cur.execute(sql, {'d': str(trade_date), 'event': event, 'cap': DISPLAY_CAP[preset_id]})
+            return cur.fetchall()
+
+    _fn.__name__ = f'_membership_{preset_id}'
+    return _fn
 
 
 def _membership(preset_id: str, qualify: str, order: str):
@@ -210,6 +268,16 @@ PRESET_MEMBERSHIP_FNS = {
         'breakdown_watch',
         qualify='pct_chng < 0 AND pct_from_breakdown < 0',
         order='pct_from_breakdown ASC, equity_id',
+    ),
+    # fetchGlEvents: gl_event = 'BREAKOUT', sorted pct_from_gl DESC
+    'gl_breakout': _membership_gl(
+        'gl_breakout', event='BREAKOUT',
+        order='pct_from_gl DESC NULLS LAST, equity_id',
+    ),
+    # fetchGlEvents: gl_event = 'RETEST', sorted gl_days_above DESC
+    'gl_retest': _membership_gl(
+        'gl_retest', event='RETEST',
+        order='gl_days_above DESC NULLS LAST, equity_id',
     ),
 }
 
