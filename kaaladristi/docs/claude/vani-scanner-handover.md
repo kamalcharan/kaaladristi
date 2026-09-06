@@ -9,6 +9,43 @@ assumed away in the plan.
 
 ---
 
+## 0. Next session starts here
+
+**Done and on `main`:** the refactor (§12) and scanner 1, `weekly_movers`.
+
+**Next:** scanner 2, `monthly_movers`. It should be two edits — a descriptor
+entry in `App/frontend/src/config/scannerStudio.ts` (copy `weekly_movers`,
+swap `pct_wtd` → `pct_mtd`, `prev_week_close` → `prev_month_close`, and the
+labels), and one entry in `PRESET_MEMBERSHIP_FNS` in
+`App/backend/scripts/compute_scan_membership_snapshot.py`
+(`qualify='pct_mtd > 0'`, `order='pct_mtd DESC, equity_id'`, cap 500, copied
+from that arm in migration 197). No new fact builder and no new prompt wording:
+it carries `breakout_surge`'s exact `vani_rule`.
+
+Then §10's order: `weekly_decliners` (writes the weakness-side builder that
+serves all three caution scans), `monthly_decliners`, `breakdown_watch`.
+
+**Owner action still outstanding** — nothing downstream is blocked on it, but
+three intent cards stay hidden until it runs:
+
+```
+cd App/backend
+python scripts/compute_scan_membership_snapshot.py --from 2026-08-20
+```
+
+This backfills `weekly_movers` AND re-writes `breakout_surge`'s existing 12 days
+under the corrected membership rule. **Read §12's bug note before assuming any
+snapshot history is comparable** — history written before 2026-09-05 used a
+wider pool than the matview actually showed.
+
+Two other owner-run items are carried from earlier work and are unrelated to
+this task, but a session touching the pipeline will meet them:
+`km_migration_199_user_bookmarks_grants.sql`, and
+`backfill_rolling_metrics_fast.py` (which §5 needs before `breakdown_watch`,
+and which the Big Money work also wants).
+
+---
+
 ## 1. What "VaNi on a scanner" currently means
 
 There are **two levels**, from the owner's "VaNi Two Levels" design
