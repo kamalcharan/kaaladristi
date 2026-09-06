@@ -15,7 +15,8 @@ import AtmosphericBadge from '@/components/domain/AtmosphericBadge';
 import { ScanFilterBar, applyFilters, DEFAULT_FILTERS, FPB_DEFAULT_FILTERS, JOURNEY_DEFAULT_FILTERS, type ScanFilters } from '@/components/domain/ScanFilterBar';
 import ScanVaNiPublisher from '@/components/domain/ScanVaNiPublisher';
 import ScanStalenessBanner from '@/components/domain/ScanStalenessBanner';
-import BreakoutSurgeStudio from '@/views/BreakoutSurgeStudio';
+import ScannerStudio from '@/views/ScannerStudio';
+import { STUDIO_PRESET_IDS } from '@/config/scannerStudio';
 import { navName } from '@/lib/symbolUtils';
 import { getSetupAdapter } from '@/services/thesis/setupAdapter';
 import '@/services/thesis/adapters'; // registers SETUP_ADAPTERS entries
@@ -1295,18 +1296,22 @@ function ScannerResults({ presetId }: { presetId: string }) {
     );
   }
 
-  // Breakout Surge — its own studio page (stat tiles, VaNi card, filters,
+  // Studio presets — their own page (stat tiles, VaNi card, filters,
   // table/cards), delegated to entirely rather than built inline here (same
   // pattern as Stage 2 / Conviction Flow / Flower Pot Burst below: this
   // component's own useScan/filters/sort state above goes unused for this
   // branch, same as it does for those three). Only the category tab strip
-  // is reused from `header` — BreakoutSurgeStudio renders its own
+  // is reused from `header` — ScannerStudio renders its own
   // title/description, so the rest of `header` would duplicate it.
-  if (presetId === 'breakout_surge') {
+  //
+  // Membership of the set is decided by config/scannerStudio.ts having a
+  // descriptor for the preset, so adding the next scanner is one entry there
+  // rather than another branch here.
+  if (STUDIO_PRESET_IDS.has(presetId)) {
     return (
       <div style={{ paddingBottom: '100px' }}>
         {categoryTabStrip}
-        <BreakoutSurgeStudio />
+        <ScannerStudio presetId={presetId} />
       </div>
     );
   }

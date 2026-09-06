@@ -20,6 +20,7 @@ import ScanVaNiPublisher from '@/components/domain/ScanVaNiPublisher'
 import VaNiFeedback from '@/components/domain/VaNi/VaNiFeedback'
 import { useVaNiAsk } from '@/hooks/useVaNiChat'
 import { useIndustryLeadershipMap } from '@/hooks/useIndustryRotation'
+import { getStudioDescriptor, type StudioDescriptor } from '@/config/scannerStudio'
 import type { ScanStock, ScanDefinition } from '@/types'
 
 type QuickFilterKey = 'ob' | 'watch'
@@ -75,7 +76,19 @@ type ScannerIntentKey =
  * Highlights read 0 instead of the real ~15. Fixed to read
  * `r.vaniOpportunity`, the field that's actually populated.
  */
-export default function BreakoutSurgeStudio() {
+/**
+ * Renamed from BreakoutSurgeStudio (2026-09-05) and parameterised by preset.
+ * The shell was already generic — the title reads `meta.name` from the DB, and
+ * ScanTable / ScanFilterBar / useScanMembershipHistory all took a presetId
+ * already. What was hardcoded was the preset ID itself (eight places) and the
+ * handful of strings that encode what the scan MEANS. Those now come from
+ * config/scannerStudio.ts's descriptor.
+ *
+ * `breakout_surge` is the control for this refactor: it must render
+ * identically to before, which is what makes the change verifiable.
+ */
+export default function ScannerStudio({ presetId }: { presetId: string }) {
+  const descriptor = getStudioDescriptor(presetId)
   const navigate = useNavigate()
   const [exchangeFilter, setExchangeFilter] = useState<ExchangeFilter>('combined')
   const [viewMode, setViewMode] = useState<'table' | 'cards'>('table')
@@ -94,13 +107,13 @@ export default function BreakoutSurgeStudio() {
   const resultsRef = useRef<HTMLDivElement>(null)
   const scrollToResults = () => resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 
-  const { data: rows, isLoading, error } = useScan('breakout_surge', exchangeFilter)
+  const { data: rows, isLoading, error } = useScan(presetId, exchangeFilter)
   const { bookmarkedIds, load: loadBookmarks } = useBookmarkStore()
   useEffect(() => { loadBookmarks() }, [loadBookmarks])
 
-  const meta = getPresetMeta('breakout_surge')
+  const meta = getPresetMeta(presetId)
   const all = rows ?? []
-  const stats = computeCohortStats(all)
+  const stats = computeCohortStats(all, descriptor?.pace)
   const dataDate = all[0]?.trade_date ?? null
   // Cross-screener Sector Rotation signal (industry_rank), fetched
   // separately from the scan query itself — its own loading state, since
@@ -113,7 +126,7 @@ export default function BreakoutSurgeStudio() {
   // separately for the same reason (depends on knowing dataDate first).
   // null/undefined-safe throughout: buildDayOverDayContext handles an
   // empty/still-loading history array the same as "no prior snapshot yet".
-  const { data: membershipHistory } = useScanMembershipHistory('breakout_surge', dataDate, 10)
+  const { data: membershipHistory } = useScanMembershipHistory(presetId, dataDate, 10)
   const dayOverDay = buildDayOverDayContext(membershipHistory ?? [])
   const newSinceYesterday = computeNewSinceYesterdayFacts(all, dayOverDay)
   const rsFlip = computeRsFlipFacts(all, dayOverDay)
@@ -124,7 +137,7 @@ export default function BreakoutSurgeStudio() {
     filtered = filtered.filter(isHighlight)
   } else if (scanIntent === 'momentum_gap') {
     filtered = filtered
-      .filter(isAccelerating)
+      .filter(descriptor?.pace ?? isAccelerating)
       .sort((a, b) => ((b.score_5d ?? 0) - (b.score_22d ?? 0)) - ((a.score_5d ?? 0) - (a.score_22d ?? 0)))
   } else if (scanIntent === 'leading_industry' && stats.leadingIndustry) {
     filtered = filtered.filter((r) => r.industry === stats.leadingIndustry!.name)
@@ -137,7 +150,7 @@ export default function BreakoutSurgeStudio() {
   }
   // is_unusual applies no filter (mode: none, per the mockup) — the pill
   // still selects/narrates, the table below is untouched.
-  if (quick.ob) filtered = filtered.filter((r) => (r.rsi_14 ?? 0) < 70)
+  if (quick.ob && descriptor) filtered = filtered.filter(descriptor.rsiQuick.test)
   if (quick.watch) filtered = filtered.filter((r) => bookmarkedIds.has(r.equity_id))
 
   const toggleQuick = (key: QuickFilterKey) => setQuick((p) => ({ ...p, [key]: !p[key] }))
@@ -149,8 +162,23 @@ export default function BreakoutSurgeStudio() {
     scrollToResults()
   }
 
+  // Every hook above runs unconditionally — the guard cannot move earlier
+  // without breaking the rules of hooks. A preset with no descriptor is a
+  // routing mistake (ScanView only sends STUDIO_PRESET_IDS here), so this is a
+  // developer-facing message, not a user-facing empty state.
+  const d = descriptor
+
   const onRowClick = (s: ScanStock) =>
-    navigate(`/chart/equity/${s.equity_id}?name=${encodeURIComponent(displaySymbol(s))}&tab=chart&setup=breakout_surge`)
+    navigate(`/chart/equity/${s.equity_id}?name=${encodeURIComponent(displaySymbol(s))}&tab=chart&setup=${presetId}`)
+
+  if (!d) {
+    return (
+      <div style={{ padding: 24, color: 'var(--bear)', fontFamily: 'var(--font-mono)', fontSize: 13 }}>
+        No Studio descriptor for preset “{presetId}”. Add one to
+        config/scannerStudio.ts, or route this preset to ScanView's generic layout.
+      </div>
+    )
+  }
 
   return (
     <>
@@ -198,13 +226,13 @@ export default function BreakoutSurgeStudio() {
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, marginBottom: 22, flexWrap: 'wrap' }}>
         <div>
           <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 28, fontWeight: 500, margin: '0 0 6px', color: 'var(--text-primary)' }}>
-            {meta?.name ?? 'Breakout Surge'}
+            {meta?.name ?? presetId}
           </h1>
           <p style={{ fontSize: 13.5, color: 'var(--text-muted)', maxWidth: 640, lineHeight: 1.55 }}>{meta?.description}</p>
         </div>
         <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
-          <DownloadXlsButton stocks={filtered} scanName="Breakout_Surge" variant="breakout_surge" />
-          <TradingViewExportButton stocks={filtered} scanName="Breakout_Surge" />
+          <DownloadXlsButton stocks={filtered} scanName={d.exportName} variant={d.xlsVariant} />
+          <TradingViewExportButton stocks={filtered} scanName={d.exportName} />
         </div>
       </div>
 
@@ -218,7 +246,7 @@ export default function BreakoutSurgeStudio() {
               shortcuts into the shared filter state below. ── */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 10, marginBottom: 18 }}>
             <StatTile
-              label="Broke Out Today"
+              label={d.countLabel}
               value={String(stats.brokeOutCount)}
               onClick={anyFilterActive ? clearAll : undefined}
               title={anyFilterActive ? 'Click to clear all filters' : undefined}
@@ -232,9 +260,9 @@ export default function BreakoutSurgeStudio() {
               onClick={() => selectScanIntent('why_flagged')}
             />
             <StatTile
-              label="Accelerating"
+              label={d.paceLabel}
               value={`${stats.acceleratingPct}%`}
-              sub="5D ≥ 22D pace"
+              sub={d.paceSub}
               active={!!filters.accelerating}
               onClick={() => setFilters((f) => ({ ...f, accelerating: f.accelerating ? undefined : true }))}
             />
@@ -277,7 +305,8 @@ export default function BreakoutSurgeStudio() {
               question row). ── */}
           {meta && (
             <ScannerVaNiCard
-              presetId="breakout_surge"
+              presetId={presetId}
+              descriptor={d}
               meta={meta}
               allStocks={all}
               dataDate={dataDate}
@@ -302,9 +331,9 @@ export default function BreakoutSurgeStudio() {
               border: `1px solid ${quick.ob ? 'var(--accent)' : 'var(--border)'}`,
               background: quick.ob ? 'var(--accent-glow)' : 'transparent',
               color: quick.ob ? 'var(--accent)' : 'var(--text-muted)',
-            }}>Not overbought</button>
+            }}>{d.rsiQuick.label}</button>
 
-            <ScanFilterBar presetId="breakout_surge" stocks={all} filters={filters} onFiltersChange={setFilters} />
+            <ScanFilterBar presetId={presetId} stocks={all} filters={filters} onFiltersChange={setFilters} />
 
             <span style={{ marginLeft: 'auto', fontFamily: 'var(--font-mono)', fontSize: 11.5, color: 'var(--text-faint)' }}>
               {filtered.length} shown
@@ -323,9 +352,9 @@ export default function BreakoutSurgeStudio() {
 
           {/* ── Real production row rendering — not reinvented ── */}
           {viewMode === 'table' ? (
-            <ScanTable stocks={filtered} presetId="breakout_surge" onRowClick={onRowClick} />
+            <ScanTable stocks={filtered} presetId={presetId} onRowClick={onRowClick} />
           ) : (
-            <BreakoutSurgeCards stocks={filtered} />
+            <BreakoutSurgeCards stocks={filtered} descriptor={d} />
           )}
         </>
       )}
@@ -387,21 +416,30 @@ function useMinVaNiLoading(isPending: boolean): boolean {
  *  renders once its `ready` check (below) passes, so partial infra
  *  readiness (e.g. no prior-day snapshot yet) just means fewer pills, never
  *  a broken one. */
-const ALL_INTENTS_ORDERED: { key: ScannerIntentKey; question: string }[] = [
-  { key: 'new_since_yesterday', question: "Show me what's new since yesterday" },
-  { key: 'sector_leading', question: "Which sectors' stocks are leading today?" },
-  { key: 'momentum_gap', question: 'Stocks with a momentum gap' },
-  { key: 'rs_flip', question: 'Which stocks just turned RS-green?' },
-  { key: 'leading_industry', question: 'Which industry is leading this scan?' },
-  { key: 'why_flagged', question: 'Why did VaNi flag these stocks?' },
-  { key: 'is_unusual', question: 'Is today unusual compared to recent sessions?' },
-]
+/** All 7 questions in the mockup's order. Six read the same on every scan; only
+ *  `rs_flip` names a direction, so its text comes from the preset's descriptor
+ *  (and a descriptor with `rsFlip: null` drops the question entirely). */
+function intentsOrdered(d: StudioDescriptor): { key: ScannerIntentKey; question: string }[] {
+  const all: { key: ScannerIntentKey; question: string | null }[] = [
+    { key: 'new_since_yesterday', question: "Show me what's new since yesterday" },
+    { key: 'sector_leading', question: "Which sectors' stocks are leading today?" },
+    { key: 'momentum_gap', question: 'Stocks with a momentum gap' },
+    { key: 'rs_flip', question: d.rsFlip?.question ?? null },
+    { key: 'leading_industry', question: 'Which industry is leading this scan?' },
+    { key: 'why_flagged', question: 'Why did VaNi flag these stocks?' },
+    { key: 'is_unusual', question: 'Is today unusual compared to recent sessions?' },
+  ]
+  return all.filter((i): i is { key: ScannerIntentKey; question: string } => i.question != null)
+}
 
 function ScannerVaNiCard({
-  presetId, meta, allStocks, dataDate, exchangeFilter, scanIntent, onSelectIntent,
+  presetId, descriptor, meta, allStocks, dataDate, exchangeFilter, scanIntent, onSelectIntent,
   sectorLeadingReady, sectorLeadingFacts, newSinceYesterdayFacts, rsFlipFacts, isUnusualFacts,
 }: {
   presetId: string
+  /** Carries the preset's pace predicate and its rs_flip question text — the
+   *  two places this card's behaviour depends on which scan it is showing. */
+  descriptor: StudioDescriptor
   meta: ScanDefinition
   /** Full day's cohort, unfiltered — every intent's facts must cover the
    *  whole day, not whatever's currently filtered into the table below. */
@@ -417,7 +455,7 @@ function ScannerVaNiCard({
   /** All computed once in the parent (shared with the table's own filter
    *  predicates where applicable) — passed through rather than recomputed
    *  here. The Phase 3 facts are null until a prior-day snapshot exists;
-   *  their pills simply don't render until then (see ALL_INTENTS_ORDERED). */
+   *  their pills simply don't render until then (see intentsOrdered). */
   sectorLeadingFacts: SectorLeadingFacts | null
   newSinceYesterdayFacts: NewSinceYesterdayFacts | null
   rsFlipFacts: RsFlipFacts | null
@@ -447,7 +485,7 @@ function ScannerVaNiCard({
     why_flagged: true,
     sector_leading: sectorLeadingReady,
     new_since_yesterday: !!newSinceYesterdayFacts,
-    rs_flip: !!rsFlipFacts,
+    rs_flip: !!rsFlipFacts && descriptor.rsFlip != null,
     is_unusual: !!isUnusualFacts,
   }
 
@@ -456,7 +494,7 @@ function ScannerVaNiCard({
     const mutation = mutationByIntent[key]
     if (!dataDate || mutation.data || mutation.isPending) return
     if (key === 'momentum_gap') {
-      const facts = computeMomentumGapFacts(allStocks)
+      const facts = computeMomentumGapFacts(allStocks, descriptor.pace)
       mutation.mutate({
         intent_id: 'scanner.momentum_gap', preset_id: presetId, data_date: dataDate,
         timeframe: 'daily', exchange: exchangeFilter,
@@ -544,7 +582,7 @@ function ScannerVaNiCard({
     cursor: 'pointer', fontFamily: 'var(--font-body)', maxWidth: '100%', textAlign: 'left',
   }
   const activePillStyle: React.CSSProperties = { ...pillStyle, background: 'var(--indigo-bg)', fontWeight: 700 }
-  const visibleIntents = ALL_INTENTS_ORDERED.filter((it) => readyByIntent[it.key])
+  const visibleIntents = intentsOrdered(descriptor).filter((it) => readyByIntent[it.key])
 
   // Owner (2026-09-03): "intents should be part of VaNi interaction" — the
   // mockup's own .vani-main wraps ONE badge header around BOTH the

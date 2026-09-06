@@ -303,38 +303,148 @@ a set membership test.
 
 ---
 
-## 9. Open questions for the owner
+## 9. Owner decisions (2026-09-05) — questions closed
 
-1. **Do `gl_breakout` and `gl_retest` count as "price action"?** They carry
-   `category = 'price_action'` in the DB, but they are Golden Line scanners
-   with their own `gl_event_any` rule and are already on the Discovery board.
-   Including them means a third highlight-explain builder. Five targets or
-   seven?
+1. **Five targets.** `gl_breakout` / `gl_retest` are OUT of scope despite
+   carrying `category = 'price_action'`. The five are `weekly_movers`,
+   `monthly_movers`, `breakdown_watch`, `weekly_decliners`,
+   `monthly_decliners`.
 
-2. **How should the caution side be worded?** Neutral phrasing that serves
-   both directions ("moved furthest from its own recent pace", "most
-   represented industry"), or explicit caution-side variants of the seven
-   intents? Neutral is fewer moving parts and more obviously D39-safe;
-   per-side reads better. This also decides whether `rs_flip` on a decliners
-   scan is even offered — "turned RS-red" may be too directional for D39.
+2. **SEBI wording is already solved — do not re-litigate it.** Use the
+   vocabulary the platform already ships and has cleared: `ZONE_LABELS` in
+   `constants/signalScale.ts` (Leading / Improving / Neutral / Weakening /
+   Lagging) and the D39 ROC badge set (expanding / slowing / turning /
+   contracting / warming_up). The caution side is written in that vocabulary,
+   NOT in invented phrasing. Concretely: `rs_flip` on a decliners scan reads
+   as a move **into Weakening/Lagging**, never "turned RS-red"; the
+   momentum-gap prompt says "moved furthest from its own recent pace"
+   rather than "pulled ahead". No new compliance review is needed for
+   wording that stays inside the approved sets.
 
-3. **Does every preset need a full Studio page?** Six more pages with stat
-   tiles, quick filters and export buttons is a lot of surface for scans that
-   are essentially one sorted column. The alternative is a **middle tier**:
-   the seven intent cards bolted onto the existing generic `ScanView` layout,
-   with the full Studio reserved for `breakout_surge` and perhaps the Golden
-   Line pair.
+3. **Full parity with Breakout Surge.** Every one of the five gets the same
+   Level 2 treatment — stat tiles, quick filters, the seven intent cards,
+   export buttons, table/cards toggle. No middle tier.
 
-4. **Cap the five on the Discovery board?** Step 0 puts up to 500 rows per
-   preset in front of `fetchVaniHighlights`. `gl_breakout` uses
-   `vani_cap = 12`. What should these five use?
+   Two execution constraints attached to this:
 
-5. **Membership backfill horizon** — all history, or a bounded window? Full
-   history is cheap to write but `is_unusual` only ever reads the trailing few
-   sessions, so a year would do.
+   **Mobile responsiveness is a requirement, not an afterthought.** Current
+   state, verified: the Studio's stat row is already fluid
+   (`repeat(auto-fit, minmax(160px, 1fr))`), its header and card rows use
+   `flexWrap`, and `ScanTable` already scrolls horizontally
+   (`overflowX: 'auto'`) with a sticky symbol column. So the shell is
+   inherited-responsive and the job is to not regress it — and to check the
+   intent-card row and the stat tiles at narrow widths, which is where a
+   seven-card row is most likely to break.
 
-6. **Should Level 1 be fixed at the same time?** `scanner.read_results`
-   narrates a 25-row sample as though it were the full set — a known
-   correctness problem, called out in both `scannerenhancement.md` and
-   `BreakoutSurgeStudio.tsx`'s own comments. It affects every scanner, not
-   just these five. Separate task, or fold it in?
+   **One scanner at a time, finished before the next starts.** No partial
+   rollout across several presets at once.
+
+---
+
+## 10. Build order
+
+Derived from the `vani_rule` each preset carries, which decides how much
+per-preset work it actually needs:
+
+| Order | Preset | `vani_rule` | New fact-builder work |
+|---|---|---|---|
+| 0 | *(refactor)* | — | parameterise the Studio; `breakout_surge` is the control and must render identically |
+| 1 | `weekly_movers` | `is_vani_surge_or_breakout` | **none** — same rule as `breakout_surge` |
+| 2 | `monthly_movers` | `is_vani_surge_or_breakout` | **none** |
+| 3 | `weekly_decliners` | `is_vani_weakness` | the weakness-side builder (serves all three) |
+| 4 | `monthly_decliners` | `is_vani_weakness` | reuses #3 |
+| 5 | `breakdown_watch` | `is_vani_weakness` | reuses #3; **last** because of the `pct_from_breakdown` history gap in §5 |
+
+The two movers share `breakout_surge`'s exact rule, so
+`computeHighlightExplainFacts` applies to them unchanged and no caution-side
+prompt variant is needed — which makes them the right pair to validate the
+refactor against. All three decliners share one rule, so the weakness-side
+builder is written once, at step 3.
+
+`breakdown_watch` goes last on purpose: its Studio works today, but its three
+day-over-day intents stay null-guarded (cards hidden) until
+`backfill_rolling_metrics_fast.py` has run. Placing it last gives that run the
+most time to happen without blocking anything else.
+
+---
+
+## 11. Still open — not blocking, owner to decide when convenient
+
+- **Discovery board opt-in (§6 Step 0).** The five presets have a `vani_rule`
+  but no `vani_side`, so they never reach `fetchVaniHighlights`. One migration.
+  Needs a `vani_cap` decision: these are 500-row scans and `gl_breakout` caps
+  at 12.
+- **Membership backfill horizon** — full history, or a bounded window? A year
+  is ample; `is_unusual` only reads the trailing few sessions.
+- **`scanner.read_results` narrates a 25-row sample as the full set.** A real
+  correctness bug affecting every scanner, not just these five. Separate task.
+
+---
+
+## 12. Progress log
+
+### 2026-09-05 — Step 0 (refactor) + Scanner 1 (`weekly_movers`)
+
+**Refactor.** `BreakoutSurgeStudio` → `ScannerStudio({ presetId })`. The shell
+was already more generic than its name: the title read `meta.name` from the DB,
+and `ScanTable` / `ScanFilterBar` / `useScanMembershipHistory` / `ScannerVaNiCard`
+all took a `presetId` already. What was hardcoded was the id itself (eight
+places) and the handful of strings that encode what the scan MEANS. Those moved
+to `config/scannerStudio.ts`.
+
+`ScanView` now routes on `STUDIO_PRESET_IDS.has(presetId)` instead of one
+`=== 'breakout_surge'` branch, so scanner 2 is a descriptor entry, not another
+branch.
+
+Three functions became injectable rather than assumed:
+`computeCohortStats(rows, pace?)`, `computeMomentumGapFacts(rows, pace?)`, and
+the RSI quick-toggle test. All default to the existing strength behaviour, so
+`breakout_surge` is unchanged — it is the control, and it renders identically.
+
+`BreakoutSurgeCards` takes the descriptor for its third data row (breakout level
+and distance on Breakout Surge; prior-week close and WTD% on the movers) and its
+empty state. Its `fmtBrkPct` hardcoded a `+` prefix — correct for a breakout
+distance, which the scan's own gate makes positive, wrong for anything that can
+go negative. Replaced with a signed formatter; output is identical wherever the
+value was already positive.
+
+**A real bug found while mirroring the arm, and fixed.**
+`_membership_breakout_surge` omitted `ema_20 IS NOT NULL`, which `eq_base` — and
+therefore every matview arm — carries. Measured on 2026-09-04: the faithful rule
+yields **270** rows, exactly matching `km_scan_results`; the shipped function
+wrote **284**. A 5% over-collection every day since 2026-08-20.
+
+It matters because this table is *diffed*: a snapshot wider than what the UI
+showed makes `new_since_yesterday` **under-report**, since a stock already in
+yesterday's over-wide set never reads as new. The membership SQL is now one
+shared pool mirroring `pa_pool`/`pa`, with each preset supplying only its own
+`WHERE` and `ORDER BY`, copied from its CTE in migration 197.
+
+ISIN de-duplication was restored at the same time. It changes nothing today
+(weekly_movers reads 1,012 either way, the pool being NSE-only already), but two
+NSE listings sharing an ISIN would otherwise both enter.
+
+**Mobile.** No layout was altered. The shell is inherited-responsive and was
+re-checked rather than assumed: stat tiles are `repeat(auto-fit,
+minmax(160px, 1fr))` (two columns at 375px), the header, intent-pill row and
+filter row all `flexWrap`, and `ScanTable` scrolls horizontally with a sticky
+symbol column.
+
+**Verified:** `npm run typecheck` + `npm run build` clean (theme ratchet passes);
+the generated membership SQL run against the live DB returns 500 for
+`weekly_movers` on 2026-09-04, matching the matview's 500, and 270 for
+`breakout_surge`, matching its 270.
+
+**Owner action required before `weekly_movers`'s day-over-day intents work:**
+
+```
+cd App/backend
+python scripts/compute_scan_membership_snapshot.py --from 2026-08-20
+```
+
+That backfills `weekly_movers` and — necessarily — **re-writes `breakout_surge`'s
+existing 12 days** under the corrected rule, so the two are comparable. Until it
+runs, `weekly_movers` shows four of seven intent cards; the three day-over-day
+ones stay hidden by their existing null-guards rather than showing a wrong
+number. A wider `--from` is fine and cheap; `is_unusual` only reads the trailing
+few sessions.
