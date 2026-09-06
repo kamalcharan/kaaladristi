@@ -29,6 +29,8 @@ import '@/services/thesis/adapters'; // registers SETUP_ADAPTERS entries
 const storySetupSuffix = (presetId: string): string =>
   getSetupAdapter(presetId) ? `&tab=chart&setup=${presetId}` : '';
 import { useVaNiStore } from '@/stores/vaniStore';
+import { useIsPhone } from '@/hooks/useMediaQuery';
+import { useTopbarHeight } from '@/hooks/useTopbarHeight';
 
 // ── Sort ──────────────────────────────────────────────────────
 
@@ -235,22 +237,36 @@ function useViewMode(): [ViewMode, (v: ViewMode) => void] {
 // ── Action Island (shared shell) ──────────────────────────────
 
 function ActionIsland({ children }: { children: React.ReactNode }) {
+  const phone = useIsPhone();
   return (
     <div style={{
       position: 'fixed',
-      bottom: '28px',
-      left: '50%',
-      transform: 'translateX(calc(-50% + 110px))',
+      zIndex: 50,
       background: 'color-mix(in srgb, var(--card) 94%, transparent)',
       backdropFilter: 'blur(12px)',
       border: '1px solid var(--border)',
-      borderRadius: '100px',
-      padding: '10px 18px 10px 22px',
+      boxShadow: '0 20px 50px rgba(0,0,0,0.4)',
       display: 'flex',
       alignItems: 'center',
-      gap: '14px',
-      boxShadow: '0 20px 50px rgba(0,0,0,0.4)',
-      zIndex: 50,
+      ...(phone
+        // Phone: the sidebar is an overlay, so there is nothing to offset for.
+        // Pin to both edges instead of centring a pill that can be wider than
+        // the screen, and let the count + button wrap onto two lines.
+        ? {
+            bottom: '16px', left: '12px', right: '12px',
+            borderRadius: '20px', padding: '10px 14px',
+            gap: '10px', flexWrap: 'wrap' as const, justifyContent: 'center',
+          }
+        // Desktop: centred in the content column. `--sidebar-w` is set on
+        // <main> by Layout.tsx (220px, or 52px collapsed) and this island is
+        // its descendant, so the offset tracks the real sidebar width — the
+        // old hardcoded +110px assumed 220 and drifted 84px off-centre when
+        // the sidebar was collapsed.
+        : {
+            bottom: '28px', left: '50%',
+            transform: 'translateX(calc(-50% + var(--sidebar-w, 220px) / 2))',
+            borderRadius: '100px', padding: '10px 18px 10px 22px', gap: '14px',
+          }),
     }}>
       {children}
     </div>
@@ -1100,6 +1116,7 @@ function FpbResults({ preset, timeframe, viewMode, onViewModeChange }: {
 
 function ScannerResults({ presetId }: { presetId: string }) {
   const navigate = useNavigate();
+  const phone = useIsPhone();
   const [searchParams] = useSearchParams();
   const timeframe = (searchParams.get('timeframe') ?? 'daily') as ScanTimeframe;
   const [exchangeFilter, setExchangeFilter] = useState<ExchangeFilter>('combined');
@@ -1175,10 +1192,16 @@ function ScannerResults({ presetId }: { presetId: string }) {
   // delegates its body to BreakoutSurgeStudio, not the generic layout below)
   // can render just this, without the title/description block that
   // BreakoutSurgeStudio already renders itself.
+  // Phone: one row that scrolls sideways, the way native tab bars do. Eight
+  // Price Action chips wrapped into a five-line stack at 358px, pushing the
+  // title below the fold before the user had read a thing.
   const categoryTabStrip = categoryPresets.length > 1 && (
-    <div style={{
+    <div className={phone ? 'no-scrollbar' : undefined} style={{
       display: 'flex', alignItems: 'center', gap: '4px',
-      marginBottom: '20px', flexWrap: 'wrap',
+      marginBottom: '20px',
+      ...(phone
+        ? { flexWrap: 'nowrap' as const, overflowX: 'auto' as const, paddingBottom: '4px', WebkitOverflowScrolling: 'touch' as const }
+        : { flexWrap: 'wrap' as const }),
     }}>
       {categoryPresets.map((p) => {
         const isActive = p.id === presetId;
@@ -1188,7 +1211,7 @@ function ScannerResults({ presetId }: { presetId: string }) {
             key={p.id}
             onClick={() => navigate(`/scanner/${p.id}`)}
             style={{
-              display: 'inline-flex', alignItems: 'center', gap: '6px',
+              display: 'inline-flex', alignItems: 'center', gap: '6px', flexShrink: 0,
               padding: '5px 12px', borderRadius: '8px',
               border: `1px solid ${isActive ? preset.category_color : 'var(--border)'}`,
               background: isActive ? `${preset.category_color}18` : 'transparent',
@@ -1499,9 +1522,17 @@ function ScannerResults({ presetId }: { presetId: string }) {
 
 import React from 'react';
 
+/** Standing disclaimer under every scanner — one string, rendered by both
+ *  the desktop (sticky footer) and phone (end-of-page) shells. */
+const SCAN_DISCLAIMER =
+  'Scans surface observations of market conditions from end-of-day data, for study and education. ' +
+  'Nothing here is investment advice or a recommendation to buy or sell any security.';
+
 export default function ScanView() {
   const { presetId } = useParams<{ presetId?: string }>();
   const navigate = useNavigate();
+  const phone = useIsPhone();
+  const topbarH = useTopbarHeight();
   const { data: presets = SCAN_PRESETS } = useScanPresets();
   const { data: allCountsData } = useAllScanCounts('combined');
   const allCounts = allCountsData?.counts;
@@ -1550,10 +1581,75 @@ export default function ScanView() {
   const activePreset = presets.find((p) => p.id === presetId);
   const activeCategoryId = activePreset?.category ?? '';
 
+  // Phone: a horizontal category strip above the results, in normal document
+  // flow. The 220px side rail left a 170px results column at 390px — every tab
+  // stacked, the title wrapped, the filter bar and the VaNi button were
+  // clipped off the right edge — and a page-within-a-page scroll region is
+  // the wrong shape for a thumb anyway.
+  if (phone) {
+    return (
+      <div style={{ margin: '-16px', display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+        <div className="no-scrollbar" style={{
+          display: 'flex', alignItems: 'center', gap: '4px',
+          overflowX: 'auto', WebkitOverflowScrolling: 'touch',
+          padding: '10px 12px',
+          background: 'var(--card)', borderBottom: '1px solid var(--border)',
+          position: 'sticky', top: topbarH, zIndex: 30,
+        }}>
+          {categories.map((cat) => {
+            const defaultPreset = cat.defaultPreset ?? cat.presets[0];
+            const isActive = cat.id === activeCategoryId;
+            return (
+              <button
+                key={cat.id}
+                onClick={() => defaultPreset && navigate(`/scanner/${defaultPreset.id}`)}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: '7px', flexShrink: 0,
+                  padding: '6px 12px', borderRadius: '100px', cursor: 'pointer',
+                  border: `1px solid ${isActive ? cat.color : 'var(--border)'}`,
+                  background: isActive ? `color-mix(in srgb, ${cat.color} 10%, transparent)` : 'transparent',
+                  fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: '11px',
+                  letterSpacing: '0.8px', textTransform: 'uppercase',
+                  color: isActive ? cat.color : 'var(--text-muted)',
+                }}
+              >
+                <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: cat.color, flexShrink: 0 }} />
+                {cat.label}
+              </button>
+            );
+          })}
+        </div>
+        <div style={{ padding: '16px', minWidth: 0 }}>
+          {presetId ? (
+            <ScannerResults presetId={presetId} />
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '48px 0' }}>
+              <Loader2 style={{ width: '20px', height: '20px', color: 'var(--text-faint)', animation: 'spin 1s linear infinite' }} />
+            </div>
+          )}
+        </div>
+        <div style={{
+          padding: '10px 16px 12px',
+          borderTop: '1px solid var(--border)',
+          background: 'var(--card)',
+          fontSize: '10.5px', lineHeight: 1.5, color: 'var(--text-faint)',
+          textAlign: 'center',
+        }}>
+          {SCAN_DISCLAIMER}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div style={{
       display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden',
-      margin: '-24px', height: 'calc(100vh - 46px)',
+      // Cancels Layout.tsx's `p-4` (16px) exactly. This was -24px — an 8px
+      // overhang on every side: the rail started under the sidebar and the
+      // right edge ran past the viewport (measured: shell right = 1608 at
+      // 1600). And the height subtracted a topbar of 46px that is really 75,
+      // so the "never scrolls away" footer sat 21px below the fold.
+      margin: '-16px', height: `calc(100vh - ${topbarH}px)`,
     }}>
       {/* Left category rail — collapsible on click */}
       <div style={{
@@ -1648,8 +1744,7 @@ export default function ScanView() {
           fontSize: '10.5px', lineHeight: 1.5, color: 'var(--text-faint)',
           textAlign: 'center',
         }}>
-          Scans surface observations of market conditions from end-of-day data, for study and education.
-          Nothing here is investment advice or a recommendation to buy or sell any security.
+          {SCAN_DISCLAIMER}
         </div>
       </div>
     </div>

@@ -11,6 +11,7 @@ import { displaySymbol, displaySubName, navName as toNavName } from '@/lib/symbo
 import { Card } from '@/components/ui';
 import { useNavigate } from 'react-router-dom';
 import type { ScanStock } from '@/types';
+import { useIsPhone } from '@/hooks/useMediaQuery';
 import React from 'react';
 import { ZONE_LABELS, FLOW_LABELS, zoneLabel } from '@/constants/signalScale';
 import { ScanCardWrapper, VaniBadge, CardExchangeBadge } from './ScanCardShell';
@@ -240,6 +241,7 @@ export function StockCard({
    *  Leading `&` is required — the URL already carries `?name=…`. */
   linkQueryExtra?: string;
 }) {
+  const phone = useIsPhone();
   const navigate = useNavigate();
   const heroName = displaySymbol(stock);
   const subName = displaySubName(stock);
@@ -274,9 +276,18 @@ export function StockCard({
       onClick={handleClick}
       vaniEntity={{ type: 'equity', id: stock.equity_id, symbol: heroName, pageContext: vaniContext ?? 'Scanner' }}
     >
-      <div style={{ flex: 1, minWidth: 0, display: 'grid', gridTemplateColumns: '1fr 120px 100px', gap: '18px', alignItems: 'center' }}>
+      {/* Phone: the three zones cannot share one row — the fixed 120px + 100px
+          columns left the identity zone ~100px wide, so every badge wrapped
+          onto its own line and the middle column's chips collided with the
+          price. Identity takes the full width; price and metrics sit side by
+          side beneath it. Desktop keeps the three-column row unchanged. */}
+      <div style={{
+        flex: 1, minWidth: 0, display: 'grid', alignItems: 'center',
+        gridTemplateColumns: phone ? '1fr 1fr' : '1fr 120px 100px',
+        gap: phone ? '10px 12px' : '18px',
+      }}>
       {/* Zone 1: Identity + Evidence strip */}
-      <div style={{ minWidth: 0 }}>
+      <div style={{ minWidth: 0, gridColumn: phone ? '1 / -1' : undefined }}>
         {/* Symbol + badges */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '5px', flexWrap: 'wrap' }}>
           {stock.vaniOpportunity && (

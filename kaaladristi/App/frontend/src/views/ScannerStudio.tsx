@@ -248,7 +248,11 @@ export default function ScannerStudio({ presetId }: { presetId: string }) {
           {/* ── Cohort summary strip — always reflects the FULL day's cohort (all
               252), not the filtered subset. Several tiles double as filter
               shortcuts into the shared filter state below. ── */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 10, marginBottom: 18 }}>
+          {/* 148px, not 160: the grid measures 326px on a 390px phone (panel
+              padding both sides), and two 160px columns plus the 10px gap is
+              330 — so six tiles stacked single-file. 148 gives two columns
+              from 306px up; on desktop the tiles are far wider either way. */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(148px, 1fr))', gap: 10, marginBottom: 18 }}>
             <StatTile
               label={d.countLabel}
               value={String(stats.brokeOutCount)}

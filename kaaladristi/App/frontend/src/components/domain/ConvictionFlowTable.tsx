@@ -63,9 +63,15 @@ function DataRow({ items }: { items: DataItem[] }) {
       alignItems: 'center',
       justifyContent: 'space-between',
       width: '100%',
+      // Wrap rather than overflow. Eight label/value pairs need ~560px in one
+      // line; on a 390px phone that pushed the whole page to 553px wide and
+      // made the browser zoom out. When the row fits, wrapping changes nothing.
+      flexWrap: 'wrap' as const,
+      rowGap: '4px',
+      columnGap: '10px',
     }}>
       {items.map((item, i) => (
-        <span key={i} style={{ display: 'inline-flex', alignItems: 'baseline', gap: '3px' }}>
+        <span key={i} style={{ display: 'inline-flex', alignItems: 'baseline', gap: '3px', whiteSpace: 'nowrap' as const }}>
           <span style={{
             fontFamily: 'var(--font-mono)',
             fontSize: '9px',

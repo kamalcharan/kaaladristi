@@ -82,9 +82,13 @@ async function run() {
       });
 
       // ── seed auth + theme + welcome-ack before any page script runs ──
+      // The token must LOOK like a JWT with a far-future exp: services/auth.ts
+      // tokenExpired() (2026-07-25) treats an unparseable token as expired and
+      // clears the session, which bounced every harness route to the landing
+      // page. Signature is never verified client-side, so 'harness' is fine.
       await ctx.addInitScript(({ theme, mode, userId }) => {
         localStorage.setItem('kd_session', JSON.stringify({
-          access_token: 'harness-token',
+          access_token: 'eyJhbGciOiAiSFMyNTYiLCAidHlwIjogIkpXVCJ9.eyJyb2xlIjogImF1dGhlbnRpY2F0ZWQiLCAic3ViIjogIjAwMDAwMDAwLTAwMDAtNDAwMC04MDAwLTAwMDAwMDAwMDAwMSIsICJlbWFpbCI6ICJxYUBoYXJuZXNzLmxvY2FsIiwgImV4cCI6IDQxMDI0NDQ4MDB9.harness',
           user: { id: userId, email: 'qa@harness.local', full_name: 'QA Harness', role: 'admin' },
         }));
         localStorage.setItem('kd-theme', theme);

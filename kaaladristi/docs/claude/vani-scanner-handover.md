@@ -751,3 +751,64 @@ And one anti-pattern, from getting the first one wrong before getting it right:
 tell you what production does.** Check which path actually runs before writing
 down a severity.
 
+---
+
+## 13. Scanner pages on a phone (2026-09-06, after the five scanners)
+
+§9.3 made mobile a requirement for the Studios and recorded that the Studio
+shell was "inherited-responsive". That was true of the Studio and false of the
+thing it inherits from: `ScanView`'s shell. Measured with a new phone-viewport
+harness (`scripts/qa/qa-mobile.mjs`, real-shaped rows, 390×844):
+
+- the 220px category rail left a **170px results column** — every tab stacked
+  one per line, the title wrapped, the VaNi button and filter bar were clipped
+  off the right edge, on every preset including the Studios;
+- the shell's `margin: -24px` cancelled a page padding that is 16px, an 8px
+  overhang per side that forced the layout viewport to 398px (a real phone
+  zooms out); on desktop the same overhang put the rail 8px under the sidebar
+  and the right edge 8px past the viewport;
+- the shell's height subtracted a 46px topbar that measures 75px on desktop,
+  so the "never scrolls away" disclaimer footer had sat **21px below the
+  fold** on desktop all along;
+- the bottom Action Island was offset by a hardcoded +110px (half of an
+  assumed 220px sidebar) — wrong on a phone, and 84px off-centre whenever the
+  desktop sidebar was collapsed to 52px;
+- Conviction Flow's card view pushed the page to **553px** — its metric
+  `DataRow` never wrapped (the same row is duplicated in the Studio cards);
+- the generic `StockCard` kept its `1fr 120px 100px` grid, leaving ~100px for
+  identity so badges wrapped one per line and the middle chips collided with
+  the price;
+- Studio stat tiles stacked single-file: the grid measures 326px and two
+  `minmax(160px)` columns need 330.
+
+**What changed.** Below Tailwind's `md` (768px — the breakpoint the app shell
+already uses to turn the sidebar into an overlay) `ScanView` renders a
+horizontal category strip in normal document flow instead of the side rail,
+the tab strip scrolls sideways, the island pins to both edges and wraps, cards
+re-grid, `DataRow` wraps, tiles go `minmax(148px)`. Decided by a new
+`useIsPhone()` (`hooks/useMediaQuery.ts`) because these are structural
+changes, not cosmetic ones a `md:` class could express. Desktop keeps its
+layout with two measured corrections: margin `-16px`, and height from a new
+`useTopbarHeight()` that reads the real header instead of assuming 46.
+
+**Verified.** Every scanner route holds a 390px layout viewport in both table
+and cards views (`docWidth == vw == 390`), where before all were 398 and
+Conviction Flow cards 553. Desktop before/after pixel-diff 7–11% per route,
+all attributable to the 8px shift and the footer moving into the viewport
+(after-capture is exactly 1600×1016; before was 1608×1029). typecheck and
+build clean.
+
+**Two harness facts worth more than the fix.** (1) The theme QA harness had
+been silently broken since 2026-07-25: `tokenExpired()` treats an unparseable
+token as expired, and `'harness-token'` has no payload, so every route bounced
+to the landing page — which then crashed in `Hero.tsx`. All three scripts now
+seed a real JWT shape. (2) Playwright's full-page capture paints the fixed
+sidebar at its 260px mobile width, covering the rail's labels; the viewport
+capture and the live DOM are correct. Both are in `scripts/qa/README.md`.
+
+**Not done, deliberately.** The JobMonitor "Backend offline" pill sits over
+the island on a phone when the backend is down — not a scanner component.
+`useVaNiIntents` and `buildWhyTags` remain unused exports. The phone default
+is still table view with a sticky symbol column; cards may be the better
+phone default, but that is a product call, not a layout one.
+
