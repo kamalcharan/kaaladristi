@@ -6,10 +6,19 @@ Replaces the slow per-date loop in backfill_rolling_metrics.py.
 Original: loops over every date, runs a full-table window-function CTE
           each time → O(N_dates × table_size) → 3+ days for full history.
 
-This version: one UPDATE covers the entire date range in a single pass.
-          The window CTE scans the table ONCE and PostgreSQL resolves all
-          window frames in one sort+scan sweep → typically 10-30 minutes
-          for full history, seconds for a small date range.
+This version: symbol-batched (250 symbols per UPDATE, one transaction each,
+          after the single-pass form was OOM-killed on the VPS). Each batch
+          rewrites EVERY bar of its symbols' history when no date range is
+          given, so a full run is ~26M row-updates across 20+ columns.
+
+          MEASURED 2026-09-06 (full history, no --from): ~1.4 symbols/s,
+          ~560K rows per 250-symbol batch → 11,316 symbols in ~2.3 HOURS.
+          The old "10-30 minutes" figure predates symbol batching; do not
+          plan around it. A bounded --from is correct AND fast: the windows
+          are scoped by symbol, not by date, so every look-back still sees
+          full history and only the targeted rows are written.
+          Batches commit independently — Ctrl-C loses at most one batch, and
+          a re-run (with or without --from) is idempotent.
 
 Columns written (same as original):
   w52_high, w52_low, lifetime_high
