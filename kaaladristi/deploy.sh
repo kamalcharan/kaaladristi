@@ -29,7 +29,9 @@ if [ ! -f "$NGINX_CONF_DEST" ]; then
 fi
 
 # 4. Build containers
-echo "[docker] Building..."
+# Stamp the bundle with the commit being deployed (sidebar footer + console).
+export VITE_BUILD_SHA="$(git rev-parse --short HEAD)"
+echo "[docker] Building $VITE_BUILD_SHA..."
 docker compose --env-file "$ENV_FILE" build pipeline-api2 kd-frontend
 
 # 5. Start containers

@@ -492,7 +492,8 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen = false, onClo
             </div>
             <div style={{ lineHeight: 1.5 }}>
               {formatFooterDate()}<br />
-              {marketStatus()}
+              {marketStatus()}<br />
+              <span title="Deployed commit (deploy.sh stamps it)">build {import.meta.env.VITE_BUILD_SHA || 'dev'}</span>
             </div>
           </>
         )}

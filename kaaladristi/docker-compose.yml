@@ -76,6 +76,9 @@ services:
         # App/frontend/src/lib/analytics.ts for the product-tagging scheme.
         VITE_POSTHOG_KEY:      "${VITE_POSTHOG_KEY:-}"
         VITE_POSTHOG_HOST:     "${VITE_POSTHOG_HOST:-https://us.i.posthog.com}"
+        # Git short SHA stamped into the bundle (deploy.sh exports it) — shown in
+        # the sidebar footer so "is the new build live?" is a glance, not a guess.
+        VITE_BUILD_SHA:        "${VITE_BUILD_SHA:-}"
     container_name: kd-frontend
     restart: unless-stopped
     networks:
