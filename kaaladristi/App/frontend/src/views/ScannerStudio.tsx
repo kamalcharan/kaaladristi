@@ -94,7 +94,16 @@ export default function ScannerStudio({ presetId }: { presetId: string }) {
   const descriptor = getStudioDescriptor(presetId)
   const navigate = useNavigate()
   const [exchangeFilter, setExchangeFilter] = useState<ExchangeFilter>('combined')
-  const [viewMode, setViewMode] = useState<'table' | 'cards'>('table')
+  // Same localStorage key ScanView's generic layout persists its toggle
+  // under, so a user who picked Cards on one scanner gets Cards on the next
+  // instead of the Studio silently resetting to Table.
+  const [viewMode, setViewModeState] = useState<'table' | 'cards'>(() => {
+    try { return localStorage.getItem('scan_view_mode') === 'cards' ? 'cards' : 'table' } catch { return 'table' }
+  })
+  const setViewMode = (m: 'table' | 'cards') => {
+    setViewModeState(m)
+    try { localStorage.setItem('scan_view_mode', m) } catch { /* ignore */ }
+  }
   const [filters, setFilters] = useState<ScanFilters>(DEFAULT_FILTERS)
   const [quick, setQuick] = useState<Record<QuickFilterKey, boolean>>(DEFAULT_QUICK)
   // Which VaNi-card question (if any) is currently driving the table below —

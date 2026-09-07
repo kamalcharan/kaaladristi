@@ -2,6 +2,7 @@
 // qa-screenshots.mjs, but with real-shaped scan rows so the table / cards /
 // filter bar actually render, and a phone viewport.
 // Usage: node scripts/qa/qa-mobile.mjs [--width=390] [--routes=/scanner/power_buy,...] [--view=table|cards] [--tag=before]
+//        [--element=<css selector>]  capture just that element (e.g. [data-qa=studio-cards]) instead of the full page
 import { chromium } from 'playwright-core';
 import { mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -74,7 +75,13 @@ async function run() {
       await page.goto(BASE + r, { waitUntil: 'domcontentloaded', timeout: 20000 });
       await page.waitForTimeout(2500);
       const overflow = await page.evaluate(() => ({ docW: document.documentElement.scrollWidth, vw: window.innerWidth }));
-      await page.screenshot({ path: join(OUT, slug(r) + '.png'), fullPage: true });
+      if (args.element) {
+        const el = page.locator(String(args.element)).first();
+        await el.scrollIntoViewIfNeeded();
+        await el.screenshot({ path: join(OUT, slug(r) + '.png') });
+      } else {
+        await page.screenshot({ path: join(OUT, slug(r) + '.png'), fullPage: true });
+      }
       process.stdout.write(`ok  ${WIDTH} ${r}  docWidth=${overflow.docW} vw=${overflow.vw}${overflow.docW > overflow.vw ? '  <-- HORIZONTAL OVERFLOW' : ''}\n`);
     } catch (e) { process.stdout.write(`ERR ${r} — ${String(e).slice(0, 140)}\n`); }
   }

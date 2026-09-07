@@ -107,9 +107,17 @@ interface ScanCardWrapperProps {
   children: React.ReactNode;
   /** When set, renders the ✦ Ask-VaNi trigger at the card's right edge. */
   vaniEntity?: VaNiEntity;
+  /**
+   * Phone layout: the wrapper draws only the frame — no Avatar on the left,
+   * no VaNiTrigger on the right, children top-aligned — and the card places
+   * both inside its own first row. A 42px avatar plus a 24px trigger on a
+   * 358px card left ~250px for everything else; the stacked Studio card
+   * (BreakoutSurgeTable) needs the full width for its 2×2 ledger.
+   */
+  bare?: boolean;
 }
 
-export function ScanCardWrapper({ isVani, symbol, onClick, children, vaniEntity }: ScanCardWrapperProps) {
+export function ScanCardWrapper({ isVani, symbol, onClick, children, vaniEntity, bare = false }: ScanCardWrapperProps) {
   // Card whose "Ask VaNi" popover is open gets an indigo border, same
   // priority-over-gold convention as ScanTable.tsx's row highlight — stays
   // identifiable as the popover's subject through scrolling.
@@ -122,7 +130,7 @@ export function ScanCardWrapper({ isVani, symbol, onClick, children, vaniEntity 
       onKeyDown={onClick ? (e) => (e.key === 'Enter' || e.key === ' ') && onClick() : undefined}
       style={{
         display: 'flex',
-        alignItems: 'center',
+        alignItems: bare ? 'flex-start' : 'center',
         gap: '14px',
         background: isVani
           ? 'linear-gradient(135deg, rgba(212,168,75,0.06) 0%, var(--card) 55%)'
@@ -135,9 +143,9 @@ export function ScanCardWrapper({ isVani, symbol, onClick, children, vaniEntity 
         transition: 'border-color 0.15s',
       }}
     >
-      <Avatar symbol={symbol} isVani={isVani} />
+      {!bare && <Avatar symbol={symbol} isVani={isVani} />}
       {children}
-      {vaniEntity && <VaNiTrigger entity={vaniEntity} />}
+      {!bare && vaniEntity && <VaNiTrigger entity={vaniEntity} />}
     </div>
   );
 }

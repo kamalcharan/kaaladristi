@@ -38,9 +38,14 @@ import {
 
 export type StudioSide = 'strength' | 'caution'
 
+/** How a card slot renders its number: a price level, a signed percentage,
+ *  or a plain count (sessions above the Golden Line). */
+export type StudioValueKind = 'price' | 'pct' | 'count'
+
 export interface StudioLevel {
   label: string
   value: (r: ScanStock) => number | null | undefined
+  kind: StudioValueKind
   /** fieldConfig key for colouring, when the field has one. */
   colorKey?: string
 }
@@ -120,10 +125,14 @@ export interface StudioDescriptor {
   xlsVariant: ScanVariant
 
   /**
-   * The two level columns the cards view shows in its third row. Breakout
-   * shows its breakout level and distance from it; the movers show the prior
-   * period close and the move since.
+   * The card's ledger — frozen as Option B+E (2026-09-07, docs/claude/
+   * scanner-gap-audit-2026-09-06.md §9). Four fixed slots on every Studio:
+   * the scan's own metric first and largest (`cardHero`), then two price
+   * levels (`cardLevels`), then RVOL. Same slot, same meaning, so the eye
+   * learns where to look once. The hero is also the table's DEFAULT_SORT key
+   * for the preset, so cards and table agree on what "first" means.
    */
+  cardHero: StudioLevel
   cardLevels: [StudioLevel, StudioLevel]
 
   /**
@@ -240,11 +249,16 @@ const glHighlight = (event: GlEvent) => ({
   },
 })
 
+/** Second ledger slot shared by every non-GL Studio. `w52_low` would be the
+ *  natural mirror for the caution side, but km_scan_results does not carry
+ *  it (migration 200 projects w52_high only) — a slot that read "—" on 500
+ *  rows is worse than the high, which still says how far the fall has gone.
+ *  Add w52_low to the matview before switching the caution presets. */
+const W52_HIGH_LEVEL: StudioLevel = { label: '52W High', value: (r) => r.w52_high, kind: 'price' }
+
 /** The Golden Line is sma_150; `pct_from_gl` is the close's distance above it. */
-const GL_CARD_LEVELS: [StudioLevel, StudioLevel] = [
-  { label: 'GL', value: (r) => r.sma_150 },
-  { label: 'vs GL', value: (r) => r.pct_from_gl, colorKey: 'pct_from_gl' },
-]
+const GL_LEVEL: StudioLevel = { label: 'GL (150d)', value: (r) => r.sma_150, kind: 'price' }
+const VS_GL: StudioLevel = { label: 'vs GL', value: (r) => r.pct_from_gl, kind: 'pct', colorKey: 'pct_from_gl' }
 
 /** Shared by all three caution presets — the crossing that matters there is
  *  into the bear side, worded in ZONE_LABELS' own terms. */
@@ -268,9 +282,10 @@ export const STUDIO_DESCRIPTORS: Record<string, StudioDescriptor> = {
     rsFlip: { question: 'Which stocks just turned RS-green?', into: 'bullish' },
     exportName: 'Breakout_Surge',
     xlsVariant: 'breakout_surge',
+    cardHero: { label: '% from Brk', value: (r) => r.pct_from_breakout, kind: 'pct', colorKey: 'pct_from_breakout' },
     cardLevels: [
-      { label: 'Brk Lvl', value: (r) => r.breakout_level },
-      { label: 'Brk%', value: (r) => r.pct_from_breakout, colorKey: 'pct_from_breakout' },
+      { label: 'Brk Lvl', value: (r) => r.breakout_level, kind: 'price' },
+      W52_HIGH_LEVEL,
     ],
     displayName: 'Breakout Surge',
   },
@@ -289,9 +304,10 @@ export const STUDIO_DESCRIPTORS: Record<string, StudioDescriptor> = {
     rsFlip: { question: 'Which stocks just turned RS-green?', into: 'bullish' },
     exportName: 'Weekly_Movers',
     xlsVariant: 'default',
+    cardHero: { label: 'WTD', value: (r) => r.pct_wtd, kind: 'pct', colorKey: 'pct_wtd' },
     cardLevels: [
-      { label: 'Prev Wk', value: (r) => r.prev_week_close },
-      { label: 'WTD%', value: (r) => r.pct_wtd, colorKey: 'pct_wtd' },
+      { label: 'Prev Wk', value: (r) => r.prev_week_close, kind: 'price' },
+      W52_HIGH_LEVEL,
     ],
     displayName: 'Weekly Movers',
   },
@@ -310,9 +326,10 @@ export const STUDIO_DESCRIPTORS: Record<string, StudioDescriptor> = {
     rsFlip: { question: 'Which stocks just turned RS-green?', into: 'bullish' },
     exportName: 'Monthly_Movers',
     xlsVariant: 'default',
+    cardHero: { label: 'MTD', value: (r) => r.pct_mtd, kind: 'pct', colorKey: 'pct_mtd' },
     cardLevels: [
-      { label: 'Prev Mth', value: (r) => r.prev_month_close },
-      { label: 'MTD%', value: (r) => r.pct_mtd, colorKey: 'pct_mtd' },
+      { label: 'Prev Mth', value: (r) => r.prev_month_close, kind: 'price' },
+      W52_HIGH_LEVEL,
     ],
     displayName: 'Monthly Movers',
   },
@@ -330,9 +347,10 @@ export const STUDIO_DESCRIPTORS: Record<string, StudioDescriptor> = {
     industryQuestion: CAUTION_INDUSTRY_Q,
     exportName: 'Weekly_Decliners',
     xlsVariant: 'default',
+    cardHero: { label: 'WTD', value: (r) => r.pct_wtd, kind: 'pct', colorKey: 'pct_wtd' },
     cardLevels: [
-      { label: 'Prev Wk', value: (r) => r.prev_week_close },
-      { label: 'WTD%', value: (r) => r.pct_wtd, colorKey: 'pct_wtd' },
+      { label: 'Prev Wk', value: (r) => r.prev_week_close, kind: 'price' },
+      W52_HIGH_LEVEL,
     ],
     displayName: 'Weekly Decliners',
   },
@@ -348,9 +366,10 @@ export const STUDIO_DESCRIPTORS: Record<string, StudioDescriptor> = {
     industryQuestion: CAUTION_INDUSTRY_Q,
     exportName: 'Monthly_Decliners',
     xlsVariant: 'default',
+    cardHero: { label: 'MTD', value: (r) => r.pct_mtd, kind: 'pct', colorKey: 'pct_mtd' },
     cardLevels: [
-      { label: 'Prev Mth', value: (r) => r.prev_month_close },
-      { label: 'MTD%', value: (r) => r.pct_mtd, colorKey: 'pct_mtd' },
+      { label: 'Prev Mth', value: (r) => r.prev_month_close, kind: 'price' },
+      W52_HIGH_LEVEL,
     ],
     displayName: 'Monthly Decliners',
   },
@@ -369,9 +388,10 @@ export const STUDIO_DESCRIPTORS: Record<string, StudioDescriptor> = {
     industryQuestion: CAUTION_INDUSTRY_Q,
     exportName: 'Breakdown_Surge',
     xlsVariant: 'default',
+    cardHero: { label: '% Below Floor', value: (r) => r.pct_from_breakdown, kind: 'pct', colorKey: 'pct_from_breakdown' },
     cardLevels: [
-      { label: 'Brk Dn Lvl', value: (r) => r.breakdown_level },
-      { label: '% Below', value: (r) => r.pct_from_breakdown, colorKey: 'pct_from_breakdown' },
+      { label: 'Brk Dn Lvl', value: (r) => r.breakdown_level, kind: 'price' },
+      W52_HIGH_LEVEL,
     ],
     // kd_scan_presets calls this one "Breakdown Surge"; the id is the outlier.
     displayName: 'Breakdown Surge',
@@ -390,7 +410,10 @@ export const STUDIO_DESCRIPTORS: Record<string, StudioDescriptor> = {
     newSinceYesterday: false,
     exportName: 'Golden_Line_Breakout',
     xlsVariant: 'default',
-    cardLevels: GL_CARD_LEVELS,
+    // Day one above the line: the distance reclaimed is the number; sessions
+    // above is 1 on every row and says nothing.
+    cardHero: VS_GL,
+    cardLevels: [GL_LEVEL, W52_HIGH_LEVEL],
     displayName: 'Golden Line Breakout',
   },
 
@@ -407,7 +430,10 @@ export const STUDIO_DESCRIPTORS: Record<string, StudioDescriptor> = {
     // A retest CAN repeat on consecutive sessions, so the card is real here.
     exportName: 'Golden_Line_Retest',
     xlsVariant: 'default',
-    cardLevels: GL_CARD_LEVELS,
+    // A retest is about the hold, so the count of sessions above the line
+    // leads and the distance takes the second level slot.
+    cardHero: { label: 'Sessions above GL', value: (r) => r.gl_days_above, kind: 'count', colorKey: 'gl_days_above' },
+    cardLevels: [GL_LEVEL, VS_GL],
     displayName: 'Golden Line Retest',
   },
 }

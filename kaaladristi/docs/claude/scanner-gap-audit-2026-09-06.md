@@ -409,6 +409,21 @@ or more. "Where" names the file(s) to open.
   `AtmosphericBadge` on the Studio; count badges for Flower Pot (matview list)
   and the GL pair (`fetchDirectPresetCounts` → `executeScan().length`, retired
   by C1); dead exports removed; CLAUDE.md migration line at 202.
+- **Studio card redesign — DONE 2026-09-07 (Option B+E, frozen on the
+  "Scanner Studio Cards" canvas).** `BreakoutSurgeTable.tsx` renders the
+  three fixed rows on all eight Studios: signal band (VaNi · RS band · flow ·
+  SVD/SBD/SYD · RSI state) → ledger (scan metric first and largest · level ·
+  level · RVOL, price rail right) → Score 5D vs 22D bars. Slots come from the
+  descriptor's new `cardHero` + typed `cardLevels`; the hero is also each
+  preset's `DEFAULT_SORT` key. Phone: 2×2 ledger, avatar and ✦ inside the
+  identity row (`ScanCardWrapper bare`); a narrow desktop column (~1280px
+  with both sidebars) drops to the same 2×2 via a ResizeObserver rather than
+  wrapping mid-row. Studio's Table/Cards toggle now persists under the same
+  `scan_view_mode` key the generic layout uses. `qa-mobile.mjs --element=`
+  captures one element (used: `[data-qa=studio-cards]`). Known gap:
+  `w52_low` is not in `km_scan_results`, so the caution presets show 52W
+  High in the second level slot until the matview grows the column (fold
+  into C1).
 - **Batch 2:** B1, B2, then C2 on top of them.
 - **Batch 3:** C1, then B3.
 - **Owner, any time:** D1–D5, E1, C3 as a convention.
