@@ -31,7 +31,9 @@ const navSections: NavSection[] = [
     items: [
       { to: '/workspace',        glyph: '⊞', label: 'Workspace' },
       { to: '/guide',            glyph: '?', label: 'How to use DristiQ' },
-      { to: '/almanac',         glyph: '◈', label: 'Almanac' },
+      // Almanac hidden from the user menu for launch (owner 2026-09-07) — astro is
+      // not releasing yet; the route stays live and admins still see it.
+      { to: '/almanac',         glyph: '◈', label: 'Almanac', adminOnly: true },
       { to: '/catalog',          glyph: '⊟', label: 'Catalog' },
       { to: '/sector-rotation',  glyph: '⇌', label: 'Sector Rotation' },
       { to: '/scanner',        glyph: '⊙', label: 'Scanner' },

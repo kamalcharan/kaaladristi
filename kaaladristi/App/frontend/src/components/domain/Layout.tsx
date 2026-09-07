@@ -12,6 +12,9 @@ import JobMonitor from './JobMonitor';
 import { NoiseOverlay } from '@/components/ui';
 import PageTour from '@/components/ui/PageTour';
 
+// Topbar "Ask VaNi" pill — hidden for launch (owner 2026-09-07).
+const SHOW_ASK_VANI = false
+
 export default function Layout() {
   const [collapsed, setCollapsed] = useState(
     () => localStorage.getItem('kd_sidebar_collapsed') === 'true'
@@ -89,8 +92,10 @@ export default function Layout() {
               <DataFreshnessChip />
             </div>
 
-            {/* VaNi button — indigo-bg, indigo border, pill */}
-            <button
+            {/* VaNi button — indigo-bg, indigo border, pill.
+                Hidden for launch (owner 2026-09-07); flip SHOW_ASK_VANI to restore.
+                The per-card ✦ triggers and the drawer itself stay wired. */}
+            {SHOW_ASK_VANI && <button
               onClick={toggleVani}
               className={cn(
                 'inline-flex items-center cursor-pointer transition-all shrink-0',
@@ -112,7 +117,7 @@ export default function Layout() {
             >
               <span style={{ fontSize: '13px' }}>✦</span>
               <span className="hidden sm:inline">Ask VaNi</span>
-            </button>
+            </button>}
           </div>
         </header>
 
