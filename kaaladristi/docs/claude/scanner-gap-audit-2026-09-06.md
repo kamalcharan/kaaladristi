@@ -348,3 +348,63 @@ user mid-toggle.
 5. **§7 descriptor consolidation** — so the next scanner cannot regress.
 6. **§3a GL matview arms**, **§3e GL adapters**, **§4** — as scheduled.
 
+---
+
+## 11. Task list — the working checklist
+
+Every open item from the 2026-09-06 session, one place. IDs are stable;
+tick them off here. Size: **S** under an hour, **M** half a day, **L** a day
+or more. "Where" names the file(s) to open.
+
+### A. Bugs — wrong numbers or wrong order, fix regardless of UX decisions
+
+| ID | Task | Where | Size |
+|---|---|---|---|
+| A1 | Add `DEFAULT_SORT` entries for the seven scanners that fall through to `magic_rs` (wk/mo movers `pct_wtd`/`pct_mtd` desc, wk/mo decliners asc, breakdown `pct_from_breakdown` asc, gl_breakout `pct_from_gl` desc, gl_retest `gl_days_above` desc). Fixes table order AND the cards-vs-table disagreement (§2a, §9b). | `ScanTable.tsx` | S |
+| A2 | Studio cards: pass `onClick` (the Studio's existing `onRowClick`) and render `BookmarkToggle` in `BreakoutSurgeCards`; same two props in `ConvictionFlowCards`. Cards can then open and bookmark a stock like the table row (§9a). | `BreakoutSurgeTable.tsx`, `ConvictionFlowTable.tsx`, `ScannerStudio.tsx` | S |
+| A3 | Replace the Studio's plain "Loading real scan results…" text with `<DristiQLoader />` (§8). | `ScannerStudio.tsx:243` | S |
+| A4 | Tab-strip count badge for presets outside the matview lists (GL pair, Flower Pot): fall through to `executeScan(id).length` in `getAllScanCounts` (§2b). Superseded by C1 if that lands first. | `scanEngine.ts` | S |
+
+### B. Capability gaps — Breakout Surge can, the others cannot
+
+| ID | Task | Where | Size |
+|---|---|---|---|
+| B1 | Filter bar `metric` group for Studio presets: min/max on the descriptor's ranking column (labelled from `fieldConfig`) + RVOL Min. Also closes the invisible-RVOL-filter problem (§3b, §3c). | `ScanFilterBar.tsx`, `scannerStudio.ts` (expose ranking key) | S–M |
+| B2 | XLS export variant that appends the descriptor's two levels + Score 5D/22D + 5D/22D returns, used by the seven `xlsVariant: 'default'` Studios (§3d). Flower Pot gets its compression fields the same way if wanted. | `downloadXls.ts`, `scannerStudio.ts` | S |
+| B3 | Chart-setup adapters for `gl_breakout` / `gl_retest` (or one parameterised on the event), following `breakoutSurge.ts`. Content work: the Golden Line story has to be written (§3e). | `services/thesis/adapters/` | M |
+| B4 | Studio renders `ScanStalenessBanner` and `AtmosphericBadge` like the generic layout (§4). | `ScannerStudio.tsx` | S |
+
+### C. Structural — stop the audit from repeating
+
+| ID | Task | Where | Size |
+|---|---|---|---|
+| C1 | Migration: add `gl_breakout` / `gl_retest` arms to `km_scan_results` (mirror `fetchGlEvents`: NSE, ISIN-dedup, `gl_event = X`, no price/EMA gate, cap 200) and project `pct_from_gl`, `gl_event`, `gl_days_above`, `bm_event`, `bm_ratio`. Then move the pair into `MATVIEW_PRICE_ACTION_PRESETS`, keep the fetcher as fallback, update `_GL_POOL`'s note. Closes §3a and A4 (§2b). | new `km_migration_202_*.sql`, `scanEngine.ts`, `compute_scan_membership_snapshot.py` | M |
+| C2 | Descriptor consolidation: `STUDIO_DESCRIPTORS` carries sort key, column set, filter group, export variant; `ScanTable`, `ScanFilterBar`, `downloadXls` and the counts list read it instead of their own maps (§7). After this a preset with a descriptor cannot be missing a sort, a filter or an export column. Do AFTER A1/B1/B2 so each behaviour is right before it is moved. | five files | M |
+| C3 | Refresh `km_scan_results` is part of every migration that recreates it `WITH NO DATA` — either the migration ends with the two `REFRESH` statements, or the runbook says so. Today's outage on the six bundle scanners came from migration 200 leaving both views empty until the nightly step. | `DBscripts/` convention, `CLAUDE.md` | S |
+
+### D. Owner decisions — not code until decided
+
+| ID | Decision | Context |
+|---|---|---|
+| D1 | `flower_pot_burst` has no `vani_rule`. With none, ✦ never lights and "Burst" on the Discovery board has no definition the app can explain. Define one, or accept the label as-is. | §5 |
+| D2 | Dots vs Golden Line events: 19% of event bars (91 of 479 over 20 sessions) carry neither `dot_svd` nor `dot_sbd` by the time the scan reads them, though `gl_events` required one when it stamped the event — a later `compute_dots` run is rewriting already-stamped bars. Investigate the re-run window, or accept that the event flag is the record and the dots are advisory. | handover §12 (GL entry) |
+| D3 | `gl_breakout` hides "new since yesterday" (structurally 100%). Keep the exception or restore full parity. | descriptor `newSinceYesterday` |
+| D4 | Phone default view: table with a sticky symbol column (today) vs cards. Product call. | handover §13 |
+| D5 | Cards-vs-table field sets differ by design across three card families (§9c/§9d). Leave as a knowing choice, or pick one family. | §9 |
+
+### E. Verification and hygiene
+
+| ID | Task | Size |
+|---|---|---|
+| E1 | Real-device phone pass (iOS Safari + Android Chrome): category strip swipe, tab strip swipe, table/cards toggle, Filters, a Studio intent card, landscape once, Ask VaNi. | S |
+| E2 | Remove or wire the unused exports `useVaNiIntents` (hooks/useVaNiChat.ts) and `buildWhyTags` (breakoutSurgeInsights.ts). | S |
+| E3 | JobMonitor "Backend offline" pill overlaps the scanner Action Island on a phone when the backend is down. Not a scanner component; move the pill or the island's `bottom`. | S |
+| E4 | Update `CLAUDE.md`'s "Next migration number" line (says 167; disk is at 201) and note the harness JWT fix in the theme-QA section. | S |
+
+### Suggested batches
+
+- **Batch 1 (one sitting):** A1, A2, A3, A4, B4, E2, E4.
+- **Batch 2:** B1, B2, then C2 on top of them.
+- **Batch 3:** C1, then B3.
+- **Owner, any time:** D1–D5, E1, C3 as a convention.
+
