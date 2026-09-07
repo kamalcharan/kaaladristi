@@ -46,10 +46,12 @@ interface UseTourOptions<Tab extends string> {
   autoStart?: boolean
   /** Called before a step that lives on another tab; must trigger the tab render. */
   onTabChange?: (tab: Tab) => void
+  /** Fires when the tour closes (completed or skipped) — the Guide marks a walk here. */
+  onDone?: () => void
 }
 
 export function useTour<Tab extends string>(opts: UseTourOptions<Tab>) {
-  const { tourId, steps, userId, enabled = true, autoStart = true, onTabChange } = opts
+  const { tourId, steps, userId, enabled = true, autoStart = true, onTabChange, onDone } = opts
 
   const driverRef = useRef<Driver | null>(null)
   // live refs so the driver callbacks never close over stale props
@@ -57,6 +59,8 @@ export function useTour<Tab extends string>(opts: UseTourOptions<Tab>) {
   stepsRef.current = steps
   const onTabChangeRef = useRef(onTabChange)
   onTabChangeRef.current = onTabChange
+  const onDoneRef = useRef(onDone)
+  onDoneRef.current = onDone
 
   const hasSeen = useCallback((): boolean => {
     if (!userId) return true
@@ -124,6 +128,7 @@ export function useTour<Tab extends string>(opts: UseTourOptions<Tab>) {
       onDestroyed: () => {
         markSeen() // skipped or completed — either way, don't nag again
         driverRef.current = null
+        onDoneRef.current?.()
       },
     })
 

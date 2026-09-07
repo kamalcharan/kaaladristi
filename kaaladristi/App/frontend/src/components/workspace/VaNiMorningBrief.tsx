@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { X, Trash2 } from 'lucide-react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useFrameworkStore, type VaNiCorrelation } from '@/stores/frameworkStore'
+import ContinuityLine from './ContinuityLine'
 import type { UserFramework } from '@/types/framework'
 import { useAuthStore } from '@/stores/authStore'
 import type { KmProfile } from '@/types'
@@ -177,11 +178,14 @@ export default function VaNiMorningBrief({ modalOpen, onModalOpen, onModalClose,
     }
     if (items.length === 0) {
       return (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0' }}>
-          <div style={orbStyle}>Vᴺ</div>
-          <span style={{ fontSize: 12, fontStyle: 'italic', color: 'color-mix(in srgb, var(--vani) 50%, transparent)', fontFamily: 'var(--font-display)' }}>
-            VaNi · No active signals in framework
-          </span>
+        <div>
+          <ContinuityLine compact />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0' }}>
+            <div style={orbStyle}>Vᴺ</div>
+            <span style={{ fontSize: 12, fontStyle: 'italic', color: 'color-mix(in srgb, var(--vani) 50%, transparent)', fontFamily: 'var(--font-display)' }}>
+              VaNi · No active signals in framework
+            </span>
+          </div>
         </div>
       )
     }
@@ -197,6 +201,7 @@ export default function VaNiMorningBrief({ modalOpen, onModalOpen, onModalClose,
             VaNi · Today
           </span>
         </div>
+        <ContinuityLine compact />
         {items.map((item, i) => (
           <div key={i} style={{
             position: 'relative', display: 'flex', alignItems: 'flex-start', gap: 8,
@@ -554,6 +559,7 @@ function MorningModal({ items, profile, onClose }: {
           <p style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.5, margin: 0 }}>
             What's active in your framework as markets open today.
           </p>
+          <ContinuityLine />
           <div style={{
             marginTop: 5, fontSize: 10, fontFamily: 'var(--font-mono, monospace)',
             color: 'var(--text-faint)',

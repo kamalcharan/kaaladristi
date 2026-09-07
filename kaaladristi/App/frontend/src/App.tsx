@@ -32,6 +32,7 @@ import { RuleList, RuleDetail } from '@/pages/RuleEngine';
 import MarketStructureView from '@/views/MarketStructureView';
 import PlanetaryIntelView from '@/views/PlanetaryIntelView';
 import WorkspacePage from '@/views/WorkspacePage'
+import GuidePage from '@/views/GuidePage'
 import CatalogPage from '@/views/CatalogPage';
 import PricingPage from '@/views/PricingPage'
 import AccountPage from '@/views/AccountPage';
@@ -112,6 +113,7 @@ function AppRoutes() {
       <Route element={<ProtectedRoute />}>
         <Route element={<Layout />}>
           <Route path="/workspace" element={<WorkspacePage />} />
+          <Route path="/guide" element={<GuidePage />} />
           <Route path="/catalog" element={<CatalogPage />} />
           <Route path="/sector-rotation" element={<SectorRotationPage />} />
           <Route path="/sector-rotation/:indexId" element={<IndexDetailPage />} />

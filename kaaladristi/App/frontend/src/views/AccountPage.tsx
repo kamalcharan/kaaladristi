@@ -4,18 +4,19 @@
  */
 
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { User, Lock, CreditCard, Palette } from 'lucide-react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import { User, Lock, CreditCard, Palette, Compass } from 'lucide-react'
 import { useAuthStore } from '@/stores/authStore'
 import { updateProfile, changePassword } from '@/services/auth'
 import { fmtDate } from '@/lib/dateUtils'
 import { isValidIndianMobile, normalizeIndianMobile } from '@/lib/phone'
 import { PageHeader, Tabs } from '@/components/ui'
 import ThemeSettings from '@/components/domain/ThemeSettings'
+import HowYouInvestPanel from '@/components/domain/Onboarding/HowYouInvestPanel'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
-type Tab = 'profile' | 'appearance' | 'security' | 'billing'
+type Tab = 'profile' | 'invest' | 'appearance' | 'security' | 'billing'
 
 // ── Plan helpers ─────────────────────────────────────────────────────────────
 
@@ -538,13 +539,20 @@ function BillingTab() {
 
 const TABS: { id: Tab; label: string; Icon: typeof User }[] = [
   { id: 'profile',    label: 'Profile',        Icon: User },
+  { id: 'invest',     label: 'How you invest', Icon: Compass },
   { id: 'appearance', label: 'Appearance',     Icon: Palette },
   { id: 'security',   label: 'Security',       Icon: Lock },
   { id: 'billing',    label: 'Plan & Billing', Icon: CreditCard },
 ]
 
+const TAB_IDS: Tab[] = ['profile', 'invest', 'appearance', 'security', 'billing']
+
 export default function AccountPage() {
-  const [activeTab, setActiveTab] = useState<Tab>('profile')
+  // `?tab=invest` (and `&rerun=1`) deep links come from the Guide, the setup
+  // wizard's step 4 and the beta welcome card.
+  const [searchParams] = useSearchParams()
+  const requested = searchParams.get('tab') as Tab | null
+  const [activeTab, setActiveTab] = useState<Tab>(requested && TAB_IDS.includes(requested) ? requested : 'profile')
 
   return (
     <div style={{ minHeight: '100%' }}>
@@ -571,6 +579,7 @@ export default function AccountPage() {
         </div>
 
         {activeTab === 'profile'    && <ProfileTab />}
+        {activeTab === 'invest'     && <HowYouInvestPanel rerun={searchParams.get('rerun') === '1'} />}
         {activeTab === 'appearance' && <AppearanceTab />}
         {activeTab === 'security'   && <SecurityTab />}
         {activeTab === 'billing'    && <BillingTab />}

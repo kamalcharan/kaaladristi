@@ -30,6 +30,7 @@ const navSections: NavSection[] = [
     flat: true,   // top-level items — no "View" parent heading
     items: [
       { to: '/workspace',        glyph: '⊞', label: 'Workspace' },
+      { to: '/guide',            glyph: '?', label: 'How to use DristiQ' },
       { to: '/almanac',         glyph: '◈', label: 'Almanac' },
       { to: '/catalog',          glyph: '⊟', label: 'Catalog' },
       { to: '/sector-rotation',  glyph: '⇌', label: 'Sector Rotation' },

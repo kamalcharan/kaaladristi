@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/stores/authStore';
 
 // Shown once per user per browser: acknowledgement is persisted in
@@ -14,7 +15,12 @@ const ackKey = (userId: string) => `kd_welcome_ack_${userId}`;
 
 export default function BetaWelcomeModal() {
   const user = useAuthStore((s) => s.user);
+  const profile = useAuthStore((s) => s.profile);
+  const navigate = useNavigate();
   const [isOpen, setIsOpen] = useState(false);
+  // Users onboarded before the persona flow (migration 204) never told VaNi
+  // how they invest; offer the 30-second Account tab instead of a re-onboard.
+  const needsPersona = !!profile?.onboarded && !profile.persona;
 
   useEffect(() => {
     if (!user?.id) return;
@@ -92,6 +98,30 @@ export default function BetaWelcomeModal() {
             This is not investment advice. DristiQ is an atmospheric intelligence platform —
             it observes patterns, not predictions.
           </p>
+
+          {needsPersona && (
+            <div
+              className="rounded-xl px-4 py-3 flex items-center gap-3"
+              style={{ background: 'var(--accent-glow)', border: '1px solid var(--accent-dim)' }}
+            >
+              <div className="flex-1 min-w-0">
+                <div className="text-[13px] font-semibold" style={{ color: 'var(--text-primary)' }}>
+                  Tell VaNi how you invest (30 seconds)
+                </div>
+                <div className="text-[12px]" style={{ color: 'var(--text-muted)' }}>
+                  Three quick choices set the scanners the Guide and Morning Brief follow. Your workbench stays as it is.
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => { acknowledge(); navigate('/account?tab=invest'); }}
+                className="text-[12px] font-semibold px-3 py-2 rounded-full"
+                style={{ background: 'var(--accent-solid)', color: '#fff', border: 'none', cursor: 'pointer', whiteSpace: 'nowrap' }}
+              >
+                Set it up →
+              </button>
+            </div>
+          )}
 
           {/* Disclaimer */}
           <div

@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useMemo } from 'react'
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { from } from '@/services/postgrest'
@@ -29,6 +29,9 @@ import AtmosphericBadge from '@/components/domain/AtmosphericBadge'
 import MyBookmarksPanel from '@/components/domain/MyBookmarksPanel'
 import TourLauncher from '@/components/ui/TourLauncher'
 import { useTour } from '@/hooks/useTour'
+import { useLocation } from 'react-router-dom'
+import { markGuideWalked, tourRequest } from '@/services/guideProgress'
+import { maybeRecordDay2Return } from '@/services/uxEvents'
 import { buildWorkspaceTourSteps } from '@/config/tours/workspaceTour'
 
 type ActiveTab = 'today' | 'discovery' | 'myspace' | 'bookmarks'
@@ -105,13 +108,29 @@ export default function WorkspacePage() {
   // ── Explainer walk — auto-starts on first visit (after welcome-modal ack),
   //    replayable via the ? launcher in the tab bar ──
   const tourSteps = useMemo(() => buildWorkspaceTourSteps({ astro: icpMode === 'astro' }), [icpMode])
+  // "Show me" from the Guide (`/workspace?tour=1&guide=workspace`) forces the
+  // walk once the framework is up and marks it walked when it closes.
+  const location = useLocation()
+  const tourReq = tourRequest(location.search)
   const { startTour } = useTour<ActiveTab>({
     tourId: 'workspace',
     steps: tourSteps,
     userId: profile?.id,
     enabled: !!framework && !isLoading,
+    autoStart: !tourReq,
     onTabChange: setActiveTab,
+    onDone: tourReq?.guideKey ? () => void markGuideWalked(tourReq.guideKey) : undefined,
   })
+  const forcedRef = useRef(false)
+  useEffect(() => {
+    if (!tourReq || forcedRef.current || !framework || isLoading) return
+    forcedRef.current = true
+    const t = window.setTimeout(() => void startTour(), 900)
+    return () => window.clearTimeout(t)
+  }, [tourReq, framework, isLoading, startTour])
+
+  // Onboarding metric: the user came back 1–3 days after setting a persona.
+  useEffect(() => { maybeRecordDay2Return(profile?.persona_set_at) }, [profile?.persona_set_at])
 
   useEffect(() => {
     if (!framework && profile?.id) {
