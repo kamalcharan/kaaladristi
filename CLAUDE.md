@@ -639,6 +639,56 @@ These are in `LESSONS_LEARNED.md` in full; summary for quick reference:
 
 ## Known Issues
 
+### 📋 NEXT SESSION (owner + Claude) — Scanner Studio: Flower Pot card + VaNi intents, card convergence
+Parked 2026-09-07 mid-discussion; pick up here. Full record: `docs/claude/scanner-gap-audit-2026-09-06.md` §11
+(task table with ✅ / ⏳ per item, the D1–D5 rows carry the owner's decisions verbatim) and
+`docs/claude/vani-scanner-handover.md` §0 (owner-run items).
+
+**Shipped this session, all on main:** Batches 1–3 of the gap audit (sort defaults, card
+click + bookmark, Studio loader/staleness/atmospheric badge, count badges, Studio metric
+filters, XLS metric columns, descriptor consolidation — `config/scannerStudio.ts`
+`STUDIO_DESCRIPTORS` is now the single source for a Studio's source/sort/columns/card
+slots/filter metric/export columns, and `lib/scan_contract.py` reads it), the frozen
+**Option B+E Studio card** on all eight Studios (`BreakoutSurgeTable.tsx`; canvas
+"Scanner Studio Cards"), Golden Line matview arms (**migration 202 — owner must run it,
+then `REFRESH MATERIALIZED VIEW km_scan_results; REFRESH MATERIALIZED VIEW
+km_scan_exclusion_counts;`** — the frontend already reads the pair as matview-served with
+fetcher fallback, and the nightly integrity check reports the arm empty until the refresh),
+Golden Line Story View adapters, phone default = cards (D4), Studio card sort chips, the
+Flower Pot live-releases accumulation fix, and "Solid Violet Dot" → "Volume Drive" in the
+VaNi prompt.
+
+**Decisions taken (do not re-open):** D2 closed — bare Golden Line event bars are the
+±5-calendar-day dot rule (2026-08-28), not a re-run; D3 keep `gl_breakout`'s
+new-since-yesterday exception; D4 cards on phone; D5 direction = converge every scanner on
+the B+E Studio card via a descriptor per preset (Conviction Flow and Flower Pot next, generic
+`StockCard` survives only for the stage/flow bundles until they get descriptors).
+
+**To discuss next (Flower Pot, `flower_pot_burst`):**
+1. **Card** — move onto the B+E card: hero = Tightness on coils / Quality on releases,
+   levels = 10-day range high/low, RVOL; signal band already carries the phase. Bookmark +
+   ✦ come free with it (today the page has neither).
+2. **VaNi intents** (candidates): `why_watch_coil` (tightness, coiled days, volume death),
+   `coiling_industries` (representation, same shape as `leading_industry`),
+   `recent_outcomes` (from `km_fpb_active` — the only scanner with outcome data),
+   `new_coils` once `compute_scan_membership_snapshot.py` covers the preset.
+3. **Stat tiles** — today's "Bursts / Shatters / Coiling today" are correct but thin;
+   candidates: coils entering vs leaving today, median coil age, trailing-20-session release
+   hit rate from `km_fpb_active`, leading coiling industry.
+4. **D1 VaNi rule** — deferred on purpose (no rule survived). Candidate: coil tightness
+   (top quartile) × Magic RS band (Leading/Improving). Not testable yet: tightness lives only
+   inside the matview (never stored per day) and `km_fpb_active` has 20 releases since
+   2026-07-28 (12 settled upward bursts: 9 target/holding, 3 stopped; zone at release does
+   not separate them). Path: store `fpb_compression_score`/`fpb_setup_days` on
+   `km_equity_eod` nightly, test at ~60 releases. Ship without ✦ until then.
+5. **Nomenclature** — the card metric line now uses the table's header words (Tightness ·
+   ATR ×60d · Vol ×norm · Coiled). `fieldConfig` has no `magic_rs_zone` key, so the table
+   still shows Magic RS as a number ("MagicRS vs N500") like every other Studio table; the
+   zone pill is on the card. Decide whether tables should carry the zone label too.
+
+Also still open from the audit: E1 real-device phone pass, E3 "Backend offline" pill overlapping
+the scanner Action Island on a phone.
+
 ### 📋 FOR REVIEW (owner) — Data depth: enriched signals only ~1.5–2 yr deep
 `DATA_DEPTH_AUDIT.md` (2026-07-12, read-only MCP audit). Raw **prices** are complete
 ~26 yr both exchanges (NSE 1996→, BSE 2000→), but the **enriched layer is shallow**:
