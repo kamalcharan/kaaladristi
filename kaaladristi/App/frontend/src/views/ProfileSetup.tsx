@@ -547,15 +547,21 @@ export default function ProfileSetup() {
     if (profile?.onboarded) navigate('/workspace', { replace: true })
   }, [profile?.onboarded, navigate])
 
-  // Resume: a returning user who built their workbench (icp_mode saved) but
-  // never completed the final steps lands here (ProtectedRoute forces /setup
-  // while onboarded is false). Drop them on Plan (step 5) instead of making
-  // them redo everything. Runs whenever the profile changes, not once on
-  // mount — see the 2026-07-30 stall note in git history.
+  // Resume: a returning user who answered the Personality step (persona_set_at
+  // stamped by the RPC, migration 204) but never finished lands here
+  // (ProtectedRoute forces /setup while onboarded is false). Drop them on
+  // Scanners (step 3) — rebuilding the starter workbench is idempotent — instead
+  // of making them redo the questions. Runs whenever the profile changes, not
+  // once on mount (2026-07-30 stall note in git history).
+  //
+  // NOT icp_mode: migration 100 gave it NOT NULL DEFAULT 'astro', so every
+  // profile has it from creation and the old rule sent EVERY new signup
+  // straight to Plan → Look — nobody ever saw the VaNi intro or the ICP
+  // question (found 2026-09-07 on the first real signup after the rework).
   useEffect(() => {
     if (!profile) return
     if (profile.onboarded) return
-    if (profile.icp_mode && step < 5) setStep(5)
+    if (profile.persona_set_at && step < 3) setStep(3)
   }, [profile, step])
 
   // Funnel visibility — which onboarding step a user actually reaches.
