@@ -197,3 +197,154 @@ Discovery board is a label without a definition.
 5. **§3a GL matview arms** — a migration; closes the pair's remaining gaps.
 6. **§3e GL adapters** — content work; schedule separately.
 7. **§4** — two lines, whenever the Studio is next touched.
+
+---
+
+## 7. Why there are so many gaps when the code is "reusable"
+
+The owner's challenge is right about the components and wrong about the
+configuration, and the difference is the whole story.
+
+The **buttons and engines are shared**: `ScannerExportButtons` (XLS + TV),
+`ScanFilterBar`'s `applyFilters`, `ScanTable`, the VaNi publisher, the Studio
+shell. Every Studio renders the same XLS button, the same TV button, the same
+filter engine. None of the gaps in §2–§3 is a missing component.
+
+What is **not shared is preset identity**. Each of these files carries its own
+hand-maintained "what does preset X get" map, and a new preset must be added
+to every one of them by hand or it silently falls to a default:
+
+| # | File | Map / branch | Falls through to |
+|---|---|---|---|
+| 1 | `ScanTable.tsx` | `DEFAULT_SORT` | `magic_rs desc` (§2a — **wrong order**) |
+| 2 | `ScanTable.tsx` | `PRESET_COL_OVERRIDES` | the category's generic columns |
+| 3 | `ScanFilterBar.tsx` | `getFilterGroup` (+ `STAGE_PRESETS`, `JOURNEY_WAKE_PRESETS`) | `standard` group — no metric bounds, **RVOL input hidden** (§3b/§3c) |
+| 4 | `ScanFilterBar.tsx` / `ScanView.tsx` | `defaultFiltersFor` | `DEFAULT_FILTERS` |
+| 5 | `downloadXls.ts` | `ScanVariant` switch | `baseRow` — **metric column absent** (§3d) |
+| 6 | `scanEngine.ts` | `SCAN_PRESETS` (offline fallback copy of the DB table) | — |
+| 7 | `scanEngine.ts` | `executeScan` dispatch chain | error |
+| 8 | `scanEngine.ts` | `MATVIEW_PRICE_ACTION_PRESETS` / `MATVIEW_BUNDLE_PRESETS` | direct fetch (§3a) |
+| 9 | `scanEngine.ts` | `fetchAllScanCountsFromMatview` `.in([...])` | **no count badge** (§2b) |
+| 10 | `config/scannerStudio.ts` | `STUDIO_DESCRIPTORS` | generic layout |
+| 11 | `thesis/adapters/index.ts` | `SETUP_ADAPTERS` | no setup handoff (§3e) |
+| 12 | `compute_scan_membership_snapshot.py` | `SNAPSHOT_PRESET_IDS` + `DISPLAY_CAP` + `PRESET_MEMBERSHIP_FNS` | no day-over-day cards |
+| 13 | `kd_scan_presets` (DB) | row + `vani_rule` + `vani_side` | not on Discovery |
+| 14 | `km_scan_results` (migration) | matview arm | direct fetch |
+
+Fourteen places. Breakout Surge has an entry in all fourteen because it was
+built first and each map was written *for* it. Every scanner added since
+picked up whichever maps its author knew about. The five-scanner sprint added
+entries to #10, #12 and #13 — the three the handover named — and the audit
+finds the gaps in exactly the eleven it did not name. That is not carelessness
+in any one session; it is the predictable result of identity being spread
+across fourteen files with no single list to check against.
+
+**The structural fix** is to make `STUDIO_DESCRIPTORS` (or the DB row) the one
+place that carries sort key, column set, filter group, export variant and
+matview membership, and have #1, #2, #3, #5 and #9 read from it instead of
+keeping their own maps. Then a preset that has a descriptor cannot be missing
+a sort or an export column. That is a refactor of five files, not a rewrite,
+and it is the only change that stops this audit from being repeated for the
+next scanner.
+
+---
+
+## 8. Loader — the owner is right, the Studios do not carry one
+
+| Layout | While loading it renders |
+|---|---|
+| Generic (`ScannerResults`) | `<DristiQLoader />` |
+| Stage 2 | `<DristiQLoader message="Preparing Data For You…" />` |
+| Conviction Flow, Flower Pot, Waking Giants | `<DristiQLoader />` |
+| **All 8 Studios** | `<p>Loading real scan results…</p>` — plain muted text |
+
+`ScannerStudio.tsx:243`. The branded loader exists and is one import away;
+the Studio predates its adoption and was never brought in line. Inherited by
+every Studio from `breakout_surge` down. One line.
+
+---
+
+## 9. Cards view vs table view — where the two disagree
+
+Three different card components serve the scanner pages, and they are not
+equivalent to the table or to each other.
+
+### 9a. Actions on a row — the real inconsistency
+
+| Affordance | Table row | Generic cards (`StockCard`) | **Studio cards** (`BreakoutSurgeCards`) | Conviction Flow cards |
+|---|---|---|---|---|
+| Click → chart with `&setup=` handoff | ✓ | ✓ | **✗ no click at all** | **✗** |
+| Bookmark star | ✓ | ✓ | **✗** | **✗** |
+| ✦ Ask VaNi | ✓ | ✓ | ✓ | ✓ |
+
+In every Studio's cards view a stock **cannot be opened or bookmarked**; the
+same stock one toggle away in table view can be both. `BreakoutSurgeCards`
+passes `vaniEntity` to `ScanCardWrapper` but no `onClick`, and imports no
+`BookmarkToggle`. The wrapper already supports both (it renders `role=button`
+when given a handler), so this is two props and one import per card
+component — the Studio's existing `onRowClick` is the handler to pass.
+
+### 9b. Order — the two views of one scan disagree
+
+The Studio hands the same `filtered` array to both views. Cards render it in
+the **fetched order** — the scan's own ranking. The table applies
+`DEFAULT_SORT` on mount, which for seven scanners is the `magic_rs` fallback
+(§2a). So on Weekly Movers the cards are ranked by WTD gain and the table by
+Magic RS. Fixing §2a fixes this.
+
+### 9c. Which numbers you see
+
+| | Fields |
+|---|---|
+| Table (per-preset `PRESET_COL_OVERRIDES`) | the scan's metric first, then Score 5D/22D, D%, RVOL, delivery, EMA20, RSI, Magic RS… — 12–16 columns, user-editable |
+| Studio cards | Close, D%, EMA20, RSI, the descriptor's two levels, 5D%, 22D%, RVOL hero |
+| Generic cards | Close, D%, EMA20, reward/ATR, then *signal pills*: MRS/N500, RSI, Institution, RVOL, Delivery%, Rising/Falling Flow, SVD/SBD/SYD dots |
+| Conviction Flow cards | Close, D%, EMA20, RSI, RSS, avg amt 5D/22D, Today Deliv, 52w, Dist, 5D/22D/66D% |
+
+Concretely: the Golden Line table leads with `gl_event` and `gl_days_above`;
+the Golden Line cards show neither (only GL level and % vs GL). The Breakdown
+Surge table shows `pct_from_breakdown`; the cards show it as "% Below" — fine.
+The generic cards show Magic RS, delivery and the SVD/SBD dots; the Studio
+cards show none of those. None of this is *wrong*, but a user switching views
+loses columns without being told, and the Columns picker (table only) has no
+cards equivalent.
+
+### 9d. Grouping and sorting controls
+
+| | Table | Generic cards | Studio cards |
+|---|---|---|---|
+| VaNi Highlight / All Results split | no (inline ✦) | **yes**, two sections | no |
+| Sort control | column headers | **Sort chips** (Score 5D / 22D / VaNi …) | none — fetched order only |
+| Empty state | "No results" | shared copy | descriptor `displayName` copy |
+
+The generic layout hides its sort chips in table view on purpose ("the table's
+sortable headers are the single sort control"). The Studio cards have no sort
+control at all — the only way to re-order Studio cards is to switch to the
+table, where the order is (today) wrong.
+
+### 9e. Export follows the filter, not the view
+
+Both views export `filtered`, in fetched order. Sorting the table does not
+change the XLS order. Defensible, but undocumented, and the button sits under
+a table the user just sorted.
+
+### 9f. Verdict on cards
+
+The cards view is not a second rendering of the table; it is a third
+component family with its own field set, no sort, and — in the Studios — no
+row actions. §9a is a defect and should be fixed with §8. §9b is fixed by
+§2a. §9c/§9d are the UX-parity question the owner has said is *not* the aim;
+they are recorded so the choice is made knowingly rather than discovered by a
+user mid-toggle.
+
+---
+
+## 10. Revised order
+
+1. **§2a sort map** — seven entries; also fixes §9b.
+2. **§8 loader + §9a card actions** — one line and two props; every Studio.
+3. **§2b counts** — the fallthrough.
+4. **§3b/§3c filter group** and **§3d export row**.
+5. **§7 descriptor consolidation** — so the next scanner cannot regress.
+6. **§3a GL matview arms**, **§3e GL adapters**, **§4** — as scheduled.
+
