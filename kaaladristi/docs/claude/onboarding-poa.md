@@ -100,7 +100,13 @@ Phone: design every new element at 390px first (`qa-mobile.mjs --element` for ea
 
 ---
 
-## Phase 3 — "How to use DristiQ" + Show me · 1 day
+## Phase 3 — "How to use DristiQ" + Show me · 1 day · ✅ built 2026-09-07
+
+Built: `views/GuidePage.tsx` at `/guide`, sidebar item "How to use DristiQ" (after Workspace).
+Show me = navigate to the real page with `?tour=1&guide=<key>`; `components/ui/PageTour.tsx` and
+`views/WorkspacePage.tsx` honour it (forced start, `useTour` gained `onDone`) and
+`services/guideProgress.ts markGuideWalked` writes `guide_progress`. Rows: the persona's 4 scanners +
+Workspace + Study (`/chart/index/1`).
 
 - New route `/guide` (`views/GuidePage.tsx`) + nav item "How to use DristiQ" (top nav,
   after Workspace; also linked from BetaWelcomeModal).
@@ -113,7 +119,12 @@ Phone: design every new element at 390px first (`qa-mobile.mjs --element` for ea
 
 ---
 
-## Phase 4 — Account "How you invest" tab · ½ day
+## Phase 4 — Account "How you invest" tab · ½ day · ✅ built 2026-09-07
+
+Built: `components/domain/Onboarding/HowYouInvestPanel.tsx` under Account (`?tab=invest`,
+`&rerun=1` opens the three live picks). Saving changes what the Guide and Morning Brief follow; the
+workbench is deliberately NOT rebuilt (no silent overwrite of a customised framework). Existing users
+(`onboarded` without `persona`) get a "Tell VaNi how you invest (30s)" card in BetaWelcomeModal.
 
 `views/AccountPage.tsx` `TABS` gains `{ id: 'invest', label: 'How you invest' }`:
 reading strip (read-only) + three choosers (same components as step 2, no live cards
@@ -123,7 +134,14 @@ walked). Saves through `updateProfile`.
 
 ---
 
-## Phase 5 — Morning Brief continuity · ½ day (backend + 1 line UI)
+## Phase 5 — Morning Brief continuity · ½ day · ✅ built 2026-09-07 (frontend-only, deviation)
+
+Built as a deterministic browser-side line instead of an LLM prompt change:
+`components/workspace/ContinuityLine.tsx` inside VaNiMorningBrief (pinned strip + modal) for the first
+`CONTINUITY_DAYS` (14) after `persona_set_at` — "{Persona}s on DristiQ are watching {first scanner}
+today. The name you picked, X, closed ₹… (+y%). N of 6 guide walks done." No per-user LLM cost, no
+backend change, never drifts from the persona vocabulary. `day2_return` is written from WorkspacePage
+mount via `services/uxEvents.ts maybeRecordDay2Return`.
 
 - `POST /api/vani/daily` request gains optional `persona` and `first_bookmark_symbol`
   (frontend already knows both). Backend (`pipeline2_api.py vani_daily` →
@@ -137,7 +155,7 @@ walked). Saves through `updateProfile`.
 
 ---
 
-## Phase 6 — QA + ship · 1 day
+## Phase 6 — QA + ship · 1 day · ⏳ typecheck / theme gate / persona check green; harness screenshots at 390 + 1280 for /setup steps 1–4, /guide, /account?tab=invest reviewed. Owner: run migration 204, `./deploy.sh`, then walk /setup on a fresh account and the Account tab on an existing one.
 
 - `npm run typecheck && npm run lint && npm run build` (theme gates run in build).
 - `scripts/qa/qa-mobile.mjs` on `/setup` steps 1–5, `/guide`, `/account?tab=invest`.
