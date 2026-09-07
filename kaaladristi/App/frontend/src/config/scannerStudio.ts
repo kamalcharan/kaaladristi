@@ -39,8 +39,10 @@ import {
 export type StudioSide = 'strength' | 'caution'
 
 /** How a card slot renders its number: a price level, a signed percentage,
- *  or a plain count (sessions above the Golden Line). */
-export type StudioValueKind = 'price' | 'pct' | 'count'
+ *  a plain count (sessions above the Golden Line), or an unsigned two-decimal
+ *  score (Flower Pot's Tightness and Quality — bounded indices where the
+ *  second decimal separates the rows and a sign would be meaningless). */
+export type StudioValueKind = 'price' | 'pct' | 'count' | 'score'
 
 export interface StudioLevel {
   /** ScanStock column. Every slot is a stored column — no derived values —
@@ -517,7 +519,7 @@ export function studioPresetsBySource(source: StudioDescriptor['source']): strin
  * audit §3d).
  */
 export function studioXlsColumns(d: StudioDescriptor): XlsColumn[] {
-  const dp = (lvl: StudioLevel) => (lvl.kind === 'count' ? 0 : lvl.kind === 'price' ? 1 : 2)
+  const dp = (lvl: StudioLevel) => (lvl.kind === 'count' ? 0 : lvl.kind === 'price' ? 1 : 2)  // pct and score both take 2
   const slot = (lvl: StudioLevel): XlsColumn => ({ header: lvl.label, value: (r) => levelValue(lvl, r), dp: dp(lvl) })
   return [
     slot(d.cardHero),

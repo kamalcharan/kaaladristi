@@ -24,6 +24,7 @@ import VaNiFeedback from '@/components/domain/VaNi/VaNiFeedback'
 import { useVaNiAsk } from '@/hooks/useVaNiChat'
 import { useIndustryLeadershipMap } from '@/hooks/useIndustryRotation'
 import { getStudioDescriptor, studioXlsColumns, cardSortOptions, sortForCards, type StudioDescriptor } from '@/config/scannerStudio'
+import ScanStatTile from '@/components/domain/ScanStatTile'
 import { isPhoneNow } from '@/hooks/useMediaQuery'
 import type { ScanStock, ScanDefinition } from '@/types'
 
@@ -294,13 +295,13 @@ export default function ScannerStudio({ presetId }: { presetId: string }) {
               330 — so six tiles stacked single-file. 148 gives two columns
               from 306px up; on desktop the tiles are far wider either way. */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(148px, 1fr))', gap: 10, marginBottom: 18 }}>
-            <StatTile
+            <ScanStatTile
               label={d.countLabel}
               value={String(stats.brokeOutCount)}
               onClick={anyFilterActive ? clearAll : undefined}
               title={anyFilterActive ? 'Click to clear all filters' : undefined}
             />
-            <StatTile
+            <ScanStatTile
               label="VaNi Highlights"
               value={String(stats.highlightCount)}
               accent="gold"
@@ -308,21 +309,21 @@ export default function ScannerStudio({ presetId }: { presetId: string }) {
               active={scanIntent === 'why_flagged'}
               onClick={() => selectScanIntent('why_flagged')}
             />
-            <StatTile
+            <ScanStatTile
               label={d.paceLabel}
               value={`${stats.acceleratingPct}%`}
               sub={d.paceSub}
               active={!!filters.accelerating}
               onClick={() => setFilters((f) => ({ ...f, accelerating: f.accelerating ? undefined : true }))}
             />
-            <StatTile
+            <ScanStatTile
               label="Real Volume Behind"
               value={`${stats.realVolumePct}%`}
               sub="RVOL > 3×"
               active={filters.rvolMin != null}
               onClick={() => setFilters((f) => ({ ...f, rvolMin: f.rvolMin != null ? undefined : 3 }))}
             />
-            <StatTile
+            <ScanStatTile
               label="Leading Industry"
               value={stats.leadingIndustry?.name ?? '—'}
               sub={stats.leadingIndustry ? `${stats.leadingIndustry.count} names` : undefined}
@@ -336,7 +337,7 @@ export default function ScannerStudio({ presetId }: { presetId: string }) {
               } : undefined}
               title="Click to filter to this industry — or pick any industry from Filters below"
             />
-            <StatTile
+            <ScanStatTile
               label="Your Watchlist"
               value={String(all.filter((r) => bookmarkedIds.has(r.equity_id)).length)}
               accent="green"
@@ -715,35 +716,4 @@ function ScannerVaNiCard({
   )
 }
 
-function StatTile({ label, value, sub, accent, active, onClick, title }: {
-  label: string; value: string; sub?: string; accent?: 'gold' | 'green'; active?: boolean; onClick?: () => void; title?: string
-}) {
-  const accentColor = accent === 'gold' ? 'var(--gold)' : accent === 'green' ? 'var(--bull)' : undefined
-  return (
-    <div
-      onClick={onClick}
-      role={onClick ? 'button' : undefined}
-      tabIndex={onClick ? 0 : undefined}
-      onKeyDown={onClick ? (e) => (e.key === 'Enter' || e.key === ' ') && onClick() : undefined}
-      title={title}
-      style={{
-        background: accent ? `linear-gradient(135deg, color-mix(in srgb, ${accentColor} 8%, transparent) 0%, var(--card) 60%)` : 'var(--card)',
-        border: `1px solid ${active ? 'var(--accent)' : accent ? `color-mix(in srgb, ${accentColor} 35%, transparent)` : 'var(--border)'}`,
-        borderLeft: accent ? `3px solid ${accentColor}` : active ? '3px solid var(--accent)' : '1px solid var(--border)',
-        borderRadius: 12, padding: '13px 15px', cursor: onClick ? 'pointer' : undefined,
-        boxShadow: active ? '0 0 0 1px var(--accent)' : undefined,
-        transition: 'border-color 0.15s, box-shadow 0.15s',
-      }}
-    >
-      <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9.5, letterSpacing: '.07em', textTransform: 'uppercase', color: accent ? accentColor : active ? 'var(--accent)' : 'var(--text-faint)', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 5 }}>
-        {label}
-        {active && <span style={{ color: 'var(--accent)' }}>●</span>}
-      </div>
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
-        <span style={{ fontFamily: 'var(--font-display)', fontSize: 20, fontWeight: 500, color: 'var(--text-primary)' }}>{value}</span>
-        {sub && <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, color: 'var(--text-faint)' }}>{sub}</span>}
-      </div>
-    </div>
-  )
-}
 

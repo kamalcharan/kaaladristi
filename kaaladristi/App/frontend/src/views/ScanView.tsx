@@ -8,7 +8,7 @@ import { StockCard, StageBadge } from '@/components/domain/StockCard';
 import { ScanSectionLabel } from '@/components/domain/ScanCardShell';
 import ScanTable from '@/components/domain/ScanTable';
 import ConvictionFlowCards from '@/components/domain/ConvictionFlowTable';
-import BreakoutSurgeCards from '@/components/domain/BreakoutSurgeTable';
+import BreakoutSurgeCards, { StudioCard } from '@/components/domain/BreakoutSurgeTable';
 import { downloadScanXls, type ScanVariant } from '@/utils/downloadXls';
 import type { ScanDefinition, ScanStock } from '@/types';
 import AtmosphericBadge from '@/components/domain/AtmosphericBadge';
@@ -17,6 +17,8 @@ import ScanVaNiPublisher from '@/components/domain/ScanVaNiPublisher';
 import ScanStalenessBanner from '@/components/domain/ScanStalenessBanner';
 import ScannerStudio from '@/views/ScannerStudio';
 import { STUDIO_PRESET_IDS } from '@/config/scannerStudio';
+import { fpbCardDescriptor } from '@/config/flowerPotCards';
+import ScanStatTile from '@/components/domain/ScanStatTile';
 import { navName } from '@/lib/symbolUtils';
 import { getSetupAdapter } from '@/services/thesis/setupAdapter';
 import '@/services/thesis/adapters'; // registers SETUP_ADAPTERS entries
@@ -894,12 +896,12 @@ function FpbMetricLine({ stock }: { stock: ScanStock }) {
       const pct = Math.round(stock.fpb_close_strength * 100);
       parts.push(`closed ${pct}% up the range`);  // ~100% = at the high (burst), ~0% = at the low (shatter)
     }
-    if (stock.fpb_quality != null) parts.push(`quality ${stock.fpb_quality}`);
+    // Quality is the release card's hero — not repeated here.
   } else {
-    // Same words, same order as the table's column headers (Tightness ·
-    // ATR ×60d · Vol ×norm · Coiled) so the card and the grid read as one
-    // scanner; Tightness leads because it is the sort key.
-    if (stock.fpb_compression_score != null) parts.push(`Tightness ${stock.fpb_compression_score}`);
+    // The compression EVIDENCE, in the table's own header words (ATR ×60d ·
+    // Vol ×norm · Coiled). Tightness itself is the card's hero slot now, so
+    // repeating it here would say the same number twice; what the line adds is
+    // the three legs the score is built from.
     if (stock.fpb_atr_compression != null) parts.push(`ATR ×60d ${stock.fpb_atr_compression}`);
     if (stock.fpb_vol_death != null) parts.push(`Vol ×norm ${Math.round(stock.fpb_vol_death * 100)}%`);
     if (stock.fpb_setup_days != null) parts.push(`Coiled ${stock.fpb_setup_days}d/22`);
@@ -919,14 +921,31 @@ const FPB_STATUS: Record<string, { label: string; color: string }> = {
   TARGET_HIT: { label: 'Target hit',    color: 'var(--bull)' },
   CRACKED:    { label: 'Cracked',       color: 'var(--gold)' },
   STOPPED:    { label: 'Stopped',       color: 'var(--bear)' },
+  // Ran its window without reaching either level. Shown, not hidden: with the
+  // no-move releases dropped, "6 of 10 reached target" is a rate over the
+  // outcomes that happened to be decisive, which reads better than the record
+  // actually is.
+  EXPIRED:    { label: 'Window closed', color: 'var(--text-muted)' },
 };
 
 const FPB_OPEN = new Set(['ACTIVE', 'HOLDING']);
-const FPB_CLOSED = new Set(['TARGET_HIT', 'STOPPED', 'CRACKED']);
-/** Calendar days a settled release stays visible — the same 9-day window
- *  km_fpb_active's maintenance function uses to EXPIRE an open one (≈ 5
- *  sessions). */
-const FPB_OUTCOME_DAYS = 9;
+const FPB_CLOSED = new Set(['TARGET_HIT', 'STOPPED', 'CRACKED', 'EXPIRED']);
+/**
+ * Performance = every release since this date, not a rolling window.
+ *
+ * Owner call 2026-09-07: "everything is still launch — we can take April 1st
+ * as the base." The 9-day window this replaced was a bug fix, not a design —
+ * settled rows used to pile up for ever because km_fpb_active's maintenance
+ * function EXPIREs only ACTIVE/HOLDING rows, and a window was the quick way to
+ * stop that. But it also hid the record: on 2026-09-07 the journal held 17
+ * settled releases and the page showed 2.
+ *
+ * km_fpb_active is append-only and starts 2026-07-28 (migration 156), so this
+ * date is deliberately earlier than any row — it is the launch baseline, and
+ * it keeps the label honest the day the journal is backfilled further.
+ */
+const FPB_PERFORMANCE_SINCE = '2026-04-01';
+const FPB_SINCE_LABEL = '1 Apr';
 
 function FpbActiveSection() {
   const navigate = useNavigate();
@@ -937,13 +956,14 @@ function FpbActiveSection() {
   // outcomes piled up (to the 24-row cap) above the scanner they were meant
   // to annotate. Open releases render in full; settled ones for one swing
   // window as a compact strip, then drop.
-  const { open, settled } = useMemo(() => {
-    const cutoff = new Date(Date.now() - FPB_OUTCOME_DAYS * 86400000).toISOString().slice(0, 10);
-    return {
-      open: rows.filter((r) => FPB_OPEN.has(r.status)).slice(0, 24),
-      settled: rows.filter((r) => FPB_CLOSED.has(r.status) && (r.last_eval_date ?? r.release_date) >= cutoff),
-    };
-  }, [rows]);
+  const { open, settled } = useMemo(() => ({
+    open: rows.filter((r) => FPB_OPEN.has(r.status)).slice(0, 24),
+    // Newest outcome first, so the strip reads as a running record rather than
+    // whatever order the fetch returned.
+    settled: rows
+      .filter((r) => FPB_CLOSED.has(r.status) && (r.last_eval_date ?? r.release_date) >= FPB_PERFORMANCE_SINCE)
+      .sort((a, b) => (b.last_eval_date ?? b.release_date ?? '').localeCompare(a.last_eval_date ?? a.release_date ?? '')),
+  }), [rows]);
   if (open.length === 0 && settled.length === 0) return null;
 
   const fmt = (n: number | null | undefined) => (n == null ? '—' : `₹${Number(n).toLocaleString('en-IN', { maximumFractionDigits: 1 })}`);
@@ -996,7 +1016,7 @@ function FpbActiveSection() {
       {settled.length > 0 && (
         <div style={{ marginTop: open.length > 0 ? 12 : 0 }}>
           <ScanSectionLabel>
-            Recent Outcomes · last {FPB_OUTCOME_DAYS} days · {hits} of {settled.length} reached target
+            Results since {FPB_SINCE_LABEL} · {hits} of {settled.length} reached target
           </ScanSectionLabel>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
             {settled.map((r: FpbActiveRow) => {
@@ -1038,8 +1058,18 @@ function FpbResults({ preset, timeframe, viewMode, onViewModeChange }: {
   const [exchangeFilter, setExchangeFilter] = useState<ExchangeFilter>('combined');
   const [filters, setFilters] = useState<ScanFilters>(FPB_DEFAULT_FILTERS);
   const [vaniOnly, setVaniOnly] = useState(false);
+  const [tightOnly, setTightOnly] = useState(false);
   const { data: rawStocks = [], isLoading, error } = useScan('flower_pot_burst', exchangeFilter, timeframe);
-  const filtered = useMemo(() => applyFilters(rawStocks, filters), [rawStocks, filters]);
+  const { data: activeRows = [] } = useFpbActive();
+  // Two stages on purpose: the stat tiles read `baseFiltered` so the "Tight
+  // today" tile keeps showing its own count while it is the active filter —
+  // a tile that zeroes itself the moment you click it is unreadable.
+  const baseFiltered = useMemo(() => applyFilters(rawStocks, filters), [rawStocks, filters]);
+  const filtered = useMemo(
+    // Releases are events, not coils — they stay visible under the toggle.
+    () => (tightOnly ? baseFiltered.filter((s) => s.fpb_phase !== 'SETUP' || s.fpb_tight_today === true) : baseFiltered),
+    [baseFiltered, tightOnly],
+  );
   const bursts = useMemo(() => filtered.filter((s) => s.fpb_phase === 'BURST'), [filtered]);
   const shatters = useMemo(() => filtered.filter((s) => s.fpb_phase === 'SHATTER'), [filtered]);
   // ✦ VaNi Highlight for FPB = the releases (Burst up / Shatter down) — the
@@ -1049,6 +1079,31 @@ function FpbResults({ preset, timeframe, viewMode, onViewModeChange }: {
     () => (vaniOnly ? [] : filtered.filter((s) => s.fpb_phase === 'SETUP')),
     [filtered, vaniOnly],
   );
+
+  const goStock = (s: ScanStock) =>
+    navigate(`/chart/equity/${s.equity_id}?name=${encodeURIComponent(navName(s))}${storySetupSuffix('flower_pot_burst')}`);
+
+  // ── Stat tiles ───────────────────────────────────────────────────────────
+  // The same six-tile strip every Studio opens with, reading this scanner's
+  // own numbers. "Broke Out Today" would be 0 on most days here, so the count
+  // tile is the coiling cohort and the releases get their own pair.
+  const stats = useMemo(() => {
+    const coils = baseFiltered.filter((s) => s.fpb_phase === 'SETUP');
+    // NULL until migration 205 projects fpb_tight_today — the tile hides
+    // rather than reporting a confident zero.
+    const tightKnown = coils.some((s) => s.fpb_tight_today != null);
+    const open = activeRows.filter((r) => FPB_OPEN.has(r.status));
+    const settled = activeRows.filter(
+      (r) => FPB_CLOSED.has(r.status) && (r.last_eval_date ?? r.release_date ?? '') >= FPB_PERFORMANCE_SINCE,
+    );
+    return {
+      coils: coils.length,
+      tight: tightKnown ? coils.filter((s) => s.fpb_tight_today === true).length : null,
+      open: open.length,
+      settled: settled.length,
+      hits: settled.filter((r) => r.status === 'TARGET_HIT').length,
+    };
+  }, [baseFiltered, activeRows]);
 
   return (
     <>
@@ -1074,6 +1129,38 @@ function FpbResults({ preset, timeframe, viewMode, onViewModeChange }: {
         </div>
       </div>
 
+      {/* ── Stat tiles ── the strip every Studio opens with, in this
+          scanner's own terms. Same component (ScanStatTile), so a reader
+          moving here from Breakout Surge meets the same object. */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(148px, 1fr))', gap: 10, marginBottom: 18 }}>
+        <ScanStatTile
+          label="Coiling Now"
+          value={String(stats.coils)}
+          sub="watching"
+          onClick={tightOnly ? () => setTightOnly(false) : undefined}
+          title={tightOnly ? 'Click to show every coil again' : undefined}
+        />
+        {stats.tight != null && (
+          <ScanStatTile
+            label="Tight Today"
+            value={String(stats.tight)}
+            sub={`of ${stats.coils}`}
+            active={tightOnly}
+            onClick={() => setTightOnly((t) => !t)}
+            title="The scan lists any stock compressed within the last 10 sessions. These are the ones still meeting the gate on today's bar."
+          />
+        )}
+        <ScanStatTile label="Bursts Today" value={String(bursts.length)} accent={bursts.length > 0 ? 'gold' : undefined} />
+        <ScanStatTile label="Shatters Today" value={String(shatters.length)} />
+        <ScanStatTile label="Live Releases" value={String(stats.open)} sub="day 2+" accent={stats.open > 0 ? 'green' : undefined} />
+        <ScanStatTile
+          label="Reached Target"
+          value={`${stats.hits} of ${stats.settled}`}
+          sub={`since ${FPB_SINCE_LABEL}`}
+          title="Every release since the launch baseline that has settled — reached its target, stopped, cracked, or closed its window without reaching either."
+        />
+      </div>
+
       {/* Day-2 position layer — recent releases + hold/crack verdict + SL/target.
           Renders only once km_fpb_active (migration 156) is populated. */}
       {!vaniOnly && <FpbActiveSection />}
@@ -1088,7 +1175,7 @@ function FpbResults({ preset, timeframe, viewMode, onViewModeChange }: {
         <ScanTable
           stocks={[...bursts, ...shatters, ...setups]}
           presetId="flower_pot_burst"
-          onRowClick={(s) => navigate(`/chart/equity/${s.equity_id}?name=${encodeURIComponent(navName(s))}${storySetupSuffix('flower_pot_burst')}`)}
+          onRowClick={goStock}
         />
       ) : (
         <>
@@ -1109,7 +1196,7 @@ function FpbResults({ preset, timeframe, viewMode, onViewModeChange }: {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: 20 }}>
               {bursts.map((stock) => (
                 <div key={stock.equity_id}>
-                  <StockCard stock={stock} linkQueryExtra={storySetupSuffix('flower_pot_burst')} />
+                  <StudioCard stock={stock} descriptor={fpbCardDescriptor(stock)} onClick={() => goStock(stock)} />
                   <FpbMetricLine stock={stock} />
                 </div>
               ))}
@@ -1135,7 +1222,7 @@ function FpbResults({ preset, timeframe, viewMode, onViewModeChange }: {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: 20 }}>
               {shatters.map((stock) => (
                 <div key={stock.equity_id}>
-                  <StockCard stock={stock} linkQueryExtra={storySetupSuffix('flower_pot_burst')} />
+                  <StudioCard stock={stock} descriptor={fpbCardDescriptor(stock)} onClick={() => goStock(stock)} />
                   <FpbMetricLine stock={stock} />
                 </div>
               ))}
@@ -1162,7 +1249,7 @@ function FpbResults({ preset, timeframe, viewMode, onViewModeChange }: {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   {setups.map((stock) => (
                     <div key={stock.equity_id}>
-                      <StockCard stock={stock} linkQueryExtra={storySetupSuffix('flower_pot_burst')} />
+                      <StudioCard stock={stock} descriptor={fpbCardDescriptor(stock)} onClick={() => goStock(stock)} />
                       <FpbMetricLine stock={stock} />
                     </div>
                   ))}

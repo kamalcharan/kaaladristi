@@ -612,6 +612,14 @@ export interface ScanStock {
   fpb_atr_compression?: number | null;      // ATR15 / ATR60
   fpb_vol_death?: number | null;            // vol5 / vol22
   fpb_setup_days?: number | null;           // compressed days in the last 22 sessions
+  // Migration 205. hi10/lo10 are the 10-day range the coil is compressing
+  // inside — the card's two level slots. fpb_tight_today is THIS bar's
+  // compression gate: the arm admits any stock compressed within the last ten
+  // sessions, so a row can sit in "Coiling Setups" having already released its
+  // grip, and nothing else on the row distinguishes the two.
+  fpb_hi10?: number | null;                 // 10-day range high
+  fpb_lo10?: number | null;                 // 10-day range low
+  fpb_tight_today?: boolean | null;         // compression gate met on this bar
   // Waking Giants / First Ascent fields (migration 174; null for all other scans)
   wg_phase?: 'WAKING' | 'STIRRING' | 'DORMANT' | 'ASCENDING' | 'HIBERNATING' | null;
   gl_acc_days?: number | null;              // quiet delivery-backed sessions of last 60

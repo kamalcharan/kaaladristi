@@ -420,7 +420,7 @@ AI_MODEL=claude-haiku-4-5      # any model the provider supports
 
 New migrations go in `App/DBscripts/km_migration_NNN_description.sql`.
 Run them directly in pgAdmin, DBeaver, or `psql` — **no Python wrapper scripts**.
-Next migration number: **205** (disk is at 204 — `km_migration_204_profile_persona.sql`, onboarding persona persistence: `km_profiles.persona/acts_on/hold_horizon/concede_level/persona_set_at/guide_progress`, `kd_update_profile` whitelist, `km_ux_events`; vocabulary mirrored in `src/constants/personaConfig.ts` and gated by `npm run check:persona` inside `npm run build`; plan: `docs/claude/onboarding-poa.md`; 203 = `km_migration_203_index_breadth.sql`, per-index breadth table + `compute_index_breadth()`; owner runs it then `python scripts/backfill_index_breadth.py`; 202 = `km_migration_202_gl_matview_arms.sql`, Golden Line arms + GL/Big Money bar columns on `km_scan_results`; 195/197/200/202 recreate the `km_scan_results` matview `WITH NO DATA`, so the owner must `REFRESH MATERIALIZED VIEW km_scan_results` then `km_scan_exclusion_counts` after applying one; 200b is a suffixed duplicate). Older history: (166 = `km_migration_166_golarambh_almanac.sql` — Golārambha family: 4 generator-fed `planet_state` Sun rules (Uttara/Dakshina Gola halves + equinox ±1d turn windows, tag 'Gola'), windows from `scripts/generate_golarambh_windows.py` (TROPICAL equinox crossings — deliberately not the sidereal sankranti), almanac body in AlmanacPage + `astro_group:Gola` overlay; 165 = force-reonboard theme; 164 = forgot-password token leak; 163 = pricing GST beta default; NOTE 161/162 have DUPLICATE numbers (rule_evidence + scan_presets at 161, rule_evidence_transitions + user_bookmarks at 162); 160 = Mercury-slice launch catalog scope; see `docs/claude/astro-story.md`. ⚠ Numbering drifted: duplicates also at 152/153 and no 155 — always `ls App/DBscripts/ | sort` before picking a number, don't trust this line alone.)
+Next migration number: **206** (disk is at 205 — `km_migration_205_fpb_card_columns.sql`, Flower Pot card columns + ETFs out of the whole matview: mutual-fund units (`isin LIKE 'INF%'`) leave `active`/`wg_pool`/the exclusion-count universe, `km_equity_symbols.is_etf` is set from the same rule (it had been FALSE on all 16,938 rows since the column existed), the `flower_pot_burst` arm LEFT JOINs `stock` so it carries the shared card's columns instead of typed NULLs, three new columns `fpb_hi10`/`fpb_lo10`/`fpb_tight_today`, and `d_pct` stops being NULL on sixteen of the seventeen arms; **owner runs it then `REFRESH MATERIALIZED VIEW km_scan_results;` and `REFRESH MATERIALIZED VIEW km_scan_exclusion_counts;`**; measured effect on the 2026-09-07 bar: flower_pot_burst 106→68 rows with 67 of 68 carrying an industry, breakdown_watch 441→364, breakout_surge 295→277, conviction_flow stays at its cap of 50 with 12 real stocks replacing fund units; 204 = `km_migration_204_profile_persona.sql`, onboarding persona persistence: `km_profiles.persona/acts_on/hold_horizon/concede_level/persona_set_at/guide_progress`, `kd_update_profile` whitelist, `km_ux_events`; vocabulary mirrored in `src/constants/personaConfig.ts` and gated by `npm run check:persona` inside `npm run build`; plan: `docs/claude/onboarding-poa.md`; 203 = `km_migration_203_index_breadth.sql`, per-index breadth table + `compute_index_breadth()`; owner runs it then `python scripts/backfill_index_breadth.py`; 202 = `km_migration_202_gl_matview_arms.sql`, Golden Line arms + GL/Big Money bar columns on `km_scan_results`; 195/197/200/202 recreate the `km_scan_results` matview `WITH NO DATA`, so the owner must `REFRESH MATERIALIZED VIEW km_scan_results` then `km_scan_exclusion_counts` after applying one; 200b is a suffixed duplicate). Older history: (166 = `km_migration_166_golarambh_almanac.sql` — Golārambha family: 4 generator-fed `planet_state` Sun rules (Uttara/Dakshina Gola halves + equinox ±1d turn windows, tag 'Gola'), windows from `scripts/generate_golarambh_windows.py` (TROPICAL equinox crossings — deliberately not the sidereal sankranti), almanac body in AlmanacPage + `astro_group:Gola` overlay; 165 = force-reonboard theme; 164 = forgot-password token leak; 163 = pricing GST beta default; NOTE 161/162 have DUPLICATE numbers (rule_evidence + scan_presets at 161, rule_evidence_transitions + user_bookmarks at 162); 160 = Mercury-slice launch catalog scope; see `docs/claude/astro-story.md`. ⚠ Numbering drifted: duplicates also at 152/153 and no 155 — always `ls App/DBscripts/ | sort` before picking a number, don't trust this line alone.)
 
 **Target database**: most migrations target `kaala_dristi_db`. Migrations that target `vani_db` must say so explicitly in the file header (example: migration 092).
 
@@ -642,55 +642,94 @@ These are in `LESSONS_LEARNED.md` in full; summary for quick reference:
 
 ## Known Issues
 
-### 📋 NEXT SESSION (owner + Claude) — Scanner Studio: Flower Pot card + VaNi intents, card convergence
-Parked 2026-09-07 mid-discussion; pick up here. Full record: `docs/claude/scanner-gap-audit-2026-09-06.md` §11
-(task table with ✅ / ⏳ per item, the D1–D5 rows carry the owner's decisions verbatim) and
-`docs/claude/vani-scanner-handover.md` §0 (owner-run items).
+### 📋 NEXT SESSION (owner + Claude) — Flower Pot: VaNi intents (the card, tiles and ETF fix shipped)
 
-**Shipped this session, all on main:** Batches 1–3 of the gap audit (sort defaults, card
-click + bookmark, Studio loader/staleness/atmospheric badge, count badges, Studio metric
-filters, XLS metric columns, descriptor consolidation — `config/scannerStudio.ts`
-`STUDIO_DESCRIPTORS` is now the single source for a Studio's source/sort/columns/card
-slots/filter metric/export columns, and `lib/scan_contract.py` reads it), the frozen
-**Option B+E Studio card** on all eight Studios (`BreakoutSurgeTable.tsx`; canvas
-"Scanner Studio Cards"), Golden Line matview arms (**migration 202 — owner must run it,
-then `REFRESH MATERIALIZED VIEW km_scan_results; REFRESH MATERIALIZED VIEW
-km_scan_exclusion_counts;`** — the frontend already reads the pair as matview-served with
-fetcher fallback, and the nightly integrity check reports the arm empty until the refresh),
-Golden Line Story View adapters, phone default = cards (D4), Studio card sort chips, the
-Flower Pot live-releases accumulation fix, and "Solid Violet Dot" → "Volume Drive" in the
-VaNi prompt.
+Session 2026-09-07 (2). Full record of the prior audit: `docs/claude/scanner-gap-audit-2026-09-06.md` §11.
 
-**Decisions taken (do not re-open):** D2 closed — bare Golden Line event bars are the
-±5-calendar-day dot rule (2026-08-28), not a re-run; D3 keep `gl_breakout`'s
-new-since-yesterday exception; D4 cards on phone; D5 direction = converge every scanner on
-the B+E Studio card via a descriptor per preset (Conviction Flow and Flower Pot next, generic
-`StockCard` survives only for the stage/flow bundles until they get descriptors).
+**⚠ OWNER MUST RUN — nothing below is visible until this happens:**
 
-**To discuss next (Flower Pot, `flower_pot_burst`):**
-1. **Card** — move onto the B+E card: hero = Tightness on coils / Quality on releases,
-   levels = 10-day range high/low, RVOL; signal band already carries the phase. Bookmark +
-   ✦ come free with it (today the page has neither).
-2. **VaNi intents** (candidates): `why_watch_coil` (tightness, coiled days, volume death),
-   `coiling_industries` (representation, same shape as `leading_industry`),
-   `recent_outcomes` (from `km_fpb_active` — the only scanner with outcome data),
-   `new_coils` once `compute_scan_membership_snapshot.py` covers the preset.
-3. **Stat tiles** — today's "Bursts / Shatters / Coiling today" are correct but thin;
-   candidates: coils entering vs leaving today, median coil age, trailing-20-session release
-   hit rate from `km_fpb_active`, leading coiling industry.
-4. **D1 VaNi rule** — deferred on purpose (no rule survived). Candidate: coil tightness
-   (top quartile) × Magic RS band (Leading/Improving). Not testable yet: tightness lives only
-   inside the matview (never stored per day) and `km_fpb_active` has 20 releases since
-   2026-07-28 (12 settled upward bursts: 9 target/holding, 3 stopped; zone at release does
-   not separate them). Path: store `fpb_compression_score`/`fpb_setup_days` on
-   `km_equity_eod` nightly, test at ~60 releases. Ship without ✦ until then.
-5. **Nomenclature** — the card metric line now uses the table's header words (Tightness ·
-   ATR ×60d · Vol ×norm · Coiled). `fieldConfig` has no `magic_rs_zone` key, so the table
-   still shows Magic RS as a number ("MagicRS vs N500") like every other Studio table; the
-   zone pill is on the card. Decide whether tables should carry the zone label too.
+```
+km_migration_205_fpb_card_columns.sql          -- in pgAdmin
+REFRESH MATERIALIZED VIEW km_scan_results;
+REFRESH MATERIALIZED VIEW km_scan_exclusion_counts;
+```
 
-Also still open from the audit: E1 real-device phone pass, E3 "Backend offline" pill overlapping
-the scanner Action Island on a phone.
+Until it runs the Flower Pot card shows "—" for its two level slots and empty
+Score 5D/22D bars, and the "Tight Today" tile hides itself (the column reads
+NULL, and a confident zero would be worse than no tile). Verification queries
+are at the tail of the migration.
+
+**Shipped this session:**
+
+- **ETFs out of every scanner.** `is_etf` had been FALSE on all 16,938 rows
+  since the column existed, so nothing could filter on it. Indian ISINs split
+  cleanly — `INE` = company shares, `INF` = mutual-fund units — and the
+  exclusion now sits in the matview's `active` CTE, `wg_pool` and the
+  exclusion-count universe, with `is_etf` set from the same rule for consumers
+  outside the view. It was never a Flower Pot problem alone: 77 of 441
+  breakdown_watch rows, 12 of 50 conviction_flow, 18 of 295 breakout_surge.
+  Flower Pot was worst because it selects FOR stillness — a liquid ETF parked
+  at ₹999.99 scores maximum compression, so the five "tightest coils" on the
+  page were LIQUIDETF, LIQUID, IVZINNIFTY, LIQUIDPLUS and BANKADD. After 205:
+  106 → 68 rows, 67 of 68 carrying an industry (was 59 of 102).
+- **The shared B+E card on all three phases** (D5). `config/flowerPotCards.ts`
+  holds three card-only descriptors — hero Tightness on coils, Quality on
+  releases, both level slots the 10-day range (`fpb_hi10`/`fpb_lo10`, the
+  scanner's own geometry: the burst gate IS `close > hi10_prior`). They live
+  outside `STUDIO_DESCRIPTORS` on purpose: membership there routes a preset
+  into `ScannerStudio` and is parsed by `lib/scan_contract.py`, and per gap
+  audit §5 this page's three-phase layout is not to be unified.
+- **`fpbRowToScanStock` now delegates** to `scanRowToScanStock` and overlays
+  the fpb columns. It used to hand-write every field and pass null for the
+  shared ones, which was right while the arm projected typed NULLs and would
+  now be throwing real values away. `lib/scan_contract.py`'s `mapper_fields`
+  follows the spread (it would otherwise report 70 fields as gaps on a mapper
+  that is strictly more complete).
+- **Six stat tiles**, the same `ScanStatTile` the Studios use — extracted from
+  `views/ScannerStudio.tsx` to `components/domain/ScanStatTile.tsx` rather
+  than copied. Coiling Now · Tight Today · Bursts · Shatters · Live Releases ·
+  Reached Target.
+- **Performance = every release since 1 Apr 2026** (owner call), not the 9-day
+  rolling window. `FPB_PERFORMANCE_SINCE` in ScanView. EXPIRED releases now
+  appear as "Window closed" chips: with the no-move outcomes hidden, "6 of 10
+  reached target" was a rate over the decisive outcomes only. On 2026-09-07
+  the journal held 17 settled releases and the page showed 2.
+- **`d_pct` populated on sixteen arms** (conviction_flow was the lone
+  exception). The Studio XLS export gained a "D% from EMA20" column last
+  session which had therefore always exported blank.
+- **"Tight today"** — the arm's gate is `is_burst OR is_shatter OR
+  setup_recent10 = 1`, i.e. compressed on ANY of the last ten sessions. On
+  2026-09-04 only 26 of 102 rows still met the ATR and volume-death legs; 3
+  scored 0.00 tightness. `fpb_tight_today` makes that visible instead of
+  leaving a card whose hero reads 0.00 on a row labelled "coiling".
+
+**Still open — one decision, then a small build:**
+
+**VaNi intents for Flower Pot.** Not built; the owner has not picked. Level 1
+(`scanner.explain_preset` / `read_results`) already works here. Candidates, in
+the order I'd ship them:
+
+1. `recent_outcomes` — from `km_fpb_active`, the only scanner with real
+   outcome data (2026-09-07: 6 target hits, 3 cracked, 1 stopped, 3 holding,
+   7 expired, over 20 releases since 07-28). Must not imply a rate from 20.
+2. `why_watch_coil` — tightness, coiled days, volume death. It is also the
+   intent that explains the 26-of-102 gap in prose.
+3. `coiling_industries` — computable, but must state its denominator; the top
+   industry today is Specialty Chemicals with 5 names.
+4. `new_coils` — needs `compute_scan_membership_snapshot.py` extended to this
+   preset (it is the ONE preset with no rows in `km_scan_membership_daily`)
+   plus a backfill. Define membership as **tight today**, not arm presence:
+   otherwise a coil "leaving" means it decompressed ten sessions ago.
+
+Each needs a `_SKILL_SYSTEM` in `lib/ai_prompts.py`, an endpoint, and a card —
+same shape as the seven Studio intents.
+
+**D1 (no `vani_rule`) stays deferred**, unchanged: tightness is now stored per
+day on the matview but still not on `km_equity_eod`, and `km_fpb_active` needs
+~60 releases before the coil-tightness × Magic RS candidate is testable.
+
+Also still open from the audit: E1 real-device phone pass, E3 "Backend offline"
+pill overlapping the scanner Action Island on a phone.
 
 ### 📋 FOR REVIEW (owner) — Data depth: enriched signals only ~1.5–2 yr deep
 `DATA_DEPTH_AUDIT.md` (2026-07-12, read-only MCP audit). Raw **prices** are complete
