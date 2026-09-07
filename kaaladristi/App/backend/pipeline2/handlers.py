@@ -48,7 +48,7 @@ FIXABLE_DIMENSIONS = frozenset({
     'index_magic_rs', 'nse_magic_rs', 'bse_magic_rs', 'rs_percentile',
     'supertrend', 'rolling_metrics', 'd365', 'stage_classification', 'vani_flags',
     'equity_weekly', 'equity_monthly',
-    'index_returns', 'industry_composites', 'market_breadth', 'breadth_roc',
+    'index_returns', 'industry_composites', 'market_breadth', 'breadth_roc', 'index_breadth',
     'symbol_enrichment', 'scan_refresh', 'wg_journeys', 'integrity_checks', 'dots',
     'scan_membership_snapshot',
 })
@@ -698,6 +698,35 @@ def handle_market_breadth(conn, trade_date: date, force: bool,
     return HandlerResult(status, before, after, n)
 
 
+def handle_index_breadth(conn, trade_date: date, force: bool,
+                         exchange: Optional[str], on_progress: ProgressFn) -> HandlerResult:
+    """Per-index constituent breadth → km_index_breadth (migration 203).
+
+    One set-based RPC for every index that has km_index_constituents rows,
+    standard and custom alike. Reads km_equity_eod's ema_20/sma_50/sma_150
+    and closes, so it runs after the indicator dimensions; custom indices
+    are synthesised by index_returns but their BREADTH comes from their
+    constituents' bars, which exist regardless, so ordering against
+    index_returns is grouping, not dependency. Idempotent upsert — `force`
+    simply recomputes the day.
+    """
+    before = fill_rate(conn, 'index_breadth', trade_date)
+    on_progress(f'before fill_rate = {before:.1f}%', 5)
+
+    on_progress('running compute_index_breadth', 30)
+    try:
+        res = _rpc(conn, 'compute_index_breadth', {
+            'p_from_date': str(trade_date), 'p_to_date': str(trade_date)})
+        n = int(res[0].get('compute_index_breadth', 0) or 0) if res else 0
+    except Exception as e:
+        conn.rollback()
+        return HandlerResult('failed', before, before, 0, error_msg=str(e)[:500])
+
+    after = fill_rate(conn, 'index_breadth', trade_date)
+    status = 'completed' if after >= 100.0 else 'failed'
+    return HandlerResult(status, before, after, n)
+
+
 def handle_breadth_roc(conn, trade_date: date, force: bool,
                        exchange: Optional[str], on_progress: ProgressFn) -> HandlerResult:
     before = fill_rate(conn, 'breadth_roc', trade_date)
@@ -1157,6 +1186,8 @@ def handle(dimension: str, conn, trade_date: date, force: bool,
         return handle_market_breadth(conn, trade_date, force, exchange, on_progress)
     if dimension == 'breadth_roc':
         return handle_breadth_roc(conn, trade_date, force, exchange, on_progress)
+    if dimension == 'index_breadth':
+        return handle_index_breadth(conn, trade_date, force, exchange, on_progress)
     if dimension == 'scan_refresh':
         return handle_scan_refresh(conn, trade_date, force, exchange, on_progress)
     if dimension == 'scan_membership_snapshot':
@@ -1198,6 +1229,7 @@ KNOWN_DIMENSIONS = [
     'industry_composites',
     'market_breadth',
     'breadth_roc',
+    'index_breadth',
     'symbol_enrichment',
     'dots',
     'scan_refresh',

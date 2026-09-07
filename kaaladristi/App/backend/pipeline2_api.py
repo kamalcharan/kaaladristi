@@ -7636,6 +7636,21 @@ async def custom_index_compute(index_id: int, req: Optional[_CustomComputeReq] =
             score_rows = cur.fetchall()
         conn.commit()
 
+        # Per-index breadth for THIS index (migration 203) so Sector Rotation's
+        # detail page and the Workspace panel read the table immediately
+        # rather than falling back to the browser computation until the next
+        # nightly run. Bounded to the 252-session percentile window (the
+        # frontend reads 404 calendar days). Non-fatal, same as indicators.
+        try:
+            breadth_from = from_date or (date.today() - timedelta(days=404)).isoformat()
+            with conn.cursor() as cur:
+                cur.execute("SELECT compute_index_breadth(%s, %s, %s)",
+                            [breadth_from, to_date or date.today().isoformat(), index_id])
+            conn.commit()
+        except Exception as _bexc:  # noqa: BLE001 — a missing migration must not fail the Calculate
+            conn.rollback()
+            log.warning("compute_index_breadth skipped for index %s: %s", index_id, _bexc)
+
         # Fill the indicator layer for this index so the detail page's zone/flow/
         # technical widgets populate (ema_20, rsi_14, magic_rs, flow_type).
         # refresh=True re-nulls indicators_computed_at so an edited index

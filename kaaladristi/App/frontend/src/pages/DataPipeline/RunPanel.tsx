@@ -110,6 +110,7 @@ export default function RunPanel({ selection, onEnqueued }: Props) {
     'industry_composites',
     'market_breadth',
     'breadth_roc',
+    'index_breadth',
   ]);
   const showExchange = dimension !== '' &&
                        dimension !== 'all' &&

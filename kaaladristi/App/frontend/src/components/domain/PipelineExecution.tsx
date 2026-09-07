@@ -248,6 +248,7 @@ const FIX_LABELS: Record<string, string> = {
   'fix:indicators': 'Recomputing Technical Indicators',
   'fix:flow_intelligence': 'Recomputing Flow Intelligence',
   'fix:market_breadth': 'Recomputing Market Breadth',
+  'fix:index_breadth': 'Recomputing Index Breadth',
   'fix:breadth_roc': 'Recomputing Breadth ROC',
   'fix:nse_equities': 'Backfilling NSE Equities',
   'fix:bse_equities': 'Backfilling BSE Equities',

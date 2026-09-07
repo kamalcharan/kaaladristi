@@ -255,6 +255,7 @@ DIMENSION_META: dict[str, dict] = {
     'industry_composites':     {'step': 'industry_composites',   'exchange': 'NSE', 'fix': 'fix:industry_composites'},
     'market_breadth':          {'step': 'market_breadth',        'exchange': 'NSE', 'fix': 'fix:market_breadth'},
     'breadth_roc':             {'step': 'breadth_roc',           'exchange': 'NSE', 'fix': 'fix:breadth_roc'},
+    'index_breadth':           {'step': 'index_breadth',         'exchange': 'NSE', 'fix': 'fix:index_breadth'},
 
     'fii_dii':                 {'step': 'fii_dii',               'exchange': 'NSE', 'fix': 'fix:fii_dii'},
 }
@@ -636,6 +637,21 @@ def check_market_breadth(db, trading_days, skip_dates):
     }
 
 
+def check_index_breadth(db, trading_days, skip_dates):
+    """Per-index breadth coverage (km_index_breadth, migration 203) — a date
+    counts once any index has a row; the pipeline2 fill_rate holds the
+    per-index floor."""
+    dates = _query_distinct_dates(db,
+        "SELECT DISTINCT trade_date FROM km_index_breadth "
+        "WHERE trade_date BETWEEN %s AND %s",
+        [str(trading_days[0]), str(trading_days[-1])])
+    return {
+        'id': 'index_breadth', 'layer': 'snapshot', 'label': 'Index Breadth',
+        'latest_date': _latest_date(dates),
+        'days': _build_day_statuses(trading_days, dates, skip_dates),
+    }
+
+
 def check_breadth_roc(db, trading_days, skip_dates):
     """Breadth ROC computation coverage."""
     dates = _query_distinct_dates(db,
@@ -767,6 +783,7 @@ HEALTH_CHECKS = [
     check_industry_composites,
     check_market_breadth,
     check_breadth_roc,
+    check_index_breadth,
 ]
 
 

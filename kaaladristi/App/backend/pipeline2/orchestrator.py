@@ -66,6 +66,7 @@ DAILY_STEPS: list[tuple[str, Optional[str]]] = [
     ('industry_composites',   None),
     ('market_breadth',        None),
     ('breadth_roc',           None),
+    ('index_breadth',         None),   # per-index constituent breadth → km_index_breadth (migration 203); after indicators, standard + custom indices
     ('dots',                  None),   # SVD/SBD/SYD — Volume Drive selects on these; must precede scan_refresh
     ('gl_events',             None),   # Golden Line breakout/retest — reads sma_150 AND the dots, so AFTER `dots`
     # Big Money days — delivered value vs the stock's own 66-day norm. AFTER

@@ -99,7 +99,15 @@ DIMENSION_HEALTH: dict[str, tuple[str, str | None, list[str] | None, float | Non
     'industry_composites':   ('km_industry_eod',  None,        None,                                                       None),
     'market_breadth':        ('km_market_breadth', None,       None,                                                       None),
     'breadth_roc':           ('km_breadth_roc',   None,        None,                                                       None),
+    # Row presence per date, like the two above — but ~131 rows a day (one per
+    # index with constituents), so the count-based branch reports it healthy
+    # once any index has a row. INDEX_BREADTH_OK_FLOOR below sets the bar.
+    'index_breadth':         ('km_index_breadth', None,        None,                                                       None),
 }
+
+# Indices with constituents measured 2026-09-07: 131. A run that wrote rows
+# for fewer than this many indices is partial, not ok.
+INDEX_BREADTH_OK_FLOOR = 100
 
 
 # Expected row counts per download dimension: (min_expected, max_expected).
@@ -148,6 +156,7 @@ LABELS: dict[str, str] = {
     'industry_composites':   'Industry Composites',
     'market_breadth':        'Market Breadth',
     'breadth_roc':           'Breadth ROC',
+    'index_breadth':         'Index Breadth',
 }
 
 
@@ -368,6 +377,13 @@ def fill_rate(conn, dimension: str, trade_date: date) -> float:
             n = cur.fetchone()[0]
             return 100.0 if n > 0 else 0.0
 
+        if dimension == 'index_breadth':
+            cur.execute(f"SELECT COUNT(*) FROM {table} WHERE trade_date = %s", [str(trade_date)])
+            n = cur.fetchone()[0]
+            if n >= INDEX_BREADTH_OK_FLOOR:
+                return 100.0
+            return round(min(100.0, (n / INDEX_BREADTH_OK_FLOOR) * 100.0), 2) if n > 0 else 0.0
+
         # Column-fill dimensions
         conds = ' AND '.join(f'e.{c} IS NOT NULL' for c in cols)
         if exchange and table == 'km_equity_eod':
@@ -539,7 +555,7 @@ def _health_row(
             if status == 'ok':
                 latest_ok = ds
 
-    elif dimension in ('market_breadth', 'breadth_roc'):
+    elif dimension in ('market_breadth', 'breadth_roc', 'index_breadth'):
         counts = _row_count_by_date(conn, table, from_dt, to_dt)
         for d in trading_days:
             ds = str(d)
@@ -694,6 +710,7 @@ DIMENSION_ORDER = [
     'industry_composites',
     'market_breadth',
     'breadth_roc',
+    'index_breadth',
     'equity_weekly',
     'equity_monthly',
     # ── Reconciliation (parsed vs inserted) ──────────────────────────

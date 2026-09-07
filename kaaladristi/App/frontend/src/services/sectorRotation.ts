@@ -752,12 +752,56 @@ export async function fetchIndexBreadth(
     return { data: [], roc: [], percentileRank: null, stockCount, zoneMode: 'absolute', rocBadge: 'warming_up' };
   }
 
-  // ── Step 2: fetch constituent EOD straight from km_equity_eod ─────────────
   // Calendar cutoff = 1.6× trading days to safely cover BREADTH_LOOKBACK sessions.
   const calendarDays = Math.ceil(BREADTH_LOOKBACK * 1.6);
   const cutoffDate = new Date();
   cutoffDate.setDate(cutoffDate.getDate() - calendarDays);
   const cutoff = cutoffDate.toISOString().split('T')[0];
+
+  // ── Step 2a: the pipeline's precomputed rows (km_index_breadth, migration
+  //    203 — nightly dimension `index_breadth`). One ≤ 404-row read; the same
+  //    numbers the fallback below computes, so Workspace, Sector Rotation and
+  //    Market Structure all read tables. Empty only for a custom index created
+  //    since the last nightly run, or before the migration is applied — then
+  //    the constituent computation below still answers.
+  const { data: preRows, error: preErr } = await from('km_index_breadth')
+    .select('trade_date,pct_above_20,pct_above_50,pct_above_150,breadth_score,stock_count,universe_count,above_20,above_50,above_150,up_5pct,down_5pct,up_20pct_5d,down_20pct_5d,roc_13,roc_55,sma_breadth')
+    .eq('index_id', indexId)
+    .gte('trade_date', cutoff)
+    .order('trade_date', { ascending: true })
+    .limit(1000)
+    .execute();
+  if (preErr) console.warn('[indexBreadth] km_index_breadth unavailable — computing from constituents', preErr);
+  const pre = (preRows ?? []) as Record<string, unknown>[];
+  if (pre.length > 0) {
+    const num = (v: unknown): number | null => (v == null ? null : Number(v));
+    const computed: MarketBreadthDay[] = pre.map((r) => ({
+      trade_date:    String(r.trade_date),
+      pct_above_20:  num(r.pct_above_20),
+      pct_above_50:  num(r.pct_above_50),
+      pct_above_150: num(r.pct_above_150),
+      breadth_score: num(r.breadth_score),
+      stock_count:   num(r.stock_count),
+      universe_count: num(r.universe_count),
+      above_20:  num(r.above_20),
+      above_50:  num(r.above_50),
+      above_150: num(r.above_150),
+      up_5pct:   num(r.up_5pct),
+      down_5pct: num(r.down_5pct),
+      up_20pct_5d:   num(r.up_20pct_5d),
+      down_20pct_5d: num(r.down_20pct_5d),
+    }));
+    const roc: BreadthRocDay[] = pre.map((r) => ({
+      trade_date:  String(r.trade_date),
+      roc_13:      num(r.roc_13),
+      roc_55:      num(r.roc_55),
+      sma_breadth: num(r.sma_breadth),
+      stock_count: num(r.stock_count),
+    }));
+    return finaliseIndexBreadth(computed, roc, stockCount, days);
+  }
+
+  // ── Step 2b: fallback — fetch constituent EOD straight from km_equity_eod ──
 
   // NOT v_equity_eod_deduped. The constituents are explicit equity_ids (one
   // listing each, chosen by index membership), so the view's ISIN dedup adds
@@ -884,25 +928,6 @@ export async function fetchIndexBreadth(
     };
   });
 
-  // ── Step 4: zone mode + percentile rank ───────────────────────────────────
-  const historyLen = computed.length;
-  const zoneMode: IndexBreadthResult['zoneMode'] =
-    historyLen < BREADTH_FLOOR    ? 'absolute'    :
-    historyLen < BREADTH_LOOKBACK ? 'provisional' :
-    'percentile';
-
-  let percentileRank: number | null = null;
-  if (zoneMode !== 'absolute') {
-    const latestScore = computed.at(-1)?.breadth_score ?? null;
-    if (latestScore != null) {
-      const scores = computed
-        .map((d) => d.breadth_score)
-        .filter((s): s is number => s != null);
-      const below = scores.filter((s) => s < latestScore).length;
-      percentileRank = scores.length > 0 ? below / scores.length : null;
-    }
-  }
-
   // ── Step 6: per-constituent ROC → index-level average ROC ────────────────────
   const dateIdx = new Map<string, number>(allDates.map((d, i) => [d, i]));
   const constituentSeries = new Map<number, Map<number, number>>();
@@ -948,6 +973,39 @@ export async function fetchIndexBreadth(
     }
     return { ...row, sma_breadth };
   });
+
+  return finaliseIndexBreadth(computed, roc, stockCount, days);
+}
+
+/**
+ * Presentation-layer derivations shared by the table read and the
+ * client-side fallback: zone mode + percentile rank of the latest score
+ * within the index's own history, the ROC badge, and the display trim.
+ */
+function finaliseIndexBreadth(
+  computed: MarketBreadthDay[],
+  roc: BreadthRocDay[],
+  stockCount: number,
+  days: number,
+): IndexBreadthResult {
+  // ── Step 4: zone mode + percentile rank ───────────────────────────────────
+  const historyLen = computed.length;
+  const zoneMode: IndexBreadthResult['zoneMode'] =
+    historyLen < BREADTH_FLOOR    ? 'absolute'    :
+    historyLen < BREADTH_LOOKBACK ? 'provisional' :
+    'percentile';
+
+  let percentileRank: number | null = null;
+  if (zoneMode !== 'absolute') {
+    const latestScore = computed.at(-1)?.breadth_score ?? null;
+    if (latestScore != null) {
+      const scores = computed
+        .map((d) => d.breadth_score)
+        .filter((s): s is number => s != null);
+      const below = scores.filter((s) => s < latestScore).length;
+      percentileRank = scores.length > 0 ? below / scores.length : null;
+    }
+  }
 
   const latestRoc = roc.at(-1);
   const rocBadge: RocBadge = (() => {
