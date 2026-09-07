@@ -23,7 +23,7 @@ import { DristiQLoader } from '@/components/ui'
 import VaNiFeedback from '@/components/domain/VaNi/VaNiFeedback'
 import { useVaNiAsk } from '@/hooks/useVaNiChat'
 import { useIndustryLeadershipMap } from '@/hooks/useIndustryRotation'
-import { getStudioDescriptor, studioXlsColumns, type StudioDescriptor } from '@/config/scannerStudio'
+import { getStudioDescriptor, studioXlsColumns, cardSortOptions, sortForCards, type StudioDescriptor } from '@/config/scannerStudio'
 import { isPhoneNow } from '@/hooks/useMediaQuery'
 import type { ScanStock, ScanDefinition } from '@/types'
 
@@ -747,48 +747,3 @@ function StatTile({ label, value, sub, accent, active, onClick, title }: {
   )
 }
 
-// ── Card sort ────────────────────────────────────────────────────────────────
-// The chip set: the preset's hero metric first (and its table sort key when
-// that differs — Breakout Surge sorts by Score 5D but leads its card with
-// % from Brk), then the same fixed tail the generic layout's chips carry.
-function cardSortOptions(d: StudioDescriptor | null): { key: keyof ScanStock; label: string }[] {
-  const opts: { key: keyof ScanStock; label: string }[] = []
-  const push = (key: keyof ScanStock, label: string) => {
-    if (!opts.some((o) => o.key === key)) opts.push({ key, label })
-  }
-  if (d) {
-    push(d.cardHero.key, d.cardHero.filterLabel ?? d.cardHero.label)
-    if (d.sort.key === 'score_5d') push('score_5d', 'Score 5D')
-    else if (d.sort.key !== d.cardHero.key) push(d.sort.key, d.sort.key)
-  }
-  push('vaniOpportunity', '✦ VaNi Highlight')
-  push('score_5d', 'Score 5D')
-  push('score_22d', 'Score 22D')
-  push('rvol', 'RVOL')
-  push('pct_chng', '% Chg')
-  push('rsi_14', 'RSI')
-  push('symbol', 'Symbol')
-  return opts
-}
-
-// Same value-first comparison ScanView / ScanTable use: numbers (and booleans,
-// so ✦ sorts) compare numerically, strings lexically, nulls always last.
-function sortForCards(rows: ScanStock[], key: keyof ScanStock, dir: 'asc' | 'desc'): ScanStock[] {
-  const num = (v: unknown): number | null => {
-    if (v == null) return null
-    if (typeof v === 'boolean') return v ? 1 : 0
-    const n = typeof v === 'number' ? v : Number(v)
-    return Number.isFinite(n) ? n : null
-  }
-  return [...rows].sort((a, b) => {
-    const va = a[key], vb = b[key]
-    const na = num(va), nb = num(vb)
-    if (na == null && nb == null) return 0
-    if (na == null) return 1
-    if (nb == null) return -1
-    if (typeof va === 'string' && typeof vb === 'string' && !Number.isFinite(Number(va))) {
-      return dir === 'asc' ? va.localeCompare(vb) : vb.localeCompare(va)
-    }
-    return dir === 'asc' ? na - nb : nb - na
-  })
-}

@@ -8,13 +8,21 @@ import { trackEvent } from '@/lib/analytics'
 import { errMessage as sharedErrMessage } from '@/lib/errorMessages'
 import { isValidIndianMobile, normalizeIndianMobile } from '@/lib/phone'
 import { PAID_TIERS } from '@/constants/frameworkConstants'
-import { getTemplateForICP } from '@/constants/frameworkTemplates'
+import { TEMPLATE_MAP } from '@/constants/frameworkTemplates'
 import type { FrameworkTemplate } from '@/constants/frameworkTemplates'
+import { PERSONAS, PERSONA_SCANNERS, PERSONA_TEMPLATE, derivePersona, type Persona, type PersonaAnswers } from '@/constants/personaConfig'
+import { getPresetMeta } from '@/services/scanEngine'
+import { useIsPhone } from '@/hooks/useMediaQuery'
+import PersonalityScreen, { type PersonalityState } from '@/components/domain/Onboarding/PersonalityScreen'
+import GuideStep from '@/components/domain/Onboarding/GuideStep'
+import LiveIntroCard from '@/components/domain/Onboarding/LiveIntroCard'
+import TryItSort from '@/components/domain/Onboarding/TryItSort'
 import PricingCards from '@/components/domain/Pricing/PricingCards'
 import ThemeSettings from '@/components/domain/ThemeSettings'
 
-type Step = 1 | 2 | 3 | 4 | 5
-type ICP  = 'investor' | 'trader' | 'both'
+// 1 What is VaNi + your details · 2 Personality · 3 Scanners (workbench builds)
+// 4 How VaNi will guide · 5 Plan · 6 Look — docs/claude/onboarding-poa.md
+type Step = 1 | 2 | 3 | 4 | 5 | 6
 
 // ── Keyframe animations ───────────────────────────────────────────────────────
 
@@ -155,7 +163,7 @@ function Screen1({ displayName, setDisplayName, phone, setPhone, onBegin }: S1Pr
   const showPhoneError = phoneTouched && !phoneValid
   const handleBegin = () => { setPhoneTouched(true); if (phoneValid) onBegin() }
   return (
-    <div className="fixed inset-0 flex items-center justify-center overflow-hidden"
+    <div className="fixed inset-0 flex items-center justify-center overflow-y-auto"
       style={{ background: 'var(--bg)' }}>
       {/* Ambient glows */}
       <div style={{ position:'absolute', width:700, height:700, borderRadius:'50%',
@@ -195,7 +203,8 @@ function Screen1({ displayName, setDisplayName, phone, setPhone, onBegin }: S1Pr
       </div>
 
       {/* Card */}
-      <div style={{ position:'relative', zIndex:10, textAlign:'center',
+      <div style={{ position:'relative', zIndex:10, textAlign:'center', width:'100%',
+        padding:'24px 14px', margin:'auto',
         animation:'card-rise .9s cubic-bezier(.22,1,.36,1) .4s both' }}>
         <div style={{ display:'inline-flex', alignItems:'center', gap:7,
           padding:'5px 14px', borderRadius:100,
@@ -215,11 +224,13 @@ function Screen1({ displayName, setDisplayName, phone, setPhone, onBegin }: S1Pr
           background:'linear-gradient(135deg, #9d8ff9, var(--gold, var(--gold)))',
           WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent', backgroundClip:'text',
           animation:'text-in .6s ease .95s both' }}>VaNi.</div>
-        <p style={{ fontSize:15, color:'var(--text-muted)', marginTop:16, marginBottom:32,
+        <p style={{ fontSize:15, color:'var(--text-muted)', margin:'16px auto 32px',
           lineHeight:1.65, maxWidth:400,
           animation:'text-in .6s ease 1.1s both' }}>
-          I'll help you build your market intelligence framework.
+          I assemble your market workbench from what you'd act on — not from a form.
         </p>
+        {/* First value before the first question — one live setup, today's date. */}
+        <LiveIntroCard />
         {/* Name (optional) + phone (required — how we reach you about your account) */}
         <div style={{ maxWidth:340, margin:'0 auto 28px',
           animation:'text-in .6s ease 1.2s both' }}>
@@ -261,167 +272,11 @@ function Screen1({ displayName, setDisplayName, phone, setPhone, onBegin }: S1Pr
   )
 }
 
-// ── Screen 2 — ICP Question ───────────────────────────────────────────────────
-
-interface S2Props {
-  typed: boolean; icp: ICP | null
-  onSelect: (val: ICP) => void
-  blend: number; setBlend: (v: number) => void
-  icpMode: 'astro' | 'technical'; setIcpMode: (v: 'astro' | 'technical') => void
-  onContinue: () => void
-}
-
-function Screen2({ typed, icp, onSelect, blend, setBlend, icpMode, setIcpMode, onContinue }: S2Props) {
-  const tiles: { val: ICP; icon: string; label: string; sub: string }[] = [
-    { val:'investor', icon:'🌱', label:'Investor',  sub:'Weeks to months' },
-    { val:'trader',   icon:'⚡', label:'Trader',    sub:'Swing & short-term' },
-    { val:'both',     icon:'⚖️', label:'Both',      sub:'Set your blend' },
-  ]
-  const islandText = icp === 'investor' ? 'Investor profile selected'
-    : icp === 'trader' ? 'Trader profile selected'
-    : icp === 'both'   ? 'Set your blend — then build'
-    : 'Select how you participate in markets'
-
-  return (
-    <div className="fixed inset-0 flex flex-col" style={{ background:'var(--bg)', paddingTop:52 }}>
-      <div className="flex-1 flex flex-col items-center justify-center px-6">
-        {/* VaNi bubble */}
-        <div style={{ display:'flex', gap:12, alignItems:'flex-start', maxWidth:520, width:'100%',
-          marginBottom:32, animation:'bubble-in .4s cubic-bezier(.22,1,.36,1) both' }}>
-          <div style={{ width:34, height:34, flexShrink:0, borderRadius:10,
-            background:'linear-gradient(135deg, #9d8ff9, #5b4fd4)',
-            display:'flex', alignItems:'center', justifyContent:'center',
-            boxShadow:`0 3px 12px ${V}.4)`, fontSize:13, fontWeight:700,
-            color:'#fff', fontFamily:'var(--font-mono, monospace)', marginTop:2 }}>V</div>
-          <div style={{ background:'var(--card)', border:'1px solid color-mix(in srgb, var(--text-primary) 14%, transparent)',
-            borderRadius:'3px 14px 14px 14px', padding:'14px 18px',
-            fontSize:14, color:'var(--text-primary)', lineHeight:1.65, maxWidth:460 }}>
-            {!typed ? (
-              <span style={{ display:'flex', gap:5, alignItems:'center', padding:'6px 4px' }}>
-                {[0, 200, 400].map(delay => (
-                  <span key={delay} style={{ width:7, height:7, borderRadius:'50%',
-                    background:'color-mix(in srgb, var(--text-primary) 15%, transparent)', display:'inline-block',
-                    animation:`typing-dot 1.2s ease-in-out ${delay}ms infinite` }} />
-                ))}
-              </span>
-            ) : (
-              <span style={{ animation:'bubble-in .4s cubic-bezier(.22,1,.36,1) both' }}>
-                One thing —{' '}
-                <span style={{ color:'var(--gold, var(--gold))', fontFamily:'var(--font-display)',
-                  fontStyle:'italic', fontSize:15 }}>
-                  how do you participate in markets?
-                </span>
-                <span style={{ display:'block', fontSize:12, color:'var(--text-muted)', marginTop:6 }}>
-                  This is all I need to get started. You can change anything after.
-                </span>
-              </span>
-            )}
-          </div>
-        </div>
-        {/* Tiles */}
-        {typed && (
-          <div style={{ display:'flex', gap:10, maxWidth:520, width:'100%',
-            animation:'bubble-in .4s ease .1s both' }}>
-            {tiles.map(({ val, icon, label, sub }) => (
-              <button key={val} onClick={() => onSelect(val)}
-                style={{ flex:1, padding:'18px 14px', cursor:'pointer', textAlign:'center',
-                  borderRadius:12, transition:'all .2s ease',
-                  border:`1px solid ${icp === val ? 'var(--accent)' : 'color-mix(in srgb, var(--text-primary) 7%, transparent)'}`,
-                  background: icp === val ? 'var(--accent-glow)' : 'var(--card)' }}
-                onMouseEnter={e => { if (icp !== val) (e.currentTarget).style.borderColor='color-mix(in srgb, var(--text-primary) 14%, transparent)' }}
-                onMouseLeave={e => { if (icp !== val) (e.currentTarget).style.borderColor='color-mix(in srgb, var(--text-primary) 7%, transparent)' }}>
-                <div style={{ fontSize:22, marginBottom:8 }}>{icon}</div>
-                <div style={{ fontSize:13, fontWeight:500, color:'var(--text-primary)', marginBottom:3 }}>{label}</div>
-                <div style={{ fontSize:11, color:'var(--text-muted)', lineHeight:1.4 }}>{sub}</div>
-              </button>
-            ))}
-          </div>
-        )}
-        {/* Blend slider */}
-        {typed && icp === 'both' && (
-          <div style={{ maxWidth:520, width:'100%', marginTop:10, padding:'16px 20px',
-            border:'1px solid color-mix(in srgb, var(--text-primary) 7%, transparent)', borderRadius:12,
-            background:'var(--card)', animation:'bubble-in .3s ease both' }}>
-            <div style={{ textAlign:'center', fontFamily:'var(--font-mono, monospace)',
-              fontSize:13, color:'var(--gold, var(--gold))', marginBottom:12 }}>
-              {blend}% Investor · {100 - blend}% Trader
-            </div>
-            <input type="range" min={10} max={90} value={blend}
-              onChange={e => setBlend(Number(e.target.value))}
-              style={{ width:'100%', accentColor:'var(--gold, var(--gold))' }} />
-            <div style={{ display:'flex', justifyContent:'space-between', fontSize:10,
-              color:'var(--text-muted)', marginTop:8,
-              fontFamily:'var(--font-mono, monospace)' }}>
-              <span>← Investor</span><span>Trader →</span>
-            </div>
-          </div>
-        )}
-
-        {/* Analysis style toggle */}
-        {typed && icp && (
-          <div style={{ maxWidth:520, width:'100%', marginTop:10,
-            animation:'bubble-in .3s ease .1s both' }}>
-            <div style={{ fontSize:12, color:'var(--text-muted)', marginBottom:10,
-              fontFamily:'var(--font-mono, monospace)', letterSpacing:'.04em' }}>
-              Your analysis style:
-            </div>
-            <div style={{ display:'flex', gap:8 }}>
-              {([
-                { val: 'astro' as const,      icon: '☽', label: 'Astro-aware'   },
-                { val: 'technical' as const,  icon: '⊙', label: 'Technical only' },
-              ]).map(({ val, icon, label }) => {
-                const active = icpMode === val
-                return (
-                  <button
-                    key={val}
-                    onClick={() => setIcpMode(val)}
-                    style={{
-                      flex: 1, padding: '10px 14px', borderRadius: 10, cursor: 'pointer',
-                      fontSize: 13, fontFamily: 'inherit', fontWeight: active ? 500 : 400,
-                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
-                      transition: 'all .2s ease',
-                      background: active ? 'var(--accent-dim)' : 'transparent',
-                      border: `1px solid ${active ? 'var(--accent)' : 'var(--border)'}`,
-                      color: active ? 'var(--accent)' : 'var(--text-muted)',
-                    }}
-                  >
-                    <span style={{ fontSize: 15 }}>{icon}</span>
-                    {label}
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-        )}
-      </div>
-      {/* Action island */}
-      <div style={{ position:'fixed', bottom:24, left:'50%', transform:'translateX(-50%)',
-        background:'var(--bg)', border:'1px solid var(--accent-dim)',
-        borderRadius:28, padding:'10px 20px 10px 14px',
-        display:'flex', alignItems:'center', gap:12, backdropFilter:'blur(20px)',
-        boxShadow:`0 8px 32px rgba(0,0,0,.5), 0 0 0 1px ${V}.08)`,
-        zIndex:200, minWidth:320, animation:'bubble-in .4s ease .3s both' }}>
-        <div style={{ width:22, height:22, borderRadius:'50%', flexShrink:0,
-          background:'radial-gradient(circle at 35% 35%, #9d8ff9, #5b4fd4)',
-          animation:'badge-pulse 2.5s ease-in-out infinite' }} />
-        <span style={{ fontSize:13, color:'var(--text-primary)', flex:1 }}>{islandText}</span>
-        {icp === 'both' && (
-          <button onClick={onContinue}
-            style={{ padding:'7px 16px', border:'none', borderRadius:100, cursor:'pointer',
-              fontSize:12, fontWeight:500, fontFamily:'inherit',
-              background:'var(--accent-solid)', color:'#fff', flexShrink:0, transition:'background .2s' }}>
-            Build my workspace →
-          </button>
-        )}
-      </div>
-    </div>
-  )
-}
-
 // ── Screen 3 — VaNi Builds Framework ─────────────────────────────────────────
 
 interface S3Props {
   template: FrameworkTemplate
+  persona: Persona
   isFree: boolean
   onAccept: () => Promise<void>
   onBrowse: () => void
@@ -429,7 +284,9 @@ interface S3Props {
   errorMsg: string | null
 }
 
-function Screen3({ template, isFree: _isFree, onAccept, onBrowse, isCommitting, errorMsg }: S3Props) {
+function Screen3({ template, persona, isFree: _isFree, onAccept, onBrowse, isCommitting, errorMsg }: S3Props) {
+  const phone = useIsPhone()
+  const scanners = PERSONA_SCANNERS[persona].map(id => getPresetMeta(id)).filter((m): m is NonNullable<typeof m> => !!m)
   const animBlocks = buildAnimBlocks(template)
   const total = animBlocks.length
 
@@ -486,17 +343,19 @@ function Screen3({ template, isFree: _isFree, onAccept, onBrowse, isCommitting, 
       </div>
 
       {/* Main: canvas left + narration right */}
-      <div style={{ flex:1, display:'grid', gridTemplateColumns:'1fr 360px', overflow:'hidden' }}>
+      <div style={{ flex:1, display:'grid', gridTemplateColumns: phone ? 'minmax(0, 1fr)' : 'minmax(0, 1fr) 360px',
+        overflow: phone ? 'auto' : 'hidden', minWidth:0 }}>
         {/* Left — block list */}
-        <div style={{ borderRight:'1px solid color-mix(in srgb, var(--text-primary) 7%, transparent)',
-          display:'flex', flexDirection:'column', padding:24, gap:12, overflowY:'auto' }}>
+        <div style={{ borderRight: phone ? 'none' : '1px solid color-mix(in srgb, var(--text-primary) 7%, transparent)',
+          display:'flex', flexDirection:'column', padding: phone ? 16 : 24, gap:12, minWidth:0,
+          overflowY: phone ? 'visible' : 'auto' }}>
           <span style={{ fontFamily:'var(--font-mono, monospace)', fontSize:10,
             letterSpacing:'.1em', textTransform:'uppercase', color:'color-mix(in srgb, var(--text-primary) 15%, transparent)' }}>
             Your Workspace
           </span>
           <h2 style={{ fontFamily:'var(--font-display)', fontSize:20, fontWeight:300,
             color:'var(--text-primary)', letterSpacing:'-0.02em', marginBottom:4 }}>
-            {done ? 'Your framework' : 'VaNi is building…'}
+            {done ? `Your ${PERSONAS[persona].label.toLowerCase()} workbench` : 'VaNi is building…'}
           </h2>
           {animBlocks.map((block, i) => {
             const visible = visibleCount > i
@@ -528,13 +387,34 @@ function Screen3({ template, isFree: _isFree, onAccept, onBrowse, isCommitting, 
             )
           })}
 
+          {/* The persona's four scanners — the workbench's output panels. They
+              light after the blocks so the sequence reads blocks → scanners. */}
+          <span style={{ fontFamily:'var(--font-mono, monospace)', fontSize:10, marginTop:8,
+            letterSpacing:'.1em', textTransform:'uppercase', color:'color-mix(in srgb, var(--text-primary) 15%, transparent)' }}>
+            Your scanners
+          </span>
+          <div data-tour="onboarding-scanner-strip" style={{ display:'grid', gridTemplateColumns:'repeat(2, minmax(0, 1fr))', gap:8 }}>
+            {scanners.map((m, i) => {
+              const lit = done || visibleCount > total - 1
+              return (
+                <div key={m.id} style={{ border:`1px solid ${lit ? 'var(--accent-dim)' : 'var(--border)'}`,
+                  borderRadius:10, background:'var(--card)', padding:'10px 12px',
+                  opacity: lit ? 1 : .35, transition:`all .5s ease ${i * 120}ms` }}>
+                  <div style={{ fontFamily:'var(--font-mono, monospace)', fontSize:9, letterSpacing:'.1em',
+                    textTransform:'uppercase', color:'var(--accent)', marginBottom:3 }}>Scanner 0{i + 1}</div>
+                  <div style={{ fontSize:13, fontWeight:500, color:'var(--text-primary)' }}>{m.name}</div>
+                </div>
+              )
+            })}
+          </div>
+
           {/* Completion message + actions */}
           {done && (
             <div style={{ marginTop:8, animation:'text-in .6s ease both' }}>
               <p style={{ fontSize:14, color:'var(--text-muted)', lineHeight:1.65, marginBottom:20 }}>
                 Your starter framework is already applied — you can change any part of it later, from the Catalog.
               </p>
-              <div style={{ display:'flex', gap:10 }}>
+              <div style={{ display:'flex', gap:10, flexWrap:'wrap' }}>
                 <button onClick={onAccept} disabled={isCommitting}
                   style={{ flex:1, padding:'13px 0', border:'none', borderRadius:100,
                     cursor: isCommitting ? 'default' : 'pointer', fontSize:14, fontWeight:500,
@@ -577,8 +457,9 @@ function Screen3({ template, isFree: _isFree, onAccept, onBrowse, isCommitting, 
         </div>
 
         {/* Right — VaNi narration log */}
-        <div style={{ display:'flex', flexDirection:'column', padding:'20px 18px',
-          overflowY:'auto', gap:10 }}>
+        <div style={{ display:'flex', flexDirection:'column', padding: phone ? '16px' : '20px 18px',
+          overflowY: phone ? 'visible' : 'auto', gap:10, minWidth:0,
+          borderTop: phone ? '1px solid color-mix(in srgb, var(--text-primary) 7%, transparent)' : 'none' }}>
           {animBlocks.slice(0, visibleCount).map((block, i) => (
             <div key={i} style={{ display:'flex', gap:8, alignItems:'flex-start',
               animation:'bubble-in .4s cubic-bezier(.22,1,.36,1) both' }}>
@@ -616,6 +497,7 @@ function Screen3({ template, isFree: _isFree, onAccept, onBrowse, isCommitting, 
               </div>
             </div>
           )}
+          {done && <TryItSort />}
           <div ref={logEndRef} />
         </div>
       </div>
@@ -635,16 +517,24 @@ export default function ProfileSetup() {
   const { profile, refreshProfile, setProfile } = useAuthStore()
   const { loadFramework, applyTemplate, saveFramework, framework } = useFrameworkStore()
 
-  const [step,        setStep]        = useState<Step>(1)
-  const [icp,         setIcp]         = useState<ICP | null>(null)
-  const [blend,       setBlend]       = useState(50)
-  const [icpMode,     setIcpMode]     = useState<'astro' | 'technical'>('astro')
+  // Dev-only deep link (?step=N) so the QA screenshot harness can render a
+  // later screen without a live framework service. Ignored in production.
+  const [step,        setStep]        = useState<Step>(() => {
+    if (!import.meta.env.DEV) return 1
+    const n = Number(new URLSearchParams(window.location.search).get('step'))
+    return n >= 1 && n <= 6 ? (n as Step) : 1
+  })
+  const [personality, setPersonality] = useState<PersonalityState>({ answers: {}, override: null, stock: null })
   const [displayName, setDisplayName] = useState(profile?.display_name ?? '')
   const [phone,       setPhone]       = useState(profile?.phone ?? '')
-  const [s2Typed,     setS2Typed]     = useState(false)
   const [committing,  setCommitting]  = useState(false)
-  const [browseIntent, setBrowseIntent] = useState(false)  // "Customize in Catalog" path → theme step → /catalog
+  const [browseIntent, setBrowseIntent] = useState(false)  // "Customize in Catalog" path → look step → /catalog
   const [error,       setError]       = useState<string | null>(null)
+
+  // Persona is derived from the three answers (or the user's override chip);
+  // the template follows the persona — no new templates, see personaConfig.
+  const persona: Persona = personality.override ?? derivePersona(personality.answers)
+  const template: FrameworkTemplate = TEMPLATE_MAP[PERSONA_TEMPLATE[persona]]
 
   // Guard: an ONBOARDED user must never sit in this wizard. Users used to
   // land here via the transiently-null-profile bounce in ProtectedRoute and
@@ -657,36 +547,20 @@ export default function ProfileSetup() {
     if (profile?.onboarded) navigate('/workspace', { replace: true })
   }, [profile?.onboarded, navigate])
 
-  // Resume: a returning user who built their framework (icp_mode saved) but
-  // never completed the final step lands here (ProtectedRoute forces /setup
-  // while onboarded is false). Skip the wizard and drop them on Plan (Step 4)
-  // instead of making them redo everything.
-  //
-  // 2026-07-30: this fires whenever the user is on Step ≤3 with icp_mode
-  // already saved — not just once on mount. The old "runs once on mount" guard
-  // let a user stall at Step 3 (screenshot from Charan) whenever the resume
-  // useEffect happened to run before the profile finished loading; after
-  // profile arrived the guard was already set and the jump never happened.
-  // The condition is idempotent (setStep(4) is a no-op if step is already 4).
+  // Resume: a returning user who built their workbench (icp_mode saved) but
+  // never completed the final steps lands here (ProtectedRoute forces /setup
+  // while onboarded is false). Drop them on Plan (step 5) instead of making
+  // them redo everything. Runs whenever the profile changes, not once on
+  // mount — see the 2026-07-30 stall note in git history.
   useEffect(() => {
     if (!profile) return
     if (profile.onboarded) return
-    if (profile.icp_mode && step < 4) setStep(4)
+    if (profile.icp_mode && step < 5) setStep(5)
   }, [profile, step])
 
   // Funnel visibility — which onboarding step a user actually reaches.
-  // The step 1 back-navigation gap found in review means this can only
-  // ever move forward today; this event is what will prove that once fixed.
   useEffect(() => {
     trackEvent('onboarding_step_viewed', { step })
-  }, [step])
-
-  // Screen 2: typing animation — reveal question after 1.4s
-  useEffect(() => {
-    if (step !== 2) return
-    setS2Typed(false)
-    const t = setTimeout(() => setS2Typed(true), 1400)
-    return () => clearTimeout(t)
   }, [step])
 
   // Screen 3: pre-load framework so applyTemplate has something to write into
@@ -708,9 +582,32 @@ export default function ProfileSetup() {
     setStep(2)
   }
 
-  function handleSelectICP(val: ICP) {
-    setIcp(val)
-    if (val !== 'both') setTimeout(() => setStep(3), 280)
+  // Step 2 exit — persist the persona NOW, not at the end, so abandoning the
+  // wizard still leaves one (Account → How you invest can change it later).
+  // persona_set_at is stamped by the RPC. Non-blocking: a failed save is
+  // recoverable from Account and must not strand the user here.
+  function persistPersona(p: Persona, answers: PersonaAnswers, skipped: boolean) {
+    updateProfile({
+      persona: p,
+      acts_on: answers.acts_on ?? null,
+      hold_horizon: answers.hold_horizon ?? null,
+      concede_level: answers.concede_level ?? null,
+    })
+      .then(() => refreshProfile().catch(() => {}))
+      .catch(() => {/* non-critical */})
+    trackEvent('onboarding_persona', { persona: p, skipped, overridden: personality.override != null, ...answers })
+  }
+
+  function handlePersonalityContinue() {
+    persistPersona(persona, personality.answers, false)
+    setStep(3)
+  }
+
+  function handlePersonalitySkip() {
+    const blank: PersonalityState = { answers: {}, override: null, stock: null }
+    setPersonality(blank)
+    persistPersona(derivePersona(blank.answers), blank.answers, true)
+    setStep(3)
   }
 
   const setupErrMessage = (e: unknown) => sharedErrMessage(e, {
@@ -741,20 +638,13 @@ export default function ProfileSetup() {
   // user as onboarded=true with no framework row. Throws on any failure so the
   // caller can surface an error and NOT advance.
   async function commitFramework() {
-    if (!icp) throw new Error('No profile selected')
-
-    // Make sure a framework exists to write into (retry the load if it lagged/failed).
     if (!useFrameworkStore.getState().framework && profile?.id) {
       await loadFramework(profile.id)
     }
     if (!useFrameworkStore.getState().framework) {
-      // Surface the store's real fetch error (e.g. "HTTP 401") so the caller
-      // can distinguish a dead session from a down server.
       const storeErr = useFrameworkStore.getState().error
       throw new Error(storeErr || 'framework service unavailable')
     }
-
-    const template = getTemplateForICP(icp, blend)
     applyTemplate(template)
     const saved = await saveFramework()
     if (!saved) {
@@ -763,21 +653,27 @@ export default function ProfileSetup() {
     }
   }
 
-  // "Start here →" — apply template + save icp_mode, then go to the final
-  // step. NOTE: onboarded is intentionally NOT set here. It flips only when
+  // icp_mode is the resume signal (workbench built, later steps pending). The
+  // astro/technical choice is no longer asked during setup — astro is not
+  // releasing yet — so everyone starts 'technical'; Account → Appearance
+  // still lets a user switch.
+  async function saveWorkbenchMarker() {
+    await updateProfile({ icp_mode: 'technical' })
+    try { await refreshProfile() } catch {
+      if (profile) setProfile({ ...profile, icp_mode: 'technical' })
+    }
+  }
+
+  // "Start here →" — apply template + mark built, then on to How VaNi will
+  // guide. NOTE: onboarded is intentionally NOT set here. It flips only when
   // the user completes the last screen (2026-07-19) — so abandoning before
-  // then forces them back to finish on next login. icp_mode persisting is the
-  // resume signal: framework built, final step pending → jump straight to it.
+  // then forces them back to finish on next login.
   async function handleAccept() {
-    if (!icp) return
     setCommitting(true)
     setError(null)
     try {
       await commitFramework()
-      await updateProfile({ icp_mode: icpMode })
-      try { await refreshProfile() } catch {
-        if (profile) setProfile({ ...profile, icp_mode: icpMode })
-      }
+      await saveWorkbenchMarker()
       setCommitting(false)
       setStep(4)
     } catch (e) {
@@ -793,19 +689,14 @@ export default function ProfileSetup() {
     }
   }
 
-  // Final step is now Theme (Step 5). Plan exits advance to it rather than
-  // completing — so every user consciously picks a theme before entering.
-  // `browseIntent` remembers the "Customize in Catalog" path so the theme
-  // step lands them in the catalog instead of the workspace.
-  function handlePaidSuccess() {
-    setStep(5)
-  }
+  // Plan exits advance to Look (step 6) rather than completing — so every
+  // user consciously picks a theme before entering.
+  function handlePaidSuccess() { setStep(6) }
+  function handleFreeSelected() { setStep(6) }
 
-  function handleFreeSelected() {
-    setStep(5)
-  }
-
-  // Theme step "Enter DristiQ" — the single place onboarding completes.
+  // Look step "Enter DristiQ" — the single place onboarding completes.
+  // `browseIntent` remembers the "Customize in Catalog" path so this lands
+  // them in the catalog instead of the workspace.
   async function finishOnboarding() {
     completingRef.current = true  // suppress the onboarded-guard redirect — we navigate ourselves
     try {
@@ -815,31 +706,25 @@ export default function ProfileSetup() {
       await handleCommitError(e)
       return
     }
-    trackEvent('onboarding_completed', { icp, icp_mode: icpMode })
+    trackEvent('onboarding_completed', { persona, icp_mode: 'technical' })
     if (browseIntent) { navigate('/catalog', { replace: true }); return }
     const dest = await resolveSpotlightIntent()
     navigate(dest ?? '/workspace', { replace: true })
   }
 
   async function handleBrowse() {
-    if (!icp) { setBrowseIntent(true); setStep(5); return }
     setCommitting(true)
     setError(null)
     try {
       await commitFramework()
-      await updateProfile({ icp_mode: icpMode })   // onboarded flips at theme step
-      try { await refreshProfile() } catch {
-        if (profile) setProfile({ ...profile, icp_mode: icpMode })
-      }
+      await saveWorkbenchMarker()   // onboarded flips at the look step
       setBrowseIntent(true)
       setCommitting(false)
-      setStep(5)
+      setStep(6)
     } catch (e) {
       await handleCommitError(e)
     }
   }
-
-  const template = icp ? getTemplateForICP(icp, blend) : null
 
   return (
     <>
@@ -852,17 +737,17 @@ export default function ProfileSetup() {
         />
       )}
       {step === 2 && (
-        <Screen2
-          typed={s2Typed} icp={icp}
-          onSelect={handleSelectICP}
-          blend={blend} setBlend={setBlend}
-          icpMode={icpMode} setIcpMode={setIcpMode}
-          onContinue={() => setStep(3)}
+        <PersonalityScreen
+          state={personality}
+          onChange={setPersonality}
+          onContinue={handlePersonalityContinue}
+          onSkip={handlePersonalitySkip}
         />
       )}
-      {step === 3 && template && (
+      {step === 3 && (
         <Screen3
           template={template}
+          persona={persona}
           isFree={false}
           onAccept={handleAccept}
           onBrowse={handleBrowse}
@@ -871,6 +756,9 @@ export default function ProfileSetup() {
         />
       )}
       {step === 4 && (
+        <GuideStep persona={persona} onContinue={() => setStep(5)} />
+      )}
+      {step === 5 && (
         <div className="fixed inset-0 overflow-y-auto" style={{ background: 'var(--bg)', padding: '48px 24px 80px' }}>
           <div style={{ maxWidth: 900, margin: '0 auto' }}>
             <div style={{ textAlign: 'center', marginBottom: 40 }}>
@@ -897,8 +785,9 @@ export default function ProfileSetup() {
         </div>
       )}
 
-      {/* Step 5 — Theme preference (final step: onboarded flips here) */}
-      {step === 5 && (
+
+      {/* Step 6 — Theme preference (final step: onboarded flips here) */}
+      {step === 6 && (
         <div className="fixed inset-0 overflow-y-auto" style={{ background: 'var(--bg)', padding: '48px 24px 80px' }}>
           <div style={{ maxWidth: 460, margin: '0 auto' }}>
             <div style={{ textAlign: 'center', marginBottom: 32 }}>

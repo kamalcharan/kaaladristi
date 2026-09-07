@@ -9,6 +9,12 @@ import { DOT_LABELS, zoneLabel, flowLabel } from '@/constants/signalScale';
 import { useIsPhone } from '@/hooks/useMediaQuery';
 import { levelValue, type StudioDescriptor, type StudioLevel } from '@/config/scannerStudio';
 
+/** The slice of a Studio descriptor the card itself reads. Every Studio
+ *  descriptor satisfies it; onboarding (config/onboardingCards.ts) builds
+ *  card-only descriptors for presets that have no Studio page so the same
+ *  card can show a Stage 2 or Quiet Rising Flow row during setup. */
+export type StudioCardDescriptor = Pick<StudioDescriptor, 'presetId' | 'displayName' | 'side' | 'cardHero' | 'cardLevels' | 'rsiQuick'>;
+
 /**
  * Scanner Studio cards — the "Option B+E" design frozen 2026-09-07
  * (docs/claude/scanner-gap-audit-2026-09-06.md §9; canvas "Scanner Studio
@@ -169,7 +175,7 @@ function ScoreBar({ label, value, max, color }: { label: string; value: number |
 /** Row 1 — the qualitative read. Every pill is a label the app already
  *  shows elsewhere (ZONE_LABELS / FLOW_LABELS / DOT_LABELS), so no new
  *  vocabulary is introduced here. */
-function SignalBand({ stock, descriptor }: { stock: ScanStock; descriptor: StudioDescriptor }) {
+function SignalBand({ stock, descriptor }: { stock: ScanStock; descriptor: StudioCardDescriptor }) {
   const zone = stock.magic_rs_zone ? zoneLabel(stock.magic_rs_zone) : null;
   const zoneColor = getColor('magic_rs', stock.magic_rs, stock);
   const flow = stock.flow_type ? flowLabel(stock.flow_type) : null;
@@ -296,8 +302,11 @@ function useNarrow(ref: React.RefObject<HTMLDivElement | null>, below: number): 
 
 // ── Card ──────────────────────────────────────────────────────────────────────
 
-function StudioCard({ stock, descriptor, onClick }: { stock: ScanStock; descriptor: StudioDescriptor; onClick?: () => void }) {
-  const phone = useIsPhone();
+/** `stacked` forces the phone layout regardless of viewport — for a card
+ *  inside a narrow column (the setup wizard's three-up picker, its 360px
+ *  narration rail). The desktop ledger assumes the card has the page. */
+export function StudioCard({ stock, descriptor, onClick, stacked = false }: { stock: ScanStock; descriptor: StudioCardDescriptor; onClick?: () => void; stacked?: boolean }) {
+  const phone = useIsPhone() || stacked;
   const ledgerRef = useRef<HTMLDivElement>(null);
   const narrow = useNarrow(ledgerRef, 420);
   const isVani = stock.vaniOpportunity;

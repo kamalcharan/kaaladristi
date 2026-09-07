@@ -9,6 +9,7 @@
 
 import { create } from 'zustand';
 import { useAuthStore } from '@/stores/authStore';
+import { recordUxEvent } from '@/services/uxEvents';
 import { fetchBookmarks, addBookmark, removeBookmark, setPosition as apiSetPosition, type BookmarkRow, type PositionEntry } from '@/services/bookmarks';
 
 interface BookmarkState {
@@ -98,6 +99,7 @@ export const useBookmarkStore = create<BookmarkState>((set, get) => ({
         const row = await addBookmark(userId, equityId);
         set((s) => ({ bookmarks: [row, ...s.bookmarks.filter((b) => b.equity_id !== equityId)] }));
         settle(true);
+        recordUxEvent('first_bookmark', { equity_id: equityId, path: window.location.pathname });
       } else {
         await removeBookmark(userId, equityId);
         settle(false);
