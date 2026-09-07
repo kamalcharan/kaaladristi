@@ -17,7 +17,7 @@ bookmark-not-plan as the exit, and "Show me" (tours) instead of videos.
 
 ---
 
-## Phase 0 — Data contract (1 migration, owner runs) · ½ day
+## Phase 0 — Data contract (1 migration, owner runs) · ½ day · ✅ built 2026-09-07 (owner to run 204)
 
 **Migration 204 `km_migration_204_profile_persona.sql`** (`ls App/DBscripts | sort`
 first — numbering has drifted before):
@@ -43,7 +43,7 @@ round-trips for a test account.
 
 ---
 
-## Phase 1 — Persona engine + mapping config (pure TS, no UI) · ½ day
+## Phase 1 — Persona engine + mapping config (pure TS, no UI) · ½ day · ✅ built 2026-09-07 (`constants/personaConfig.ts`, `scripts/qa/check-persona.mjs` wired into `npm run build`)
 
 - `constants/personaConfig.ts` (constants-first rule):
   - `PERSONAS` — id, label, one-line voice ("Acts on confirmed strength, holds for weeks").
