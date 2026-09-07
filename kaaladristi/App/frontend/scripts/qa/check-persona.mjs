@@ -10,7 +10,7 @@
 //    real `id:` in services/scanEngine.ts SCAN_PRESETS.
 // 4. Every PERSONA_TEMPLATE id is a real template id in frameworkTemplates.ts.
 // 5. The DB CHECK constraints in migration 204 list exactly the same vocabulary.
-import { readFileSync } from 'node:fs'
+import { readFileSync, existsSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import { transformSync } from 'esbuild'
@@ -62,13 +62,19 @@ const templateIds = new Set([...read('src/constants/frameworkTemplates.ts').matc
 for (const [p, t] of Object.entries(cfg.PERSONA_TEMPLATE)) ok(templateIds.has(t), `${p} → template '${t}' not in frameworkTemplates.ts`)
 
 // ── 5. DB CHECK vocabulary matches ───────────────────────────────────────────
-const mig = read('../DBscripts/km_migration_204_profile_persona.sql')
+// The Docker image only carries App/frontend (nginx/Dockerfile copies that
+// directory alone), so the migration is absent there; the comparison runs in
+// a full checkout (local, CI) and is skipped — reported, not failed — in the
+// image build.
+const migPath = path.join(root, '../DBscripts/km_migration_204_profile_persona.sql')
+const mig = existsSync(migPath) ? readFileSync(migPath, 'utf8') : null
 const dbList = col => {
+  if (mig == null) return null
   const m = mig.match(new RegExp(`${col}\\s+TEXT\\s*\\n?\\s*CHECK \\(${col} IN \\(([^)]*)\\)`))
   return m ? m[1].split(',').map(s => s.trim().replace(/'/g, '')).sort().join(',') : null
 }
 const same = (col, ids) => ok(dbList(col) === [...ids].sort().join(','), `migration 204 CHECK for ${col} (${dbList(col)}) ≠ personaConfig (${[...ids].sort().join(',')})`)
-same('persona', cfg.PERSONA_IDS); same('acts_on', cfg.ACTS_ON_IDS); same('hold_horizon', cfg.HOLD_HORIZON_IDS); same('concede_level', cfg.CONCEDE_LEVEL_IDS)
+if (mig != null) { same('persona', cfg.PERSONA_IDS); same('acts_on', cfg.ACTS_ON_IDS); same('hold_horizon', cfg.HOLD_HORIZON_IDS); same('concede_level', cfg.CONCEDE_LEVEL_IDS) }
 
 if (fails.length) { console.error('check-persona: FAIL\n  ' + fails.join('\n  ')); process.exit(1) }
-console.log(`check-persona: ok · 27 combinations · ${used.size} preset ids · ${Object.keys(cfg.PERSONA_TEMPLATE).length} templates · DB vocabulary in sync`)
+console.log(`check-persona: ok · 27 combinations · ${used.size} preset ids · ${Object.keys(cfg.PERSONA_TEMPLATE).length} templates · ${mig != null ? 'DB vocabulary in sync' : 'DB vocabulary check skipped (migration file not in this build context)'}`)
