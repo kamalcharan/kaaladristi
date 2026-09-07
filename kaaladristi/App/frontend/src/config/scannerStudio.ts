@@ -140,7 +140,9 @@ export interface StudioDescriptor {
    * their own fetcher and are counted by running it. scanEngine derives its
    * MATVIEW_PRICE_ACTION_PRESETS / direct-count lists from this field, so a
    * preset cannot be in one list and missing from the other (gap audit §7,
-   * rows 8 and 9). C1 flips the Golden Line pair to `matview`.
+   * rows 8 and 9). Migration 202 gave the Golden Line pair its arms; every
+   * Studio is `matview` now, and `direct` stays for the next preset that
+   * ships ahead of its arm.
    */
   source: 'matview' | 'direct'
 
@@ -292,28 +294,13 @@ const GL_LEVEL: StudioLevel = { key: 'sma_150', label: 'GL (150d)', kind: 'price
 const VS_GL: StudioLevel = { key: 'pct_from_gl', label: 'vs GL', kind: 'pct', colorKey: 'pct_from_gl' }
 
 /**
- * The seven Studios that mirror Breakout Surge's price_action group columns
- * with their own metric pair swapped into the same slot, so a reader moving
- * between them sees one grid (originally ScanTable's PRESET_COL_OVERRIDES).
+ * Table columns for the seven Studios that mirror Breakout Surge's
+ * price_action group columns with their own metric pair swapped into the same
+ * slot, so a reader moving between them sees one grid. Written out as LITERAL
+ * arrays, not built by a helper: App/backend/lib/scan_contract.py reads
+ * `tableColumns: [...]` per preset by regex to derive the scanner-integrity
+ * contract from the shipping code, and a helper call is invisible to it.
  */
-const mirrorColumns = (pair: [string, string]): string[] => [
-  'symbol', 'close', 'score_5d', 'score_22d', 'pct_chng',
-  ...pair,
-  'avg_amt_5d', 'avg_amt_22d',
-  'rvol', 'rsi_14', 'magic_rs',
-  'mcap_cr', 'delivery_pct',
-]
-
-/** The two Golden Line presets: the event leads because it is why the row is
- *  present; then how far from the line and how long it has held it, in the
- *  order each preset ranks on. */
-const glColumns = (lead: [string, string]): string[] => [
-  'symbol', 'close', 'pct_chng', 'gl_event', ...lead,
-  'dot_signal', 'delivery_pct', 'rvol',
-  'score_5d', 'score_22d', 'avg_amt_5d', 'avg_amt_22d',
-  'rsi_14', 'magic_rs', 'mcap_cr',
-]
-
 /** Shared by all three caution presets — the crossing that matters there is
  *  into the bear side, worded in ZONE_LABELS' own terms. */
 const CAUTION_RS_FLIP = {
@@ -361,7 +348,7 @@ export const STUDIO_DESCRIPTORS: Record<string, StudioDescriptor> = {
     exportName: 'Weekly_Movers',
     source: 'matview',
     sort: { key: 'pct_wtd', dir: 'desc' },
-    tableColumns: mirrorColumns(['prev_week_close', 'pct_wtd']),
+    tableColumns: ['symbol', 'close', 'score_5d', 'score_22d', 'pct_chng', 'prev_week_close', 'pct_wtd', 'avg_amt_5d', 'avg_amt_22d', 'rvol', 'rsi_14', 'magic_rs', 'mcap_cr', 'delivery_pct'],
     cardHero: { key: 'pct_wtd', label: 'WTD', kind: 'pct', colorKey: 'pct_wtd' },
     cardLevels: [
       { key: 'prev_week_close', label: 'Prev Wk', kind: 'price' },
@@ -385,7 +372,7 @@ export const STUDIO_DESCRIPTORS: Record<string, StudioDescriptor> = {
     exportName: 'Monthly_Movers',
     source: 'matview',
     sort: { key: 'pct_mtd', dir: 'desc' },
-    tableColumns: mirrorColumns(['prev_month_close', 'pct_mtd']),
+    tableColumns: ['symbol', 'close', 'score_5d', 'score_22d', 'pct_chng', 'prev_month_close', 'pct_mtd', 'avg_amt_5d', 'avg_amt_22d', 'rvol', 'rsi_14', 'magic_rs', 'mcap_cr', 'delivery_pct'],
     cardHero: { key: 'pct_mtd', label: 'MTD', kind: 'pct', colorKey: 'pct_mtd' },
     cardLevels: [
       { key: 'prev_month_close', label: 'Prev Mth', kind: 'price' },
@@ -409,7 +396,7 @@ export const STUDIO_DESCRIPTORS: Record<string, StudioDescriptor> = {
     source: 'matview',
     // Decliner arms rank the largest LOSS first — asc.
     sort: { key: 'pct_wtd', dir: 'asc' },
-    tableColumns: mirrorColumns(['prev_week_close', 'pct_wtd']),
+    tableColumns: ['symbol', 'close', 'score_5d', 'score_22d', 'pct_chng', 'prev_week_close', 'pct_wtd', 'avg_amt_5d', 'avg_amt_22d', 'rvol', 'rsi_14', 'magic_rs', 'mcap_cr', 'delivery_pct'],
     cardHero: { key: 'pct_wtd', label: 'WTD', kind: 'pct', colorKey: 'pct_wtd' },
     cardLevels: [
       { key: 'prev_week_close', label: 'Prev Wk', kind: 'price' },
@@ -430,7 +417,7 @@ export const STUDIO_DESCRIPTORS: Record<string, StudioDescriptor> = {
     exportName: 'Monthly_Decliners',
     source: 'matview',
     sort: { key: 'pct_mtd', dir: 'asc' },
-    tableColumns: mirrorColumns(['prev_month_close', 'pct_mtd']),
+    tableColumns: ['symbol', 'close', 'score_5d', 'score_22d', 'pct_chng', 'prev_month_close', 'pct_mtd', 'avg_amt_5d', 'avg_amt_22d', 'rvol', 'rsi_14', 'magic_rs', 'mcap_cr', 'delivery_pct'],
     cardHero: { key: 'pct_mtd', label: 'MTD', kind: 'pct', colorKey: 'pct_mtd' },
     cardLevels: [
       { key: 'prev_month_close', label: 'Prev Mth', kind: 'price' },
@@ -454,7 +441,7 @@ export const STUDIO_DESCRIPTORS: Record<string, StudioDescriptor> = {
     exportName: 'Breakdown_Surge',
     source: 'matview',
     sort: { key: 'pct_from_breakdown', dir: 'asc' },
-    tableColumns: mirrorColumns(['breakdown_level', 'pct_from_breakdown']),
+    tableColumns: ['symbol', 'close', 'score_5d', 'score_22d', 'pct_chng', 'breakdown_level', 'pct_from_breakdown', 'avg_amt_5d', 'avg_amt_22d', 'rvol', 'rsi_14', 'magic_rs', 'mcap_cr', 'delivery_pct'],
     cardHero: { key: 'pct_from_breakdown', label: '% Below Floor', kind: 'pct', colorKey: 'pct_from_breakdown' },
     cardLevels: [
       { key: 'breakdown_level', label: 'Brk Dn Lvl', kind: 'price' },
@@ -476,9 +463,10 @@ export const STUDIO_DESCRIPTORS: Record<string, StudioDescriptor> = {
     // Structurally 100% every day — see the field's doc.
     newSinceYesterday: false,
     exportName: 'Golden_Line_Breakout',
-    source: 'direct',
+    // Migration 202. fetchGlEvents stays as the fallback while it is unapplied.
+    source: 'matview',
     sort: { key: 'pct_from_gl', dir: 'desc' },
-    tableColumns: glColumns(['pct_from_gl', 'gl_days_above']),
+    tableColumns: ['symbol', 'close', 'pct_chng', 'gl_event', 'pct_from_gl', 'gl_days_above', 'dot_signal', 'delivery_pct', 'rvol', 'score_5d', 'score_22d', 'avg_amt_5d', 'avg_amt_22d', 'rsi_14', 'magic_rs', 'mcap_cr'],
     // Day one above the line: the distance reclaimed is the number; sessions
     // above is 1 on every row and says nothing.
     cardHero: VS_GL,
@@ -498,9 +486,9 @@ export const STUDIO_DESCRIPTORS: Record<string, StudioDescriptor> = {
     rsFlip: { question: 'Which stocks just turned RS-green?', into: 'bullish' },
     // A retest CAN repeat on consecutive sessions, so the card is real here.
     exportName: 'Golden_Line_Retest',
-    source: 'direct',
+    source: 'matview',
     sort: { key: 'gl_days_above', dir: 'desc' },
-    tableColumns: glColumns(['gl_days_above', 'pct_from_gl']),
+    tableColumns: ['symbol', 'close', 'pct_chng', 'gl_event', 'gl_days_above', 'pct_from_gl', 'dot_signal', 'delivery_pct', 'rvol', 'score_5d', 'score_22d', 'avg_amt_5d', 'avg_amt_22d', 'rsi_14', 'magic_rs', 'mcap_cr'],
     // A retest is about the hold, so the count of sessions above the line
     // leads and the distance takes the second level slot.
     cardHero: { key: 'gl_days_above', label: 'Sessions above GL', filterLabel: 'Held GL', kind: 'count', colorKey: 'gl_days_above' },

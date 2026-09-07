@@ -27,6 +27,7 @@ import { monthlyMoversAdapter } from './monthlyMovers';
 import { weeklyDeclinersAdapter } from './weeklyDecliners';
 import { monthlyDeclinersAdapter } from './monthlyDecliners';
 import { breakdownWatchAdapter } from './breakdownWatch';
+import { glBreakoutAdapter, glRetestAdapter } from './goldenLine';
 
 SETUP_ADAPTERS['stage_2_leaders']      = stage2LeadersAdapter;
 SETUP_ADAPTERS['breakout_surge']       = breakoutSurgeAdapter;
@@ -48,6 +49,8 @@ SETUP_ADAPTERS['monthly_movers']        = monthlyMoversAdapter;
 SETUP_ADAPTERS['weekly_decliners']      = weeklyDeclinersAdapter;
 SETUP_ADAPTERS['monthly_decliners']     = monthlyDeclinersAdapter;
 SETUP_ADAPTERS['breakdown_watch']       = breakdownWatchAdapter;
+SETUP_ADAPTERS['gl_breakout']           = glBreakoutAdapter;
+SETUP_ADAPTERS['gl_retest']             = glRetestAdapter;
 SETUP_ADAPTERS['wg_ascent']            = wgAscentAdapter;
 SETUP_ADAPTERS['wg_stirring']          = wgStirringAdapter;
 

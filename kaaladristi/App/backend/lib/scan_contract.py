@@ -36,6 +36,10 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 _SRC = os.path.normpath(os.path.join(_HERE, '..', '..', 'frontend', 'src'))
 SCAN_ENGINE = os.path.join(_SRC, 'services', 'scanEngine.ts')
 SCAN_TABLE = os.path.join(_SRC, 'components', 'domain', 'ScanTable.tsx')
+# Scanner Studio descriptors (gap audit C2, 2026-09-07): the single place a
+# Studio preset's row source, table sort and table columns live. ScanTable and
+# scanEngine read it ahead of their own maps, so the contract must too.
+SCANNER_STUDIO = os.path.join(_SRC, 'config', 'scannerStudio.ts')
 
 
 def _read(path: str) -> str:
@@ -96,6 +100,32 @@ def preset_meta(src: str | None = None) -> dict[str, dict]:
     return _require(out, 'SCAN_PRESETS')
 
 
+# ── 1b. Scanner Studio descriptors ──────────────────────────────────────
+def studio_descriptors(src: str | None = None) -> dict[str, dict]:
+    """preset -> {source, tableColumns} off STUDIO_DESCRIPTORS.
+
+    `source` is 'matview' | 'direct' and DRIVES scanEngine's
+    MATVIEW_PRICE_ACTION_PRESETS (derived, not a literal list any more);
+    `tableColumns` is what ScanTable renders ahead of PRESET_COL_OVERRIDES
+    (None when the preset takes its category's group defaults)."""
+    if src is None:
+        src = _read(SCANNER_STUDIO)
+    block = _block(src, r'STUDIO_DESCRIPTORS\s*:[^=]*=', '{', '}')
+    out = {}
+    parts = re.split(r"presetId:\s*'([^']+)'", block)
+    # re.split yields [pre, id1, body1, id2, body2, ...]
+    for pid, body in zip(parts[1::2], parts[2::2]):
+        source = re.search(r"source:\s*'(matview|direct)'", body)
+        cols = re.search(r'tableColumns:\s*\[(.*?)\]', body, re.S)
+        out[pid] = {
+            'source': source.group(1) if source else None,
+            'tableColumns': re.findall(r"'([^']+)'", cols.group(1)) if cols else None,
+        }
+        if out[pid]['source'] is None:
+            raise ValueError(f'STUDIO_DESCRIPTORS.{pid} has no source — extractor or descriptor changed shape')
+    return _require(out, 'STUDIO_DESCRIPTORS')
+
+
 # ── 2. routing: preset -> fetcher -> table ──────────────────────────────
 _TABLE_OF = {
     'km_scan_results': 'matview',
@@ -128,6 +158,13 @@ def routing(src: str | None = None) -> dict[str, str]:
     bundle = set(re.findall(r"'([^']+)'",
                             _block(src, r'MATVIEW_BUNDLE_PRESETS[^=\n]*=', '[', ']')))
     _require(bundle, 'MATVIEW_BUNDLE_PRESETS')
+    # MATVIEW_PRICE_ACTION_PRESETS = studioPresetsBySource('matview') — read
+    # the descriptor, which is what the running code reads. Before this the
+    # walk fell through to each preset's fallback fetcher (km_equity_eod) and
+    # reported the six price-action presets as 'live' — the same wrong answer
+    # this file's header warns about, one branch further down.
+    price_action = {p for p, d in studio_descriptors().items() if d['source'] == 'matview'}
+    _require(price_action, "STUDIO_DESCRIPTORS source='matview'")
 
     out: dict[str, str] = {}
 
@@ -153,6 +190,9 @@ def routing(src: str | None = None) -> dict[str, str]:
         if 'MATVIEW_BUNDLE_PRESETS' in line and 'has(scanId)' in line:
             for pid in sorted(bundle):
                 _claim(pid, 'fetchFromScanMatview')
+        if 'MATVIEW_PRICE_ACTION_PRESETS' in line and 'has(scanId)' in line:
+            for pid in sorted(price_action):
+                _claim(pid, 'fetchFromScanMatview')
 
     return _require(out, 'executeScan routing')
 
@@ -164,14 +204,20 @@ def matview_served(src: str | None = None) -> set[str]:
 
 # ── 3. columns the UI renders per preset ────────────────────────────────
 def preset_columns(src: str | None = None) -> dict[str, list[str]]:
-    """preset -> column keys, from ScanTable's per-preset overrides."""
+    """preset -> column keys ScanTable renders ahead of the group defaults:
+    the Studio descriptor's tableColumns first, then PRESET_COL_OVERRIDES —
+    the order ScanTable resolves them in."""
     if src is None:
         src = _read(SCAN_TABLE)
     block = _block(src, r'PRESET_COL_OVERRIDES\s*:[^=]*=', '{', '}')
     out = {}
     for m in re.finditer(r'(\w+):\s*\[(.*?)\]', block, re.S):
         out[m.group(1)] = re.findall(r"'([^']+)'", m.group(2))
-    return _require(out, 'PRESET_COL_OVERRIDES')
+    _require(out, 'PRESET_COL_OVERRIDES')
+    for pid, d in studio_descriptors().items():
+        if d['tableColumns']:
+            out[pid] = d['tableColumns']
+    return out
 
 
 FIELD_AVAILABILITY_TS = os.path.join(_SRC, 'fieldAvailability.ts')
@@ -205,8 +251,9 @@ def columns_for(preset: str, meta: dict, overrides: dict, groups: dict,
     """Exactly what ScanTable renders for this preset.
 
     Resolution order mirrors the app:
-      1. PRESET_COL_OVERRIDES[presetId]                       (ScanTable:148)
-      2. FIELD_AVAILABILITY[preset.category].defaultCols      (ScanTable:115)
+      1. STUDIO_DESCRIPTORS[presetId].tableColumns            (ScanTable getStudioDescriptor)
+      2. PRESET_COL_OVERRIDES[presetId]                       (ScanTable)
+      3. FIELD_AVAILABILITY[preset.category].defaultCols      (ScanTable:115)
       3. getFieldsForGroup()'s fallback for an unknown category
 
     `preset.category` comes from getPresetMeta(), which prefers the

@@ -2363,7 +2363,8 @@ const MATVIEW_BUNDLE_PRESETS: ReadonlySet<string> = new Set([
 // Membership is the descriptor's `source: 'matview'` (config/scannerStudio.ts)
 // so this list and the count query below cannot drift from each other or
 // from the Studio (gap audit §7, rows 8–9). Today: weekly/monthly movers +
-// decliners, breakout_surge, breakdown_watch.
+// decliners, breakout_surge, breakdown_watch, and the Golden Line pair
+// (migration 202).
 const MATVIEW_PRICE_ACTION_PRESETS: ReadonlySet<string> = new Set(studioPresetsBySource('matview'));
 
 // Waking Giants v4 (migration 177) — the three journey-state presets read the
@@ -2692,6 +2693,13 @@ function scanRowToScanStock(r: any): ScanStock {
     // crosses; the audit now checks this mapper too (lib/scan_contract.py).
     score_5d: num(r.score_5d),
     score_22d: num(r.score_22d),
+    // Migration 202 columns — the Golden Line pair's own metrics and the
+    // bar's own dots (the has_recent_* trio above is the 5-session window;
+    // the GL table's Dot column is the bar's). undefined → null before 202.
+    pct_from_gl: num(r.pct_from_gl),
+    gl_event: r.gl_event ?? null,
+    gl_days_above: num(r.gl_days_above),
+    dot_signal: r.dot_svd ? 'SVD' : r.dot_sbd ? 'SBD' : r.dot_syd ? 'SYD' : null,
     // Preset-specific (populated where applicable, null elsewhere)
     ret_5d:  num(r.ret_5d),
     ret_22d: num(r.ret_22d),
@@ -2805,11 +2813,17 @@ async function fetchAllScanCountsFromMatview(
     }
     // Journey-tab counts ride along (separate table, graceful zeros pre-177).
     Object.assign(counts, await fetchWgJourneyCounts());
-    // Presets served by their own fetcher rather than the matview (the Golden
-    // Line pair, until C1 adds their arms to km_scan_results): count what the
-    // tab would render. Both queries are one latest-date read of ~200 rows,
-    // and a failure here must not blank every other badge — log and show 0.
-    Object.assign(counts, await fetchDirectPresetCounts(exchangeFilter));
+    // Presets served by their own fetcher rather than the matview, plus any
+    // matview Studio whose arm returned NOTHING — the same "migration not
+    // applied yet" signal executeScan reads, answered the same way (run the
+    // fetcher). On a genuinely empty day the fallback returns the same zero
+    // for one extra query. A failure here must not blank every other badge —
+    // log and show 0.
+    const direct = [
+      ...studioPresetsBySource('direct'),
+      ...studioPresetsBySource('matview').filter((id) => counts[id] === 0),
+    ];
+    Object.assign(counts, await fetchDirectPresetCounts(direct, exchangeFilter));
     return { counts, latestDate };
   } catch (e) {
     console.warn('[scan] matview counts read failed, using bundle fallback', e);
@@ -2817,12 +2831,11 @@ async function fetchAllScanCountsFromMatview(
   }
 }
 
-// Tab-strip badge counts for Studio presets that executeScan serves outside
-// the matview — the descriptor's `source: 'direct'` (the Golden Line pair
-// until C1 gives them a matview arm).
+// Tab-strip badge counts via executeScan, for the presets the matview read
+// could not count (see the caller).
 
-async function fetchDirectPresetCounts(exchangeFilter: ExchangeFilter): Promise<Record<string, number>> {
-  const entries = await Promise.all(studioPresetsBySource('direct').map(async (id): Promise<[string, number]> => {
+async function fetchDirectPresetCounts(ids: readonly string[], exchangeFilter: ExchangeFilter): Promise<Record<string, number>> {
+  const entries = await Promise.all(ids.map(async (id): Promise<[string, number]> => {
     try {
       return [id, (await executeScan(id, exchangeFilter)).length];
     } catch (e) {
@@ -2864,7 +2877,7 @@ export async function executeScan(
     // the fallback would return empty too. Don't run it, and don't blame the
     // migration for it.
     if (exchangeFilter === 'BSE') return [];
-    console.warn(`[scan] ${scanId}: no km_scan_results rows — run migration 195 and REFRESH MATERIALIZED VIEW km_scan_results. Using the direct-query fallback.`);
+    console.warn(`[scan] ${scanId}: no km_scan_results rows — apply the latest km_scan_results migration (202 for the Golden Line pair) and REFRESH MATERIALIZED VIEW km_scan_results. Using the direct-query fallback.`);
   }
   if (scanId === 'breakout_surge' || scanId === 'breakout_surge_daily') return fetchBreakoutSurge(exchangeFilter);
   if (scanId === 'weekly_movers')        return fetchPeriodMovers('weekly_movers', 'pct_wtd', 'up', exchangeFilter);

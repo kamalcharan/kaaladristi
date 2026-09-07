@@ -90,6 +90,12 @@ export interface LatestEodRow {
   pct_mtd: number | null;
   breakdown_level: number | null;
   pct_from_breakdown: number | null;
+  // Golden Line columns (migration 194 — goldenLine adapters). gl_event is the
+  // pipeline's stamp on the bar (BREAKOUT / RETEST / NULL); gl_days_above the
+  // consecutive sessions closed above sma_150, this bar included.
+  pct_from_gl: number | null;
+  gl_event: string | null;
+  gl_days_above: number | null;
 }
 
 /** The equity's master-table row — identity + exchange + industry. */

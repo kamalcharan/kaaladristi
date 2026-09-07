@@ -371,14 +371,14 @@ or more. "Where" names the file(s) to open.
 |---|---|---|---|
 | B1 ✅ | Filter bar `metric` group for Studio presets: min/max on the descriptor's ranking column (labelled from `fieldConfig`) + RVOL Min. Also closes the invisible-RVOL-filter problem (§3b, §3c). | `ScanFilterBar.tsx`, `scannerStudio.ts` (expose ranking key) | S–M |
 | B2 ✅ | XLS export variant that appends the descriptor's two levels + Score 5D/22D + 5D/22D returns, used by the seven `xlsVariant: 'default'` Studios (§3d). Flower Pot gets its compression fields the same way if wanted. | `downloadXls.ts`, `scannerStudio.ts` | S |
-| B3 | Chart-setup adapters for `gl_breakout` / `gl_retest` (or one parameterised on the event), following `breakoutSurge.ts`. Content work: the Golden Line story has to be written (§3e). | `services/thesis/adapters/` | M |
+| B3 ✅ | Chart-setup adapters for `gl_breakout` / `gl_retest` (or one parameterised on the event), following `breakoutSurge.ts`. Content work: the Golden Line story has to be written (§3e). | `services/thesis/adapters/` | M |
 | B4 ✅ | Studio renders `ScanStalenessBanner` and `AtmosphericBadge` like the generic layout (§4). | `ScannerStudio.tsx` | S |
 
 ### C. Structural — stop the audit from repeating
 
 | ID | Task | Where | Size |
 |---|---|---|---|
-| C1 | Migration: add `gl_breakout` / `gl_retest` arms to `km_scan_results` (mirror `fetchGlEvents`: NSE, ISIN-dedup, `gl_event = X`, no price/EMA gate, cap 200) and project `pct_from_gl`, `gl_event`, `gl_days_above`, `bm_event`, `bm_ratio`. Then move the pair into `MATVIEW_PRICE_ACTION_PRESETS`, keep the fetcher as fallback, update `_GL_POOL`'s note. Closes §3a and A4 (§2b). | new `km_migration_202_*.sql`, `scanEngine.ts`, `compute_scan_membership_snapshot.py` | M |
+| C1 ✅ | Migration: add `gl_breakout` / `gl_retest` arms to `km_scan_results` (mirror `fetchGlEvents`: NSE, ISIN-dedup, `gl_event = X`, no price/EMA gate, cap 200) and project `pct_from_gl`, `gl_event`, `gl_days_above`, `bm_event`, `bm_ratio`. Then move the pair into `MATVIEW_PRICE_ACTION_PRESETS`, keep the fetcher as fallback, update `_GL_POOL`'s note. Closes §3a and A4 (§2b). | new `km_migration_202_*.sql`, `scanEngine.ts`, `compute_scan_membership_snapshot.py` | M |
 | C2 ✅ | Descriptor consolidation: `STUDIO_DESCRIPTORS` carries sort key, column set, filter group, export variant; `ScanTable`, `ScanFilterBar`, `downloadXls` and the counts list read it instead of their own maps (§7). After this a preset with a descriptor cannot be missing a sort, a filter or an export column. Do AFTER A1/B1/B2 so each behaviour is right before it is moved. | five files | M |
 | C3 | Refresh `km_scan_results` is part of every migration that recreates it `WITH NO DATA` — either the migration ends with the two `REFRESH` statements, or the runbook says so. Today's outage on the six bundle scanners came from migration 200 leaving both views empty until the nightly step. | `DBscripts/` convention, `CLAUDE.md` | S |
 
@@ -441,6 +441,31 @@ or more. "Where" names the file(s) to open.
   read the descriptor; a preset with a descriptor cannot be missing a sort,
   a column set, a metric filter, an export column or a count badge. Still
   hand-maintained: 4 (defaultFiltersFor), 6, 7, 10–14.
-- **Batch 3:** C1, then B3.
+- **Batch 3:** C1, then B3. **Done 2026-09-07 (code); C1 needs the owner
+  to run migration 202.** C1: `km_migration_202_gl_matview_arms.sql`
+  recreates `km_scan_results` with `gl_breakout` / `gl_retest` arms (mirror
+  of `fetchGlEvents`: NSE, ISIN-dedup, event flag, no price gate, cap 200,
+  breakouts by `pct_from_gl` desc, retests by `gl_days_above` desc,
+  `vani_flag` TRUE) and projects `pct_from_gl`, `gl_event`, `gl_days_above`,
+  `bm_event`, `bm_ratio`, `dot_svd`, `dot_sbd`, `dot_syd` on every arm (the
+  dots because the GL table's Dot column is the BAR's dot, not the 5-session
+  `has_recent_*` window); exclusion counts enumerate the pair. Validated
+  against the live DB with the reduced CTE chain: 17 breakouts / 2 retests on
+  2026-09-04, identical to the fetcher. The pair's descriptor is
+  `source: 'matview'`; `executeScan` and the count badge fall back to the
+  fetcher while the arm is empty; `scanRowToScanStock` maps the new columns.
+  `lib/scan_contract.py` now reads `STUDIO_DESCRIPTORS` (`source` drives the
+  routing walk, `tableColumns` the column contract — the Studio arrays are
+  literal for that reason), which also fixed a pre-existing gap where the six
+  price-action presets were reported `live`; `mapper_gaps` / `unknown_columns`
+  / `fallback_columns` are empty. **Deploy order:** the nightly integrity
+  check derives matview-served from the descriptor, so between deploying the
+  frontend and running 202 + REFRESH it will report the pair's arm empty.
+  B3: `services/thesis/adapters/goldenLine.ts`
+  (one builder, two registrations) — the line, the base/retest floor and the
+  weekly 50 EMA as LT levels; pivots as swing levels; eight what-confirms
+  items including the pipeline's own `gl_event` stamp and, on retests,
+  sessions held. `LatestEodRow` / `useSetupData` carry the three GL columns.
+  Row clicks on both Studios now append `&tab=chart&setup=…`.
 - **Owner, any time:** D1–D5, E1, C3 as a convention.
 

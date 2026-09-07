@@ -137,15 +137,18 @@ _PA_POOL = """
 
 
 # ---------------------------------------------------------------------------
-# The Golden Line pair has NO matview arm — km_scan_results holds no rows for
-# either preset. They are served by fetchGlEvents (scanEngine.ts), so THAT is
-# what this mirrors, and it differs from the price-action pool in two ways
-# that must not be "corrected" for consistency:
+# The Golden Line pair: migration 202 gave them km_scan_results arms
+# (gl_breakout / gl_retest, mirroring fetchGlEvents in scanEngine.ts, which
+# stays as the frontend's fallback). This pool mirrors the ARM for history —
+# km_scan_results is latest-date only — and it differs from the price-action
+# pool in two ways that must not be "corrected" for consistency:
 #
-#   no close >= 50 and no ema_20 gate -- the fetcher applies neither; the
-#       event flag is the whole filter. Adding the shared pool's gates here
+#   no close >= 50 gate -- neither the arm nor the fetcher applies one; the
+#       event flag is the whole filter. Adding the shared pool's gate here
 #       would snapshot a narrower set than the UI shows, the exact under-
-#       reporting this file's header describes.
+#       reporting this file's header describes. (The arm reads through the
+#       matview's ema_20 IS NOT NULL gate; it cannot bite on a row that has
+#       an sma_150-based event, so it is not reproduced here.)
 #   ordering is the scan's own -- breakouts by distance above the line
 #       (pct_from_gl DESC), retests by sessions held (gl_days_above DESC).
 #
@@ -178,8 +181,8 @@ _GL_POOL = """
 
 
 def _membership_gl(preset_id: str, event: str, order: str):
-    """Membership for one Golden Line preset — mirrors fetchGlEvents, not a
-    matview arm (there is none). See the note above _GL_POOL."""
+    """Membership for one Golden Line preset — mirrors the migration-202 arm
+    (and fetchGlEvents, which it was copied from). See the note above _GL_POOL."""
     sql = _GL_POOL.format(order=order)
 
     def _fn(conn, trade_date) -> list[tuple[int, str | None]]:

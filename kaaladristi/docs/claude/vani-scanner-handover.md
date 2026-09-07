@@ -19,6 +19,16 @@ remains the control. Eight of nine active `price_action` presets carry the
 Studio; the ninth, `flower_pot_burst`, stays excluded (it has no `vani_rule`
 at all, so "why flagged" has nothing to compute until that is decided).
 
+**2026-09-07 addendum (gap audit Batch 3, C1):** the items below were all run
+by the owner on 2026-09-06. One NEW owner-run item since:
+`km_migration_202_gl_matview_arms.sql` (Golden Line arms on `km_scan_results`
++ GL / Big Money / dot bar columns), then
+`REFRESH MATERIALIZED VIEW km_scan_results; REFRESH MATERIALIZED VIEW km_scan_exclusion_counts;`
+— run it promptly after deploying, because the frontend already reads the pair
+as matview-served (fetcher fallback until then) and the nightly integrity check
+reports the arm empty until the refresh. Parity + audit steps are at the tail
+of the migration. Detail: `docs/claude/scanner-gap-audit-2026-09-06.md` §11.
+
 **What is left is not code.** Two owner-run items, in this order:
 
 1. `python scripts/backfill_rolling_metrics_fast.py` — fills
