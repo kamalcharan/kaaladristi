@@ -6,6 +6,7 @@ import { useAuthStore } from '@/stores/authStore';
 import { useMidnightDateRefresh } from '@/stores/appStore';
 import { ErrorBoundary } from '@/components/ui';
 import Layout from '@/components/domain/Layout';
+import BuildWatch from '@/components/ui/BuildWatch';
 import ProtectedRoute from '@/components/domain/ProtectedRoute';
 import LandingPage from '@/views/LandingPage';
 import LoginPage from '@/views/LoginPage';
@@ -99,6 +100,8 @@ function AppRoutes() {
   }
 
   return (
+    <>
+    <BuildWatch />
     <Routes>
       {/* Public: Landing / Auth */}
       <Route path="/" element={<LandingPage />} />
@@ -165,6 +168,7 @@ function AppRoutes() {
 
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
+    </>
   );
 }
 

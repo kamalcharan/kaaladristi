@@ -77,7 +77,9 @@ export default function LoginPage() {
         // so go straight to the wizard.
         await useAuthStore.getState().refreshProfile();
         trackEvent('user_registered');
-        navigate('/setup');
+        // Full navigation, not a client-side route: a tab opened before a deploy
+        // must pick up the current bundle before the wizard starts.
+        window.location.assign('/setup');
       } else {
         await signIn(email, password);
         await useAuthStore.getState().refreshProfile();
