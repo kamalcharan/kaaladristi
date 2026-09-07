@@ -166,6 +166,18 @@ const DEFAULT_SORT: Record<string, { key: string; dir: 'asc' | 'desc' }> = {
   // next-day move, so it would sort the list by a feature with no predictive
   // value.
   volume_drive:     { key: 'delivery_pct',      dir: 'desc' },
+  // Price Action Studios — each scan's own ranking column, mirroring its
+  // fetcher / matview arm. Without these the seven fell through to the
+  // magic_rs fallback below, so table view discarded the ranking the cards
+  // view (fetched order) kept: the two views of one scan disagreed (gap
+  // audit §2a / §9b). Decliner arms rank the largest LOSS first — asc.
+  weekly_movers:     { key: 'pct_wtd',            dir: 'desc' },
+  monthly_movers:    { key: 'pct_mtd',            dir: 'desc' },
+  weekly_decliners:  { key: 'pct_wtd',            dir: 'asc'  },
+  monthly_decliners: { key: 'pct_mtd',            dir: 'asc'  },
+  breakdown_watch:   { key: 'pct_from_breakdown', dir: 'asc'  },
+  gl_breakout:       { key: 'pct_from_gl',        dir: 'desc' },
+  gl_retest:         { key: 'gl_days_above',      dir: 'desc' },
   // v4 journey tabs — match each fetcher's engine ranking.
   waking_giants:    { key: 'base_years',        dir: 'desc' },
   wg_ascent:        { key: 'align_score',       dir: 'desc' },

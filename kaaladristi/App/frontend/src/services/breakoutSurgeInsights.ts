@@ -549,23 +549,3 @@ export function computeIsUnusualFacts(todayCount: number, ctx: DayOverDayContext
   return { todayCount, avgCount, lookbackDays: ctx.countHistory.length }
 }
 
-/**
- * Deterministic "why this row" tags — the same boolean logic backfill_vani_flags.py
- * uses for is_vani_surge/is_vani_breakout (App/backend/scripts/backfill_vani_flags.py),
- * re-expressed as human-readable tags instead of a single boolean. No LLM call —
- * Phase 2 is where these facts get handed to VaNi to turn into prose.
- */
-export function buildWhyTags(r: ScanStock): string[] {
-  const tags: string[] = []
-  if (r.w52_high != null && r.close >= r.w52_high * 0.95) tags.push('At 52W high')
-  if ((r.rvol ?? 0) > 3) tags.push(`RVOL ${r.rvol!.toFixed(1)}×`)
-  if (r.rsi_14 != null && r.rsi_14 < 78) tags.push('Not yet overbought')
-  else if (r.rsi_14 != null) tags.push(`RSI ${r.rsi_14.toFixed(0)} — extended`)
-  // Same latent bug as isHighlight() above (r.is_vani_breakout is never
-  // populated on this preset's rows) — re-derived from real sma columns
-  // instead of the missing flag.
-  if (r.sma_50 != null && r.sma_150 != null && r.close > r.sma_50 && r.close > r.sma_150) tags.push('Above 50 & 150-day trend')
-  if (isAccelerating(r)) tags.push('Accelerating vs 22D pace')
-  if (r.industry) tags.push(r.industry)
-  return tags
-}

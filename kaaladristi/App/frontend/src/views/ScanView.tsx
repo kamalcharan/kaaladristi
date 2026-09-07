@@ -864,7 +864,10 @@ function ConvictionFlowResults({ preset, timeframe, viewMode, onViewModeChange }
               <p style={{ fontSize: '13px', color: 'var(--bear)' }}>Failed to run scan.</p>
             </Card>
           ) : (
-            <ConvictionFlowCards stocks={stocks} />
+            <ConvictionFlowCards
+              stocks={stocks}
+              onRowClick={(s) => navigate(`/chart/equity/${s.equity_id}?name=${encodeURIComponent(navName(s))}${storySetupSuffix('conviction_flow')}`)}
+            />
           )}
         </>
       )}

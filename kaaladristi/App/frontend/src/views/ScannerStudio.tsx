@@ -17,6 +17,9 @@ import {
 import ScanTable from '@/components/domain/ScanTable'
 import BreakoutSurgeCards from '@/components/domain/BreakoutSurgeTable'
 import ScanVaNiPublisher from '@/components/domain/ScanVaNiPublisher'
+import ScanStalenessBanner from '@/components/domain/ScanStalenessBanner'
+import AtmosphericBadge from '@/components/domain/AtmosphericBadge'
+import { DristiQLoader } from '@/components/ui'
 import VaNiFeedback from '@/components/domain/VaNi/VaNiFeedback'
 import { useVaNiAsk } from '@/hooks/useVaNiChat'
 import { useIndustryLeadershipMap } from '@/hooks/useIndustryRotation'
@@ -234,13 +237,19 @@ export default function ScannerStudio({ presetId }: { presetId: string }) {
           </h1>
           <p style={{ fontSize: 13.5, color: 'var(--text-muted)', maxWidth: 640, lineHeight: 1.55 }}>{meta?.description}</p>
         </div>
-        <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+        <div style={{ display: 'flex', gap: 8, flexShrink: 0, alignItems: 'center', flexWrap: 'wrap' }}>
+          {/* Same astro-day badge the generic layout shows in its VaNi section
+              header (B4) — the Studio had no astro context at all. */}
+          <AtmosphericBadge />
           <DownloadXlsButton stocks={filtered} scanName={d.exportName} variant={d.xlsVariant} />
           <TradingViewExportButton stocks={filtered} scanName={d.exportName} />
         </div>
       </div>
 
-      {isLoading && <p style={{ color: 'var(--text-muted)' }}>Loading real scan results…</p>}
+      {/* The same branded loader every other scanner layout uses; the Studio
+          predated its adoption and showed a plain line of text. */}
+      {isLoading && <DristiQLoader />}
+      {!isLoading && !error && <ScanStalenessBanner stocks={all} />}
       {error && <p style={{ color: 'var(--bear)' }}>Failed to load: {(error as Error).message}</p>}
 
       {!isLoading && !error && (
@@ -362,7 +371,7 @@ export default function ScannerStudio({ presetId }: { presetId: string }) {
           {viewMode === 'table' ? (
             <ScanTable stocks={filtered} presetId={presetId} onRowClick={onRowClick} />
           ) : (
-            <BreakoutSurgeCards stocks={filtered} descriptor={d} />
+            <BreakoutSurgeCards stocks={filtered} descriptor={d} onRowClick={onRowClick} />
           )}
         </>
       )}

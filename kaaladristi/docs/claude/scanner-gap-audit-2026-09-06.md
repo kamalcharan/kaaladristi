@@ -360,10 +360,10 @@ or more. "Where" names the file(s) to open.
 
 | ID | Task | Where | Size |
 |---|---|---|---|
-| A1 | Add `DEFAULT_SORT` entries for the seven scanners that fall through to `magic_rs` (wk/mo movers `pct_wtd`/`pct_mtd` desc, wk/mo decliners asc, breakdown `pct_from_breakdown` asc, gl_breakout `pct_from_gl` desc, gl_retest `gl_days_above` desc). Fixes table order AND the cards-vs-table disagreement (§2a, §9b). | `ScanTable.tsx` | S |
-| A2 | Studio cards: pass `onClick` (the Studio's existing `onRowClick`) and render `BookmarkToggle` in `BreakoutSurgeCards`; same two props in `ConvictionFlowCards`. Cards can then open and bookmark a stock like the table row (§9a). | `BreakoutSurgeTable.tsx`, `ConvictionFlowTable.tsx`, `ScannerStudio.tsx` | S |
-| A3 | Replace the Studio's plain "Loading real scan results…" text with `<DristiQLoader />` (§8). | `ScannerStudio.tsx:243` | S |
-| A4 | Tab-strip count badge for presets outside the matview lists (GL pair, Flower Pot): fall through to `executeScan(id).length` in `getAllScanCounts` (§2b). Superseded by C1 if that lands first. | `scanEngine.ts` | S |
+| A1 ✅ | Add `DEFAULT_SORT` entries for the seven scanners that fall through to `magic_rs` (wk/mo movers `pct_wtd`/`pct_mtd` desc, wk/mo decliners asc, breakdown `pct_from_breakdown` asc, gl_breakout `pct_from_gl` desc, gl_retest `gl_days_above` desc). Fixes table order AND the cards-vs-table disagreement (§2a, §9b). | `ScanTable.tsx` | S |
+| A2 ✅ | Studio cards: pass `onClick` (the Studio's existing `onRowClick`) and render `BookmarkToggle` in `BreakoutSurgeCards`; same two props in `ConvictionFlowCards`. Cards can then open and bookmark a stock like the table row (§9a). | `BreakoutSurgeTable.tsx`, `ConvictionFlowTable.tsx`, `ScannerStudio.tsx` | S |
+| A3 ✅ | Replace the Studio's plain "Loading real scan results…" text with `<DristiQLoader />` (§8). | `ScannerStudio.tsx:243` | S |
+| A4 ✅ | Tab-strip count badge for presets outside the matview lists (GL pair, Flower Pot): fall through to `executeScan(id).length` in `getAllScanCounts` (§2b). Superseded by C1 if that lands first. | `scanEngine.ts` | S |
 
 ### B. Capability gaps — Breakout Surge can, the others cannot
 
@@ -372,7 +372,7 @@ or more. "Where" names the file(s) to open.
 | B1 | Filter bar `metric` group for Studio presets: min/max on the descriptor's ranking column (labelled from `fieldConfig`) + RVOL Min. Also closes the invisible-RVOL-filter problem (§3b, §3c). | `ScanFilterBar.tsx`, `scannerStudio.ts` (expose ranking key) | S–M |
 | B2 | XLS export variant that appends the descriptor's two levels + Score 5D/22D + 5D/22D returns, used by the seven `xlsVariant: 'default'` Studios (§3d). Flower Pot gets its compression fields the same way if wanted. | `downloadXls.ts`, `scannerStudio.ts` | S |
 | B3 | Chart-setup adapters for `gl_breakout` / `gl_retest` (or one parameterised on the event), following `breakoutSurge.ts`. Content work: the Golden Line story has to be written (§3e). | `services/thesis/adapters/` | M |
-| B4 | Studio renders `ScanStalenessBanner` and `AtmosphericBadge` like the generic layout (§4). | `ScannerStudio.tsx` | S |
+| B4 ✅ | Studio renders `ScanStalenessBanner` and `AtmosphericBadge` like the generic layout (§4). | `ScannerStudio.tsx` | S |
 
 ### C. Structural — stop the audit from repeating
 
@@ -397,13 +397,18 @@ or more. "Where" names the file(s) to open.
 | ID | Task | Size |
 |---|---|---|
 | E1 | Real-device phone pass (iOS Safari + Android Chrome): category strip swipe, tab strip swipe, table/cards toggle, Filters, a Studio intent card, landscape once, Ask VaNi. | S |
-| E2 | Remove or wire the unused exports `useVaNiIntents` (hooks/useVaNiChat.ts) and `buildWhyTags` (breakoutSurgeInsights.ts). | S |
+| E2 ✅ | Remove or wire the unused exports `useVaNiIntents` (hooks/useVaNiChat.ts) and `buildWhyTags` (breakoutSurgeInsights.ts). | S |
 | E3 | JobMonitor "Backend offline" pill overlaps the scanner Action Island on a phone when the backend is down. Not a scanner component; move the pill or the island's `bottom`. | S |
-| E4 | Update `CLAUDE.md`'s "Next migration number" line (says 167; disk is at 201) and note the harness JWT fix in the theme-QA section. | S |
+| E4 ✅ | Update `CLAUDE.md`'s "Next migration number" line (says 167; disk is at 201) and note the harness JWT fix in the theme-QA section. | S |
 
 ### Suggested batches
 
-- **Batch 1 (one sitting):** A1, A2, A3, A4, B4, E2, E4.
+- **Batch 1 (one sitting):** A1, A2, A3, A4, B4, E2, E4. **Done 2026-09-07** —
+  seven `DEFAULT_SORT` entries; Studio and Conviction Flow cards open the
+  chart and carry the bookmark star; `DristiQLoader` + `ScanStalenessBanner` +
+  `AtmosphericBadge` on the Studio; count badges for Flower Pot (matview list)
+  and the GL pair (`fetchDirectPresetCounts` → `executeScan().length`, retired
+  by C1); dead exports removed; CLAUDE.md migration line at 202.
 - **Batch 2:** B1, B2, then C2 on top of them.
 - **Batch 3:** C1, then B3.
 - **Owner, any time:** D1–D5, E1, C3 as a convention.

@@ -2769,7 +2769,10 @@ async function fetchAllScanCountsFromMatview(
   try {
     const { data, error } = await from('km_scan_results')
       .select('preset_id,exchange,isin,vani_flag,trade_date')
-      .in('preset_id', [...MATVIEW_BUNDLE_PRESETS, ...MATVIEW_PRICE_ACTION_PRESETS])
+      // flower_pot_burst rides the same matview (fetchFlowerPotBurst reads
+      // its preset_id rows) but sat in neither list, so its tab badge never
+      // rendered a number (gap audit A4).
+      .in('preset_id', [...MATVIEW_BUNDLE_PRESETS, ...MATVIEW_PRICE_ACTION_PRESETS, 'flower_pot_burst'])
       // Raised from 2000 with the six price-action presets (migration 195):
       // their caps alone are 4 x 500 + breakout/breakdown, so 2000 would have
       // silently truncated the counts — the badge would read low with no error.
@@ -2799,16 +2802,37 @@ async function fetchAllScanCountsFromMatview(
     }
     // Presets with zero matview rows still need a 0 entry so the landing UI
     // doesn't read them as "unknown".
-    for (const id of MATVIEW_BUNDLE_PRESETS) {
+    for (const id of [...MATVIEW_BUNDLE_PRESETS, ...MATVIEW_PRICE_ACTION_PRESETS, 'flower_pot_burst']) {
       if (!(id in counts)) counts[id] = 0;
     }
     // Journey-tab counts ride along (separate table, graceful zeros pre-177).
     Object.assign(counts, await fetchWgJourneyCounts());
+    // Presets served by their own fetcher rather than the matview (the Golden
+    // Line pair, until C1 adds their arms to km_scan_results): count what the
+    // tab would render. Both queries are one latest-date read of ~200 rows,
+    // and a failure here must not blank every other badge — log and show 0.
+    Object.assign(counts, await fetchDirectPresetCounts(exchangeFilter));
     return { counts, latestDate };
   } catch (e) {
     console.warn('[scan] matview counts read failed, using bundle fallback', e);
     return null;
   }
+}
+
+// Tab-strip badge counts for presets that executeScan serves outside the
+// matview. Keep in sync with the dispatch below; C1 retires the GL entries.
+const DIRECT_COUNT_PRESETS: readonly string[] = ['gl_breakout', 'gl_retest'];
+
+async function fetchDirectPresetCounts(exchangeFilter: ExchangeFilter): Promise<Record<string, number>> {
+  const entries = await Promise.all(DIRECT_COUNT_PRESETS.map(async (id): Promise<[string, number]> => {
+    try {
+      return [id, (await executeScan(id, exchangeFilter)).length];
+    } catch (e) {
+      console.warn(`[scan] ${id}: count fetch failed — badge shows 0`, e);
+      return [id, 0];
+    }
+  }));
+  return Object.fromEntries(entries);
 }
 
 export async function executeScan(

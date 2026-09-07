@@ -3,6 +3,7 @@ import type { ScanStock } from '@/types';
 import { ScanCardWrapper, VaniBadge, ScanSectionLabel, CardExchangeBadge } from './ScanCardShell';
 import { displaySymbol } from '@/lib/symbolUtils';
 import { getColor, getLabel } from '@/config/fieldConfig';
+import BookmarkToggle from './BookmarkToggle';
 
 // ── Formatters ────────────────────────────────────────────────────────────────
 
@@ -98,7 +99,7 @@ function DataRow({ items }: { items: DataItem[] }) {
 
 // ── Individual card ───────────────────────────────────────────────────────────
 
-function FlowCard({ stock }: { stock: ScanStock }) {
+function FlowCard({ stock, onClick }: { stock: ScanStock; onClick?: () => void }) {
   const isVani = stock.vaniOpportunity;
   const surge  = stock.delivery_surge_x ?? null;
 
@@ -106,6 +107,7 @@ function FlowCard({ stock }: { stock: ScanStock }) {
     <ScanCardWrapper
       isVani={isVani}
       symbol={stock.symbol}
+      onClick={onClick}
       vaniEntity={{ type: 'equity', id: stock.equity_id, symbol: displaySymbol(stock), pageContext: 'Scanner / Conviction Flow' }}
     >
       {/* Info — 4 rows */}
@@ -140,6 +142,12 @@ function FlowCard({ stock }: { stock: ScanStock }) {
               {stock.company_name}
             </span>
           )}
+          {/* Same star the table row carries — the card is a click target now
+              (A2), so it must offer the same bookmark affordance. BookmarkToggle
+              stops propagation itself; the wrapper span only pins it right. */}
+          <span onClick={(e) => e.stopPropagation()} style={{ marginLeft: 'auto', display: 'inline-flex' }}>
+            <BookmarkToggle equityId={stock.equity_id} size={13} />
+          </span>
         </div>
 
         {/* Row 2 — Price + Delivery combined */}
@@ -206,7 +214,7 @@ function FlowCard({ stock }: { stock: ScanStock }) {
 
 // ── Main export ───────────────────────────────────────────────────────────────
 
-export default function ConvictionFlowCards({ stocks }: { stocks: ScanStock[] }) {
+export default function ConvictionFlowCards({ stocks, onRowClick }: { stocks: ScanStock[]; onRowClick?: (s: ScanStock) => void }) {
   const vani = stocks.filter((s) => s.vaniOpportunity);
   const rest = stocks.filter((s) => !s.vaniOpportunity);
 
@@ -234,7 +242,7 @@ export default function ConvictionFlowCards({ stocks }: { stocks: ScanStock[] })
             </span>
           </ScanSectionLabel>
           <div style={{ display: 'flex', flexDirection: 'column' as const, gap: '8px', marginBottom: '24px' }}>
-            {vani.map((s) => <FlowCard key={s.equity_id} stock={s} />)}
+            {vani.map((s) => <FlowCard key={s.equity_id} stock={s} onClick={onRowClick ? () => onRowClick(s) : undefined} />)}
           </div>
         </>
       )}
@@ -245,7 +253,7 @@ export default function ConvictionFlowCards({ stocks }: { stocks: ScanStock[] })
             All Results · {stocks.length} stock{stocks.length !== 1 ? 's' : ''} · sorted by Surge ↓
           </ScanSectionLabel>
           <div style={{ display: 'flex', flexDirection: 'column' as const, gap: '8px' }}>
-            {rest.map((s) => <FlowCard key={s.equity_id} stock={s} />)}
+            {rest.map((s) => <FlowCard key={s.equity_id} stock={s} onClick={onRowClick ? () => onRowClick(s) : undefined} />)}
           </div>
         </>
       )}

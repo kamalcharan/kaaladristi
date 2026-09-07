@@ -1,6 +1,7 @@
 import React from 'react';
 import type { ScanStock } from '@/types';
 import { ScanCardWrapper, VaniBadge, ScanSectionLabel, CardExchangeBadge } from './ScanCardShell';
+import BookmarkToggle from './BookmarkToggle';
 import { displaySymbol } from '@/lib/symbolUtils';
 import { getColor } from '@/config/fieldConfig';
 import type { StudioDescriptor } from '@/config/scannerStudio';
@@ -91,7 +92,7 @@ function DataRow({ items }: { items: DataItem[] }) {
 
 // ── Individual card ───────────────────────────────────────────────────────────
 
-function BurstCard({ stock, descriptor }: { stock: ScanStock; descriptor: StudioDescriptor }) {
+function BurstCard({ stock, descriptor, onClick }: { stock: ScanStock; descriptor: StudioDescriptor; onClick?: () => void }) {
   const isVani = stock.vaniOpportunity;
   const rvol = stock.rvol ?? null;
 
@@ -99,6 +100,7 @@ function BurstCard({ stock, descriptor }: { stock: ScanStock; descriptor: Studio
     <ScanCardWrapper
       isVani={isVani}
       symbol={stock.symbol}
+      onClick={onClick}
       vaniEntity={{ type: 'equity', id: stock.equity_id, symbol: displaySymbol(stock), pageContext: `Scanner / ${descriptor.displayName}` }}
     >
       {/* Info */}
@@ -133,6 +135,11 @@ function BurstCard({ stock, descriptor }: { stock: ScanStock; descriptor: Studio
               {stock.company_name}
             </span>
           )}
+          {/* Same star the table row carries; the wrapper's click must not
+              fire when the star is the target. */}
+          <span onClick={(e) => e.stopPropagation()} style={{ marginLeft: 'auto', display: 'inline-flex' }}>
+            <BookmarkToggle equityId={stock.equity_id} size={13} />
+          </span>
         </div>
 
         {/* Row 2 — Price + indicators */}
@@ -207,7 +214,7 @@ function BurstCard({ stock, descriptor }: { stock: ScanStock; descriptor: Studio
 
 // ── Main export ───────────────────────────────────────────────────────────────
 
-export default function BreakoutSurgeCards({ stocks, descriptor }: { stocks: ScanStock[]; descriptor: StudioDescriptor }) {
+export default function BreakoutSurgeCards({ stocks, descriptor, onRowClick }: { stocks: ScanStock[]; descriptor: StudioDescriptor; onRowClick?: (s: ScanStock) => void }) {
   const vani = stocks.filter((s) => s.vaniOpportunity);
   const rest = stocks.filter((s) => !s.vaniOpportunity);
 
@@ -235,7 +242,7 @@ export default function BreakoutSurgeCards({ stocks, descriptor }: { stocks: Sca
             </span>
           </ScanSectionLabel>
           <div style={{ display: 'flex', flexDirection: 'column' as const, gap: '8px', marginBottom: '24px' }}>
-            {vani.map((s) => <BurstCard descriptor={descriptor} key={s.equity_id} stock={s} />)}
+            {vani.map((s) => <BurstCard descriptor={descriptor} key={s.equity_id} stock={s} onClick={onRowClick ? () => onRowClick(s) : undefined} />)}
           </div>
         </>
       )}
@@ -246,7 +253,7 @@ export default function BreakoutSurgeCards({ stocks, descriptor }: { stocks: Sca
             All Results · {stocks.length} stock{stocks.length !== 1 ? 's' : ''} · sorted by RVOL ↓
           </ScanSectionLabel>
           <div style={{ display: 'flex', flexDirection: 'column' as const, gap: '8px' }}>
-            {rest.map((s) => <BurstCard descriptor={descriptor} key={s.equity_id} stock={s} />)}
+            {rest.map((s) => <BurstCard descriptor={descriptor} key={s.equity_id} stock={s} onClick={onRowClick ? () => onRowClick(s) : undefined} />)}
           </div>
         </>
       )}
