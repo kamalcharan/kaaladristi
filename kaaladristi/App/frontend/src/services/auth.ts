@@ -210,7 +210,11 @@ export async function getProfile(): Promise<KmProfile | null> {
  *  never reach the dashboard). The RPC runs as its owner and scopes the write
  *  to the caller's own row via the JWT `sub` claim. */
 export async function updateProfile(
-  updates: Partial<Pick<KmProfile, 'full_name' | 'display_name' | 'phone' | 'avatar_url' | 'onboarded' | 'theme' | 'mode' | 'icp_mode'>>,
+  updates: Partial<Pick<KmProfile,
+    | 'full_name' | 'display_name' | 'phone' | 'avatar_url' | 'onboarded' | 'theme' | 'mode' | 'icp_mode'
+    // migration 204 — persona_set_at is stamped by the RPC, never sent
+    | 'persona' | 'acts_on' | 'hold_horizon' | 'concede_level' | 'guide_progress'
+  >>,
 ) {
   const user = getUser();
   if (!user) throw new Error('Not authenticated');

@@ -1,3 +1,4 @@
+import type { Persona, ActsOn, HoldHorizon, ConcedeLevel } from '@/constants/personaConfig';
 // ── App Types ──
 
 export type MarketSymbol = 'NIFTY' | 'BANKNIFTY' | 'NIFTYIT' | 'NIFTYFMCG';
@@ -151,6 +152,13 @@ export interface KmProfile {
   theme?: string;       // active UI theme id; undefined = 'kaaladristi'
   mode?: 'dark' | 'light' | 'system'; // active UI color mode; undefined = 'dark'
   icp_mode?: 'astro' | 'technical'; // workspace tab default; undefined treated as 'astro'
+  // migration 204 — persona persistence (vocabulary: constants/personaConfig.ts)
+  persona?: Persona | null;
+  acts_on?: ActsOn | null;
+  hold_horizon?: HoldHorizon | null;
+  concede_level?: ConcedeLevel | null;
+  persona_set_at?: string | null;   // stamped server-side whenever persona is written
+  guide_progress?: Record<string, string>; // {"<preset id | page>": "YYYY-MM-DD"} — Show-me tours walked
 }
 
 // ── Index / Equity Symbol Tables (new restructured schema) ──
