@@ -724,6 +724,16 @@ export interface IndexBreadthResult {
  * Constituents with ema_20/sma_50/sma_150 = 0 or null are excluded from that
  * ratio's denominator (new listings / insufficient price history).
  */
+type EodRow = {
+  equity_id: number;
+  trade_date: string;
+  close:    number | null;
+  pct_chng: number | null;
+  ema_20:  number | null;
+  sma_50:  number | null;
+  sma_150: number | null;
+};
+
 export async function fetchIndexBreadth(
   indexId: number,
   days = 66,
@@ -742,32 +752,46 @@ export async function fetchIndexBreadth(
     return { data: [], roc: [], percentileRank: null, stockCount, zoneMode: 'absolute', rocBadge: 'warming_up' };
   }
 
-  // ── Step 2: fetch constituent EOD from the deduped view ───────────────────
+  // ── Step 2: fetch constituent EOD straight from km_equity_eod ─────────────
   // Calendar cutoff = 1.6× trading days to safely cover BREADTH_LOOKBACK sessions.
   const calendarDays = Math.ceil(BREADTH_LOOKBACK * 1.6);
   const cutoffDate = new Date();
   cutoffDate.setDate(cutoffDate.getDate() - calendarDays);
   const cutoff = cutoffDate.toISOString().split('T')[0];
 
-  const { data: eodData, error: eodErr } = await from('v_equity_eod_deduped')
-    .select('equity_id,trade_date,close,pct_chng,ema_20,sma_50,sma_150')
-    .in('equity_id', equityIds)
-    .gte('trade_date', cutoff)
-    .order('trade_date', { ascending: true })
-    .execute();
-  if (eodErr) throw new Error(`[indexBreadth] eod: ${eodErr.message}`);
+  // NOT v_equity_eod_deduped. The constituents are explicit equity_ids (one
+  // listing each, chosen by index membership), so the view's ISIN dedup adds
+  // nothing — and its DISTINCT ON cannot take the equity_id filter inside, so
+  // Postgres sorted the ENTIRE active universe for the lookback window (~290k
+  // rows × every column) before filtering to 50 stocks. Measured 2026-09-07
+  // on the live DB, NIFTY 50 / 404 days: 3.9 s through the view, 8 ms from
+  // the table via idx_equity_eod_equity_date. The 252-session lookback (Aug
+  // 28) quadrupled that sort; under pipeline load the Workspace "breadth &
+  // momentum" panel then sat on its loader or timed out at nginx.
+  //
+  // Paged, because NIFTY 500 × 404 days is ~135k rows: one unbounded request
+  // is at the mercy of PostgREST's max-rows, which truncates SILENTLY from the
+  // newest dates (rows are date-ascending). A short page ends the loop.
+  const eodRows: EodRow[] = [];
+  const PAGE = 10_000;
+  for (let page = 0; page < 40; page++) {
+    const from_ = page * PAGE;
+    const { data: chunk, error: eodErr } = await from('km_equity_eod')
+      .select('equity_id,trade_date,close,pct_chng,ema_20,sma_50,sma_150')
+      .in('equity_id', equityIds)
+      .gte('trade_date', cutoff)
+      .order('trade_date', { ascending: true })
+      .order('equity_id', { ascending: true })
+      .range(from_, from_ + PAGE - 1)
+      .execute();
+    if (eodErr) throw new Error(`[indexBreadth] eod: ${eodErr.message}`);
+    const rows = (chunk ?? []) as EodRow[];
+    eodRows.push(...rows);
+    if (rows.length < PAGE) break;
+  }
 
   // ── Step 3: group by date and compute breadth score ───────────────────────
-  type EodRow = {
-    equity_id: number;
-    trade_date: string;
-    close:    number | null;
-    pct_chng: number | null;
-    ema_20:  number | null;
-    sma_50:  number | null;
-    sma_150: number | null;
-  };
-  const rows = (eodData ?? []) as EodRow[];
+  const rows = eodRows;
 
   const byDate = new Map<string, EodRow[]>();
   for (const row of rows) {

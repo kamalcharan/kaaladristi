@@ -264,23 +264,39 @@ def check_step_failures(conn, run_date: date) -> list[Finding]:
     """Any pipeline job that failed in the last 36 hours (km_jobs is where
     pipeline2 records dimension outcomes). Nothing alerts on these today —
     symbol_enrichment raised every night for weeks in silence."""
+    # `recovered`: a LATER job for the same dimension and trade_date reached
+    # completed/partial. The failure was real and is still reported, but it
+    # is no longer the state of the data, so it is a warning, not a critical
+    # that fails the whole integrity_checks dimension (and paints the
+    # Pipeline Dashboard red) for a day that is in fact filled. Observed
+    # 2026-09-04: nse_magic_rs for 09-03 timed out on the step advisory lock
+    # because a second pipeline (the owner's dev machine) was running the
+    # same step against the same DB; the step then completed, magic_rs fill
+    # for 09-03 was normal, and the nightly run still reported failed.
     rows = _rows(conn, """
-        SELECT j.dimension, j.status, COALESCE(j.error_msg, ''), j.trade_date
+        SELECT j.dimension, j.status, COALESCE(j.error_msg, ''), j.trade_date,
+               EXISTS (
+                 SELECT 1 FROM km_jobs k
+                 WHERE k.dimension = j.dimension AND k.trade_date = j.trade_date
+                   AND k.created_at > j.created_at
+                   AND k.status IN ('completed', 'partial')
+               ) AS recovered
         FROM km_jobs j
         WHERE j.created_at >= NOW() - INTERVAL '36 hours'
           AND j.status IN ('failed', 'error')
         ORDER BY j.dimension, j.trade_date DESC
     """)
     out: list[Finding] = []
-    for dimension, status, err, trade_date in rows:
-        sev = 'critical' if status == 'failed' else 'warning'
+    for dimension, status, err, trade_date, recovered in rows:
+        sev = 'critical' if (status == 'failed' and not recovered) else 'warning'
         out.append(Finding(
             check_key=f'step_{dimension}_{trade_date}',
             check_class='step_failure', severity=sev,
             subject=dimension,
             summary=f'Pipeline step {dimension} on {trade_date}: {status}'
+                    + (' (a later run completed)' if recovered else '')
                     + (f' — {err[:160]}' if err else ''),
-            detail={'dimension': dimension, 'status': status,
+            detail={'dimension': dimension, 'status': status, 'recovered': bool(recovered),
                     'trade_date': str(trade_date), 'error': err[:500]}))
     return out
 

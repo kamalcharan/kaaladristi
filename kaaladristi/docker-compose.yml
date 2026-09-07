@@ -50,6 +50,13 @@ services:
       VANI_DB_URL: "${VANI_DB_URL:-}"
     volumes:
       - pipeline_data:/app/data
+      # The nightly integrity check derives the scanner contract from the
+      # FRONTEND source (lib/scan_contract.py resolves ../../frontend/src from
+      # /app/lib, i.e. /frontend/src). The build context is App/backend, so the
+      # image cannot COPY it; mount the checkout read-only instead. Without
+      # this, check_scanner_contract raised "scan contract source missing"
+      # every night (findings 2026-09-03/04) and the audit never ran in prod.
+      - ./App/frontend/src:/frontend/src:ro
     command: ["uvicorn", "pipeline2_api:app", "--host", "0.0.0.0", "--port", "8101", "--workers", "1"]
     networks:
       - vikuna-net
