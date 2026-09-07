@@ -63,7 +63,24 @@ round-trips for a test account.
 
 ---
 
-## Phase 2 — ProfileSetup rework (reorder + 2 new steps) · 2 days
+## Phase 2 — ProfileSetup rework (reorder + 2 new steps) · 2 days · ✅ built 2026-09-07
+
+Built as specified with these notes: six steps (1 What is VaNi + details · 2 Personality ·
+3 Scanners · 4 How VaNi will guide · 5 Plan · 6 Look). New components live in
+`components/domain/Onboarding/` (ReadingStrip, ActsOnPicker, ConcedeChart, LiveIntroCard,
+TryItSort, PersonalityScreen, GuideStep, ui) + `hooks/useOnboardingScans.ts` +
+`config/onboardingCards.ts` (card-only descriptors for Stage 2 / Quiet Rising Flow, which have
+no Studio page). `StudioCard` is now exported from BreakoutSurgeTable with a `stacked` prop
+(forces the phone layout inside narrow columns — the desktop ledger overlapped at ≤560px).
+`cardSortOptions`/`sortForCards` moved to `config/scannerStudio.ts`. Persona is saved at step-2
+exit; `icp_mode` is set to `technical` at step 3 (astro toggle removed from the flow; resume
+signal unchanged). Step 4's "Show me" buttons are descriptive until Phase 3 ships `/guide` —
+a tour cannot leave `/setup` before `onboarded` flips. Dev-only `?step=N` deep link on `/setup`
+for the screenshot harness. `services/uxEvents.ts` records `first_bookmark` from the bookmark
+store (any page) and exposes `maybeRecordDay2Return` for Phase 5.
+**Note for owner:** the starter templates still place Panchak + Six-Day Outlook (astro) blocks —
+those are the existing `frameworkTemplates.ts` contents, untouched here; decide whether the
+investor/hybrid templates should drop astro blocks while astro is unreleased.
 
 `views/ProfileSetup.tsx` — keep the `step` machine, keep Screen1 orb/name/mobile,
 keep Screen3 build animation, keep Screens 4/5 (PricingCards, ThemeSettings).
