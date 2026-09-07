@@ -364,6 +364,7 @@ or more. "Where" names the file(s) to open.
 | A2 ✅ | Studio cards: pass `onClick` (the Studio's existing `onRowClick`) and render `BookmarkToggle` in `BreakoutSurgeCards`; same two props in `ConvictionFlowCards`. Cards can then open and bookmark a stock like the table row (§9a). | `BreakoutSurgeTable.tsx`, `ConvictionFlowTable.tsx`, `ScannerStudio.tsx` | S |
 | A3 ✅ | Replace the Studio's plain "Loading real scan results…" text with `<DristiQLoader />` (§8). | `ScannerStudio.tsx:243` | S |
 | A4 ✅ | Tab-strip count badge for presets outside the matview lists (GL pair, Flower Pot): fall through to `executeScan(id).length` in `getAllScanCounts` (§2b). Superseded by C1 if that lands first. | `scanEngine.ts` | S |
+| A5 ✅ | Studio cards had no sort control (fetch order only, owner 2026-09-07). Chips above the cards — the preset's hero metric first (plus Score 5D where that is the table sort), then ✦ VaNi, Score 5D/22D, RVOL, % Chg, RSI, Symbol — opening on the descriptor's own `sort` so cards and table agree. | `ScannerStudio.tsx` | S |
 
 ### B. Capability gaps — Breakout Surge can, the others cannot
 
@@ -386,11 +387,11 @@ or more. "Where" names the file(s) to open.
 
 | ID | Decision | Context |
 |---|---|---|
-| D1 | `flower_pot_burst` has no `vani_rule`. With none, ✦ never lights and "Burst" on the Discovery board has no definition the app can explain. Define one, or accept the label as-is. | §5 |
-| D2 | Dots vs Golden Line events: 19% of event bars (91 of 479 over 20 sessions) carry neither `dot_svd` nor `dot_sbd` by the time the scan reads them, though `gl_events` required one when it stamped the event — a later `compute_dots` run is rewriting already-stamped bars. Investigate the re-run window, or accept that the event flag is the record and the dots are advisory. | handover §12 (GL entry) |
-| D3 | `gl_breakout` hides "new since yesterday" (structurally 100%). Keep the exception or restore full parity. | descriptor `newSinceYesterday` |
-| D4 | Phone default view: table with a sticky symbol column (today) vs cards. Product call. | handover §13 |
-| D5 | Cards-vs-table field sets differ by design across three card families (§9c/§9d). Leave as a knowing choice, or pick one family. | §9 |
+| D1 ⏳ | `flower_pot_burst` has no `vani_rule`. **Owner 2026-09-07:** deferred on purpose — no rule survived scrutiny. Candidate to test: coil tightness (top quartile) × Magic RS band (Leading / Improving). Not testable yet: tightness is computed inside the matview and never stored per day, and `km_fpb_active` holds only 20 releases since 2026-07-28 (12 settled upward bursts: 9 target/holding, 3 stopped; zone at release does not separate them — 7 of 9 winners were Neutral). Path: (1) store `fpb_compression_score` / `fpb_setup_days` on `km_equity_eod` nightly, (2) at ~60 releases test the candidate against burst rate. Ship without ✦ until then. | §5 |
+| D2 ✅ | **Closed 2026-09-07 — not a re-run.** `backfill_gl_events.py` requires an SVD/SBD within ±5 CALENDAR DAYS of the crossing (owner call 2026-08-28), so a bare event bar is by design; every event before 2026-08-27 carries an on-bar dot only because that history was stamped under the earlier on-bar rule and never restamped (live count over 40 sessions: 0 bare bars before 08-27, 2–6 per day after). The Studio card's signal band reads the 5-session `has_recent_*` window, so it shows the dot the event was stamped on; only the table's Dot column reads the bar itself (migration 202 projects `dot_*`). Naming: "Solid Violet Dot" survived only in one VaNi prompt line — now "Volume Drive" (the display name everywhere) with an instruction never to describe a dot by colour. | handover §12 (GL entry) |
+| D3 ✅ | `gl_breakout` hides "new since yesterday". **Owner 2026-09-07: keep the exception.** | descriptor `newSinceYesterday` |
+| D4 ✅ | Phone default view. **Owner 2026-09-07: cards.** `defaultViewMode()` in ScanView and the Studio's initialiser both read `isPhoneNow()` — cards below 768px, table above, an explicit choice on either device is remembered and wins. | handover §13 |
+| D5 ⏳ | Three card families. **Owner 2026-09-07: streamline.** Direction: the B+E Studio card becomes THE card, driven by a descriptor per preset; Conviction Flow and Flower Pot get descriptors (hero + levels) and drop their bespoke cards; generic `StockCard` survives only for the stage and flow bundles until they get descriptors. Flower Pot card + intents to be discussed next. | §9 |
 
 ### E. Verification and hygiene
 
@@ -425,6 +426,19 @@ or more. "Where" names the file(s) to open.
   `w52_low` is not in `km_scan_results`, so the caution presets show 52W
   High in the second level slot until the matview grows the column (fold
   into C1).
+- **Flower Pot fixes 2026-09-07:** Live Releases accumulated — the
+  maintenance function EXPIREs only ACTIVE/HOLDING rows, so target-hit /
+  stopped / cracked rows kept their terminal status for ever and the section
+  (filter: not EXPIRED) piled them up to its 24-row cap above the scanner.
+  Now: open rows in full, settled rows for one 9-day swing window as a
+  "Recent Outcomes · N of M reached target" chip strip, then gone. The card
+  metric line uses the table's own header words (Tightness · ATR ×60d · Vol
+  ×norm · Coiled), Tightness first as the sort key. Still open for the card /
+  intents discussion: B+E card for Flower Pot (hero Tightness on coils /
+  Quality on releases, levels 10-day range high/low), intents
+  (`why_watch_coil`, `coiling_industries`, `recent_outcomes` from
+  km_fpb_active, `new_coils` once membership covers the preset), stat tiles
+  (coils entering/leaving, median coil age, trailing-20-session hit rate).
 - **Batch 2:** B1, B2, then C2 on top of them. **Done 2026-09-07.**
   B1: `ScanFilterBar` has a `studio` group (every preset with a descriptor,
   Breakout Surge included) — RVOL Min, then Min/Max on the descriptor's hero

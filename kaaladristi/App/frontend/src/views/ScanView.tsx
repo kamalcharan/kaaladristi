@@ -29,7 +29,7 @@ import '@/services/thesis/adapters'; // registers SETUP_ADAPTERS entries
 const storySetupSuffix = (presetId: string): string =>
   getSetupAdapter(presetId) ? `&tab=chart&setup=${presetId}` : '';
 import { useVaNiStore } from '@/stores/vaniStore';
-import { useIsPhone } from '@/hooks/useMediaQuery';
+import { useIsPhone, isPhoneNow } from '@/hooks/useMediaQuery';
 import { useTopbarHeight } from '@/hooks/useTopbarHeight';
 
 // ── Sort ──────────────────────────────────────────────────────
@@ -222,10 +222,18 @@ function ViewToggle({ value, onChange }: { value: ViewMode; onChange: (v: ViewMo
   );
 }
 
+// Default: cards on a phone, table on a desktop (owner decision D4,
+// 2026-09-07 — a 14-column table behind a sticky symbol column is the wrong
+// first screen at 390px). An explicit choice on either device is remembered
+// and wins.
+function defaultViewMode(): ViewMode {
+  return isPhoneNow() ? 'cards' : 'table';
+}
+
 function useViewMode(): [ViewMode, (v: ViewMode) => void] {
   const [mode, setMode] = React.useState<ViewMode>(() => {
-    try { return (localStorage.getItem('scan_view_mode') as ViewMode) ?? 'table'; }
-    catch { return 'table'; }
+    try { return (localStorage.getItem('scan_view_mode') as ViewMode | null) ?? defaultViewMode(); }
+    catch { return defaultViewMode(); }
   });
   function set(v: ViewMode) {
     setMode(v);
@@ -888,10 +896,13 @@ function FpbMetricLine({ stock }: { stock: ScanStock }) {
     }
     if (stock.fpb_quality != null) parts.push(`quality ${stock.fpb_quality}`);
   } else {
-    if (stock.fpb_atr_compression != null) parts.push(`ATR ${stock.fpb_atr_compression}× of 60d`);
-    if (stock.fpb_vol_death != null) parts.push(`volume ${Math.round(stock.fpb_vol_death * 100)}% of norm`);
-    if (stock.fpb_setup_days != null) parts.push(`coiled ${stock.fpb_setup_days}d/22`);
-    if (stock.fpb_compression_score != null) parts.push(`tightness ${stock.fpb_compression_score}`);
+    // Same words, same order as the table's column headers (Tightness ·
+    // ATR ×60d · Vol ×norm · Coiled) so the card and the grid read as one
+    // scanner; Tightness leads because it is the sort key.
+    if (stock.fpb_compression_score != null) parts.push(`Tightness ${stock.fpb_compression_score}`);
+    if (stock.fpb_atr_compression != null) parts.push(`ATR ×60d ${stock.fpb_atr_compression}`);
+    if (stock.fpb_vol_death != null) parts.push(`Vol ×norm ${Math.round(stock.fpb_vol_death * 100)}%`);
+    if (stock.fpb_setup_days != null) parts.push(`Coiled ${stock.fpb_setup_days}d/22`);
   }
   if (parts.length === 0) return null;
   return (
@@ -910,30 +921,50 @@ const FPB_STATUS: Record<string, { label: string; color: string }> = {
   STOPPED:    { label: 'Stopped',       color: 'var(--bear)' },
 };
 
+const FPB_OPEN = new Set(['ACTIVE', 'HOLDING']);
+const FPB_CLOSED = new Set(['TARGET_HIT', 'STOPPED', 'CRACKED']);
+/** Calendar days a settled release stays visible — the same 9-day window
+ *  km_fpb_active's maintenance function uses to EXPIRE an open one (≈ 5
+ *  sessions). */
+const FPB_OUTCOME_DAYS = 9;
+
 function FpbActiveSection() {
   const navigate = useNavigate();
   const { data: rows = [] } = useFpbActive();
-  const shown = useMemo(
-    () => rows.filter((r) => r.status !== 'EXPIRED').slice(0, 24),
-    [rows],
-  );
-  if (shown.length === 0) return null;
+  // The maintenance function expires only ACTIVE / HOLDING rows; a release
+  // that hit target or stopped keeps its terminal status for ever, and this
+  // section used to show everything that was not EXPIRED — so settled
+  // outcomes piled up (to the 24-row cap) above the scanner they were meant
+  // to annotate. Open releases render in full; settled ones for one swing
+  // window as a compact strip, then drop.
+  const { open, settled } = useMemo(() => {
+    const cutoff = new Date(Date.now() - FPB_OUTCOME_DAYS * 86400000).toISOString().slice(0, 10);
+    return {
+      open: rows.filter((r) => FPB_OPEN.has(r.status)).slice(0, 24),
+      settled: rows.filter((r) => FPB_CLOSED.has(r.status) && (r.last_eval_date ?? r.release_date) >= cutoff),
+    };
+  }, [rows]);
+  if (open.length === 0 && settled.length === 0) return null;
 
   const fmt = (n: number | null | undefined) => (n == null ? '—' : `₹${Number(n).toLocaleString('en-IN', { maximumFractionDigits: 1 })}`);
+  const go = (r: FpbActiveRow) => navigate(`/chart/equity/${r.equity_id}?name=${encodeURIComponent(navName({ symbol: r.symbol, company_name: null }))}${storySetupSuffix('flower_pot_burst')}`);
+  const hits = settled.filter((r) => r.status === 'TARGET_HIT').length;
 
   return (
     <div style={{ marginBottom: 20 }}>
+      {open.length > 0 && (
       <ScanSectionLabel>
-        Live Releases · Day 2+ · {shown.length}
+        Live Releases · Day 2+ · {open.length}
       </ScanSectionLabel>
+      )}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-        {shown.map((r: FpbActiveRow) => {
+        {open.map((r: FpbActiveRow) => {
           const st = FPB_STATUS[r.status] ?? FPB_STATUS.ACTIVE;
           const up = r.direction === 'UP';
           return (
             <div
               key={`${r.equity_id}-${r.release_date}`}
-              onClick={() => navigate(`/chart/equity/${r.equity_id}?name=${encodeURIComponent(navName({ symbol: r.symbol, company_name: null }))}${storySetupSuffix('flower_pot_burst')}`)}
+              onClick={() => go(r)}
               style={{
                 display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer',
                 padding: '10px 14px', borderRadius: 12,
@@ -962,6 +993,37 @@ function FpbActiveSection() {
           );
         })}
       </div>
+      {settled.length > 0 && (
+        <div style={{ marginTop: open.length > 0 ? 12 : 0 }}>
+          <ScanSectionLabel>
+            Recent Outcomes · last {FPB_OUTCOME_DAYS} days · {hits} of {settled.length} reached target
+          </ScanSectionLabel>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {settled.map((r: FpbActiveRow) => {
+              const st = FPB_STATUS[r.status] ?? FPB_STATUS.ACTIVE;
+              const up = r.direction === 'UP';
+              return (
+                <button
+                  key={`${r.equity_id}-${r.release_date}`}
+                  onClick={() => go(r)}
+                  title={`${up ? 'Burst' : 'Shatter'} ${r.release_date} · entry ${fmt(r.release_close)} · SL ${fmt(r.sl_level)} · target ${fmt(r.target_level)}`}
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 8, cursor: 'pointer',
+                    padding: '5px 10px', borderRadius: 999,
+                    background: 'var(--card)', border: `1px solid ${st.color}`,
+                    fontFamily: 'var(--font-mono)', fontSize: 11.5, color: 'var(--text-primary)',
+                  }}
+                >
+                  <span style={{ color: up ? 'var(--bull)' : 'var(--bear)' }}>{up ? '↑' : '↓'}</span>
+                  <span style={{ fontWeight: 600 }}>{r.symbol}</span>
+                  <span style={{ color: st.color }}>{st.label}</span>
+                  <span style={{ color: 'var(--text-faint)' }}>{(r.last_eval_date ?? r.release_date)?.slice(5)}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

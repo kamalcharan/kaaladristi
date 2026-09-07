@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Loader2 } from 'lucide-react'
 import { useScan, useScanMembershipHistory } from '@/hooks/useScan'
@@ -24,6 +24,7 @@ import VaNiFeedback from '@/components/domain/VaNi/VaNiFeedback'
 import { useVaNiAsk } from '@/hooks/useVaNiChat'
 import { useIndustryLeadershipMap } from '@/hooks/useIndustryRotation'
 import { getStudioDescriptor, studioXlsColumns, type StudioDescriptor } from '@/config/scannerStudio'
+import { isPhoneNow } from '@/hooks/useMediaQuery'
 import type { ScanStock, ScanDefinition } from '@/types'
 
 type QuickFilterKey = 'ob' | 'watch'
@@ -97,9 +98,20 @@ export default function ScannerStudio({ presetId }: { presetId: string }) {
   // Same localStorage key ScanView's generic layout persists its toggle
   // under, so a user who picked Cards on one scanner gets Cards on the next
   // instead of the Studio silently resetting to Table.
+  // Default cards on a phone, table on a desktop (owner decision D4) —
+  // identical rule to ScanView's useViewMode.
   const [viewMode, setViewModeState] = useState<'table' | 'cards'>(() => {
-    try { return localStorage.getItem('scan_view_mode') === 'cards' ? 'cards' : 'table' } catch { return 'table' }
+    const fallback = isPhoneNow() ? 'cards' : 'table'
+    try {
+      const stored = localStorage.getItem('scan_view_mode')
+      return stored === 'cards' || stored === 'table' ? stored : fallback
+    } catch { return fallback }
   })
+  // Card ordering. Opens on the descriptor's own sort (the same key + direction
+  // ScanTable opens on, so the two views of one scan agree), then the chips
+  // below. Cards had NO sort control before — they showed fetch order and the
+  // user could not change it (owner, 2026-09-07).
+  const [cardSort, setCardSort] = useState<{ key: keyof ScanStock; dir: 'asc' | 'desc' } | null>(null)
   const setViewMode = (m: 'table' | 'cards') => {
     setViewModeState(m)
     try { localStorage.setItem('scan_view_mode', m) } catch { /* ignore */ }
@@ -186,6 +198,17 @@ export default function ScannerStudio({ presetId }: { presetId: string }) {
 
   const onRowClick = (s: ScanStock) =>
     navigate(`/chart/equity/${s.equity_id}?name=${encodeURIComponent(displaySymbol(s))}&tab=chart&setup=${presetId}`)
+
+  const activeSort = cardSort ?? descriptor?.sort ?? null
+  const sortOptions = useMemo(() => cardSortOptions(descriptor), [descriptor])
+  const cardStocks = useMemo(
+    () => (activeSort ? sortForCards(filtered, activeSort.key, activeSort.dir) : filtered),
+    [filtered, activeSort],
+  )
+  const toggleCardSort = (key: keyof ScanStock) => {
+    if (activeSort && activeSort.key === key) setCardSort({ key, dir: activeSort.dir === 'asc' ? 'desc' : 'asc' })
+    else setCardSort({ key, dir: key === 'symbol' ? 'asc' : 'desc' })
+  }
 
   if (!d) {
     return (
@@ -361,6 +384,28 @@ export default function ScannerStudio({ presetId }: { presetId: string }) {
 
             <ScanFilterBar presetId={presetId} stocks={all} filters={filters} onFiltersChange={setFilters} />
 
+            {viewMode === 'cards' && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-faint)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                  Sort
+                </span>
+                {sortOptions.map((opt) => {
+                  const active = activeSort?.key === opt.key
+                  return (
+                    <button key={opt.key} onClick={() => toggleCardSort(opt.key)} style={{
+                      padding: '5px 12px', borderRadius: 100, border: 'none',
+                      background: active ? 'var(--indigo-bg)' : 'transparent',
+                      color: active ? 'var(--indigo)' : 'var(--text-muted)',
+                      outline: active ? '1px solid var(--border-indigo)' : undefined,
+                      fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'var(--font-body)', whiteSpace: 'nowrap',
+                    }}>
+                      {opt.label}{active && (activeSort?.dir === 'asc' ? ' ↑' : ' ↓')}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+
             <span style={{ marginLeft: 'auto', fontFamily: 'var(--font-mono)', fontSize: 11.5, color: 'var(--text-faint)' }}>
               {filtered.length} shown
             </span>
@@ -380,7 +425,7 @@ export default function ScannerStudio({ presetId }: { presetId: string }) {
           {viewMode === 'table' ? (
             <ScanTable stocks={filtered} presetId={presetId} onRowClick={onRowClick} />
           ) : (
-            <BreakoutSurgeCards stocks={filtered} descriptor={d} onRowClick={onRowClick} />
+            <BreakoutSurgeCards stocks={cardStocks} descriptor={d} onRowClick={onRowClick} />
           )}
         </>
       )}
@@ -700,4 +745,50 @@ function StatTile({ label, value, sub, accent, active, onClick, title }: {
       </div>
     </div>
   )
+}
+
+// ── Card sort ────────────────────────────────────────────────────────────────
+// The chip set: the preset's hero metric first (and its table sort key when
+// that differs — Breakout Surge sorts by Score 5D but leads its card with
+// % from Brk), then the same fixed tail the generic layout's chips carry.
+function cardSortOptions(d: StudioDescriptor | null): { key: keyof ScanStock; label: string }[] {
+  const opts: { key: keyof ScanStock; label: string }[] = []
+  const push = (key: keyof ScanStock, label: string) => {
+    if (!opts.some((o) => o.key === key)) opts.push({ key, label })
+  }
+  if (d) {
+    push(d.cardHero.key, d.cardHero.filterLabel ?? d.cardHero.label)
+    if (d.sort.key === 'score_5d') push('score_5d', 'Score 5D')
+    else if (d.sort.key !== d.cardHero.key) push(d.sort.key, d.sort.key)
+  }
+  push('vaniOpportunity', '✦ VaNi Highlight')
+  push('score_5d', 'Score 5D')
+  push('score_22d', 'Score 22D')
+  push('rvol', 'RVOL')
+  push('pct_chng', '% Chg')
+  push('rsi_14', 'RSI')
+  push('symbol', 'Symbol')
+  return opts
+}
+
+// Same value-first comparison ScanView / ScanTable use: numbers (and booleans,
+// so ✦ sorts) compare numerically, strings lexically, nulls always last.
+function sortForCards(rows: ScanStock[], key: keyof ScanStock, dir: 'asc' | 'desc'): ScanStock[] {
+  const num = (v: unknown): number | null => {
+    if (v == null) return null
+    if (typeof v === 'boolean') return v ? 1 : 0
+    const n = typeof v === 'number' ? v : Number(v)
+    return Number.isFinite(n) ? n : null
+  }
+  return [...rows].sort((a, b) => {
+    const va = a[key], vb = b[key]
+    const na = num(va), nb = num(vb)
+    if (na == null && nb == null) return 0
+    if (na == null) return 1
+    if (nb == null) return -1
+    if (typeof va === 'string' && typeof vb === 'string' && !Number.isFinite(Number(va))) {
+      return dir === 'asc' ? va.localeCompare(vb) : vb.localeCompare(va)
+    }
+    return dir === 'asc' ? na - nb : nb - na
+  })
 }

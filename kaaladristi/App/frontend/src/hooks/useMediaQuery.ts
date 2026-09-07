@@ -39,3 +39,13 @@ export const MD_UP = '(min-width: 768px)';
 export function useIsPhone(): boolean {
   return !useMediaQuery(MD_UP);
 }
+
+/** One-shot, non-reactive read of the same breakpoint, for useState
+ *  initialisers that must pick a default synchronously (the scanner's
+ *  table/cards default is cards on a phone — owner decision D4, 2026-09-07).
+ *  Everything that re-renders on rotation should use useIsPhone instead. */
+export function isPhoneNow(): boolean {
+  return typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+    ? !window.matchMedia(MD_UP).matches
+    : false;
+}
