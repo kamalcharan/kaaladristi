@@ -17,6 +17,7 @@
 
 import { ACTIVE_UNIVERSE_CAP } from './equityUniverse';
 import { from } from './postgrest';
+import { studioPresetsBySource } from '@/config/scannerStudio';
 import type {
   ScanStock,
   ScanDefinition,
@@ -2359,14 +2360,11 @@ const MATVIEW_BUNDLE_PRESETS: ReadonlySet<string> = new Set([
 // first would otherwise blank six tabs until someone ran it. executeScan tries
 // the matview and falls back, and the fallback logs, so a permanently-unapplied
 // migration is noisy rather than invisible.
-const MATVIEW_PRICE_ACTION_PRESETS: ReadonlySet<string> = new Set([
-  'weekly_movers',
-  'monthly_movers',
-  'weekly_decliners',
-  'monthly_decliners',
-  'breakout_surge',
-  'breakdown_watch',
-]);
+// Membership is the descriptor's `source: 'matview'` (config/scannerStudio.ts)
+// so this list and the count query below cannot drift from each other or
+// from the Studio (gap audit §7, rows 8–9). Today: weekly/monthly movers +
+// decliners, breakout_surge, breakdown_watch.
+const MATVIEW_PRICE_ACTION_PRESETS: ReadonlySet<string> = new Set(studioPresetsBySource('matview'));
 
 // Waking Giants v4 (migration 177) — the three journey-state presets read the
 // km_wg_journeys state table (the km_fpb_active pattern on a multi-year
@@ -2819,12 +2817,12 @@ async function fetchAllScanCountsFromMatview(
   }
 }
 
-// Tab-strip badge counts for presets that executeScan serves outside the
-// matview. Keep in sync with the dispatch below; C1 retires the GL entries.
-const DIRECT_COUNT_PRESETS: readonly string[] = ['gl_breakout', 'gl_retest'];
+// Tab-strip badge counts for Studio presets that executeScan serves outside
+// the matview — the descriptor's `source: 'direct'` (the Golden Line pair
+// until C1 gives them a matview arm).
 
 async function fetchDirectPresetCounts(exchangeFilter: ExchangeFilter): Promise<Record<string, number>> {
-  const entries = await Promise.all(DIRECT_COUNT_PRESETS.map(async (id): Promise<[string, number]> => {
+  const entries = await Promise.all(studioPresetsBySource('direct').map(async (id): Promise<[string, number]> => {
     try {
       return [id, (await executeScan(id, exchangeFilter)).length];
     } catch (e) {

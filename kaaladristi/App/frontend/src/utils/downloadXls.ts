@@ -68,31 +68,35 @@ function convictionFlowRow(s: ScanStock): Row {
   };
 }
 
-function breakoutSurgeRow(s: ScanStock): Row {
-  return {
-    ...baseRow(s),
-    'Breakout Level': fmt(s.breakout_level, 1),
-    '% from Brk':     fmt(s.pct_from_breakout),
-    'D% from EMA20':  fmt(s.d_pct),
-    '5D Ret%':        fmt(s.ret_5d),
-    '22D Ret%':       fmt(s.ret_22d),
-  };
+/** A column appended after the base row. Scanner Studios build theirs from
+ *  their descriptor (`studioXlsColumns`), which replaced the bespoke
+ *  breakoutSurgeRow: the descriptor's slots are the export's columns, so a
+ *  Studio cannot ship a card metric its XLS lacks. */
+export interface XlsColumn {
+  header: string;
+  value: (s: ScanStock) => number | string | null | undefined;
+  /** Decimal places for numeric values (default 2). */
+  dp?: number;
 }
 
-export type ScanVariant = 'conviction_flow' | 'breakout_surge' | 'default';
+export type ScanVariant = 'conviction_flow' | 'default';
 
 export function downloadScanXls(
   stocks: ScanStock[],
   scanName: string,
   variant: ScanVariant = 'default',
+  extraColumns: XlsColumn[] = [],
 ): void {
   const today = new Date().toISOString().slice(0, 10);
   const fileName = `${scanName.replace(/\s+/g, '_')}_${today}.xlsx`;
 
   const rows: Row[] = stocks.map((s) => {
-    if (variant === 'conviction_flow') return convictionFlowRow(s);
-    if (variant === 'breakout_surge')  return breakoutSurgeRow(s);
-    return baseRow(s);
+    const row = variant === 'conviction_flow' ? convictionFlowRow(s) : baseRow(s);
+    for (const c of extraColumns) {
+      const v = c.value(s);
+      row[c.header] = typeof v === 'number' ? fmt(v, c.dp ?? 2) : (v ?? '');
+    }
+    return row;
   });
 
   const ws = XLSX.utils.json_to_sheet(rows);

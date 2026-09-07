@@ -23,7 +23,7 @@ import { DristiQLoader } from '@/components/ui'
 import VaNiFeedback from '@/components/domain/VaNi/VaNiFeedback'
 import { useVaNiAsk } from '@/hooks/useVaNiChat'
 import { useIndustryLeadershipMap } from '@/hooks/useIndustryRotation'
-import { getStudioDescriptor, type StudioDescriptor } from '@/config/scannerStudio'
+import { getStudioDescriptor, studioXlsColumns, type StudioDescriptor } from '@/config/scannerStudio'
 import type { ScanStock, ScanDefinition } from '@/types'
 
 type QuickFilterKey = 'ob' | 'watch'
@@ -250,7 +250,7 @@ export default function ScannerStudio({ presetId }: { presetId: string }) {
           {/* Same astro-day badge the generic layout shows in its VaNi section
               header (B4) — the Studio had no astro context at all. */}
           <AtmosphericBadge />
-          <DownloadXlsButton stocks={filtered} scanName={d.exportName} variant={d.xlsVariant} />
+          <DownloadXlsButton stocks={filtered} scanName={d.exportName} columns={studioXlsColumns(d)} />
           <TradingViewExportButton stocks={filtered} scanName={d.exportName} />
         </div>
       </div>

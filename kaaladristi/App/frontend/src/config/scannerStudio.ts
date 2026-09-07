@@ -29,7 +29,7 @@
  */
 
 import type { ScanStock } from '@/types'
-import type { ScanVariant } from '@/utils/downloadXls'
+import type { XlsColumn } from '@/utils/downloadXls'
 import type { VaNiAskRequest } from '@/hooks/useVaNiChat'
 import {
   isAccelerating, isDecelerating, gapAhead, gapBehind, type GapFn,
@@ -43,11 +43,21 @@ export type StudioSide = 'strength' | 'caution'
 export type StudioValueKind = 'price' | 'pct' | 'count'
 
 export interface StudioLevel {
+  /** ScanStock column. Every slot is a stored column — no derived values —
+   *  so the same key drives the card, the filter bar and the XLS export. */
+  key: keyof ScanStock
   label: string
-  value: (r: ScanStock) => number | null | undefined
+  /** Shorter label for the filter bar's "<label> Min / Max" pair, when the
+   *  card label would push the bar onto a second row. */
+  filterLabel?: string
   kind: StudioValueKind
   /** fieldConfig key for colouring, when the field has one. */
   colorKey?: string
+}
+
+export function levelValue(lvl: StudioLevel, r: ScanStock): number | null {
+  const v = r[lvl.key]
+  return typeof v === 'number' ? v : null
 }
 
 export interface StudioDescriptor {
@@ -120,17 +130,38 @@ export interface StudioDescriptor {
    */
   industryQuestion?: string
 
-  /** Export file naming + the XLS column set. */
+  /** Export file naming. The XLS column set is `studioXlsColumns(d)`. */
   exportName: string
-  xlsVariant: ScanVariant
+
+  /**
+   * Where the rows come from, and therefore where the tab-strip count comes
+   * from: `matview` presets have an arm in km_scan_results (migration 195+)
+   * and are counted by the one aggregate read; `direct` presets have only
+   * their own fetcher and are counted by running it. scanEngine derives its
+   * MATVIEW_PRICE_ACTION_PRESETS / direct-count lists from this field, so a
+   * preset cannot be in one list and missing from the other (gap audit §7,
+   * rows 8 and 9). C1 flips the Golden Line pair to `matview`.
+   */
+  source: 'matview' | 'direct'
+
+  /** Table default sort — the fetcher's / matview arm's own ranking. Read
+   *  by ScanTable ahead of its own map (gap audit §7, row 1). */
+  sort: { key: keyof ScanStock; dir: 'asc' | 'desc' }
+
+  /**
+   * Table default columns. Omit to take the price_action group's defaults
+   * (Breakout Surge, whose columns ARE the group defaults). Read by
+   * ScanTable ahead of its own map (gap audit §7, row 2).
+   */
+  tableColumns?: string[]
 
   /**
    * The card's ledger — frozen as Option B+E (2026-09-07, docs/claude/
    * scanner-gap-audit-2026-09-06.md §9). Four fixed slots on every Studio:
    * the scan's own metric first and largest (`cardHero`), then two price
    * levels (`cardLevels`), then RVOL. Same slot, same meaning, so the eye
-   * learns where to look once. The hero is also the table's DEFAULT_SORT key
-   * for the preset, so cards and table agree on what "first" means.
+   * learns where to look once. The hero's key is also the filter bar's
+   * metric min/max column and the XLS export's first metric column.
    */
   cardHero: StudioLevel
   cardLevels: [StudioLevel, StudioLevel]
@@ -254,11 +285,34 @@ const glHighlight = (event: GlEvent) => ({
  *  it (migration 200 projects w52_high only) — a slot that read "—" on 500
  *  rows is worse than the high, which still says how far the fall has gone.
  *  Add w52_low to the matview before switching the caution presets. */
-const W52_HIGH_LEVEL: StudioLevel = { label: '52W High', value: (r) => r.w52_high, kind: 'price' }
+const W52_HIGH_LEVEL: StudioLevel = { key: 'w52_high', label: '52W High', kind: 'price' }
 
 /** The Golden Line is sma_150; `pct_from_gl` is the close's distance above it. */
-const GL_LEVEL: StudioLevel = { label: 'GL (150d)', value: (r) => r.sma_150, kind: 'price' }
-const VS_GL: StudioLevel = { label: 'vs GL', value: (r) => r.pct_from_gl, kind: 'pct', colorKey: 'pct_from_gl' }
+const GL_LEVEL: StudioLevel = { key: 'sma_150', label: 'GL (150d)', kind: 'price' }
+const VS_GL: StudioLevel = { key: 'pct_from_gl', label: 'vs GL', kind: 'pct', colorKey: 'pct_from_gl' }
+
+/**
+ * The seven Studios that mirror Breakout Surge's price_action group columns
+ * with their own metric pair swapped into the same slot, so a reader moving
+ * between them sees one grid (originally ScanTable's PRESET_COL_OVERRIDES).
+ */
+const mirrorColumns = (pair: [string, string]): string[] => [
+  'symbol', 'close', 'score_5d', 'score_22d', 'pct_chng',
+  ...pair,
+  'avg_amt_5d', 'avg_amt_22d',
+  'rvol', 'rsi_14', 'magic_rs',
+  'mcap_cr', 'delivery_pct',
+]
+
+/** The two Golden Line presets: the event leads because it is why the row is
+ *  present; then how far from the line and how long it has held it, in the
+ *  order each preset ranks on. */
+const glColumns = (lead: [string, string]): string[] => [
+  'symbol', 'close', 'pct_chng', 'gl_event', ...lead,
+  'dot_signal', 'delivery_pct', 'rvol',
+  'score_5d', 'score_22d', 'avg_amt_5d', 'avg_amt_22d',
+  'rsi_14', 'magic_rs', 'mcap_cr',
+]
 
 /** Shared by all three caution presets — the crossing that matters there is
  *  into the bear side, worded in ZONE_LABELS' own terms. */
@@ -281,10 +335,12 @@ export const STUDIO_DESCRIPTORS: Record<string, StudioDescriptor> = {
     highlight: STRENGTH_HIGHLIGHT,
     rsFlip: { question: 'Which stocks just turned RS-green?', into: 'bullish' },
     exportName: 'Breakout_Surge',
-    xlsVariant: 'breakout_surge',
-    cardHero: { label: '% from Brk', value: (r) => r.pct_from_breakout, kind: 'pct', colorKey: 'pct_from_breakout' },
+    source: 'matview',
+    // Score first (owner doctrine) — matches the merged scan's engine ranking.
+    sort: { key: 'score_5d', dir: 'desc' },
+    cardHero: { key: 'pct_from_breakout', label: '% from Brk', kind: 'pct', colorKey: 'pct_from_breakout' },
     cardLevels: [
-      { label: 'Brk Lvl', value: (r) => r.breakout_level, kind: 'price' },
+      { key: 'breakout_level', label: 'Brk Lvl', kind: 'price' },
       W52_HIGH_LEVEL,
     ],
     displayName: 'Breakout Surge',
@@ -303,10 +359,12 @@ export const STUDIO_DESCRIPTORS: Record<string, StudioDescriptor> = {
     // question text applies unchanged — no new wording to clear.
     rsFlip: { question: 'Which stocks just turned RS-green?', into: 'bullish' },
     exportName: 'Weekly_Movers',
-    xlsVariant: 'default',
-    cardHero: { label: 'WTD', value: (r) => r.pct_wtd, kind: 'pct', colorKey: 'pct_wtd' },
+    source: 'matview',
+    sort: { key: 'pct_wtd', dir: 'desc' },
+    tableColumns: mirrorColumns(['prev_week_close', 'pct_wtd']),
+    cardHero: { key: 'pct_wtd', label: 'WTD', kind: 'pct', colorKey: 'pct_wtd' },
     cardLevels: [
-      { label: 'Prev Wk', value: (r) => r.prev_week_close, kind: 'price' },
+      { key: 'prev_week_close', label: 'Prev Wk', kind: 'price' },
       W52_HIGH_LEVEL,
     ],
     displayName: 'Weekly Movers',
@@ -325,10 +383,12 @@ export const STUDIO_DESCRIPTORS: Record<string, StudioDescriptor> = {
     // and computeHighlightExplainFacts both apply unchanged.
     rsFlip: { question: 'Which stocks just turned RS-green?', into: 'bullish' },
     exportName: 'Monthly_Movers',
-    xlsVariant: 'default',
-    cardHero: { label: 'MTD', value: (r) => r.pct_mtd, kind: 'pct', colorKey: 'pct_mtd' },
+    source: 'matview',
+    sort: { key: 'pct_mtd', dir: 'desc' },
+    tableColumns: mirrorColumns(['prev_month_close', 'pct_mtd']),
+    cardHero: { key: 'pct_mtd', label: 'MTD', kind: 'pct', colorKey: 'pct_mtd' },
     cardLevels: [
-      { label: 'Prev Mth', value: (r) => r.prev_month_close, kind: 'price' },
+      { key: 'prev_month_close', label: 'Prev Mth', kind: 'price' },
       W52_HIGH_LEVEL,
     ],
     displayName: 'Monthly Movers',
@@ -346,10 +406,13 @@ export const STUDIO_DESCRIPTORS: Record<string, StudioDescriptor> = {
     rsFlip: CAUTION_RS_FLIP,
     industryQuestion: CAUTION_INDUSTRY_Q,
     exportName: 'Weekly_Decliners',
-    xlsVariant: 'default',
-    cardHero: { label: 'WTD', value: (r) => r.pct_wtd, kind: 'pct', colorKey: 'pct_wtd' },
+    source: 'matview',
+    // Decliner arms rank the largest LOSS first — asc.
+    sort: { key: 'pct_wtd', dir: 'asc' },
+    tableColumns: mirrorColumns(['prev_week_close', 'pct_wtd']),
+    cardHero: { key: 'pct_wtd', label: 'WTD', kind: 'pct', colorKey: 'pct_wtd' },
     cardLevels: [
-      { label: 'Prev Wk', value: (r) => r.prev_week_close, kind: 'price' },
+      { key: 'prev_week_close', label: 'Prev Wk', kind: 'price' },
       W52_HIGH_LEVEL,
     ],
     displayName: 'Weekly Decliners',
@@ -365,10 +428,12 @@ export const STUDIO_DESCRIPTORS: Record<string, StudioDescriptor> = {
     rsFlip: CAUTION_RS_FLIP,
     industryQuestion: CAUTION_INDUSTRY_Q,
     exportName: 'Monthly_Decliners',
-    xlsVariant: 'default',
-    cardHero: { label: 'MTD', value: (r) => r.pct_mtd, kind: 'pct', colorKey: 'pct_mtd' },
+    source: 'matview',
+    sort: { key: 'pct_mtd', dir: 'asc' },
+    tableColumns: mirrorColumns(['prev_month_close', 'pct_mtd']),
+    cardHero: { key: 'pct_mtd', label: 'MTD', kind: 'pct', colorKey: 'pct_mtd' },
     cardLevels: [
-      { label: 'Prev Mth', value: (r) => r.prev_month_close, kind: 'price' },
+      { key: 'prev_month_close', label: 'Prev Mth', kind: 'price' },
       W52_HIGH_LEVEL,
     ],
     displayName: 'Monthly Decliners',
@@ -387,10 +452,12 @@ export const STUDIO_DESCRIPTORS: Record<string, StudioDescriptor> = {
     rsFlip: CAUTION_RS_FLIP,
     industryQuestion: CAUTION_INDUSTRY_Q,
     exportName: 'Breakdown_Surge',
-    xlsVariant: 'default',
-    cardHero: { label: '% Below Floor', value: (r) => r.pct_from_breakdown, kind: 'pct', colorKey: 'pct_from_breakdown' },
+    source: 'matview',
+    sort: { key: 'pct_from_breakdown', dir: 'asc' },
+    tableColumns: mirrorColumns(['breakdown_level', 'pct_from_breakdown']),
+    cardHero: { key: 'pct_from_breakdown', label: '% Below Floor', kind: 'pct', colorKey: 'pct_from_breakdown' },
     cardLevels: [
-      { label: 'Brk Dn Lvl', value: (r) => r.breakdown_level, kind: 'price' },
+      { key: 'breakdown_level', label: 'Brk Dn Lvl', kind: 'price' },
       W52_HIGH_LEVEL,
     ],
     // kd_scan_presets calls this one "Breakdown Surge"; the id is the outlier.
@@ -409,7 +476,9 @@ export const STUDIO_DESCRIPTORS: Record<string, StudioDescriptor> = {
     // Structurally 100% every day — see the field's doc.
     newSinceYesterday: false,
     exportName: 'Golden_Line_Breakout',
-    xlsVariant: 'default',
+    source: 'direct',
+    sort: { key: 'pct_from_gl', dir: 'desc' },
+    tableColumns: glColumns(['pct_from_gl', 'gl_days_above']),
     // Day one above the line: the distance reclaimed is the number; sessions
     // above is 1 on every row and says nothing.
     cardHero: VS_GL,
@@ -429,10 +498,12 @@ export const STUDIO_DESCRIPTORS: Record<string, StudioDescriptor> = {
     rsFlip: { question: 'Which stocks just turned RS-green?', into: 'bullish' },
     // A retest CAN repeat on consecutive sessions, so the card is real here.
     exportName: 'Golden_Line_Retest',
-    xlsVariant: 'default',
+    source: 'direct',
+    sort: { key: 'gl_days_above', dir: 'desc' },
+    tableColumns: glColumns(['gl_days_above', 'pct_from_gl']),
     // A retest is about the hold, so the count of sessions above the line
     // leads and the distance takes the second level slot.
-    cardHero: { label: 'Sessions above GL', value: (r) => r.gl_days_above, kind: 'count', colorKey: 'gl_days_above' },
+    cardHero: { key: 'gl_days_above', label: 'Sessions above GL', filterLabel: 'Held GL', kind: 'count', colorKey: 'gl_days_above' },
     cardLevels: [GL_LEVEL, VS_GL],
     displayName: 'Golden Line Retest',
   },
@@ -444,3 +515,30 @@ export function getStudioDescriptor(presetId: string): StudioDescriptor | null {
 
 /** Presets that render the Studio instead of ScanView's generic layout. */
 export const STUDIO_PRESET_IDS = new Set(Object.keys(STUDIO_DESCRIPTORS))
+
+/** Studio presets by row source — scanEngine's matview / direct-count lists. */
+export function studioPresetsBySource(source: StudioDescriptor['source']): string[] {
+  return Object.values(STUDIO_DESCRIPTORS).filter((d) => d.source === source).map((d) => d.presetId)
+}
+
+/**
+ * XLS columns appended to the base row for a Studio export: the ledger's
+ * three slots (hero, two levels), then the pace pair and the returns pair
+ * every Studio shows. Before this the seven non-breakout Studios exported
+ * `baseRow` alone — Weekly Movers' file had no week-to-date column (gap
+ * audit §3d).
+ */
+export function studioXlsColumns(d: StudioDescriptor): XlsColumn[] {
+  const dp = (lvl: StudioLevel) => (lvl.kind === 'count' ? 0 : lvl.kind === 'price' ? 1 : 2)
+  const slot = (lvl: StudioLevel): XlsColumn => ({ header: lvl.label, value: (r) => levelValue(lvl, r), dp: dp(lvl) })
+  return [
+    slot(d.cardHero),
+    slot(d.cardLevels[0]),
+    slot(d.cardLevels[1]),
+    { header: 'Score 5D', value: (r) => r.score_5d ?? null, dp: 1 },
+    { header: 'Score 22D', value: (r) => r.score_22d ?? null, dp: 1 },
+    { header: 'D% from EMA20', value: (r) => r.d_pct ?? null },
+    { header: '5D Ret%', value: (r) => r.ret_5d ?? null },
+    { header: '22D Ret%', value: (r) => r.ret_22d ?? null },
+  ]
+}

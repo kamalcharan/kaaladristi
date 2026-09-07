@@ -369,8 +369,8 @@ or more. "Where" names the file(s) to open.
 
 | ID | Task | Where | Size |
 |---|---|---|---|
-| B1 | Filter bar `metric` group for Studio presets: min/max on the descriptor's ranking column (labelled from `fieldConfig`) + RVOL Min. Also closes the invisible-RVOL-filter problem (§3b, §3c). | `ScanFilterBar.tsx`, `scannerStudio.ts` (expose ranking key) | S–M |
-| B2 | XLS export variant that appends the descriptor's two levels + Score 5D/22D + 5D/22D returns, used by the seven `xlsVariant: 'default'` Studios (§3d). Flower Pot gets its compression fields the same way if wanted. | `downloadXls.ts`, `scannerStudio.ts` | S |
+| B1 ✅ | Filter bar `metric` group for Studio presets: min/max on the descriptor's ranking column (labelled from `fieldConfig`) + RVOL Min. Also closes the invisible-RVOL-filter problem (§3b, §3c). | `ScanFilterBar.tsx`, `scannerStudio.ts` (expose ranking key) | S–M |
+| B2 ✅ | XLS export variant that appends the descriptor's two levels + Score 5D/22D + 5D/22D returns, used by the seven `xlsVariant: 'default'` Studios (§3d). Flower Pot gets its compression fields the same way if wanted. | `downloadXls.ts`, `scannerStudio.ts` | S |
 | B3 | Chart-setup adapters for `gl_breakout` / `gl_retest` (or one parameterised on the event), following `breakoutSurge.ts`. Content work: the Golden Line story has to be written (§3e). | `services/thesis/adapters/` | M |
 | B4 ✅ | Studio renders `ScanStalenessBanner` and `AtmosphericBadge` like the generic layout (§4). | `ScannerStudio.tsx` | S |
 
@@ -379,7 +379,7 @@ or more. "Where" names the file(s) to open.
 | ID | Task | Where | Size |
 |---|---|---|---|
 | C1 | Migration: add `gl_breakout` / `gl_retest` arms to `km_scan_results` (mirror `fetchGlEvents`: NSE, ISIN-dedup, `gl_event = X`, no price/EMA gate, cap 200) and project `pct_from_gl`, `gl_event`, `gl_days_above`, `bm_event`, `bm_ratio`. Then move the pair into `MATVIEW_PRICE_ACTION_PRESETS`, keep the fetcher as fallback, update `_GL_POOL`'s note. Closes §3a and A4 (§2b). | new `km_migration_202_*.sql`, `scanEngine.ts`, `compute_scan_membership_snapshot.py` | M |
-| C2 | Descriptor consolidation: `STUDIO_DESCRIPTORS` carries sort key, column set, filter group, export variant; `ScanTable`, `ScanFilterBar`, `downloadXls` and the counts list read it instead of their own maps (§7). After this a preset with a descriptor cannot be missing a sort, a filter or an export column. Do AFTER A1/B1/B2 so each behaviour is right before it is moved. | five files | M |
+| C2 ✅ | Descriptor consolidation: `STUDIO_DESCRIPTORS` carries sort key, column set, filter group, export variant; `ScanTable`, `ScanFilterBar`, `downloadXls` and the counts list read it instead of their own maps (§7). After this a preset with a descriptor cannot be missing a sort, a filter or an export column. Do AFTER A1/B1/B2 so each behaviour is right before it is moved. | five files | M |
 | C3 | Refresh `km_scan_results` is part of every migration that recreates it `WITH NO DATA` — either the migration ends with the two `REFRESH` statements, or the runbook says so. Today's outage on the six bundle scanners came from migration 200 leaving both views empty until the nightly step. | `DBscripts/` convention, `CLAUDE.md` | S |
 
 ### D. Owner decisions — not code until decided
@@ -414,8 +414,9 @@ or more. "Where" names the file(s) to open.
   three fixed rows on all eight Studios: signal band (VaNi · RS band · flow ·
   SVD/SBD/SYD · RSI state) → ledger (scan metric first and largest · level ·
   level · RVOL, price rail right) → Score 5D vs 22D bars. Slots come from the
-  descriptor's new `cardHero` + typed `cardLevels`; the hero is also each
-  preset's `DEFAULT_SORT` key. Phone: 2×2 ledger, avatar and ✦ inside the
+  descriptor's new `cardHero` + typed `cardLevels`; the hero is the filter
+  bar's metric and the export's first metric column (the table sort is the
+  descriptor's own `sort` — Breakout Surge sorts by Score 5D, owner doctrine). Phone: 2×2 ledger, avatar and ✦ inside the
   identity row (`ScanCardWrapper bare`); a narrow desktop column (~1280px
   with both sidebars) drops to the same 2×2 via a ResizeObserver rather than
   wrapping mid-row. Studio's Table/Cards toggle now persists under the same
@@ -424,7 +425,22 @@ or more. "Where" names the file(s) to open.
   `w52_low` is not in `km_scan_results`, so the caution presets show 52W
   High in the second level slot until the matview grows the column (fold
   into C1).
-- **Batch 2:** B1, B2, then C2 on top of them.
+- **Batch 2:** B1, B2, then C2 on top of them. **Done 2026-09-07.**
+  B1: `ScanFilterBar` has a `studio` group (every preset with a descriptor,
+  Breakout Surge included) — RVOL Min, then Min/Max on the descriptor's hero
+  column via generic `metricKey/metricMin/metricMax` filters (the breakout-
+  only `pctFromBreakout*` pair is gone), then 5D Move. B2: `downloadScanXls`
+  takes `extraColumns`; `studioXlsColumns(d)` appends hero + two levels +
+  Score 5D/22D + D% from EMA20 + 5D/22D Ret to the base row (replaced the
+  bespoke breakoutSurgeRow; the `breakout_surge` variant is gone). C2:
+  `STUDIO_DESCRIPTORS` now carries `source` (matview | direct), `sort`,
+  `tableColumns`, `cardHero`/`cardLevels` (keyed on ScanStock columns);
+  `ScanTable` reads sort + columns from it first, `ScanFilterBar` reads the
+  metric, `scanEngine` derives MATVIEW_PRICE_ACTION_PRESETS and the direct
+  count list from `source`. Of §7's fourteen maps, rows 1, 2, 3, 5, 8, 9 now
+  read the descriptor; a preset with a descriptor cannot be missing a sort,
+  a column set, a metric filter, an export column or a count badge. Still
+  hand-maintained: 4 (defaultFiltersFor), 6, 7, 10–14.
 - **Batch 3:** C1, then B3.
 - **Owner, any time:** D1–D5, E1, C3 as a convention.
 

@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import { Download } from 'lucide-react'
-import { downloadScanXls, type ScanVariant } from '@/utils/downloadXls'
+import { downloadScanXls, type ScanVariant, type XlsColumn } from '@/utils/downloadXls'
 import type { ScanStock } from '@/types'
 
 /**
@@ -20,13 +20,13 @@ const btnBase: React.CSSProperties = {
   fontFamily: 'var(--font-body)', transition: 'all 0.15s', whiteSpace: 'nowrap',
 }
 
-export function DownloadXlsButton({ stocks, scanName, variant = 'default' }: {
-  stocks: ScanStock[]; scanName: string; variant?: ScanVariant
+export function DownloadXlsButton({ stocks, scanName, variant = 'default', columns }: {
+  stocks: ScanStock[]; scanName: string; variant?: ScanVariant; columns?: XlsColumn[]
 }) {
   if (stocks.length === 0) return null
   return (
     <button
-      onClick={() => downloadScanXls(stocks, scanName, variant)}
+      onClick={() => downloadScanXls(stocks, scanName, variant, columns)}
       title={`Download ${stocks.length} rows as Excel`}
       style={{ ...btnBase, color: 'var(--text-muted)' }}
       onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--text-primary)'; e.currentTarget.style.borderColor = 'var(--border-strong)' }}

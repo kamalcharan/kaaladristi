@@ -1,6 +1,7 @@
 import React, { useMemo, useRef, useState, useEffect } from 'react';
 import type { ScanStock } from '@/types';
 import { DOT_OPTIONS } from '@/constants/signalScale';
+import { getStudioDescriptor } from '@/config/scannerStudio';
 
 // ─── Interface ────────────────────────────────────────────────────────────────
 
@@ -14,8 +15,17 @@ export interface ScanFilters {
   surgeMin?: number;
   deliveryPctMin?: number;
   rvolMin?: number;
-  pctFromBreakoutMin?: number;
-  pctFromBreakoutMax?: number;
+  /**
+   * Bounds on a Scanner Studio's own ranking column — the descriptor's
+   * `cardHero.key` (pct_from_breakout, pct_wtd, pct_mtd, pct_from_breakdown,
+   * pct_from_gl, gl_days_above). The key travels with the bounds so
+   * applyFilters needs no preset: "between +3% and +8% WTD" on Weekly
+   * Movers, "held at least 20 sessions" on Golden Line Retest. Replaced
+   * the breakout-only pctFromBreakoutMin/Max pair (gap audit §3b).
+   */
+  metricKey?: keyof ScanStock;
+  metricMin?: number;
+  metricMax?: number;
   /** Minimum Score 5D — money-flow conviction (equity scale: median ≈ 5, top decile ≈ 28). */
   score5dMin?: number;
   /** Minimum Score 22D. */
@@ -67,13 +77,16 @@ const STAGE_PRESETS = new Set([
   'stage_3_watch', 'stage_4_leaders', 'vani_exit_watch',
 ]);
 
-type FilterGroup = 'stage' | 'conviction' | 'breakout' | 'fpb' | 'drive' | 'journey' | 'standard';
+type FilterGroup = 'stage' | 'conviction' | 'studio' | 'fpb' | 'drive' | 'journey' | 'standard';
 
 function getFilterGroup(presetId: string): FilterGroup {
   if (JOURNEY_WAKE_PRESETS.has(presetId)) return 'journey';
   if (STAGE_PRESETS.has(presetId)) return 'stage';
   if (presetId === 'conviction_flow') return 'conviction';
-  if (presetId === 'breakout_surge') return 'breakout';
+  // Every Scanner Studio, Breakout Surge included: RVOL Min plus min/max on
+  // the descriptor's own metric. Membership comes from the descriptor, so a
+  // new Studio gets its metric bounds without an entry here (gap audit §7).
+  if (getStudioDescriptor(presetId)) return 'studio';
   if (presetId === 'flower_pot_burst') return 'fpb';
   if (presetId === 'volume_drive') return 'drive';
   return 'standard';
@@ -83,7 +96,7 @@ function getFilterGroup(presetId: string): FilterGroup {
 
 export function applyFilters(stocks: ScanStock[], filters: ScanFilters): ScanStock[] {
   const { mcapMin, mcapMax, industries, move5dMax, move22dMax, move66dMax,
-    surgeMin, deliveryPctMin, rvolMin, pctFromBreakoutMin, pctFromBreakoutMax,
+    surgeMin, deliveryPctMin, rvolMin, metricKey, metricMin, metricMax,
     score5dMin, score22dMin, accelerating,
     fpbPhase, tightnessMin, coiledDaysMin, dots, wakeWindowDays } = filters;
 
@@ -92,7 +105,7 @@ export function applyFilters(stocks: ScanStock[], filters: ScanFilters): ScanSto
     (!industries || industries.length === 0) &&
     move5dMax == null && move22dMax == null && move66dMax == null &&
     surgeMin == null && deliveryPctMin == null && rvolMin == null &&
-    pctFromBreakoutMin == null && pctFromBreakoutMax == null &&
+    metricMin == null && metricMax == null &&
     score5dMin == null && score22dMin == null && !accelerating &&
     (!fpbPhase || fpbPhase === 'all') && tightnessMin == null && coiledDaysMin == null &&
     (!dots || dots.length === 0) && wakeWindowDays == null
@@ -110,8 +123,15 @@ export function applyFilters(stocks: ScanStock[], filters: ScanFilters): ScanSto
     if (surgeMin != null && (s.delivery_surge_x ?? 0) < surgeMin) return false;
     if (deliveryPctMin != null && (s.delivery_pct ?? 0) < deliveryPctMin) return false;
     if (rvolMin != null && (s.rvol ?? 0) < rvolMin) return false;
-    if (pctFromBreakoutMin != null && s.pct_from_breakout != null && s.pct_from_breakout < pctFromBreakoutMin) return false;
-    if (pctFromBreakoutMax != null && s.pct_from_breakout != null && s.pct_from_breakout > pctFromBreakoutMax) return false;
+    // Rows with no value for the metric are kept, as the old breakout pair
+    // did — the bound narrows the known, it does not demand the column.
+    if (metricKey && (metricMin != null || metricMax != null)) {
+      const v = s[metricKey];
+      if (typeof v === 'number') {
+        if (metricMin != null && v < metricMin) return false;
+        if (metricMax != null && v > metricMax) return false;
+      }
+    }
     if (score5dMin  != null && (s.score_5d  ?? -1) < score5dMin)  return false;
     if (score22dMin != null && (s.score_22d ?? -1) < score22dMin) return false;
     if (accelerating && !((s.score_5d ?? 0) > 0 && (s.score_5d ?? 0) >= (s.score_22d ?? 0))) return false;
@@ -141,7 +161,7 @@ export function hasActiveFilters(f: ScanFilters): boolean {
     (f.industries && f.industries.length > 0) ||
     f.move5dMax != null || f.move22dMax != null || f.move66dMax != null ||
     f.surgeMin != null || f.deliveryPctMin != null || f.rvolMin != null ||
-    f.pctFromBreakoutMin != null || f.pctFromBreakoutMax != null ||
+    f.metricMin != null || f.metricMax != null ||
     f.score5dMin != null || f.score22dMin != null || !!f.accelerating ||
     (f.fpbPhase != null && f.fpbPhase !== 'all') || f.tightnessMin != null || f.coiledDaysMin != null ||
     (f.dots != null && f.dots.length > 0) ||
@@ -338,6 +358,7 @@ export function ScanFilterBar({ presetId, stocks, filters, onFiltersChange }: Sc
     });
   };
   const group = getFilterGroup(presetId);
+  const studio = getStudioDescriptor(presetId);
 
   const industries = useMemo(() => {
     const set = new Set<string>();
@@ -477,12 +498,26 @@ export function ScanFilterBar({ presetId, stocks, filters, onFiltersChange }: Sc
             </>
           )}
 
-          {group === 'breakout' && (
+          {group === 'studio' && studio && (
             <>
+              {/* RVOL Min renders on every Studio — the "Real Volume Behind"
+                  tile sets rvolMin=3, and on seven presets that used to be an
+                  active, counted, invisible filter only Reset could clear
+                  (gap audit §3c). */}
               <NumInput label="RVOL Min" value={filters.rvolMin} onChange={(v) => set('rvolMin', v)} placeholder="1.0" />
               <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-end' }}>
-                <NumInput label="% From Brk Min" value={filters.pctFromBreakoutMin} onChange={(v) => set('pctFromBreakoutMin', v)} placeholder="%" />
-                <NumInput label="% From Brk Max" value={filters.pctFromBreakoutMax} onChange={(v) => set('pctFromBreakoutMax', v)} placeholder="%" />
+                <NumInput
+                  label={`${studio.cardHero.filterLabel ?? studio.cardHero.label} Min`}
+                  value={filters.metricMin}
+                  onChange={(v) => onFiltersChange({ ...filters, metricKey: studio.cardHero.key, metricMin: v })}
+                  placeholder={studio.cardHero.kind === 'count' ? '#' : '%'}
+                />
+                <NumInput
+                  label={`${studio.cardHero.filterLabel ?? studio.cardHero.label} Max`}
+                  value={filters.metricMax}
+                  onChange={(v) => onFiltersChange({ ...filters, metricKey: studio.cardHero.key, metricMax: v })}
+                  placeholder={studio.cardHero.kind === 'count' ? '#' : '%'}
+                />
               </div>
               <NumInput label="5D Move <" value={filters.move5dMax} onChange={(v) => set('move5dMax', v)} placeholder="%" />
             </>
@@ -560,8 +595,8 @@ function countActive(f: ScanFilters): number {
   if (f.surgeMin != null) n++;
   if (f.deliveryPctMin != null) n++;
   if (f.rvolMin != null) n++;
-  if (f.pctFromBreakoutMin != null) n++;
-  if (f.pctFromBreakoutMax != null) n++;
+  if (f.metricMin != null) n++;
+  if (f.metricMax != null) n++;
   if (f.score5dMin != null) n++;
   if (f.score22dMin != null) n++;
   if (f.accelerating) n++;

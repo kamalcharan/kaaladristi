@@ -12,10 +12,14 @@ import { useStockAskStore } from '@/stores/stockAskStore'
 import BookmarkToggle from '@/components/domain/BookmarkToggle'
 import FloatingHScrollbar from '@/components/ui/FloatingHScrollbar'
 import { DOT_LABELS, dotLabel, type DotSignal } from '@/constants/signalScale'
+import { getStudioDescriptor } from '@/config/scannerStudio'
 
 // ── Preset column overrides ─────────────────────────────────────────────────────
 
 // Per-preset column overrides for presets whose fetcher has a limited SELECT.
+// Scanner Studio presets are NOT here: their columns live on the descriptor
+// (`tableColumns`, config/scannerStudio.ts) and are read first below, so a
+// Studio cannot be missing its column set (gap audit §7).
 const PRESET_COL_OVERRIDES: Partial<Record<string, string[]>> = {
   // Flower Pot Burst has its own metric surface — the price_action group's
   // breakout/score columns are all null here. Lead with the always-populated
@@ -27,61 +31,6 @@ const PRESET_COL_OVERRIDES: Partial<Record<string, string[]>> = {
     'symbol', 'close', 'pct_chng', 'fpb_phase',
     'fpb_compression_score', 'fpb_atr_compression', 'fpb_vol_death', 'fpb_setup_days',
     'delivery_pct', 'rvol', 'magic_rs',
-  ],
-
-  // Weekly Movers selects on pct_wtd, so the week-to-date pair leads: the
-  // gain, then the reference close it is measured from (the export's
-  // "Breakout" column). D% follows because it is a DIFFERENT number from
-  // % WTD on every day except Monday, and showing them side by side is what
-  // makes the distinction legible.
-  // Weekly Movers deliberately MIRRORS the price_action group defaults so it
-  // reads as a sibling of Breakout Surge rather than a different product: same
-  // Close | Score 5D | Score 22D | 1D% lead ("Score is the real moat"), same
-  // delivery-value and rvol/rsi/magic_rs tail. The ONLY substitution is the
-  // breakout pair -> the week-to-date pair, which is what this preset selects
-  // on. MCap and Delivery are appended because they are the two the owner
-  // reads this list for.
-  weekly_movers: [
-    'symbol', 'close', 'score_5d', 'score_22d', 'pct_chng',
-    'prev_week_close', 'pct_wtd',
-    'avg_amt_5d', 'avg_amt_22d',
-    'rvol', 'rsi_14', 'magic_rs',
-    'mcap_cr', 'delivery_pct',
-  ],
-
-  // Monthly Movers is the weekly override with the month pair swapped in, so
-  // the two read as one family and against Breakout Surge's group surface.
-  monthly_movers: [
-    'symbol', 'close', 'score_5d', 'score_22d', 'pct_chng',
-    'prev_month_close', 'pct_mtd',
-    'avg_amt_5d', 'avg_amt_22d',
-    'rvol', 'rsi_14', 'magic_rs',
-    'mcap_cr', 'delivery_pct',
-  ],
-
-  // The three breakdown screeners mirror their up-side siblings exactly, with
-  // the down-side pair swapped in. Same Score / delivery-value / rvol tail, so
-  // a reader moving between Breakout Surge and Breakdown Surge sees one grid.
-  breakdown_watch: [
-    'symbol', 'close', 'score_5d', 'score_22d', 'pct_chng',
-    'breakdown_level', 'pct_from_breakdown',
-    'avg_amt_5d', 'avg_amt_22d',
-    'rvol', 'rsi_14', 'magic_rs',
-    'mcap_cr', 'delivery_pct',
-  ],
-  weekly_decliners: [
-    'symbol', 'close', 'score_5d', 'score_22d', 'pct_chng',
-    'prev_week_close', 'pct_wtd',
-    'avg_amt_5d', 'avg_amt_22d',
-    'rvol', 'rsi_14', 'magic_rs',
-    'mcap_cr', 'delivery_pct',
-  ],
-  monthly_decliners: [
-    'symbol', 'close', 'score_5d', 'score_22d', 'pct_chng',
-    'prev_month_close', 'pct_mtd',
-    'avg_amt_5d', 'avg_amt_22d',
-    'rvol', 'rsi_14', 'magic_rs',
-    'mcap_cr', 'delivery_pct',
   ],
 
   // Volume Drive selects ON the dot, so the dot leads — without it the grid
@@ -98,21 +47,6 @@ const PRESET_COL_OVERRIDES: Partial<Record<string, string[]>> = {
     'symbol', 'dot_signal', 'score_5d', 'score_22d', 'delivery_pct', 'close', 'pct_chng',
     'rvol', 'delivery_surge_x', 'avg_amt_5d', 'avg_amt_22d',
     'ret_5d', 'magic_rs', 'rsi_14', 'flow_type',
-  ],
-
-  // The two Golden Line presets. The event leads because it is why the row is
-  // present; then how far from the line, then how long it has held it.
-  gl_breakout: [
-    'symbol', 'close', 'pct_chng', 'gl_event', 'pct_from_gl', 'gl_days_above',
-    'dot_signal', 'delivery_pct', 'rvol',
-    'score_5d', 'score_22d', 'avg_amt_5d', 'avg_amt_22d',
-    'rsi_14', 'magic_rs', 'mcap_cr',
-  ],
-  gl_retest: [
-    'symbol', 'close', 'pct_chng', 'gl_event', 'gl_days_above', 'pct_from_gl',
-    'dot_signal', 'delivery_pct', 'rvol',
-    'score_5d', 'score_22d', 'avg_amt_5d', 'avg_amt_22d',
-    'rsi_14', 'magic_rs', 'mcap_cr',
   ],
 
   // Waking Giants v4 journey tabs — the journey dimensions lead. base_years =
@@ -156,8 +90,6 @@ const DEFAULT_SORT: Record<string, { key: string; dir: 'asc' | 'desc' }> = {
   stage_3_watch:    { key: 'rs_percentile',     dir: 'asc'  },
   vani_exit_watch:  { key: 'rs_percentile',     dir: 'asc'  },
   conviction_flow:  { key: 'delivery_surge_x',  dir: 'desc' },
-  // Score first (owner doctrine) — matches the merged scan's engine ranking.
-  breakout_surge:   { key: 'score_5d',          dir: 'desc' },
   // Tightest compression first — bursts (high quality) still sort near the top.
   flower_pot_burst: { key: 'fpb_compression_score', dir: 'desc' },
   // Delivery-first, matching fetchVolumeDrive's engine ranking. Without an
@@ -166,26 +98,17 @@ const DEFAULT_SORT: Record<string, { key: string; dir: 'asc' | 'desc' }> = {
   // next-day move, so it would sort the list by a feature with no predictive
   // value.
   volume_drive:     { key: 'delivery_pct',      dir: 'desc' },
-  // Price Action Studios — each scan's own ranking column, mirroring its
-  // fetcher / matview arm. Without these the seven fell through to the
-  // magic_rs fallback below, so table view discarded the ranking the cards
-  // view (fetched order) kept: the two views of one scan disagreed (gap
-  // audit §2a / §9b). Decliner arms rank the largest LOSS first — asc.
-  weekly_movers:     { key: 'pct_wtd',            dir: 'desc' },
-  monthly_movers:    { key: 'pct_mtd',            dir: 'desc' },
-  weekly_decliners:  { key: 'pct_wtd',            dir: 'asc'  },
-  monthly_decliners: { key: 'pct_mtd',            dir: 'asc'  },
-  breakdown_watch:   { key: 'pct_from_breakdown', dir: 'asc'  },
-  gl_breakout:       { key: 'pct_from_gl',        dir: 'desc' },
-  gl_retest:         { key: 'gl_days_above',      dir: 'desc' },
   // v4 journey tabs — match each fetcher's engine ranking.
   waking_giants:    { key: 'base_years',        dir: 'desc' },
   wg_ascent:        { key: 'align_score',       dir: 'desc' },
   wg_stirring:      { key: 'gl_acc_days',       dir: 'desc' },
 }
 
-function getDefaultSort(presetId: string) {
-  return DEFAULT_SORT[presetId] ?? { key: 'magic_rs', dir: 'desc' as const }
+function getDefaultSort(presetId: string): { key: string; dir: 'asc' | 'desc' } {
+  // Studio presets carry their ranking on the descriptor; the map above is
+  // for everything else. The magic_rs fallback is what silently discarded
+  // seven fetchers' rankings before A1 (gap audit §2a).
+  return getStudioDescriptor(presetId)?.sort ?? DEFAULT_SORT[presetId] ?? { key: 'magic_rs', dir: 'desc' as const }
 }
 
 // ── Sort ───────────────────────────────────────────────────────────────────────
@@ -286,7 +209,7 @@ export default function ScanTable({ stocks, presetId, onRowClick }: ScanTablePro
   }, [gearOpen])
 
   const optionalCols  = groupOptionalCols
-  const defaultCols   = PRESET_COL_OVERRIDES[presetId] ?? groupDefaultCols
+  const defaultCols   = getStudioDescriptor(presetId)?.tableColumns ?? PRESET_COL_OVERRIDES[presetId] ?? groupDefaultCols
 
   // visible = default cols + optional cols not hidden, deduped
   const activeCols = [...defaultCols, ...optionalCols.filter(c => !hiddenCols.has(c))]

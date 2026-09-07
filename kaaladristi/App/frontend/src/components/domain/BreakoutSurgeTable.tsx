@@ -7,7 +7,7 @@ import { displaySymbol } from '@/lib/symbolUtils';
 import { getColor } from '@/config/fieldConfig';
 import { DOT_LABELS, zoneLabel, flowLabel } from '@/constants/signalScale';
 import { useIsPhone } from '@/hooks/useMediaQuery';
-import type { StudioDescriptor, StudioLevel } from '@/config/scannerStudio';
+import { levelValue, type StudioDescriptor, type StudioLevel } from '@/config/scannerStudio';
 
 /**
  * Scanner Studio cards — the "Option B+E" design frozen 2026-09-07
@@ -304,10 +304,10 @@ function StudioCard({ stock, descriptor, onClick }: { stock: ScanStock; descript
   const vaniEntity = { type: 'equity' as const, id: stock.equity_id, symbol: displaySymbol(stock), pageContext: `Scanner / ${descriptor.displayName}` };
 
   const hero = descriptor.cardHero;
-  const heroV = hero.value(stock);
+  const heroV = levelValue(hero, stock);
   const [l1, l2] = descriptor.cardLevels;
-  const l1V = l1.value(stock);
-  const l2V = l2.value(stock);
+  const l1V = levelValue(l1, stock);
+  const l2V = levelValue(l2, stock);
 
   const heroCell = <Cell label={hero.label} value={fmtLevel(hero, heroV)} color={levelColor(hero, heroV)} hero first />;
   const l1Cell = (first = false) => <Cell label={l1.label} value={fmtLevel(l1, l1V)} color={levelColor(l1, l1V)} first={first} />;
