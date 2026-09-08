@@ -103,9 +103,13 @@ DROP MATERIALIZED VIEW IF EXISTS km_scan_results          CASCADE;
 -- the prefix directly so a fund listed after this migration is excluded
 -- without anyone remembering to re-run an UPDATE.
 -- ============================================================================
+-- COALESCE, not the bare LIKE: `NULL LIKE 'INF%'` is NULL, and 1,442 rows
+-- (251 of them active) carry no ISIN. Without it those rows go FALSE -> NULL
+-- and the column stops being a usable boolean. A symbol with no ISIN cannot be
+-- shown to be a fund, so it is not one.
 UPDATE km_equity_symbols
-   SET is_etf = (isin LIKE 'INF%')
- WHERE is_etf IS DISTINCT FROM (isin LIKE 'INF%');
+   SET is_etf = COALESCE(isin LIKE 'INF%', FALSE)
+ WHERE is_etf IS DISTINCT FROM COALESCE(isin LIKE 'INF%', FALSE);
 
 CREATE MATERIALIZED VIEW km_scan_results AS
 WITH
@@ -1363,10 +1367,25 @@ NOTIFY pgrst, 'reload schema';
 COMMIT;
 
 -- ============================================================================
--- Populate (run AFTER commit; order matters — results before exclusion counts,
--- since the latter's included_count SELECTs from km_scan_results):
---   REFRESH MATERIALIZED VIEW km_scan_results;
---   REFRESH MATERIALIZED VIEW km_scan_exclusion_counts;
+-- Populate. Gap audit C3, and the reason it is now EXECUTABLE rather than a
+-- comment: a migration that recreates km_scan_results leaves BOTH views
+-- unpopulated, and every matview-served scanner then answers PostgREST with
+-- "materialized view has not been populated" -- which the UI shows as "Failed
+-- to run scan." on eleven presets at once. Migration 200 left the six bundle
+-- scanners dark that way on 2026-09-06; 205 did it again on 2026-09-07. A
+-- comment asking the next person to remember has now failed twice, so the
+-- statements run.
+--
+-- Order matters: results before exclusion counts, since the latter's
+-- included_count SELECTs from km_scan_results. Neither can be CONCURRENTLY on
+-- the first populate (that requires an already-populated view); the nightly
+-- pipeline2 handle_scan_refresh path uses CONCURRENTLY from then on.
+-- ============================================================================
+REFRESH MATERIALIZED VIEW km_scan_results;
+REFRESH MATERIALIZED VIEW km_scan_exclusion_counts;
+
+-- ============================================================================
+-- Reference (the above are already run by this file):
 -- After the initial populate, the nightly pipeline2 handle_scan_refresh path
 -- uses CONCURRENTLY (unique indexes exist on both views).
 --
