@@ -3,6 +3,7 @@ import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { Loader2, ChevronLeft, ChevronRight, Download, Copy, Check } from 'lucide-react';
 import { Card, DristiQLoader } from '@/components/ui';
 import { useScan, useAllScanCounts, useScanPresets, useFpbActive } from '@/hooks/useScan';
+import { useFpbRecentOutcomes, useFpbWhyWatchCoil, useFpbCoilingIndustries, useFpbConfluenceOutlook } from '@/hooks/useDashboardExtras';
 import { SCAN_PRESETS, type ExchangeFilter, type ScanTimeframe, type FpbActiveRow } from '@/services/scanEngine';
 import { StockCard, StageBadge } from '@/components/domain/StockCard';
 import { ScanSectionLabel } from '@/components/domain/ScanCardShell';
@@ -15,6 +16,7 @@ import AtmosphericBadge from '@/components/domain/AtmosphericBadge';
 import { ScanFilterBar, applyFilters, DEFAULT_FILTERS, FPB_DEFAULT_FILTERS, JOURNEY_DEFAULT_FILTERS, type ScanFilters } from '@/components/domain/ScanFilterBar';
 import ScanVaNiPublisher from '@/components/domain/ScanVaNiPublisher';
 import ScanStalenessBanner from '@/components/domain/ScanStalenessBanner';
+import VaNiInsight from '@/components/domain/VaNiInsight';
 import ScannerStudio from '@/views/ScannerStudio';
 import { STUDIO_PRESET_IDS } from '@/config/scannerStudio';
 import { fpbCardDescriptor } from '@/config/flowerPotCards';
@@ -1083,6 +1085,12 @@ function FpbResults({ preset, timeframe, viewMode, onViewModeChange }: {
   const goStock = (s: ScanStock) =>
     navigate(`/chart/equity/${s.equity_id}?name=${encodeURIComponent(navName(s))}${storySetupSuffix('flower_pot_burst')}`);
 
+  // VaNi intents for Flower Pot
+  const { data: recentOutcomes } = useFpbRecentOutcomes();
+  const { data: whyWatchCoil } = useFpbWhyWatchCoil();
+  const { data: coilingIndustries } = useFpbCoilingIndustries();
+  const { data: confluenceOutlook } = useFpbConfluenceOutlook();
+
   // ── Stat tiles ───────────────────────────────────────────────────────────
   // The same six-tile strip every Studio opens with, reading this scanner's
   // own numbers. "Broke Out Today" would be 0 on most days here, so the count
@@ -1164,6 +1172,34 @@ function FpbResults({ preset, timeframe, viewMode, onViewModeChange }: {
       {/* Day-2 position layer — recent releases + hold/crack verdict + SL/target.
           Renders only once km_fpb_active (migration 156) is populated. */}
       {!vaniOnly && <FpbActiveSection />}
+
+      {/* VaNi insights for Flower Pot scanner */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 16, marginBottom: 24, marginTop: 24 }}>
+        <VaNiInsight
+          insight={recentOutcomes?.insight}
+          isLoading={false}
+          className="fpb-insight fpb-recent-outcomes"
+          collapsible
+        />
+        <VaNiInsight
+          insight={whyWatchCoil?.insight}
+          isLoading={false}
+          className="fpb-insight fpb-why-watch-coil"
+          collapsible
+        />
+        <VaNiInsight
+          insight={coilingIndustries?.insight}
+          isLoading={false}
+          className="fpb-insight fpb-coiling-industries"
+          collapsible
+        />
+        <VaNiInsight
+          insight={confluenceOutlook?.insight}
+          isLoading={false}
+          className="fpb-insight fpb-confluence-outlook"
+          collapsible
+        />
+      </div>
 
       {isLoading ? (
         <DristiQLoader />
