@@ -256,6 +256,7 @@ export default function VaNiChatPanel({ docked = false }: { docked?: boolean } =
   // Free text is a SEARCH box, not a chat box: it resolves to a stock and,
   // only if that stock is in the current results, fires a canned intent.
   // Text never reaches the LLM.
+  const [showAllIntents, setShowAllIntents] = useState(false);
   const [lookupOpen, setLookupOpen] = useState(false);
   const [lookupText, setLookupText] = useState('');
   const [lookupBusy, setLookupBusy] = useState(false);
@@ -322,7 +323,12 @@ export default function VaNiChatPanel({ docked = false }: { docked?: boolean } =
   const pageLabel = PAGE_DISPLAY_LABELS[page] ?? page.replace(/_/g, ' ');
   const headerSubtext = entity
     ? `${entity.symbol} · ${pageLabel}`
-    : `${pageLabel} context · ${allIntents.length} questions`;
+    // Docked, the intent page key is not the page the user is on — 'dashboard'
+    // reads as "DASHBOARD CONTEXT" on a screen titled Workspace. Say what VaNi
+    // is doing; the question count belongs over the list, not in the masthead.
+    : docked
+      ? 'Reading this page'
+      : `${pageLabel} context · ${allIntents.length} questions`;
 
   const IntentButton = ({ intentId, label, variant }: { intentId: string; label: string; variant: 'primary' | 'secondary' }) => (
     <button
@@ -416,7 +422,11 @@ export default function VaNiChatPanel({ docked = false }: { docked?: boolean } =
 
       <div
         className={cn(
-          'fixed top-0 h-full z-[201] flex flex-col bg-[#0c0a1a]',
+          'fixed top-0 h-full z-[201] flex flex-col',
+          // Docked, the pane is a surface of THIS app and must use its tokens.
+          // The overlay's literal below is a purple-black belonging to no theme
+          // here; docked it read as a foreign panel bolted onto the page.
+          docked ? 'bg-[var(--card)]' : 'bg-[#0c0a1a]',
           docked
             // Docked: a column sitting against the rail, always present. Width
             // is the same var <main> subtracts, so the two can never disagree.
@@ -483,35 +493,55 @@ export default function VaNiChatPanel({ docked = false }: { docked?: boolean } =
         {/* Chat area */}
         <div ref={scrollRef} className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
 
-          {/* Empty state */}
-          {messages.length === 0 && (
-            <div className="py-2">
-              <div className="text-center mb-6">
-                <div className="w-14 h-14 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-[var(--accent-indigo)]/20 to-[var(--accent-violet)]/20 flex items-center justify-center border border-[var(--accent-indigo)]/20">
-                  <Sparkles className="w-6 h-6 text-[var(--accent-indigo)]" />
+            {/* Empty state */}
+            {messages.length === 0 && (
+              <div className="py-2">
+                {docked ? (
+                  // Docked, the pane is on screen all day: a 150px centred hero
+                  // asking "what would you like to know?" is a prompt to work,
+                  // not information. A quiet label over the list does the job.
+                  <div className="text-[10px] font-mono uppercase tracking-wider text-white/30 mb-2.5 px-1">
+                    Ask about this page
+                  </div>
+                ) : (
+                  <div className="text-center mb-6">
+                    <div className="w-14 h-14 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-[var(--accent-indigo)]/20 to-[var(--accent-violet)]/20 flex items-center justify-center border border-[var(--accent-indigo)]/20">
+                      <Sparkles className="w-6 h-6 text-[var(--accent-indigo)]" />
+                    </div>
+                    <p className="text-sm font-medium text-white/80 mb-1">
+                      {entity ? `Ask about ${entity.symbol}` : 'What would you like to know?'}
+                    </p>
+                    <p className="text-[11px] text-white/30 max-w-[260px] mx-auto leading-relaxed">
+                      {entity
+                        ? `VaNi will analyse ${entity.symbol}'s signals and context.`
+                        : 'VaNi reads the live data on this page and answers your questions.'}
+                    </p>
+                  </div>
+                )}
+                <div className={docked ? 'space-y-1' : 'space-y-2'}>
+                  {/* Eight equally-loud slabs is a menu wall, not a companion.
+                      Docked shows the first four and keeps the rest a click
+                      away, so the list has a top. */}
+                  {(docked && !showAllIntents ? allIntents.slice(0, 4) : allIntents).map(intent => (
+                    <IntentButton
+                      key={intent.intentId}
+                      intentId={intent.intentId}
+                      label={intent.label}
+                      variant={docked ? 'secondary' : 'primary'}
+                    />
+                  ))}
+                  {docked && !showAllIntents && allIntents.length > 4 && (
+                    <button
+                      onClick={() => setShowAllIntents(true)}
+                      className="w-full text-left px-4 py-2 text-[11px] text-[var(--accent-indigo)]/70 hover:text-[var(--accent-indigo)] transition-colors"
+                    >
+                      {allIntents.length - 4} more questions
+                    </button>
+                  )}
+                  {showStockLookup && <StockLookupAffordance variant={docked ? 'secondary' : 'primary'} />}
                 </div>
-                <p className="text-sm font-medium text-white/80 mb-1">
-                  {entity ? `Ask about ${entity.symbol}` : 'What would you like to know?'}
-                </p>
-                <p className="text-[11px] text-white/30 max-w-[260px] mx-auto leading-relaxed">
-                  {entity
-                    ? `VaNi will analyse ${entity.symbol}'s signals and context.`
-                    : 'VaNi reads the live data on this page and answers your questions.'}
-                </p>
               </div>
-              <div className="space-y-2">
-                {allIntents.map(intent => (
-                  <IntentButton
-                    key={intent.intentId}
-                    intentId={intent.intentId}
-                    label={intent.label}
-                    variant="primary"
-                  />
-                ))}
-                {showStockLookup && <StockLookupAffordance variant="primary" />}
-              </div>
-            </div>
-          )}
+            )}
 
           {/* Messages */}
           {messages.map(msg => (

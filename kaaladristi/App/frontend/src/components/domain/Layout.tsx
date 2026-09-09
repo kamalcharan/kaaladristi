@@ -53,7 +53,7 @@ export default function Layout() {
     >
       <NoiseOverlay />
       <Sidebar
-        collapsed={collapsed}
+        collapsed={railCollapsed}
         onToggle={toggle}
         mobileOpen={mobileNavOpen}
         onCloseMobile={() => setMobileNavOpen(false)}
