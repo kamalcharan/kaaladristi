@@ -3,6 +3,7 @@ import { Navigate, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { from } from '@/services/postgrest'
 import { useIndexBreadth } from '@/hooks/useSectorRotation'
+import { useVaNiStore } from '@/stores/vaniStore'
 import TickerRail from '@/components/domain/DashboardV3/TickerRail'
 import PlanetRegimeStrip from '@/components/domain/DashboardV3/PlanetRegimeStrip'
 import BreadthRotation from '@/components/domain/BreadthRotation'
@@ -59,6 +60,24 @@ export default function WorkspacePage() {
 
   const icpMode = profile?.icp_mode ?? 'astro'
   const [activeTab, setActiveTab] = useState<ActiveTab>(icpMode === 'technical' ? 'discovery' : 'today')
+
+  // Tell VaNi which page it is on. /workspace is one route over four tabs, and
+  // usePageContext maps by route alone — so every tab inherited `index_vp`,
+  // whose single Mercury intent was chosen for My Space's ribbon (owner
+  // 2026-07-22). On Today that meant one irrelevant question beside breadth,
+  // ROC, the ticker rail and panchang — exactly the eight `dashboard` intents.
+  // My Space and Bookmarks keep index_vp, so nothing regresses there.
+  const setPageOverride = useVaNiStore((s) => s.setPageOverride)
+  useEffect(() => {
+    const byTab: Record<ActiveTab, 'dashboard' | 'index_vp'> = {
+      today: 'dashboard',
+      discovery: 'dashboard',   // SectorPulse — dashboard.rotation_overview
+      myspace: 'index_vp',
+      bookmarks: 'index_vp',
+    }
+    setPageOverride(byTab[activeTab])
+    return () => setPageOverride(null)
+  }, [activeTab, setPageOverride])
 
   const [drawerOpen, setDrawerOpen]             = useState(false)
   const [activePairKey, setActivePairKey]       = useState<string | null>(null)

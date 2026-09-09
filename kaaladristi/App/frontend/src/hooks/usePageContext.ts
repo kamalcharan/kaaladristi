@@ -4,6 +4,7 @@
  */
 
 import { useLocation, useParams } from 'react-router-dom';
+import { useVaNiStore } from '@/stores/vaniStore';
 import type { VaNiPage } from '@/config/vaniIntents';
 
 export interface PageContext {
@@ -35,6 +36,12 @@ export function usePageContext(): PageContext {
   const location = useLocation();
   const params = useParams();
   const path = location.pathname;
+  // A page may refine its own key — see vaniStore.pageOverride. /workspace is
+  // four tabs behind one path, so the route alone picks the wrong intent set
+  // for three of them.
+  const pageOverride = useVaNiStore((s) => s.pageOverride);
+
+  if (pageOverride) return { page: pageOverride };
 
   for (const entry of PATH_MAP) {
     const match = path.match(entry.pattern);

@@ -10,6 +10,7 @@
  * check membership before any LLM call.
  */
 
+import type { VaNiPage } from '@/config/vaniIntents';
 import { create } from 'zustand';
 
 /** Raw signal values for the line-item confirmation view (StockAskPopover) —
@@ -82,6 +83,14 @@ export interface VaNiScanContext {
 
 interface VaNiState {
   open: boolean;
+  /**
+   * A page's own refinement of its VaNi page key. usePageContext maps by
+   * route, but /workspace is four tabs behind one path — its Today tab shows
+   * breadth, ROC, the ticker rail and panchang (exactly what the dashboard
+   * intents describe) while My Space shows the Mercury ribbon. One route-level
+   * key cannot serve both, so the page publishes which it currently is.
+   */
+  pageOverride: VaNiPage | null;
   entity: VaNiEntity | null;
   scanContext: VaNiScanContext | null;
   /** Intent to auto-fire when the panel opens (e.g. "✦ VaNi explains" link). */
@@ -90,6 +99,7 @@ interface VaNiState {
   openWithEntity: (entity: VaNiEntity) => void;
   openWithIntent: (intentId: string) => void;
   consumePendingIntent: () => string | null;
+  setPageOverride: (page: VaNiPage | null) => void;
   setScanContext: (ctx: VaNiScanContext) => void;
   clearScanContext: () => void;
   close: () => void;
@@ -99,6 +109,7 @@ interface VaNiState {
 export const useVaNiStore = create<VaNiState>((set, get) => ({
   open: false,
   entity: null,
+  pageOverride: null,
   scanContext: null,
   pendingIntentId: null,
   toggle: () => set((s) => ({ open: !s.open, entity: s.open ? null : s.entity })),
@@ -109,6 +120,7 @@ export const useVaNiStore = create<VaNiState>((set, get) => ({
     if (id) set({ pendingIntentId: null });
     return id;
   },
+  setPageOverride: (pageOverride) => set({ pageOverride }),
   setScanContext: (scanContext) => set({ scanContext }),
   clearScanContext: () => set({ scanContext: null }),
   close: () => set({ open: false, entity: null, pendingIntentId: null }),
