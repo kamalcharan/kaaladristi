@@ -3206,6 +3206,130 @@ def fpb_coiling_industries(date: str = None):
     return {"insight": insight, "ai": insight is not None}
 
 
+@app.get('/api/ai/fpb-new-coils')
+def fpb_new_coils():
+    """Stocks newly compressed on the latest bar versus the prior one.
+
+    Computed from km_equity_eod rather than km_scan_results: that matview
+    holds a single trade_date, so it cannot answer "since yesterday" at all.
+    The compression gate is the same one migration 205 applies (atr15/atr60,
+    10-day range, volume death, RS drift, warmup, price floor, stage), just
+    evaluated on two bars instead of the latest. Membership is tight-on-that-
+    bar, so a name dropping out stopped meeting the gate — it did not break
+    out.
+    """
+    if not _AI_ENABLED or not _AI_OPTIONAL_OK:
+        return {"insight": None, "ai": False}
+
+    conn = _db()
+    if not conn:
+        return {"insight": None, "ai": False}
+
+    cache_key = "fpb_new_coils:latest"
+    if cache_key in _insight_cache:
+        return {"insight": _insight_cache[cache_key], "ai": True}
+
+    try:
+        rows = conn.execute("""
+            WITH days AS (
+              SELECT trade_date FROM (
+                SELECT DISTINCT trade_date FROM km_equity_eod
+                WHERE trade_date > CURRENT_DATE - 30 ORDER BY trade_date DESC LIMIT 2
+              ) x
+            ),
+            bounds AS (SELECT MAX(trade_date) AS cur, MIN(trade_date) AS prev FROM days),
+            active AS (
+              SELECT id AS equity_id, symbol, exchange FROM km_equity_symbols
+              WHERE is_active = TRUE AND (isin IS NULL OR isin NOT LIKE 'INF%%')
+            ),
+            fpb_base AS (
+              SELECT e.equity_id, a.symbol, e.trade_date, e.high, e.low, e.close, e.volume,
+                     e.magic_rs, e.stage,
+                     GREATEST(e.high - e.low, abs(e.high - e.prev_close), abs(e.low - e.prev_close)) AS tr
+              FROM km_equity_eod e JOIN active a USING (equity_id)
+              WHERE a.exchange = 'NSE'
+                AND e.trade_date > (SELECT cur FROM bounds) - INTERVAL '140 days'
+                AND e.trade_date <= (SELECT cur FROM bounds)
+            ),
+            w AS (
+              SELECT b.*,
+                avg(tr) OVER w15 AS atr15, avg(tr) OVER w60 AS atr60,
+                avg(volume) OVER w5 AS vol5, avg(volume) OVER w22 AS vol22,
+                max(high) OVER w10 AS hi10, min(low) OVER w10 AS lo10,
+                lag(magic_rs,5) OVER (PARTITION BY equity_id ORDER BY trade_date) AS rs5,
+                count(*) OVER w60 AS nbars
+              FROM fpb_base b
+              WINDOW w15 AS (PARTITION BY equity_id ORDER BY trade_date ROWS BETWEEN 14 PRECEDING AND CURRENT ROW),
+                     w60 AS (PARTITION BY equity_id ORDER BY trade_date ROWS BETWEEN 59 PRECEDING AND CURRENT ROW),
+                     w5  AS (PARTITION BY equity_id ORDER BY trade_date ROWS BETWEEN 4 PRECEDING AND CURRENT ROW),
+                     w22 AS (PARTITION BY equity_id ORDER BY trade_date ROWS BETWEEN 21 PRECEDING AND CURRENT ROW),
+                     w10 AS (PARTITION BY equity_id ORDER BY trade_date ROWS BETWEEN 9 PRECEDING AND CURRENT ROW)
+            ),
+            tight AS (
+              SELECT trade_date, equity_id, symbol FROM w
+              WHERE atr15/NULLIF(atr60,0) < 0.8 AND (hi10-lo10)/NULLIF(close,0) < 0.08
+                AND vol5/NULLIF(vol22,0) < 0.6 AND abs(magic_rs - rs5) < 2
+                AND nbars >= 60 AND close > 20 AND stage NOT IN ('S3','S4')
+                AND trade_date IN (SELECT trade_date FROM days)
+            )
+            SELECT (SELECT cur FROM bounds)::text  AS cur_date,
+                   (SELECT prev FROM bounds)::text AS prior_date,
+                   (SELECT COUNT(*) FROM tight WHERE trade_date=(SELECT cur FROM bounds))::int  AS now_count,
+                   (SELECT COUNT(*) FROM tight WHERE trade_date=(SELECT prev FROM bounds))::int AS prior_count,
+                   COALESCE((SELECT string_agg(symbol, ', ' ORDER BY symbol) FROM tight t
+                             WHERE t.trade_date=(SELECT cur FROM bounds)
+                               AND t.equity_id NOT IN (
+                                 SELECT equity_id FROM tight WHERE trade_date=(SELECT prev FROM bounds))), '') AS new_symbols
+        """)
+        row = rows[0] if rows else None
+    except Exception as e:
+        logging.error(f"[fpb_new_coils] query error: {e}")
+        return {"insight": None, "ai": False}
+
+    if not row or not row.get('cur_date'):
+        return {"insight": None, "ai": False}
+
+    new_syms = (row.get('new_symbols') or '').strip()
+    user_msg = (
+        f"Flower Pot Burst compression on {row['cur_date']} versus the prior session "
+        f"{row['prior_date']}: {row.get('now_count') or 0} stocks tight now, "
+        f"{row.get('prior_count') or 0} tight on the prior bar. "
+        + (f"Newly tight today: {new_syms}."
+           if new_syms else "No stock is newly tight; the set is unchanged from the prior session.")
+    )
+
+    skill = _VANI_INTENTS.get("fpb.new_coils")
+    if not skill:
+        return {"insight": None, "ai": False}
+
+    insight, _provider = _ai_complete_src(
+        system=skill.system_prompt,
+        user=user_msg,
+        max_tokens=skill.max_tokens,
+        temperature=0.4,
+        no_think=True,
+        prefer_local=(skill.complexity == 'low'),
+    )
+    if insight:
+        insight, _rejected = _sebi_post_filter(insight)
+        if _rejected or not insight:
+            logging.warning('[fpb] insight rejected by SEBI post-filter')
+            insight = None
+    if insight:
+        _insight_cache[cache_key] = insight
+        _log_interaction(
+            product="dristiq",
+            endpoint="/api/ai/fpb-new-coils",
+            user_input=user_msg,
+            llm_response=insight,
+            system_prompt=skill.system_prompt,
+            context_payload={},
+            model_version=_AI_MODEL,
+            latency_ms=0,
+        )
+    return {"insight": insight, "ai": insight is not None}
+
+
 @app.get('/api/ai/fpb-confluence-outlook')
 def fpb_confluence_outlook(date: str = None):
     """Top coils by confluence of tightness and Magic RS momentum."""

@@ -288,3 +288,18 @@ export function useFpbConfluenceOutlook(enabled = true) {
     retry: false,
   });
 }
+
+export function useFpbNewCoils(enabled = true) {
+  const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? '';
+  return useQuery({
+    queryKey: ['fpb_new_coils'],
+    queryFn: async (): Promise<{ date: string; insight: string | null; ai: boolean }> => {
+      const res = await fetch(`${pipelineUrl}/api/ai/fpb-new-coils`);
+      if (!res.ok) return { date: '', insight: null, ai: false };
+      return res.json();
+    },
+    staleTime: 6 * 60 * 60 * 1000, // 6 hours — matches the intent's cache_ttl_hours
+    enabled,
+    retry: false,
+  });
+}

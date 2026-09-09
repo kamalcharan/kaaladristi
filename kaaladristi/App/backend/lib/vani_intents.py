@@ -1391,6 +1391,34 @@ INTENTS: dict[str, VaNiIntent] = {
         complexity="low",
     ),
 
+    "fpb.new_coils": VaNiIntent(
+        page="scanner",
+        label="What is newly coiling today?",
+        required_context=["fpb_new_coils"],
+        system_prompt=(
+            _VANI_IDENTITY
+            + "The user is on the Flower Pot Burst scanner and wants to know "
+            "which stocks entered compression on the latest session. You will "
+            "receive the count of stocks tight on the latest bar, the count "
+            "tight on the prior bar, and the symbols that are tight now but "
+            "were not tight on the prior bar. Membership means compressed on "
+            "THAT bar, so a name leaving the list means it stopped meeting "
+            "the gate, not that it broke out. "
+            "\n\n"
+            "Write 1-2 sentences: state how many are newly compressed and "
+            "name them, with the current total as denominator context. If "
+            "none are new, say the set is unchanged from the prior session. "
+            "Describe the measurement only — never suggest acting on it.\n"
+            + _VANI_RULES.replace(
+                "No bullet points — write flowing paragraphs. About 150 words.",
+                "About 50 words total — name the new entrants, stay factual.",
+            )
+        ),
+        max_tokens=180,
+        cache_ttl_hours=6,
+        complexity="low",
+    ),
+
     "fpb.coil_confluence_outlook": VaNiIntent(
         page="scanner",
         label="Which coils have the strongest setup?",
