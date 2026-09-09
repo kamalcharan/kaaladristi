@@ -72,6 +72,9 @@ function fmtMcap(n: number | null | undefined): string | null {
 function fmtLevel(lvl: StudioLevel, v: number | null | undefined): string {
   if (lvl.kind === 'price') return fmtPrice(v);
   if (lvl.kind === 'count') return fmtCount(v);
+  // A bounded index, not a change — no sign, two decimals, because Flower Pot
+  // tightness separates its rows in the second one (0.00 to 2.51 live).
+  if (lvl.kind === 'score') return v == null ? '—' : v.toFixed(2);
   return fmtSignedPct(v);
 }
 

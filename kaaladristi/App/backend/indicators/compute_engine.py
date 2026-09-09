@@ -277,24 +277,28 @@ def compute_rolling_range(df: pd.DataFrame) -> dict:
     surge_22d = avg_amt_22d.div(avg_amt_66d.replace(0, np.nan)).round(4)
 
     # ── score_5d ──────────────────────────────────────────────────────────
+    # Formula: if pct ≤ 0 then 0, else pct + max(0, (surge − 1) × 100)
+    # Unified with index/sector score formula (migration 116, migration 114)
     surge_5d = avg_amt_5d.div(avg_amt_22d.replace(0, np.nan))
     score_5d = pd.Series(
         np.where(
-            surge_5d >= 1.0,
-            (surge_5d ** 2 * 25).round(2),
-            pct_5d.where(pct_5d > 0, 0.0).round(2),
+            pct_5d <= 0,
+            0.0,
+            (pct_5d + np.maximum(0, (surge_5d - 1) * 100)).round(2),
         ),
         index=df.index,
         dtype=float,
     ).where(surge_5d.notna() & pct_5d.notna())
 
     # ── score_22d ─────────────────────────────────────────────────────────
+    # Formula: if pct ≤ 0 then 0, else pct + max(0, (surge − 1) × 100)
+    # Unified with index/sector score formula (migration 116, migration 114)
     surge_22d_ratio = avg_amt_22d.div(avg_amt_66d.replace(0, np.nan))
     score_22d = pd.Series(
         np.where(
-            surge_22d_ratio >= 1.0,
-            (surge_22d_ratio ** 2 * 25).round(2),
-            pct_22d.where(pct_22d > 0, 0.0).round(2),
+            pct_22d <= 0,
+            0.0,
+            (pct_22d + np.maximum(0, (surge_22d_ratio - 1) * 100)).round(2),
         ),
         index=df.index,
         dtype=float,

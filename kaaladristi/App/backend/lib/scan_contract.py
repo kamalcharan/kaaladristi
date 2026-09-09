@@ -282,12 +282,27 @@ def columns_for(preset: str, meta: dict, overrides: dict, groups: dict,
 # selects *, and the mapper neither mapped them nor mentioned them — the UI
 # stayed blank while a DB-only audit said "populated". This function makes the
 # mapper part of the contract.
-def mapper_fields(mapper_name: str, src: str | None = None) -> dict[str, str]:
-    """field -> 'mapped' | 'null' for every field the named mapper returns."""
+def mapper_fields(mapper_name: str, src: str | None = None,
+                  _seen: set[str] | None = None) -> dict[str, str]:
+    """field -> 'mapped' | 'null' for every field the named mapper returns.
+
+    A mapper may DELEGATE rather than write every field out: since migration
+    205 fpbRowToScanStock spreads `...scanRowToScanStock(r)` and overlays only
+    the Flower Pot columns. Without following the spread this reads the
+    overlay alone and reports the other seventy fields as gaps -- the audit
+    would fail on a mapper that is strictly more complete than the one it
+    replaced. Base fields are inherited first so the overlay wins.
+    """
     if src is None:
         src = _read(SCAN_ENGINE)
+    _seen = set() if _seen is None else _seen
+    if mapper_name in _seen:
+        raise ValueError(f'mapper delegation cycle at {mapper_name}')
+    _seen.add(mapper_name)
     body = _block(src, rf'function {re.escape(mapper_name)}\([^)]*\)[^{{]*', '{', '}')
     out = {}
+    for base in re.findall(r'\.\.\.(\w+RowToScanStock)\s*\(', body):
+        out.update(mapper_fields(base, src, _seen))
     for m in re.finditer(r'^\s{4}(\w+):\s*(.+?),?\s*$', body, re.M):
         field, expr = m.group(1), m.group(2).rstrip(',')
         out[field] = 'null' if expr == 'null' else 'mapped'

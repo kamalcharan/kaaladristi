@@ -491,6 +491,32 @@ export const ALL_FIELDS: Record<string, FieldConfig> = {
     width: 72,
     colorFn: () => 'var(--bull)',
   },
+  // ── Migration 205 ────────────────────────────────────────────────────────
+  fpb_hi10: {
+    key: 'fpb_hi10',
+    label: '10D High',
+    tooltip: 'Highest high of the last 10 sessions — the upper wall of the coil. A burst is a close above the PRIOR bar\'s value.',
+    type: 'price',
+    width: 82,
+    colorFn: () => 'var(--text-secondary)',
+  },
+  fpb_lo10: {
+    key: 'fpb_lo10',
+    label: '10D Low',
+    tooltip: 'Lowest low of the last 10 sessions — the lower wall of the coil. A shatter is a close below the PRIOR bar\'s value.',
+    type: 'price',
+    width: 82,
+    colorFn: () => 'var(--text-secondary)',
+  },
+  fpb_tight_today: {
+    key: 'fpb_tight_today',
+    label: 'Tight Today',
+    tooltip: 'Whether this bar itself meets the compression gate. The scan admits any stock compressed within the last 10 sessions, so a listed coil may already have loosened — this says which are still tightening.',
+    type: 'category',
+    width: 88,
+    formatFn: (val: any) => (val == null ? '—' : val ? 'Yes' : 'No'),
+    colorFn: (val: any) => (val ? 'var(--text-primary)' : 'var(--text-faint)'),
+  },
 
   // ── Waking Giants / First Ascent (migration 174) ──────────────────────────
   wg_phase: {

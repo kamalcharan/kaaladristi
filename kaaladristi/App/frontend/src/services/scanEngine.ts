@@ -2031,46 +2031,24 @@ function computeFpbStock(bars: any[], sym: EquitySymbolRow | undefined): ScanSto
   };
 }
 
-/** Map a km_scan_results row (preset_id='flower_pot_burst') to a ScanStock. */
+/** Map a km_scan_results row (preset_id='flower_pot_burst') to a ScanStock.
+ *
+ *  Delegates to scanRowToScanStock and overlays the Flower Pot columns.
+ *  Before migration 205 this mapper wrote out every field by hand and passed
+ *  null for the shared ones — which was correct at the time, because the arm
+ *  projected typed NULLs for flow_type / rsi_14 / score_5d / w52_high / the
+ *  dot trio. 205 builds the arm on the same `stock` row every other preset
+ *  uses, so hand-written nulls would now be throwing away real values. One
+ *  mapper also means the next column the matview grows reaches Flower Pot
+ *  without a second edit. */
 function fpbRowToScanStock(r: any): ScanStock {
   const num = (v: any) => (v == null ? null : Number(v));
   return {
-    equity_id: r.equity_id,
-    symbol: r.symbol ?? String(r.equity_id),
-    company_name: r.company_name ?? null,
-    industry: r.industry ?? null,
-    exchange: r.exchange ?? null,
-    mcap_cr: num(r.mcap_cr),
-    trade_date: r.trade_date,
-    close: Number(r.close),
-    open: null, high: null, low: null,
-    pct_chng: num(r.pct_chng),
-    magic_rs: num(r.magic_rs),
-    magic_rs_zone: r.magic_rs_zone ?? null,
-    rss_value: null, rss_spread: null,
-    rsi_14: null,
-    rvol: num(r.rvol),
-    flow_type: null,
-    supertrend_dir: null,
-    sma_50: null, sma_150: null, sma_200: null,
-    ema_20: null, atr_14: null,
-    w52_high: null, w52_low: null, lifetime_high: null,
-    avg_amt_5d: null, avg_amt_22d: null, avg_amt_66d: null, delivery_surge_x: null,
-    sniper_inst: null, sniper_hot: null,
-    accum_distrib: null, volume_divergence_flag: null,
-    delivery_pct: num(r.delivery_pct),
-    deliv_value_cr: null,
-    has_recent_svd: false, has_recent_sbd: false, has_recent_syd: false,
-    pctBelow52wHigh: null,
-    reward: null, rewardPct: null,
-    magicRsTrend: [],
-    score_5d: null, score_22d: null,
-    xAmt: null,
-    rel_5d_n50: null, rel_22d_n50: null, rel_66d_n50: null,
-    rel_5d_n500: null, rel_22d_n500: null, rel_66d_n500: null,
+    ...scanRowToScanStock(r),
+    // The release IS the highlight — flower_pot_burst has no vani_rule, so the
+    // arm sets vani_flag = is_burst and this restates it at the mapper rather
+    // than leaving the meaning only in SQL.
     vaniOpportunity: r.fpb_phase === 'BURST',
-    stage: r.stage ?? null,
-    d_pct: r.pct_chng != null ? Math.round(Number(r.pct_chng) * 100) / 100 : null,
     fpb_phase: r.fpb_phase ?? null,
     fpb_quality: num(r.fpb_quality),
     fpb_compression_score: num(r.fpb_compression_score),
@@ -2080,6 +2058,14 @@ function fpbRowToScanStock(r: any): ScanStock {
     fpb_atr_compression: num(r.fpb_atr_compression),
     fpb_vol_death: num(r.fpb_vol_death),
     fpb_setup_days: num(r.fpb_setup_days),
+    // Migration 205 — undefined until it runs. Kept NULL rather than coerced
+    // to false, so the page can tell "not tight today" from "the column is not
+    // there yet" and hide the tile instead of reading a confident zero.
+    fpb_hi10: num(r.fpb_hi10),
+    fpb_lo10: num(r.fpb_lo10),
+    fpb_tight_today: r.fpb_tight_today == null
+      ? null
+      : (r.fpb_tight_today === true || r.fpb_tight_today === 't'),
   };
 }
 
