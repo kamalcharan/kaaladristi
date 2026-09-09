@@ -2994,13 +2994,14 @@ def fpb_recent_outcomes(date: str = None):
 
         rows = conn.execute("""
             SELECT
-                SUM(CASE WHEN fpb_outcome = 'REACHED_TARGET' THEN 1 ELSE 0 END)::int as hits,
-                SUM(CASE WHEN fpb_outcome = 'CRACKED' THEN 1 ELSE 0 END)::int as cracked,
-                SUM(CASE WHEN fpb_outcome = 'EXPIRED' THEN 1 ELSE 0 END)::int as expired,
-                SUM(CASE WHEN fpb_outcome IS NULL THEN 1 ELSE 0 END)::int as holding,
+                SUM(CASE WHEN status = 'TARGET_HIT' THEN 1 ELSE 0 END)::int as hits,
+                SUM(CASE WHEN status = 'CRACKED'    THEN 1 ELSE 0 END)::int as cracked,
+                SUM(CASE WHEN status = 'STOPPED'    THEN 1 ELSE 0 END)::int as stopped,
+                SUM(CASE WHEN status = 'EXPIRED'    THEN 1 ELSE 0 END)::int as expired,
+                SUM(CASE WHEN status = 'HOLDING'    THEN 1 ELSE 0 END)::int as holding,
                 COUNT(*)::int as total
             FROM km_fpb_active
-            WHERE fpb_outcome IS NOT NULL OR released_at >= NOW() - interval '180 days'
+            WHERE release_date >= CURRENT_DATE - 180
         """)
         row = rows[0] if rows else None
     except Exception as e:
@@ -3012,8 +3013,9 @@ def fpb_recent_outcomes(date: str = None):
 
     user_msg = (
         f"Flower Pot Burst releases since {(datetime.now() - timedelta(days=180)).strftime('%Y-%m-%d')}: "
-        f"{row.get('hits') or 0} reached target, {row.get('cracked') or 0} cracked stops, "
-        f"{row.get('holding') or 0} still holding, {row.get('expired') or 0} expired windows. "
+        f"{row.get('hits') or 0} reached target, {row.get('cracked') or 0} cracked, "
+        f"{row.get('stopped') or 0} stopped out, {row.get('holding') or 0} still holding, "
+        f"{row.get('expired') or 0} expired windows. "
         f"Total: {row.get('total')} releases."
     )
 
