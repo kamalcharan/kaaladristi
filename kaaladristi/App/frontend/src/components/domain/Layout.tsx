@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Outlet } from 'react-router-dom';
+import { Outlet, useLocation } from 'react-router-dom';
 import { Menu } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useVaNiStore } from '@/stores/vaniStore';
@@ -31,8 +31,26 @@ export default function Layout() {
     return !v;
   });
 
+  // VaNi is docked as a column on Workspace instead of opening as an overlay.
+  // The rail is forced narrow while it is: a 220px rail plus a 360px pane
+  // leaves a 1440 laptop only 860px of canvas for a 12-column grid, where the
+  // 52px rail leaves 1028. The stored preference is untouched — it applies
+  // again on every other route.
+  const vaniDocked = useLocation().pathname.startsWith('/workspace');
+  const railCollapsed = collapsed || vaniDocked;
+
   return (
-    <div className="flex min-h-screen" style={{ background: 'var(--bg)', color: 'var(--text-primary)' }}>
+    <div
+      className="flex min-h-screen"
+      style={{
+        background: 'var(--bg)',
+        color: 'var(--text-primary)',
+        // On the wrapper, not on <main>: the docked pane is main's sibling and
+        // has to read the rail width to sit beside it.
+        '--sidebar-w': railCollapsed ? '52px' : '220px',
+        '--vani-w': vaniDocked ? '360px' : '0px',
+      } as React.CSSProperties}
+    >
       <NoiseOverlay />
       <Sidebar
         collapsed={collapsed}
@@ -48,8 +66,8 @@ export default function Layout() {
           would win over any class unconditionally and break the mobile
           `ml-0`, so the actual margin is class-driven, referencing the var. */}
       <main
-        className="flex-1 relative transition-[margin-left] duration-300 ml-0 md:ml-[var(--sidebar-w)]"
-        style={{ '--sidebar-w': collapsed ? '52px' : '220px', minWidth: 0 } as React.CSSProperties}
+        className="flex-1 relative transition-[margin-left] duration-300 ml-0 md:ml-[calc(var(--sidebar-w)+var(--vani-w))]"
+          style={{ minWidth: 0 }}
       >
         {/* ── Topbar — matches dashboard-LOCKED.html .topbar ── */}
         <header
@@ -127,7 +145,7 @@ export default function Layout() {
         </div>
       </main>
 
-      <VaNiChatPanel />
+      <VaNiChatPanel docked={vaniDocked} />
       <StockAskPopover />
       <JobMonitor />
     </div>
