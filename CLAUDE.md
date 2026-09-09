@@ -703,26 +703,53 @@ are at the tail of the migration.
   scored 0.00 tightness. `fpb_tight_today` makes that visible instead of
   leaving a card whose hero reads 0.00 on a row labelled "coiling".
 
-**Still open — one decision, then a small build:**
+**VaNi intents for Flower Pot — SHIPPED (2026-09-09). All five live.**
 
-**VaNi intents for Flower Pot.** Not built; the owner has not picked. Level 1
-(`scanner.explain_preset` / `read_results`) already works here. Candidates, in
-the order I'd ship them:
+`fpb.new_coils`, `fpb.recent_outcomes`, `fpb.why_watch_coil`,
+`fpb.coiling_industries`, `fpb.coil_confluence_outlook` — each registered in
+`lib/vani_intents.py`, served by a `GET /api/ai/fpb-*` endpoint, and offered as
+a chip on `components/domain/FpbVaNiCard.tsx`. That card mirrors
+ScannerStudio's `ScannerVaNiCard` markup but is a separate component: the seven
+`scanner.*` intents POST a facts payload through `useVaNiAsk`, the `fpb.*` ones
+are plain GETs returning `{insight, ai}`. Hooks take an `enabled` flag so a
+question fetches only on chip click — never four LLM calls per page load.
 
-1. `recent_outcomes` — from `km_fpb_active`, the only scanner with real
-   outcome data (2026-09-07: 6 target hits, 3 cracked, 1 stopped, 3 holding,
-   7 expired, over 20 releases since 07-28). Must not imply a rate from 20.
-2. `why_watch_coil` — tightness, coiled days, volume death. It is also the
-   intent that explains the 26-of-102 gap in prose.
-3. `coiling_industries` — computable, but must state its denominator; the top
-   industry today is Specialty Chemicals with 5 names.
-4. `new_coils` — needs `compute_scan_membership_snapshot.py` extended to this
-   preset (it is the ONE preset with no rows in `km_scan_membership_daily`)
-   plus a backfill. Define membership as **tight today**, not arm presence:
-   otherwise a coil "leaving" means it decompressed ten sessions ago.
+**`new_coils` did NOT need the membership snapshot.** The earlier plan said it
+required `compute_scan_membership_snapshot.py` extended plus a backfill,
+because `flower_pot_burst` is the one preset with no rows in
+`km_scan_membership_daily`. That premise was wrong: `km_scan_results` holds a
+single `trade_date` (it is current-state), but the compression gate is
+recomputable from raw `km_equity_eod` history, so the endpoint derives both
+bars itself. Membership is **tight on that bar** — a name leaving the list
+stopped meeting the gate, it did not break out. The standalone query was
+validated against the matview (both return 8 tight coils for 2026-09-08).
 
-Each needs a `_SKILL_SYSTEM` in `lib/ai_prompts.py`, an endpoint, and a card —
-same shape as the seven Studio intents.
+**Three bugs found while wiring these — all silent, all expensive:**
+
+1. **`_VaNi_INTENTS` vs `_VANI_INTENTS`.** All four original endpoints looked
+   up a name that is defined nowhere. Every call raised NameError → 500 →
+   the card's `insight: null` → "VaNi has nothing to report for this question
+   today", the same string it shows for genuinely empty data. `pyflakes` finds
+   this in one second. **Run `python -m pyflakes` on the backend before
+   believing any "no data" symptom** — it also flags five live undefined names
+   in `lib/integrity_checks.py` (`db_meta` 512, `unmeasured_n` 590-596) that
+   are still unfixed.
+2. **`fpb.recent_outcomes` queried columns that do not exist.**
+   `km_fpb_active` has `status` and `release_date`; the query used
+   `fpb_outcome` and `released_at`, and tested `'REACHED_TARGET'` where the
+   column stores `'TARGET_HIT'`. `'STOPPED'` had no branch at all.
+3. **The `fpb.*` endpoints never reached Qwen.** They used the legacy
+   `_ai_complete` path, whose `prefer_local` defaults to False, so every answer
+   came from the cloud provider. All five intents are `complexity='low'` and
+   now pass `prefer_local=(skill.complexity == 'low')` via
+   `complete_with_source`, matching `/api/vani/ask`. They also skipped
+   `_sebi_post_filter` entirely and served raw model output; that is now
+   applied.
+
+**Still open:** `prefer_local` appears in only the `/api/vani/ask` family
+against 19 `_ai_complete(` call sites — every other legacy `GET /api/ai/*`
+endpoint (panchang-insight, breadth-insight, market-pulse-insight, …) still
+routes to the cloud and still skips the SEBI filter.
 
 **D1 (no `vani_rule`) stays deferred**, unchanged: tightness is now stored per
 day on the matview but still not on `km_equity_eod`, and `km_fpb_active` needs

@@ -5,6 +5,7 @@ import {
   useFpbWhyWatchCoil,
   useFpbCoilingIndustries,
   useFpbConfluenceOutlook,
+  useFpbNewCoils,
 } from '@/hooks/useDashboardExtras'
 
 /**
@@ -22,9 +23,11 @@ import {
  * here from Breakout Surge meets the same object.
  */
 
-type FpbIntentKey = 'recent_outcomes' | 'why_watch_coil' | 'coiling_industries' | 'confluence_outlook'
+type FpbIntentKey =
+  | 'new_coils' | 'recent_outcomes' | 'why_watch_coil' | 'coiling_industries' | 'confluence_outlook'
 
 const QUESTIONS: { key: FpbIntentKey; question: string }[] = [
+  { key: 'new_coils', question: 'What is newly coiling today?' },
   { key: 'recent_outcomes', question: 'How are active coils performing?' },
   { key: 'why_watch_coil', question: 'Why does tightness matter?' },
   { key: 'coiling_industries', question: 'Which industries are coiling?' },
@@ -36,12 +39,14 @@ export default function FpbVaNiCard() {
 
   // All four run unconditionally (rules of hooks); `enabled` keeps the fetch
   // to the selected question, so opening the page costs no LLM calls.
+  const newCoils = useFpbNewCoils(intent === 'new_coils')
   const outcomes = useFpbRecentOutcomes(intent === 'recent_outcomes')
   const tightness = useFpbWhyWatchCoil(intent === 'why_watch_coil')
   const industries = useFpbCoilingIndustries(intent === 'coiling_industries')
   const confluence = useFpbConfluenceOutlook(intent === 'confluence_outlook')
 
   const byIntent = {
+    new_coils: newCoils,
     recent_outcomes: outcomes,
     why_watch_coil: tightness,
     coiling_industries: industries,
