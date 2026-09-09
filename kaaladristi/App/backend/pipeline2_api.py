@@ -3019,7 +3019,7 @@ def fpb_recent_outcomes(date: str = None):
         f"Total: {row.get('total')} releases."
     )
 
-    skill = _VaNi_INTENTS.get("fpb.recent_outcomes")
+    skill = _VANI_INTENTS.get("fpb.recent_outcomes")
     if not skill:
         return {"insight": None, "ai": False}
 
@@ -3077,7 +3077,7 @@ def fpb_why_watch_coil():
         "Explain why this compression-volume pattern matters for traders and why the list is smaller."
     )
 
-    skill = _VaNi_INTENTS.get("fpb.why_watch_coil")
+    skill = _VANI_INTENTS.get("fpb.why_watch_coil")
     if not skill:
         return {"insight": None, "ai": False}
 
@@ -3176,7 +3176,7 @@ def fpb_coiling_industries(date: str = None):
         f"List the top industries with their coil counts as a proportion of the total."
     )
 
-    skill = _VaNi_INTENTS.get("fpb.coiling_industries")
+    skill = _VANI_INTENTS.get("fpb.coiling_industries")
     if not skill:
         return {"insight": None, "ai": False}
 
@@ -3324,7 +3324,7 @@ def fpb_confluence_outlook(date: str = None):
         f"Explain the setup quality difference and what confluence means for risk."
     )
 
-    skill = _VaNi_INTENTS.get("fpb.coil_confluence_outlook")
+    skill = _VANI_INTENTS.get("fpb.coil_confluence_outlook")
     if not skill:
         return {"insight": None, "ai": False}
 
