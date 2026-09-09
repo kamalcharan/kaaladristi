@@ -72,7 +72,7 @@ async function resolveEquity(q: string): Promise<{ id: number; symbol: string } 
   return null;
 }
 
-export default function VaNiChatPanel() {
+export default function VaNiChatPanel({ docked = false }: { docked?: boolean } = {}) {
   const {
     open, entity: storeEntity, close, clearEntity,
     scanContext, pendingIntentId, consumePendingIntent,
@@ -406,7 +406,8 @@ export default function VaNiChatPanel() {
 
   return (
     <>
-      {open && (
+      {/* No scrim when docked — it would dim the workspace being worked in. */}
+      {!docked && open && (
         <div
           className="fixed inset-0 bg-black/40 backdrop-blur-[3px] z-[200]"
           onClick={close}
@@ -415,13 +416,20 @@ export default function VaNiChatPanel() {
 
       <div
         className={cn(
-          'fixed top-0 right-0 h-full z-[201] flex flex-col',
-          'bg-[#0c0a1a] border-l-2 border-[var(--accent-indigo)]/30',
-          'shadow-[−8px_0_30px_rgba(99,102,241,0.15)]',
-          'transition-transform duration-300 ease-out',
-          'w-full sm:w-[420px] lg:w-[400px]',
-          open ? 'translate-x-0' : 'translate-x-full',
+          'fixed top-0 h-full z-[201] flex flex-col bg-[#0c0a1a]',
+          docked
+            // Docked: a column sitting against the rail, always present. Width
+            // is the same var <main> subtracts, so the two can never disagree.
+            ? 'border-r-2 border-[var(--accent-indigo)]/30 w-[var(--vani-w)] translate-x-0'
+            : cn(
+                'right-0 border-l-2 border-[var(--accent-indigo)]/30',
+                'shadow-[−8px_0_30px_rgba(99,102,241,0.15)]',
+                'transition-transform duration-300 ease-out',
+                'w-full sm:w-[420px] lg:w-[400px]',
+                open ? 'translate-x-0' : 'translate-x-full',
+              ),
         )}
+        style={docked ? { left: 'var(--sidebar-w)' } : undefined}
       >
         {/* Header */}
         <div className="flex items-center gap-3 px-5 py-4 border-b border-[var(--accent-indigo)]/20 shrink-0 bg-[var(--bg)]">
@@ -445,12 +453,15 @@ export default function VaNiChatPanel() {
               <RotateCcw className="w-3.5 h-3.5" />
             </button>
           )}
-          <button
-            onClick={close}
-            className="w-8 h-8 rounded-lg flex items-center justify-center text-white/30 hover:bg-white/10 hover:text-white/70 transition-colors"
-          >
-            <X className="w-4 h-4" />
-          </button>
+          {/* Docked, there is nothing to close to — the column stays. */}
+          {!docked && (
+            <button
+              onClick={close}
+              className="w-8 h-8 rounded-lg flex items-center justify-center text-white/30 hover:bg-white/10 hover:text-white/70 transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
         </div>
 
         {/* Entity banner */}
