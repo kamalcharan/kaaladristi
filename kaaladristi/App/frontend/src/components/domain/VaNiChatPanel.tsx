@@ -422,24 +422,34 @@ export default function VaNiChatPanel({ docked = false }: { docked?: boolean } =
 
       <div
         className={cn(
-          'fixed top-0 h-full z-[201] flex flex-col',
+          'flex flex-col',
           // Docked, the pane is a surface of THIS app and must use its tokens.
           // The overlay's literal below is a purple-black belonging to no theme
           // here; docked it read as a foreign panel bolted onto the page.
           docked ? 'bg-[var(--card)]' : 'bg-[#0c0a1a]',
           docked
-            // Docked: a column sitting against the rail, always present. Width
-            // is the same var <main> subtracts, so the two can never disagree.
-            ? 'border-r-2 border-[var(--accent-indigo)]/30 w-[var(--vani-w)] translate-x-0'
+            // Docked: a card in the page's own content row, sharing its gutter
+            // and radius, sticky under the topbar. Not fixed and not
+            // full-height — spanning the topbar row is what made the screen
+            // look like two applications stitched together.
+            ? 'sticky self-start shrink-0 w-[var(--vani-w)] rounded-2xl border border-[var(--border)] overflow-hidden'
             : cn(
-                'right-0 border-l-2 border-[var(--accent-indigo)]/30',
+                'fixed top-0 h-full z-[201] right-0',
+                'border-l-2 border-[var(--accent-indigo)]/30',
                 'shadow-[−8px_0_30px_rgba(99,102,241,0.15)]',
                 'transition-transform duration-300 ease-out',
                 'w-full sm:w-[420px] lg:w-[400px]',
                 open ? 'translate-x-0' : 'translate-x-full',
               ),
         )}
-        style={docked ? { left: 'var(--sidebar-w)' } : undefined}
+        style={
+          docked
+            ? {
+                top: 'calc(var(--topbar-h) + 1rem)',
+                height: 'calc(100vh - var(--topbar-h) - 3rem)',
+              }
+            : undefined
+        }
       >
         {/* Header */}
         <div className="flex items-center gap-3 px-5 py-4 border-b border-[var(--accent-indigo)]/20 shrink-0 bg-[var(--bg)]">

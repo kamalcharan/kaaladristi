@@ -49,6 +49,7 @@ export default function Layout() {
         // has to read the rail width to sit beside it.
         '--sidebar-w': railCollapsed ? '52px' : '220px',
         '--vani-w': vaniDocked ? '360px' : '0px',
+        '--topbar-h': '75px',
       } as React.CSSProperties}
     >
       <NoiseOverlay />
@@ -66,7 +67,7 @@ export default function Layout() {
           would win over any class unconditionally and break the mobile
           `ml-0`, so the actual margin is class-driven, referencing the var. */}
       <main
-        className="flex-1 relative transition-[margin-left] duration-300 ml-0 md:ml-[calc(var(--sidebar-w)+var(--vani-w))]"
+        className="flex-1 relative transition-[margin-left] duration-300 ml-0 md:ml-[var(--sidebar-w)]"
           style={{ minWidth: 0 }}
       >
         {/* ── Topbar — matches dashboard-LOCKED.html .topbar ── */}
@@ -139,13 +140,18 @@ export default function Layout() {
           </div>
         </header>
 
-        {/* Page content */}
-        <div className="relative z-10 p-4 pb-8">
-          <Outlet />
+        {/* Page content. The docked pane lives INSIDE this row, below the
+            topbar — as a sibling of <main> it split the topbar in two and the
+            screen read as two applications stitched together. */}
+        <div className="relative z-10 flex gap-4 p-4 pb-8">
+          {vaniDocked && <VaNiChatPanel docked />}
+          <div className="flex-1 min-w-0">
+            <Outlet />
+          </div>
         </div>
       </main>
 
-      <VaNiChatPanel docked={vaniDocked} />
+      {!vaniDocked && <VaNiChatPanel />}
       <StockAskPopover />
       <JobMonitor />
     </div>
