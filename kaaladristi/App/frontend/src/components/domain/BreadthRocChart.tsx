@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   ComposedChart, Line, Area, XAxis, YAxis, Tooltip,
   ResponsiveContainer, ReferenceLine, ReferenceArea,
@@ -16,6 +16,7 @@ const PERIODS = [
   { label: '66D', days: 66 },
 ] as const;
 type PeriodLabel = typeof PERIODS[number]['label'];
+const MAX_PERIOD_DAYS = Math.max(...PERIODS.map(p => p.days));
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 
@@ -117,10 +118,15 @@ export default function BreadthRocChart({
   const [period, setPeriod] = useState<PeriodLabel>('66D');
   const days = PERIODS.find(p => p.label === period)!.days;
 
-  // Internal hook always runs (React rules). Its result is used only when no prop data.
-  const internal = useBreadthRoc(days);
+  // Full window fetched once, sliced locally — see MarketBreadthChart for why:
+  // an injected series is fetched by the parent at a fixed window, so keying
+  // the fetch on `days` left this toggle inert wherever data is injected.
+  // Gated on the contract, not on arrival — see MarketBreadthChart.
+  const externallyFed = dataProp !== undefined || isLoadingProp !== undefined;
+  const internal = useBreadthRoc(MAX_PERIOD_DAYS, !externallyFed);
 
-  const data      = dataProp      ?? (internal.data    ?? []);
+  const source    = dataProp      ?? (internal.data    ?? []);
+  const data      = useMemo(() => source.slice(-days), [source, days]);
   const isLoading = isLoadingProp ?? internal.isLoading;
   const isError   = isErrorProp   ?? internal.isError;
 
