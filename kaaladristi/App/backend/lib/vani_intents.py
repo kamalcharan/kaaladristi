@@ -1304,6 +1304,126 @@ INTENTS: dict[str, VaNiIntent] = {
         cache_ttl_hours=24,
         complexity="low",
     ),
+
+    # ── Flower Pot Burst Scanner Intents ──────────────────────────────────────
+
+    "fpb.recent_outcomes": VaNiIntent(
+        page="scanner",
+        label="How are active coils performing?",
+        required_context=["fpb_outcomes"],
+        system_prompt=(
+            _VANI_IDENTITY
+            + "The user is on the Flower Pot Burst scanner and wants to know "
+            "how past setups have performed. You will receive a journal of "
+            "releases since a date, showing outcome distribution (target hits, "
+            "cracked stops, expired windows, holdings) and the count of each. "
+            "\n\n"
+            "Write 2 short sentences: (1) State the outcome distribution in "
+            "plain terms — how many reached target, how many stopped, holdings "
+            "in progress, and expired windows. (2) What this distribution "
+            "tells a trader about the setup's recent track record, WITHOUT "
+            "implying this predicts future outcomes — describe the measurement "
+            "only, not the odds.\n"
+            + _VANI_RULES.replace(
+                "No bullet points — write flowing paragraphs. About 150 words.",
+                "About 60 words total — stay factual and measurement-focused.",
+            )
+        ),
+        max_tokens=200,
+        cache_ttl_hours=24,
+        complexity="low",
+    ),
+
+    "fpb.why_watch_coil": VaNiIntent(
+        page="scanner",
+        label="Why does tightness matter?",
+        required_context=["fpb_tightness_explanation"],
+        system_prompt=(
+            _VANI_IDENTITY
+            + "The user is on the Flower Pot Burst scanner and wants to "
+            "understand what makes a coil worth watching. You will receive "
+            "the criteria: tightness score (compression intensity), coiled "
+            "days (how many sessions compressed), volume death (declining "
+            "volume during compression), and the scan population (today's "
+            "count vs. typical). "
+            "\n\n"
+            "Write 3 sentences: (1) What tightness IS — price compressing "
+            "into a narrow range with declining volume (quiet accumulation). "
+            "(2) Why this matters — tight coils have structural conditions "
+            "for sharper moves when released, but are NOT predictions. "
+            "(3) Why the list is smaller than breadth suggests — explain "
+            "briefly that most coils don't meet the volume and tightness "
+            "gates simultaneously, so this is a filtered observation of rare "
+            "conditions, not a broader market signal.\n"
+            + _VANI_RULES.replace(
+                "No bullet points — write flowing paragraphs. About 150 words.",
+                "About 90 words total — explain the idea, not the formula.",
+            )
+        ),
+        max_tokens=220,
+        cache_ttl_hours=24,
+        complexity="low",
+    ),
+
+    "fpb.coiling_industries": VaNiIntent(
+        page="scanner",
+        label="Which industries are coiling?",
+        required_context=["fpb_industry_summary"],
+        system_prompt=(
+            _VANI_IDENTITY
+            + "The user is on the Flower Pot Burst scanner and wants to see "
+            "which industries have tight setups active. You will receive a "
+            "list of industries with their active coil counts and the total "
+            "active coils in the scan. "
+            "\n\n"
+            "Write 1-2 sentences: Name the top 2-3 industries by coil count, "
+            "state the raw count for each, and mention the total scan count "
+            "as denominator context (e.g. '5 of 68 total tight coils are in "
+            "Specialty Chemicals'). This is a factual summary, not a sector "
+            "call.\n"
+            + _VANI_RULES.replace(
+                "No bullet points — write flowing paragraphs. About 150 words.",
+                "About 50 words total — list the top industries, stay factual.",
+            )
+        ),
+        max_tokens=180,
+        cache_ttl_hours=6,
+        complexity="low",
+    ),
+
+    "fpb.coil_confluence_outlook": VaNiIntent(
+        page="scanner",
+        label="Which coils have the strongest setup?",
+        required_context=["fpb_confluence_data"],
+        system_prompt=(
+            _VANI_IDENTITY
+            + "The user is on the Flower Pot Burst scanner and wants to know "
+            "which coils have the strongest confluence between tightness and "
+            "relative strength momentum. You will receive two lists: (1) top "
+            "3 coils with tight compression AND improving Magic RS (increasing "
+            "relative strength), and (2) top 3 coils that are tight but "
+            "experiencing degrading Magic RS (falling relative strength). "
+            "Each entry shows: stock name, tightness score, and 5-day RS change. "
+            "\n\n"
+            "Write 3 sentences: (1) Describe the strongest setups — tight "
+            "coils with improving relative strength represent accumulation "
+            "with building momentum. (2) Describe the caution setups — tight "
+            "but degrading RS suggests compression while relative strength "
+            "fades, which raises the risk that decompression breaks below "
+            "support instead of exploding upward. (3) End with one line "
+            "stating this is a confluence observation, not a prediction — "
+            "confluence increases setup quality but does not determine outcome. "
+            "Name at most one stock in each group as example; do not list all six. "
+            "\n"
+            + _VANI_RULES.replace(
+                "No bullet points — write flowing paragraphs. About 150 words.",
+                "About 100 words total — explain confluence, use 1-2 examples.",
+            )
+        ),
+        max_tokens=250,
+        cache_ttl_hours=12,
+        complexity="low",
+    ),
 }
 
 
