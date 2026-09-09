@@ -3021,7 +3021,27 @@ def fpb_recent_outcomes(date: str = None):
     if not skill:
         return {"insight": None, "ai": False}
 
-    insight = _ai_complete(system=skill.system_prompt, user=user_msg, max_tokens=skill.max_tokens, no_think=True)
+    # Qwen-first, matching /api/vani/ask. These four intents live in the
+    # vani_intents.py registry with complexity='low', but were served
+    # through the legacy _ai_complete path, which defaults prefer_local
+    # to False — so every Flower Pot answer came from the cloud provider
+    # and never touched the local Qwen server. complete_with_source so a
+    # caller can tell which backend actually answered.
+    insight, _provider = _ai_complete_src(
+        system=skill.system_prompt,
+        user=user_msg,
+        max_tokens=skill.max_tokens,
+        temperature=0.4,
+        no_think=True,
+        prefer_local=(skill.complexity == 'low'),
+    )
+    # SEBI post-filter — every intent served through /api/vani/ask passes
+    # this before reaching a user; these endpoints skipped it entirely.
+    if insight:
+        insight, _rejected = _sebi_post_filter(insight)
+        if _rejected or not insight:
+            logging.warning('[fpb] insight rejected by SEBI post-filter')
+            insight = None
     if insight:
         _insight_cache[cache_key] = insight
         _log_interaction(
@@ -3059,7 +3079,27 @@ def fpb_why_watch_coil():
     if not skill:
         return {"insight": None, "ai": False}
 
-    insight = _ai_complete(system=skill.system_prompt, user=user_msg, max_tokens=skill.max_tokens, no_think=True)
+    # Qwen-first, matching /api/vani/ask. These four intents live in the
+    # vani_intents.py registry with complexity='low', but were served
+    # through the legacy _ai_complete path, which defaults prefer_local
+    # to False — so every Flower Pot answer came from the cloud provider
+    # and never touched the local Qwen server. complete_with_source so a
+    # caller can tell which backend actually answered.
+    insight, _provider = _ai_complete_src(
+        system=skill.system_prompt,
+        user=user_msg,
+        max_tokens=skill.max_tokens,
+        temperature=0.4,
+        no_think=True,
+        prefer_local=(skill.complexity == 'low'),
+    )
+    # SEBI post-filter — every intent served through /api/vani/ask passes
+    # this before reaching a user; these endpoints skipped it entirely.
+    if insight:
+        insight, _rejected = _sebi_post_filter(insight)
+        if _rejected or not insight:
+            logging.warning('[fpb] insight rejected by SEBI post-filter')
+            insight = None
     if insight:
         _insight_cache[cache_key] = insight
     return {"insight": insight, "ai": insight is not None}
@@ -3138,7 +3178,27 @@ def fpb_coiling_industries(date: str = None):
     if not skill:
         return {"insight": None, "ai": False}
 
-    insight = _ai_complete(system=skill.system_prompt, user=user_msg, max_tokens=skill.max_tokens, no_think=True)
+    # Qwen-first, matching /api/vani/ask. These four intents live in the
+    # vani_intents.py registry with complexity='low', but were served
+    # through the legacy _ai_complete path, which defaults prefer_local
+    # to False — so every Flower Pot answer came from the cloud provider
+    # and never touched the local Qwen server. complete_with_source so a
+    # caller can tell which backend actually answered.
+    insight, _provider = _ai_complete_src(
+        system=skill.system_prompt,
+        user=user_msg,
+        max_tokens=skill.max_tokens,
+        temperature=0.4,
+        no_think=True,
+        prefer_local=(skill.complexity == 'low'),
+    )
+    # SEBI post-filter — every intent served through /api/vani/ask passes
+    # this before reaching a user; these endpoints skipped it entirely.
+    if insight:
+        insight, _rejected = _sebi_post_filter(insight)
+        if _rejected or not insight:
+            logging.warning('[fpb] insight rejected by SEBI post-filter')
+            insight = None
     if insight:
         _insight_cache[cache_key] = insight
     return {"insight": insight, "ai": insight is not None}
@@ -3266,7 +3326,27 @@ def fpb_confluence_outlook(date: str = None):
     if not skill:
         return {"insight": None, "ai": False}
 
-    insight = _ai_complete(system=skill.system_prompt, user=user_msg, max_tokens=skill.max_tokens, no_think=True)
+    # Qwen-first, matching /api/vani/ask. These four intents live in the
+    # vani_intents.py registry with complexity='low', but were served
+    # through the legacy _ai_complete path, which defaults prefer_local
+    # to False — so every Flower Pot answer came from the cloud provider
+    # and never touched the local Qwen server. complete_with_source so a
+    # caller can tell which backend actually answered.
+    insight, _provider = _ai_complete_src(
+        system=skill.system_prompt,
+        user=user_msg,
+        max_tokens=skill.max_tokens,
+        temperature=0.4,
+        no_think=True,
+        prefer_local=(skill.complexity == 'low'),
+    )
+    # SEBI post-filter — every intent served through /api/vani/ask passes
+    # this before reaching a user; these endpoints skipped it entirely.
+    if insight:
+        insight, _rejected = _sebi_post_filter(insight)
+        if _rejected or not insight:
+            logging.warning('[fpb] insight rejected by SEBI post-filter')
+            insight = None
     if insight:
         _insight_cache[cache_key] = insight
     return {"insight": insight, "ai": insight is not None}

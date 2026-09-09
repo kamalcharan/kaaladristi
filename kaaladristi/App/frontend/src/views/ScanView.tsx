@@ -13,6 +13,8 @@ import { downloadScanXls, type ScanVariant } from '@/utils/downloadXls';
 import type { ScanDefinition, ScanStock } from '@/types';
 import AtmosphericBadge from '@/components/domain/AtmosphericBadge';
 import { ScanFilterBar, applyFilters, DEFAULT_FILTERS, FPB_DEFAULT_FILTERS, JOURNEY_DEFAULT_FILTERS, type ScanFilters } from '@/components/domain/ScanFilterBar';
+import ScanVaNiPublisher from '@/components/domain/ScanVaNiPublisher';
+import FpbVaNiCard from '@/components/domain/FpbVaNiCard';
 import ScanStalenessBanner from '@/components/domain/ScanStalenessBanner';
 import ScannerStudio from '@/views/ScannerStudio';
 import { STUDIO_PRESET_IDS } from '@/config/scannerStudio';
@@ -1159,6 +1161,11 @@ function FpbResults({ preset, timeframe, viewMode, onViewModeChange }: {
         />
       </div>
 
+      {/* The four fpb.* VaNi intents. Built end to end (intent, endpoint,
+          hook) but never rendered, so the page had no VaNi at all while
+          every Studio preset carried its own card. */}
+      <FpbVaNiCard />
+
       {/* Day-2 position layer — recent releases + hold/crack verdict + SL/target.
           Renders only once km_fpb_active (migration 156) is populated. */}
       {!vaniOnly && <FpbActiveSection />}
@@ -1412,20 +1419,22 @@ function ScannerResults({ presetId }: { presetId: string }) {
           }}>
             {preset.name}
           </h1>
-          <button
-            onClick={() => openVaNiWithIntent('scanner.explain_preset')}
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0,
-              padding: '5px 12px', borderRadius: 8,
-              border: '1px solid var(--accent-indigo)',
-              background: 'color-mix(in srgb, var(--accent-indigo) 8%, transparent)',
-              color: 'var(--accent-indigo)', fontSize: 12, fontWeight: 500,
-              cursor: 'pointer', fontFamily: 'var(--font-body)',
-              transition: 'all 0.15s',
-            }}
-          >
-            <span style={{ fontSize: 12 }}>✦</span> VaNi explains this screener
-          </button>
+          {presetId !== 'flower_pot_burst' && (
+            <button
+              onClick={() => openVaNiWithIntent('scanner.explain_preset')}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0,
+                padding: '5px 12px', borderRadius: 8,
+                border: '1px solid var(--accent-indigo)',
+                background: 'color-mix(in srgb, var(--accent-indigo) 8%, transparent)',
+                color: 'var(--accent-indigo)', fontSize: 12, fontWeight: 500,
+                cursor: 'pointer', fontFamily: 'var(--font-body)',
+                transition: 'all 0.15s',
+              }}
+            >
+              <span style={{ fontSize: 12 }}>✦</span> VaNi explains this screener
+            </button>
+          )}
         </div>
         <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: 6 }}>
           {preset.description}
