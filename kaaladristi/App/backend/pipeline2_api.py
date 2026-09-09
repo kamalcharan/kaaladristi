@@ -2984,29 +2984,29 @@ def fpb_recent_outcomes(date: str = None):
         return {"insight": _insight_cache[cache_key], "ai": True}
 
     try:
-        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            cur.execute("""
-                SELECT
-                    SUM(CASE WHEN fpb_outcome = 'REACHED_TARGET' THEN 1 ELSE 0 END)::int as hits,
-                    SUM(CASE WHEN fpb_outcome = 'CRACKED' THEN 1 ELSE 0 END)::int as cracked,
-                    SUM(CASE WHEN fpb_outcome = 'EXPIRED' THEN 1 ELSE 0 END)::int as expired,
-                    SUM(CASE WHEN fpb_outcome IS NULL THEN 1 ELSE 0 END)::int as holding,
-                    COUNT(*)::int as total
-                FROM km_fpb_active
-                WHERE fpb_outcome IS NOT NULL OR released_at >= NOW() - interval '180 days'
-            """)
-            row = cur.fetchone()
-    finally:
-        conn.close()
+        rows = conn.execute("""
+            SELECT
+                SUM(CASE WHEN fpb_outcome = 'REACHED_TARGET' THEN 1 ELSE 0 END)::int as hits,
+                SUM(CASE WHEN fpb_outcome = 'CRACKED' THEN 1 ELSE 0 END)::int as cracked,
+                SUM(CASE WHEN fpb_outcome = 'EXPIRED' THEN 1 ELSE 0 END)::int as expired,
+                SUM(CASE WHEN fpb_outcome IS NULL THEN 1 ELSE 0 END)::int as holding,
+                COUNT(*)::int as total
+            FROM km_fpb_active
+            WHERE fpb_outcome IS NOT NULL OR released_at >= NOW() - interval '180 days'
+        """)
+        row = rows[0] if rows else None
+    except Exception as e:
+        logging.error(f"[fpb_recent_outcomes] query error: {e}")
+        return {"insight": None, "ai": False}
 
-    if not row or not row['total']:
+    if not row or not row.get('total'):
         return {"insight": None, "ai": False}
 
     user_msg = (
         f"Flower Pot Burst releases since {(datetime.now() - timedelta(days=180)).strftime('%Y-%m-%d')}: "
-        f"{row['hits'] or 0} reached target, {row['cracked'] or 0} cracked stops, "
-        f"{row['holding'] or 0} still holding, {row['expired'] or 0} expired windows. "
-        f"Total: {row['total']} releases."
+        f"{row.get('hits') or 0} reached target, {row.get('cracked') or 0} cracked stops, "
+        f"{row.get('holding') or 0} still holding, {row.get('expired') or 0} expired windows. "
+        f"Total: {row.get('total')} releases."
     )
 
     skill = _VaNi_INTENTS.get("fpb.recent_outcomes")
@@ -3072,43 +3072,42 @@ def fpb_coiling_industries(date: str = None):
         return {"insight": _insight_cache[cache_key], "ai": True}
 
     try:
-        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            cur.execute("""
-                SELECT
-                    s.industry,
-                    COUNT(*)::int as coil_count
-                FROM km_scan_results sr
-                JOIN km_equity_symbols s ON s.id = sr.equity_id
-                WHERE sr.preset_id = 'flower_pot_burst'
-                AND sr.fpb_phase = 'SETUP'
-                AND sr.fpb_tight_today = true
-                AND sr.trade_date = COALESCE(%s::date, CURRENT_DATE)
-                GROUP BY s.industry
-                ORDER BY coil_count DESC
-                LIMIT 5
-            """, (date,))
-            industries = cur.fetchall()
+        industries = conn.execute("""
+            SELECT
+                s.industry,
+                COUNT(*)::int as coil_count
+            FROM km_scan_results sr
+            JOIN km_equity_symbols s ON s.id = sr.equity_id
+            WHERE sr.preset_id = 'flower_pot_burst'
+            AND sr.fpb_phase = 'SETUP'
+            AND sr.fpb_tight_today = true
+            AND sr.trade_date = COALESCE(%s::date, CURRENT_DATE)
+            GROUP BY s.industry
+            ORDER BY coil_count DESC
+            LIMIT 5
+        """, (date,))
 
-            cur.execute("""
-                SELECT COUNT(*)::int as total
-                FROM km_scan_results
-                WHERE preset_id = 'flower_pot_burst'
-                AND fpb_phase = 'SETUP'
-                AND fpb_tight_today = true
-                AND trade_date = COALESCE(%s::date, CURRENT_DATE)
-            """, (date,))
-            total_row = cur.fetchone()
-    finally:
-        conn.close()
+        total_rows = conn.execute("""
+            SELECT COUNT(*)::int as total
+            FROM km_scan_results
+            WHERE preset_id = 'flower_pot_burst'
+            AND fpb_phase = 'SETUP'
+            AND fpb_tight_today = true
+            AND trade_date = COALESCE(%s::date, CURRENT_DATE)
+        """, (date,))
+        total_row = total_rows[0] if total_rows else None
+    except Exception as e:
+        logging.error(f"[fpb_coiling_industries] query error: {e}")
+        return {"insight": None, "ai": False}
 
     if not industries or not total_row:
         return {"insight": None, "ai": False}
 
     industry_list = ", ".join([
-        f"{ind['industry'] or 'Unclassified'}: {ind['coil_count']}"
+        f"{ind.get('industry') or 'Unclassified'}: {ind.get('coil_count')}"
         for ind in industries[:3]
     ])
-    total = total_row['total']
+    total = total_row.get('total')
 
     user_msg = (
         f"Flower Pot Burst scan has {total} tight coils today. "
@@ -3141,84 +3140,88 @@ def fpb_confluence_outlook(date: str = None):
         return {"insight": _insight_cache[cache_key], "ai": True}
 
     try:
-        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            # Get today and 5 days ago for Magic RS delta
-            today_date = date or 'CURRENT_DATE'
-            five_days_ago = f"({today_date}::date - interval '5 days')"
+        # Get today and 5 days ago for Magic RS delta
+        today_date = date or (datetime.now().date().isoformat())
+        five_days_ago = (datetime.strptime(today_date, '%Y-%m-%d').date() - timedelta(days=5)).isoformat()
 
-            cur.execute(f"""
-                WITH today_rs AS (
-                    SELECT equity_id, magic_rs as rs_today
-                    FROM km_equity_eod
-                    WHERE trade_date = {today_date}::date
-                ),
-                five_days_ago_rs AS (
-                    SELECT equity_id, magic_rs as rs_5d_ago
-                    FROM km_equity_eod
-                    WHERE trade_date = {five_days_ago}
-                ),
-                coils AS (
-                    SELECT
-                        sr.equity_id,
-                        s.symbol,
-                        sr.fpb_compression_score,
-                        COALESCE(t.rs_today, 0) - COALESCE(f.rs_5d_ago, 0) as rs_5d_change
-                    FROM km_scan_results sr
-                    JOIN km_equity_symbols s ON s.id = sr.equity_id
-                    LEFT JOIN today_rs t ON t.equity_id = sr.equity_id
-                    LEFT JOIN five_days_ago_rs f ON f.equity_id = sr.equity_id
-                    WHERE sr.preset_id = 'flower_pot_burst'
-                    AND sr.fpb_phase = 'SETUP'
-                    AND sr.fpb_tight_today = true
-                    AND sr.trade_date = {today_date}::date
-                )
-                SELECT * FROM coils
-                ORDER BY rs_5d_change DESC
-            """)
-            top_improving = cur.fetchall()[:3]
+        # Query for improving RS
+        improving_rows = conn.execute("""
+            WITH today_rs AS (
+                SELECT equity_id, magic_rs as rs_today
+                FROM km_equity_eod
+                WHERE trade_date = %s::date
+            ),
+            five_days_ago_rs AS (
+                SELECT equity_id, magic_rs as rs_5d_ago
+                FROM km_equity_eod
+                WHERE trade_date = %s::date
+            ),
+            coils AS (
+                SELECT
+                    sr.equity_id,
+                    s.symbol,
+                    sr.fpb_compression_score,
+                    COALESCE(t.rs_today, 0) - COALESCE(f.rs_5d_ago, 0) as rs_5d_change
+                FROM km_scan_results sr
+                JOIN km_equity_symbols s ON s.id = sr.equity_id
+                LEFT JOIN today_rs t ON t.equity_id = sr.equity_id
+                LEFT JOIN five_days_ago_rs f ON f.equity_id = sr.equity_id
+                WHERE sr.preset_id = 'flower_pot_burst'
+                AND sr.fpb_phase = 'SETUP'
+                AND sr.fpb_tight_today = true
+                AND sr.trade_date = %s::date
+            )
+            SELECT * FROM coils
+            ORDER BY rs_5d_change DESC
+            LIMIT 3
+        """, (today_date, five_days_ago, today_date))
+        top_improving = improving_rows
 
-            cur.execute(f"""
-                WITH today_rs AS (
-                    SELECT equity_id, magic_rs as rs_today
-                    FROM km_equity_eod
-                    WHERE trade_date = {today_date}::date
-                ),
-                five_days_ago_rs AS (
-                    SELECT equity_id, magic_rs as rs_5d_ago
-                    FROM km_equity_eod
-                    WHERE trade_date = {five_days_ago}
-                ),
-                coils AS (
-                    SELECT
-                        sr.equity_id,
-                        s.symbol,
-                        sr.fpb_compression_score,
-                        COALESCE(t.rs_today, 0) - COALESCE(f.rs_5d_ago, 0) as rs_5d_change
-                    FROM km_scan_results sr
-                    JOIN km_equity_symbols s ON s.id = sr.equity_id
-                    LEFT JOIN today_rs t ON t.equity_id = sr.equity_id
-                    LEFT JOIN five_days_ago_rs f ON f.equity_id = sr.equity_id
-                    WHERE sr.preset_id = 'flower_pot_burst'
-                    AND sr.fpb_phase = 'SETUP'
-                    AND sr.fpb_tight_today = true
-                    AND sr.trade_date = {today_date}::date
-                )
-                SELECT * FROM coils
-                ORDER BY rs_5d_change ASC
-            """)
-            top_degrading = cur.fetchall()[:3]
-    finally:
-        conn.close()
+        # Query for degrading RS
+        degrading_rows = conn.execute("""
+            WITH today_rs AS (
+                SELECT equity_id, magic_rs as rs_today
+                FROM km_equity_eod
+                WHERE trade_date = %s::date
+            ),
+            five_days_ago_rs AS (
+                SELECT equity_id, magic_rs as rs_5d_ago
+                FROM km_equity_eod
+                WHERE trade_date = %s::date
+            ),
+            coils AS (
+                SELECT
+                    sr.equity_id,
+                    s.symbol,
+                    sr.fpb_compression_score,
+                    COALESCE(t.rs_today, 0) - COALESCE(f.rs_5d_ago, 0) as rs_5d_change
+                FROM km_scan_results sr
+                JOIN km_equity_symbols s ON s.id = sr.equity_id
+                LEFT JOIN today_rs t ON t.equity_id = sr.equity_id
+                LEFT JOIN five_days_ago_rs f ON f.equity_id = sr.equity_id
+                WHERE sr.preset_id = 'flower_pot_burst'
+                AND sr.fpb_phase = 'SETUP'
+                AND sr.fpb_tight_today = true
+                AND sr.trade_date = %s::date
+            )
+            SELECT * FROM coils
+            ORDER BY rs_5d_change ASC
+            LIMIT 3
+        """, (today_date, five_days_ago, today_date))
+        top_degrading = degrading_rows
+    except Exception as e:
+        logging.error(f"[fpb_confluence_outlook] query error: {e}")
+        return {"insight": None, "ai": False}
 
     if not top_improving and not top_degrading:
         return {"insight": None, "ai": False}
 
     strong_list = ", ".join([
-        f"{c['symbol']} (Tightness {c['fpb_compression_score']:.1f}, RS +{c['rs_5d_change']:.1f}%)"
+        f"{c.get('symbol')} (Tightness {c.get('fpb_compression_score', 0):.1f}, RS +{c.get('rs_5d_change', 0):.1f}%)"
         for c in top_improving
     ])
     weak_list = ", ".join([
-        f"{c['symbol']} (Tightness {c['fpb_compression_score']:.1f}, RS {c['rs_5d_change']:.1f}%)"
+        f"{c.get('symbol')} (Tightness {c.get('fpb_compression_score', 0):.1f}, RS {c.get('rs_5d_change', 0):.1f}%)"
         for c in top_degrading
     ])
 
