@@ -2984,6 +2984,14 @@ def fpb_recent_outcomes(date: str = None):
         return {"insight": _insight_cache[cache_key], "ai": True}
 
     try:
+        # Get max date from km_fpb_active if date not specified
+        if not date:
+            date_rows = conn.execute("SELECT MAX(release_date)::text as max_date FROM km_fpb_active")
+            if date_rows and date_rows[0].get('max_date'):
+                date = date_rows[0]['max_date']
+            else:
+                return {"insight": None, "ai": False}
+
         rows = conn.execute("""
             SELECT
                 SUM(CASE WHEN fpb_outcome = 'REACHED_TARGET' THEN 1 ELSE 0 END)::int as hits,
@@ -3072,6 +3080,17 @@ def fpb_coiling_industries(date: str = None):
         return {"insight": _insight_cache[cache_key], "ai": True}
 
     try:
+        # Get max date from km_scan_results if date not specified
+        if not date:
+            date_rows = conn.execute("""
+                SELECT MAX(trade_date)::text as max_date FROM km_scan_results
+                WHERE preset_id = 'flower_pot_burst'
+            """)
+            if date_rows and date_rows[0].get('max_date'):
+                date = date_rows[0]['max_date']
+            else:
+                return {"insight": None, "ai": False}
+
         industries = conn.execute("""
             SELECT
                 s.industry,
@@ -3081,7 +3100,7 @@ def fpb_coiling_industries(date: str = None):
             WHERE sr.preset_id = 'flower_pot_burst'
             AND sr.fpb_phase = 'SETUP'
             AND sr.fpb_tight_today = true
-            AND sr.trade_date = COALESCE(%s::date, CURRENT_DATE)
+            AND sr.trade_date = %s::date
             GROUP BY s.industry
             ORDER BY coil_count DESC
             LIMIT 5
@@ -3093,7 +3112,7 @@ def fpb_coiling_industries(date: str = None):
             WHERE preset_id = 'flower_pot_burst'
             AND fpb_phase = 'SETUP'
             AND fpb_tight_today = true
-            AND trade_date = COALESCE(%s::date, CURRENT_DATE)
+            AND trade_date = %s::date
         """, (date,))
         total_row = total_rows[0] if total_rows else None
     except Exception as e:
@@ -3140,8 +3159,19 @@ def fpb_confluence_outlook(date: str = None):
         return {"insight": _insight_cache[cache_key], "ai": True}
 
     try:
+        # Get max date from km_scan_results if date not specified
+        if not date:
+            date_rows = conn.execute("""
+                SELECT MAX(trade_date)::text as max_date FROM km_scan_results
+                WHERE preset_id = 'flower_pot_burst'
+            """)
+            if date_rows and date_rows[0].get('max_date'):
+                date = date_rows[0]['max_date']
+            else:
+                return {"insight": None, "ai": False}
+
         # Get today and 5 days ago for Magic RS delta
-        today_date = date or (datetime.now().date().isoformat())
+        today_date = date
         five_days_ago = (datetime.strptime(today_date, '%Y-%m-%d').date() - timedelta(days=5)).isoformat()
 
         # Query for improving RS
