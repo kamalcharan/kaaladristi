@@ -2967,6 +2967,311 @@ def market_pulse_insight(date: str = None):
             "ai": insight is not None, "astro_direction": astro_dir}
 
 
+# ── Flower Pot Burst VaNi Intents ──────────────────────────────────────────────
+
+@app.get('/api/ai/fpb-recent-outcomes')
+def fpb_recent_outcomes(date: str = None):
+    """Recent outcomes from Flower Pot Burst active releases."""
+    if not _AI_ENABLED or not _AI_OPTIONAL_OK:
+        return {"insight": None, "ai": False}
+
+    conn = _db()
+    if not conn:
+        return {"insight": None, "ai": False}
+
+    cache_key = f"fpb_outcomes:{date or 'latest'}"
+    if cache_key in _insight_cache:
+        return {"insight": _insight_cache[cache_key], "ai": True}
+
+    try:
+        # Get max date from km_fpb_active if date not specified
+        if not date:
+            date_rows = conn.execute("SELECT MAX(release_date)::text as max_date FROM km_fpb_active")
+            if date_rows and date_rows[0].get('max_date'):
+                date = date_rows[0]['max_date']
+            else:
+                return {"insight": None, "ai": False}
+
+        rows = conn.execute("""
+            SELECT
+                SUM(CASE WHEN fpb_outcome = 'REACHED_TARGET' THEN 1 ELSE 0 END)::int as hits,
+                SUM(CASE WHEN fpb_outcome = 'CRACKED' THEN 1 ELSE 0 END)::int as cracked,
+                SUM(CASE WHEN fpb_outcome = 'EXPIRED' THEN 1 ELSE 0 END)::int as expired,
+                SUM(CASE WHEN fpb_outcome IS NULL THEN 1 ELSE 0 END)::int as holding,
+                COUNT(*)::int as total
+            FROM km_fpb_active
+            WHERE fpb_outcome IS NOT NULL OR released_at >= NOW() - interval '180 days'
+        """)
+        row = rows[0] if rows else None
+    except Exception as e:
+        logging.error(f"[fpb_recent_outcomes] query error: {e}")
+        return {"insight": None, "ai": False}
+
+    if not row or not row.get('total'):
+        return {"insight": None, "ai": False}
+
+    user_msg = (
+        f"Flower Pot Burst releases since {(datetime.now() - timedelta(days=180)).strftime('%Y-%m-%d')}: "
+        f"{row.get('hits') or 0} reached target, {row.get('cracked') or 0} cracked stops, "
+        f"{row.get('holding') or 0} still holding, {row.get('expired') or 0} expired windows. "
+        f"Total: {row.get('total')} releases."
+    )
+
+    skill = _VaNi_INTENTS.get("fpb.recent_outcomes")
+    if not skill:
+        return {"insight": None, "ai": False}
+
+    insight = _ai_complete(system=skill.system_prompt, user=user_msg, max_tokens=skill.max_tokens, no_think=True)
+    if insight:
+        _insight_cache[cache_key] = insight
+        _log_interaction(
+            product="dristiq",
+            endpoint="/api/ai/fpb-recent-outcomes",
+            user_input=user_msg,
+            llm_response=insight,
+            system_prompt=skill.system_prompt,
+            context_payload={},
+            model_version=_AI_MODEL,
+            latency_ms=0,
+        )
+    return {"insight": insight, "ai": insight is not None}
+
+
+@app.get('/api/ai/fpb-why-watch-coil')
+def fpb_why_watch_coil():
+    """Explain why tightness matters on Flower Pot Burst."""
+    if not _AI_ENABLED or not _AI_OPTIONAL_OK:
+        return {"insight": None, "ai": False}
+
+    cache_key = "fpb_why_watch"
+    if cache_key in _insight_cache:
+        return {"insight": _insight_cache[cache_key], "ai": True}
+
+    user_msg = (
+        "Flower Pot Burst tracks stocks with extreme price compression (tightness) and "
+        "declining volume over the last 10 sessions. A coil is 'tight today' if it meets "
+        "the tightness gate AND volume has declined, indicating quiet accumulation. "
+        "On today's scan, about 26 of 102 coils remain tight (the rest have decompressed). "
+        "Explain why this compression-volume pattern matters for traders and why the list is smaller."
+    )
+
+    skill = _VaNi_INTENTS.get("fpb.why_watch_coil")
+    if not skill:
+        return {"insight": None, "ai": False}
+
+    insight = _ai_complete(system=skill.system_prompt, user=user_msg, max_tokens=skill.max_tokens, no_think=True)
+    if insight:
+        _insight_cache[cache_key] = insight
+    return {"insight": insight, "ai": insight is not None}
+
+
+@app.get('/api/ai/fpb-coiling-industries')
+def fpb_coiling_industries(date: str = None):
+    """Which industries have tight coils active today."""
+    if not _AI_ENABLED or not _AI_OPTIONAL_OK:
+        return {"insight": None, "ai": False}
+
+    conn = _db()
+    if not conn:
+        return {"insight": None, "ai": False}
+
+    cache_key = f"fpb_industries:{date or 'latest'}"
+    if cache_key in _insight_cache:
+        return {"insight": _insight_cache[cache_key], "ai": True}
+
+    try:
+        # Get max date from km_scan_results if date not specified
+        if not date:
+            date_rows = conn.execute("""
+                SELECT MAX(trade_date)::text as max_date FROM km_scan_results
+                WHERE preset_id = 'flower_pot_burst'
+            """)
+            if date_rows and date_rows[0].get('max_date'):
+                date = date_rows[0]['max_date']
+            else:
+                return {"insight": None, "ai": False}
+
+        industries = conn.execute("""
+            SELECT
+                s.industry,
+                COUNT(*)::int as coil_count
+            FROM km_scan_results sr
+            JOIN km_equity_symbols s ON s.id = sr.equity_id
+            WHERE sr.preset_id = 'flower_pot_burst'
+            AND sr.fpb_phase = 'SETUP'
+            AND sr.fpb_tight_today = true
+            AND sr.trade_date = %s::date
+            GROUP BY s.industry
+            ORDER BY coil_count DESC
+            LIMIT 5
+        """, (date,))
+
+        total_rows = conn.execute("""
+            SELECT COUNT(*)::int as total
+            FROM km_scan_results
+            WHERE preset_id = 'flower_pot_burst'
+            AND fpb_phase = 'SETUP'
+            AND fpb_tight_today = true
+            AND trade_date = %s::date
+        """, (date,))
+        total_row = total_rows[0] if total_rows else None
+    except Exception as e:
+        logging.error(f"[fpb_coiling_industries] query error: {e}")
+        return {"insight": None, "ai": False}
+
+    if not industries or not total_row:
+        return {"insight": None, "ai": False}
+
+    industry_list = ", ".join([
+        f"{ind.get('industry') or 'Unclassified'}: {ind.get('coil_count')}"
+        for ind in industries[:3]
+    ])
+    total = total_row.get('total')
+
+    user_msg = (
+        f"Flower Pot Burst scan has {total} tight coils today. "
+        f"Top industries: {industry_list}. "
+        f"List the top industries with their coil counts as a proportion of the total."
+    )
+
+    skill = _VaNi_INTENTS.get("fpb.coiling_industries")
+    if not skill:
+        return {"insight": None, "ai": False}
+
+    insight = _ai_complete(system=skill.system_prompt, user=user_msg, max_tokens=skill.max_tokens, no_think=True)
+    if insight:
+        _insight_cache[cache_key] = insight
+    return {"insight": insight, "ai": insight is not None}
+
+
+@app.get('/api/ai/fpb-confluence-outlook')
+def fpb_confluence_outlook(date: str = None):
+    """Top coils by confluence of tightness and Magic RS momentum."""
+    if not _AI_ENABLED or not _AI_OPTIONAL_OK:
+        return {"insight": None, "ai": False}
+
+    conn = _db()
+    if not conn:
+        return {"insight": None, "ai": False}
+
+    cache_key = f"fpb_confluence:{date or 'latest'}"
+    if cache_key in _insight_cache:
+        return {"insight": _insight_cache[cache_key], "ai": True}
+
+    try:
+        # Get max date from km_scan_results if date not specified
+        if not date:
+            date_rows = conn.execute("""
+                SELECT MAX(trade_date)::text as max_date FROM km_scan_results
+                WHERE preset_id = 'flower_pot_burst'
+            """)
+            if date_rows and date_rows[0].get('max_date'):
+                date = date_rows[0]['max_date']
+            else:
+                return {"insight": None, "ai": False}
+
+        # Get today and 5 days ago for Magic RS delta
+        today_date = date
+        five_days_ago = (datetime.strptime(today_date, '%Y-%m-%d').date() - timedelta(days=5)).isoformat()
+
+        # Query for improving RS
+        improving_rows = conn.execute("""
+            WITH today_rs AS (
+                SELECT equity_id, magic_rs as rs_today
+                FROM km_equity_eod
+                WHERE trade_date = %s::date
+            ),
+            five_days_ago_rs AS (
+                SELECT equity_id, magic_rs as rs_5d_ago
+                FROM km_equity_eod
+                WHERE trade_date = %s::date
+            ),
+            coils AS (
+                SELECT
+                    sr.equity_id,
+                    s.symbol,
+                    sr.fpb_compression_score,
+                    COALESCE(t.rs_today, 0) - COALESCE(f.rs_5d_ago, 0) as rs_5d_change
+                FROM km_scan_results sr
+                JOIN km_equity_symbols s ON s.id = sr.equity_id
+                LEFT JOIN today_rs t ON t.equity_id = sr.equity_id
+                LEFT JOIN five_days_ago_rs f ON f.equity_id = sr.equity_id
+                WHERE sr.preset_id = 'flower_pot_burst'
+                AND sr.fpb_phase = 'SETUP'
+                AND sr.fpb_tight_today = true
+                AND sr.trade_date = %s::date
+            )
+            SELECT * FROM coils
+            ORDER BY rs_5d_change DESC
+            LIMIT 3
+        """, (today_date, five_days_ago, today_date))
+        top_improving = improving_rows
+
+        # Query for degrading RS
+        degrading_rows = conn.execute("""
+            WITH today_rs AS (
+                SELECT equity_id, magic_rs as rs_today
+                FROM km_equity_eod
+                WHERE trade_date = %s::date
+            ),
+            five_days_ago_rs AS (
+                SELECT equity_id, magic_rs as rs_5d_ago
+                FROM km_equity_eod
+                WHERE trade_date = %s::date
+            ),
+            coils AS (
+                SELECT
+                    sr.equity_id,
+                    s.symbol,
+                    sr.fpb_compression_score,
+                    COALESCE(t.rs_today, 0) - COALESCE(f.rs_5d_ago, 0) as rs_5d_change
+                FROM km_scan_results sr
+                JOIN km_equity_symbols s ON s.id = sr.equity_id
+                LEFT JOIN today_rs t ON t.equity_id = sr.equity_id
+                LEFT JOIN five_days_ago_rs f ON f.equity_id = sr.equity_id
+                WHERE sr.preset_id = 'flower_pot_burst'
+                AND sr.fpb_phase = 'SETUP'
+                AND sr.fpb_tight_today = true
+                AND sr.trade_date = %s::date
+            )
+            SELECT * FROM coils
+            ORDER BY rs_5d_change ASC
+            LIMIT 3
+        """, (today_date, five_days_ago, today_date))
+        top_degrading = degrading_rows
+    except Exception as e:
+        logging.error(f"[fpb_confluence_outlook] query error: {e}")
+        return {"insight": None, "ai": False}
+
+    if not top_improving and not top_degrading:
+        return {"insight": None, "ai": False}
+
+    strong_list = ", ".join([
+        f"{c.get('symbol')} (Tightness {c.get('fpb_compression_score', 0):.1f}, RS +{c.get('rs_5d_change', 0):.1f}%)"
+        for c in top_improving
+    ])
+    weak_list = ", ".join([
+        f"{c.get('symbol')} (Tightness {c.get('fpb_compression_score', 0):.1f}, RS {c.get('rs_5d_change', 0):.1f}%)"
+        for c in top_degrading
+    ])
+
+    user_msg = (
+        f"Flower Pot Burst confluence analysis: "
+        f"Strongest (tight + improving RS): {strong_list}. "
+        f"At risk (tight + degrading RS): {weak_list}. "
+        f"Explain the setup quality difference and what confluence means for risk."
+    )
+
+    skill = _VaNi_INTENTS.get("fpb.coil_confluence_outlook")
+    if not skill:
+        return {"insight": None, "ai": False}
+
+    insight = _ai_complete(system=skill.system_prompt, user=user_msg, max_tokens=skill.max_tokens, no_think=True)
+    if insight:
+        _insight_cache[cache_key] = insight
+    return {"insight": insight, "ai": insight is not None}
+
+
 @app.get('/api/pipeline2/ping')
 def ping():
     """Minimal liveness check for nginx / docker healthcheck."""

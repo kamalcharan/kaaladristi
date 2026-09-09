@@ -228,3 +228,59 @@ export function useConfluenceTimeline(days: number) {
     retry: false,
   });
 }
+
+export function useFpbRecentOutcomes() {
+  const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? '';
+  return useQuery({
+    queryKey: ['fpb_recent_outcomes'],
+    queryFn: async (): Promise<{ date: string; insight: string | null; ai: boolean }> => {
+      const res = await fetch(`${pipelineUrl}/api/ai/fpb-recent-outcomes`);
+      if (!res.ok) return { date: '', insight: null, ai: false };
+      return res.json();
+    },
+    staleTime: 24 * 60 * 60 * 1000,
+    retry: false,
+  });
+}
+
+export function useFpbWhyWatchCoil() {
+  const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? '';
+  return useQuery({
+    queryKey: ['fpb_why_watch_coil'],
+    queryFn: async (): Promise<{ date: string; insight: string | null; ai: boolean }> => {
+      const res = await fetch(`${pipelineUrl}/api/ai/fpb-why-watch-coil`);
+      if (!res.ok) return { date: '', insight: null, ai: false };
+      return res.json();
+    },
+    staleTime: 7 * 24 * 60 * 60 * 1000, // 7 days — static explanation
+    retry: false,
+  });
+}
+
+export function useFpbCoilingIndustries() {
+  const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? '';
+  return useQuery({
+    queryKey: ['fpb_coiling_industries'],
+    queryFn: async (): Promise<{ date: string; insight: string | null; ai: boolean }> => {
+      const res = await fetch(`${pipelineUrl}/api/ai/fpb-coiling-industries`);
+      if (!res.ok) return { date: '', insight: null, ai: false };
+      return res.json();
+    },
+    staleTime: 6 * 60 * 60 * 1000, // 6 hours — industry composition changes daily
+    retry: false,
+  });
+}
+
+export function useFpbConfluenceOutlook() {
+  const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? '';
+  return useQuery({
+    queryKey: ['fpb_confluence_outlook'],
+    queryFn: async (): Promise<{ date: string; insight: string | null; ai: boolean }> => {
+      const res = await fetch(`${pipelineUrl}/api/ai/fpb-confluence-outlook`);
+      if (!res.ok) return { date: '', insight: null, ai: false };
+      return res.json();
+    },
+    staleTime: 12 * 60 * 60 * 1000, // 12 hours — setup quality changes daily
+    retry: false,
+  });
+}
