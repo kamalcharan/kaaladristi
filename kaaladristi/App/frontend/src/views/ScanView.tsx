@@ -1086,10 +1086,10 @@ function FpbResults({ preset, timeframe, viewMode, onViewModeChange }: {
     navigate(`/chart/equity/${s.equity_id}?name=${encodeURIComponent(navName(s))}${storySetupSuffix('flower_pot_burst')}`);
 
   // VaNi intents for Flower Pot
-  const { data: recentOutcomes } = useFpbRecentOutcomes();
-  const { data: whyWatchCoil } = useFpbWhyWatchCoil();
-  const { data: coilingIndustries } = useFpbCoilingIndustries();
-  const { data: confluenceOutlook } = useFpbConfluenceOutlook();
+  const { data: recentOutcomes, isLoading: recentOutcomesLoading } = useFpbRecentOutcomes();
+  const { data: whyWatchCoil, isLoading: whyWatchCoilLoading } = useFpbWhyWatchCoil();
+  const { data: coilingIndustries, isLoading: coilingIndustriesLoading } = useFpbCoilingIndustries();
+  const { data: confluenceOutlook, isLoading: confluenceOutlookLoading } = useFpbConfluenceOutlook();
 
   // ── Stat tiles ───────────────────────────────────────────────────────────
   // The same six-tile strip every Studio opens with, reading this scanner's
@@ -1177,25 +1177,25 @@ function FpbResults({ preset, timeframe, viewMode, onViewModeChange }: {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 16, marginBottom: 24, marginTop: 24 }}>
         <VaNiInsight
           insight={recentOutcomes?.insight}
-          isLoading={false}
+          isLoading={recentOutcomesLoading}
           className="fpb-insight fpb-recent-outcomes"
           collapsible
         />
         <VaNiInsight
           insight={whyWatchCoil?.insight}
-          isLoading={false}
+          isLoading={whyWatchCoilLoading}
           className="fpb-insight fpb-why-watch-coil"
           collapsible
         />
         <VaNiInsight
           insight={coilingIndustries?.insight}
-          isLoading={false}
+          isLoading={coilingIndustriesLoading}
           className="fpb-insight fpb-coiling-industries"
           collapsible
         />
         <VaNiInsight
           insight={confluenceOutlook?.insight}
-          isLoading={false}
+          isLoading={confluenceOutlookLoading}
           className="fpb-insight fpb-confluence-outlook"
           collapsible
         />
