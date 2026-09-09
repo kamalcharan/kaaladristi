@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   AreaChart, Area, XAxis, YAxis, Tooltip,
   ResponsiveContainer, ReferenceLine, ReferenceArea,
@@ -16,9 +16,27 @@ const PERIODS = [
   { label: '66D', days: 66 },
 ] as const;
 type PeriodLabel = typeof PERIODS[number]['label'];
+const MAX_PERIOD_DAYS = Math.max(...PERIODS.map(p => p.days));
 
 const GREED_THRESHOLD = 55;
 const FEAR_THRESHOLD  = 35;
+
+/**
+ * Which moving averages the incoming series was actually measured against.
+ *
+ * The two breadth pipelines do NOT agree. Market-wide (km_market_breadth,
+ * compute_market_breadth.py) computes all three legs as EMAs. Per-index
+ * (km_index_breadth / fetchIndexBreadth) uses ema_20 + sma_50 + sma_150 —
+ * D40, and migration 203's own header. Labelling both "EMA" mis-states two
+ * of the three legs on every per-index card; D44 fixed exactly this mislabel
+ * for the market-wide chart and the per-index path reintroduced it.
+ */
+const MA_LABELS = {
+  market: { m20: '20 EMA', m50: '50 EMA', m150: '150 EMA' },
+  index:  { m20: '20 EMA', m50: '50 SMA', m150: '150 SMA' },
+} as const;
+export type MaBasis = keyof typeof MA_LABELS;
+type MaLabels = typeof MA_LABELS[MaBasis];
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 
@@ -31,6 +49,12 @@ export interface MarketBreadthChartProps {
   indexName?: string;
   /** Override constituent count (used when data comes from an index slice). */
   stockCount?: number;
+  /**
+   * Which MA basis `data` was measured against, driving the stat labels.
+   * Defaults from whether data was injected: the only producer of injected
+   * series is the per-index path. Pass explicitly to override.
+   */
+  maBasis?: MaBasis;
   /**
    * Zone mode drives the regime badge logic:
    *   'absolute'    — NSE universe 35/55 thresholds (default)
@@ -107,7 +131,7 @@ function EmaStat({ label, value, prev }: { label: string; value: number | null; 
 
 // ── Custom tooltip ────────────────────────────────────────────────────────────
 
-function BreadthTooltip({ active, payload }: any) {
+function BreadthTooltip({ active, payload, ma }: any) {
   if (!active || !payload?.length) return null;
   const d = payload[0]?.payload as MarketBreadthDay;
   if (!d) return null;
@@ -120,15 +144,15 @@ function BreadthTooltip({ active, payload }: any) {
         <span className={cn('font-bold mono', r.color)}>{d.breadth_score?.toFixed(1)} ({r.label})</span>
       </div>
       <div className="flex justify-between gap-4 mb-0.5">
-        <span className="text-muted">Above 20 EMA</span>
+        <span className="text-muted">Above {ma.m20}</span>
         <span className="mono text-[var(--text-secondary)]">{fmtPct(d.pct_above_20)}</span>
       </div>
       <div className="flex justify-between gap-4 mb-0.5">
-        <span className="text-muted">Above 50 EMA</span>
+        <span className="text-muted">Above {ma.m50}</span>
         <span className="mono text-[var(--text-secondary)]">{fmtPct(d.pct_above_50)}</span>
       </div>
       <div className="flex justify-between gap-4">
-        <span className="text-muted">Above 150 EMA</span>
+        <span className="text-muted">Above {ma.m150}</span>
         <span className="mono text-[var(--text-secondary)]">{fmtPct(d.pct_above_150)}</span>
       </div>
     </div>
@@ -145,16 +169,37 @@ export default function MarketBreadthChart({
   stockCount: stockCountProp,
   zoneMode = 'absolute',
   percentileRank,
+  maBasis: maBasisProp,
 }: MarketBreadthChartProps = {}) {
   const [period, setPeriod] = useState<PeriodLabel>('66D');
   const days = PERIODS.find(p => p.label === period)!.days;
 
-  // Internal hook always runs (React rules). Its result is used only when no prop data.
-  const internal = useMarketBreadth(days);
+  // Fetch the full window once and slice locally, rather than refetching per
+  // period. The toggle lives in this component but injected data is fetched by
+  // the parent — which passes a fixed window — so a refetch keyed on `days`
+  // could never move an injected series: the toggle was inert on every page
+  // that injects data. Slicing also makes the refetch redundant on the
+  // self-fetching page, since rows are date-ordered and the newest `days` are
+  // a subset of the newest MAX_PERIOD_DAYS.
+  // `enabled` is false when data was injected — the hook must still be called
+  // (React rules), but it previously fired a full market-wide query on every
+  // such page and threw the result away.
+  // Keyed on the CONTRACT, not on whether the data has arrived: an injecting
+  // parent passes `isLoading` too, and on the first render its `data` is still
+  // undefined — gating on `dataProp` alone let the market-wide query fire once
+  // on every injecting page before the real series landed.
+  const externallyFed = dataProp !== undefined || isLoadingProp !== undefined;
+  const internal = useMarketBreadth(MAX_PERIOD_DAYS, !externallyFed);
 
-  const data      = dataProp     ?? (internal.data    ?? []);
+  const source    = dataProp     ?? (internal.data    ?? []);
+  const data      = useMemo(() => source.slice(-days), [source, days]);
   const isLoading = isLoadingProp ?? internal.isLoading;
   const isError   = isErrorProp   ?? internal.isError;
+
+  // Only the per-index path produces an injected series, so its MA basis is
+  // the honest default; an explicit prop overrides.
+  const basis: MaBasis = maBasisProp ?? (externallyFed ? 'index' : 'market');
+  const ma: MaLabels   = MA_LABELS[basis];
 
   const latest = data[data.length - 1];
   const prev   = data[data.length - 2];
@@ -206,9 +251,9 @@ export default function MarketBreadthChart({
           {/* EMA stats */}
           {!tooSmall && (
             <div className="flex items-center gap-4 pl-2 border-l border-kd-border">
-              <EmaStat label="20 EMA"  value={latest?.pct_above_20  ?? null} prev={prev?.pct_above_20  ?? null} />
-              <EmaStat label="50 EMA"  value={latest?.pct_above_50  ?? null} prev={prev?.pct_above_50  ?? null} />
-              <EmaStat label="150 EMA" value={latest?.pct_above_150 ?? null} prev={prev?.pct_above_150 ?? null} />
+              <EmaStat label={ma.m20}  value={latest?.pct_above_20  ?? null} prev={prev?.pct_above_20  ?? null} />
+              <EmaStat label={ma.m50}  value={latest?.pct_above_50  ?? null} prev={prev?.pct_above_50  ?? null} />
+              <EmaStat label={ma.m150} value={latest?.pct_above_150 ?? null} prev={prev?.pct_above_150 ?? null} />
             </div>
           )}
 
@@ -225,7 +270,7 @@ export default function MarketBreadthChart({
       <div className="flex items-start justify-between mb-2">
         <div>
           <div className="text-[11px] font-bold text-[var(--text-secondary)]">Breadth Score Trend</div>
-          <div className="text-[9px] text-muted">50% Above 20 EMA · 30% Above 50 EMA · 20% Above 150 EMA</div>
+          <div className="text-[9px] text-muted">50% Above {ma.m20} · 30% Above {ma.m50} · 20% Above {ma.m150}</div>
           {zoneMode === 'provisional' && (
             <div className="text-[9px] text-risk-amber mt-0.5">* Provisional — short index history</div>
           )}
@@ -311,7 +356,7 @@ export default function MarketBreadthChart({
               label={{ value: `Fear ${FEAR_THRESHOLD}`, position: 'right', fontSize: 9, fill: 'var(--bull)' }}
             />
 
-            <Tooltip content={<BreadthTooltip />} />
+            <Tooltip content={<BreadthTooltip ma={ma} />} />
 
             <Area
               dataKey="breadth_score"
