@@ -14,6 +14,7 @@ import type { ScanDefinition, ScanStock } from '@/types';
 import AtmosphericBadge from '@/components/domain/AtmosphericBadge';
 import { ScanFilterBar, applyFilters, DEFAULT_FILTERS, FPB_DEFAULT_FILTERS, JOURNEY_DEFAULT_FILTERS, type ScanFilters } from '@/components/domain/ScanFilterBar';
 import ScanVaNiPublisher from '@/components/domain/ScanVaNiPublisher';
+import FpbVaNiCard from '@/components/domain/FpbVaNiCard';
 import ScanStalenessBanner from '@/components/domain/ScanStalenessBanner';
 import ScannerStudio from '@/views/ScannerStudio';
 import { STUDIO_PRESET_IDS } from '@/config/scannerStudio';
@@ -1159,6 +1160,11 @@ function FpbResults({ preset, timeframe, viewMode, onViewModeChange }: {
           title="Every release since the launch baseline that has settled — reached its target, stopped, cracked, or closed its window without reaching either."
         />
       </div>
+
+      {/* The four fpb.* VaNi intents. Built end to end (intent, endpoint,
+          hook) but never rendered, so the page had no VaNi at all while
+          every Studio preset carried its own card. */}
+      <FpbVaNiCard />
 
       {/* Day-2 position layer — recent releases + hold/crack verdict + SL/target.
           Renders only once km_fpb_active (migration 156) is populated. */}

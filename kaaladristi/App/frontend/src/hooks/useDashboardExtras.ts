@@ -229,7 +229,7 @@ export function useConfluenceTimeline(days: number) {
   });
 }
 
-export function useFpbRecentOutcomes() {
+export function useFpbRecentOutcomes(enabled = true) {
   const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? '';
   return useQuery({
     queryKey: ['fpb_recent_outcomes'],
@@ -239,11 +239,12 @@ export function useFpbRecentOutcomes() {
       return res.json();
     },
     staleTime: 24 * 60 * 60 * 1000,
+    enabled,
     retry: false,
   });
 }
 
-export function useFpbWhyWatchCoil() {
+export function useFpbWhyWatchCoil(enabled = true) {
   const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? '';
   return useQuery({
     queryKey: ['fpb_why_watch_coil'],
@@ -253,11 +254,12 @@ export function useFpbWhyWatchCoil() {
       return res.json();
     },
     staleTime: 7 * 24 * 60 * 60 * 1000, // 7 days — static explanation
+    enabled,
     retry: false,
   });
 }
 
-export function useFpbCoilingIndustries() {
+export function useFpbCoilingIndustries(enabled = true) {
   const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? '';
   return useQuery({
     queryKey: ['fpb_coiling_industries'],
@@ -267,11 +269,12 @@ export function useFpbCoilingIndustries() {
       return res.json();
     },
     staleTime: 6 * 60 * 60 * 1000, // 6 hours — industry composition changes daily
+    enabled,
     retry: false,
   });
 }
 
-export function useFpbConfluenceOutlook() {
+export function useFpbConfluenceOutlook(enabled = true) {
   const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? '';
   return useQuery({
     queryKey: ['fpb_confluence_outlook'],
@@ -281,6 +284,7 @@ export function useFpbConfluenceOutlook() {
       return res.json();
     },
     staleTime: 12 * 60 * 60 * 1000, // 12 hours — setup quality changes daily
+    enabled,
     retry: false,
   });
 }
