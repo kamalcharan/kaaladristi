@@ -643,6 +643,146 @@ These are in `LESSONS_LEARNED.md` in full; summary for quick reference:
 
 ## Known Issues
 
+### 📋 VaNi docked pane — autorun brief (2026-09-11)
+
+The docked pane on `/workspace` opens on a **reading of the day**, not a menu.
+Three blocks, owner-specified: today's panchangam as a CARD (the same
+`PanchangamCard` the dashboard renders — never re-narrated in prose), then
+VaNi's read of market participation, then the questions. VIX is deliberately
+absent: display-only today, scoring parked behind `docs/claude/VIX-Upgrade.md`.
+
+**`dashboard.autorun`** is a real intent with `autorun: true` in
+`config/vaniIntents.ts`, which excludes it from every chip list
+(`getAutorunIntent()` reads it instead). It covers breadth + ROC only, in
+~110 words, and is `complexity='low'` so it routes to Qwen through the shared
+`/api/vani/ask` path (`prefer_local`, `_sebi_post_filter` — both already on
+that branch). The frontend calls it through `useVaNiAutorun`, a **query**
+not a mutation: the docked pane remounts as the user moves between workspace
+tabs, and a mutation would re-POST on every one of them.
+
+### ⚠ Every dashboard/astro/industry intent prompt was being discarded
+
+Found 2026-09-11 while verifying the autorun's Qwen routing, and it is the
+**third** silent failure in this same plumbing. `vani_ask` read
+`if scanner or equity: intent.system_prompt  else: _VANI_ASK_SYSTEM` — so
+all 10 `dashboard.*`, 4 `astro_calendar.*` and 4 `industry_transition.*`
+intents ran the generic prompt and their own registry prompt never reached a
+model. **~31,000 characters of hand-written instruction, sent nowhere.**
+
+Nothing errored. Every one of those intents answered — in the same shape,
+because they were all running the same prompt. That generic prompt caps
+output at *"exactly 3-4 sentences"* and demands a closing sentence on the
+macro/transit backdrop, which most dashboard formatters supply no transit
+data for; so a two-paragraph breadth intent could only ever come back short
+with an invented or omitted astro tail, and rule 7 could fire
+*"Insufficient atmospheric data for this period."* on perfectly good breadth
+numbers. This is very likely part of what `docs/claude/scannerenhancement.md`
+recorded as VaNi reading "generic/repeats daily".
+
+Fixed: the selection is now `vani_ask_system(intent)` — a **named function**,
+not an inline branch, precisely because a branch buried mid-handler cannot be
+tested without a DB and a live LLM. The intent prompt is authoritative;
+`_VANI_ASK_SYSTEM` survives only as the fallback for an intent carrying none.
+Compliance did not weaken — the hard prohibitions that lived only in the
+generic prompt moved to `_VANI_GROUNDING` and now apply to **every** intent,
+each registry prompt already ends with `_VANI_RULES`, and `_sebi_post_filter`
+is still the enforcing backstop. One deliberate loosening: the generic
+prompt's ban on the bare words "up" and "down" is not carried over — D39
+prohibits directional *market* language (bull/bear/uptrend/downtrend) in
+badges and labels, not English words that prose about moving averages cannot
+avoid.
+
+**`test_vani_routing.py`** (standalone, no DB, no pytest — `python
+test_vani_routing.py`) now guards this. It asserts **on the wire**: which
+backend was called and what it was sent, against a stub OpenAI-compatible
+server standing in for Qwen. Verified to FAIL against both historical bugs
+(prompt discarded → "own prompt sent"/"not generic"; `prefer_local` ignored →
+"cloud untouched").
+
+Two traps it was built around, both of which produced a false PASS first:
+
+1. **A stub reached via the cloud-first path is indistinguishable from
+   `prefer_local`** — cloud errors, falls back to local, same server, same
+   `provider='qwen-local'` return. So the test counts cloud *attempts*
+   directly by spying on `_primary_complete`, plus a control case proving
+   the tripwire can fire.
+2. **A test that rebuilds the logic tests nothing.** The first version
+   assembled `intent.system_prompt + grounding` itself and asserted that
+   substring appeared somewhere in `pipeline2_api.py`. It passed against the
+   broken code it was written to catch, because the broken version contained
+   that substring too — inside the branch that skipped dashboard intents.
+   It now executes the production `vani_ask_system` and asserts `vani_ask`
+   still calls it.
+
+**Still open** (unchanged): `prefer_local` reaches only the `/api/vani/ask`
+family. Every legacy `GET /api/ai/*` endpoint — panchang-insight,
+breadth-insight, market-pulse-insight and the rest — still routes to the
+cloud and still skips the SEBI filter.
+
+**Date resolution — a real bug, fixed here.** `vani_ask` defaulted an absent
+`req.date` to the IST **calendar** day and passed it into every assembler.
+`assemble_market_pulse_context` has an `ema_20`-gated fallback
+(`latest_confirmed_date`) but it only fires when `target_date is None`, so
+the guard never ran for a VaNi intent. Between the bhavcopy ingest and the
+indicator step — and all day on a holiday — that date either has no row or
+has one whose indicator columns are still NULL, and VaNi narrated it as
+today. `vani_ask` now resolves the confirmed bar itself when the caller
+sends no date (`km_equity_eod` for `equity.*`, `km_index_eod` otherwise); an
+explicit `req.date` is still honoured verbatim.
+
+**Owner triage of the eight dashboard intents** (2026-09-11), encoded as
+flags rather than deletions so re-enabling is one line:
+`coveredByAutorun` on #1 market_summary, #2 regime_explain, #4 warnings,
+#5 breadth_explain — hidden **only where the brief runs** (the docked pane);
+still offered in the overlay drawer on `/dashboard`, where nothing has
+answered them. `provisional` on #3 rotation_overview (industry work
+incomplete — sorts last whatever its displayOrder). `hidden` on
+#6 panchangam_outlook (astro on hold).
+
+#7 and #8 were kept but **are not the same question**: #7 reads the breadth
+LEVEL (position), #8 the ROC (velocity) — on 2026-09-11 the level was flat
+while the oscillator decelerated for a third session, which is exactly when
+one is dull and the other is the signal. Both were relabelled to ask what
+the brief did NOT already answer: "Which timeframe is breadth moving on?"
+and "Is participation accelerating or fading?" #7's second paragraph was
+asking #8's question of the wrong dataset and now stops at participation
+width. #8's old label ("Is momentum supporting longs or shorts?") put a
+directional stance in the chip text — the D39 surface — and its prompt body
+instructed the model to say which side conditions favour; both are gone.
+
+**New: `dashboard.breadth_divergence`** — "Which part of the market is
+carrying it?", the one thing the single-line brief structurally cannot
+carry. Reads `km_index_breadth` (migration 203) for a segment ladder —
+NIFTY 50 / NEXT 50 / MIDCAP 100 / 500 / BANK — so every row shares one
+basis. On 2026-09-11: NIFTY BANK 37.9 vs NIFTY 50 21.4, a 16.5-point spread
+inside a market whose headline read 39.3. **The prompt is explicitly
+forbidden from subtracting the all-NSE figure from an index row**: per-index
+is ema_20+sma_50+sma_150 on raw closes (D40), market-wide is all-EMA on
+cliff-adjusted closes (D44) — different basis AND different universe. That
+is the trap the two-breadth-pipelines lesson warns about, one prompt away
+from being narrated as a finding. NIFTY SMLCAP 100 is absent from
+`km_index_breadth` and is deliberately not in the ladder.
+
+Also fixed while here: `_fmt_breadth_momentum` fed the model
+"positive — bullish momentum breadth" in its own prompt input, handing it
+the exact vocabulary `_VANI_RULES` bans two paragraphs later. Both
+momentum formatters now name the oscillator state through `_roc_state()`,
+which mirrors `ROC_BADGE_MAP` in `BreadthRocChart.tsx` — expanding /
+slowing / turning / contracting / warming up.
+
+**Componentisation** (owner: "you will end up creating different components
+if reusability is not here"). `components/domain/VaNi/` now holds
+`types.ts` (shared `ChatMessage`), `VaNiMessage.tsx` (+ `VaNiAvatar`,
+`VaNiThinking`), `VaNiIntentButton.tsx` and `VaNiIntentTray.tsx`.
+`VaNiChatPanel` had hand-maintained copies of the intent button in three
+places and the answer bubble inline; the brief needed a fourth and a second
+bubble. The tray is **pinned below the scroll area in docked mode** — the
+brief is taller than the pane, so an inline list put every question below
+the fold — and it replaces what used to be three separate inline surfaces
+(empty state, follow-up, "all answered"). The overlay drawer is untouched:
+it opens deliberately, with a question already in mind, so it neither
+autoruns nor uses the tray.
+
 ### 📋 NEXT SESSION (owner + Claude) — Flower Pot: VaNi intents (the card, tiles and ETF fix shipped)
 
 Session 2026-09-07 (2). Full record of the prior audit: `docs/claude/scanner-gap-audit-2026-09-06.md` §11.

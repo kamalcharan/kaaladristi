@@ -2,9 +2,10 @@
  * VaNi Conversational Layer — React hooks
  *
  * useVaNiAsk()          — mutation to ask a VaNi intent question
+ * useVaNiAutorun()      — query for the opening brief fired without a click
  */
 
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 
 const pipelineUrl =
   (import.meta.env.VITE_PIPELINE_API_URL as string) ?? '';
@@ -144,6 +145,48 @@ export function useVaNiAsk() {
       if (!res.ok) {
         return {
           intent_id: req.intent_id,
+          response: null,
+          ai: false,
+          cached: false,
+          provider: null,
+          error: `HTTP ${res.status}`,
+        };
+      }
+      return res.json();
+    },
+  });
+}
+
+/**
+ * The opening brief — VaNi's read of the day, fired on arrival rather than
+ * on a click.
+ *
+ * A query, not a mutation, on purpose: the docked pane mounts and remounts as
+ * the user moves between workspace tabs, and a mutation would re-POST (and on
+ * a cache miss, re-bill an LLM call) every single time. Keyed on the intent
+ * and the resolved DATA date — not the calendar day — so it dedupes across
+ * mounts and stays valid until the pipeline produces a newer bar.
+ *
+ * `date` is optional and normally omitted: the backend resolves the latest
+ * indicator-complete bar itself (ema_20-gated), which is the only date whose
+ * numbers are safe to narrate.
+ */
+export function useVaNiAutorun(intentId: string, date?: string, enabled = true) {
+  return useQuery<VaNiAskResponse>({
+    queryKey: ['vani', 'autorun', intentId, date ?? 'latest'],
+    enabled: enabled && !!intentId,
+    staleTime: 1000 * 60 * 30,
+    gcTime: 1000 * 60 * 60,
+    retry: 1,
+    queryFn: async () => {
+      const res = await fetch(`${pipelineUrl}/api/vani/ask`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ intent_id: intentId, ...(date ? { date } : {}) }),
+      });
+      if (!res.ok) {
+        return {
+          intent_id: intentId,
           response: null,
           ai: false,
           cached: false,
