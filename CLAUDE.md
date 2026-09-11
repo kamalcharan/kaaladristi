@@ -660,6 +660,65 @@ that branch). The frontend calls it through `useVaNiAutorun`, a **query**
 not a mutation: the docked pane remounts as the user moves between workspace
 tabs, and a mutation would re-POST on every one of them.
 
+### ⚠ Every dashboard/astro/industry intent prompt was being discarded
+
+Found 2026-09-11 while verifying the autorun's Qwen routing, and it is the
+**third** silent failure in this same plumbing. `vani_ask` read
+`if scanner or equity: intent.system_prompt  else: _VANI_ASK_SYSTEM` — so
+all 10 `dashboard.*`, 4 `astro_calendar.*` and 4 `industry_transition.*`
+intents ran the generic prompt and their own registry prompt never reached a
+model. **~31,000 characters of hand-written instruction, sent nowhere.**
+
+Nothing errored. Every one of those intents answered — in the same shape,
+because they were all running the same prompt. That generic prompt caps
+output at *"exactly 3-4 sentences"* and demands a closing sentence on the
+macro/transit backdrop, which most dashboard formatters supply no transit
+data for; so a two-paragraph breadth intent could only ever come back short
+with an invented or omitted astro tail, and rule 7 could fire
+*"Insufficient atmospheric data for this period."* on perfectly good breadth
+numbers. This is very likely part of what `docs/claude/scannerenhancement.md`
+recorded as VaNi reading "generic/repeats daily".
+
+Fixed: the selection is now `vani_ask_system(intent)` — a **named function**,
+not an inline branch, precisely because a branch buried mid-handler cannot be
+tested without a DB and a live LLM. The intent prompt is authoritative;
+`_VANI_ASK_SYSTEM` survives only as the fallback for an intent carrying none.
+Compliance did not weaken — the hard prohibitions that lived only in the
+generic prompt moved to `_VANI_GROUNDING` and now apply to **every** intent,
+each registry prompt already ends with `_VANI_RULES`, and `_sebi_post_filter`
+is still the enforcing backstop. One deliberate loosening: the generic
+prompt's ban on the bare words "up" and "down" is not carried over — D39
+prohibits directional *market* language (bull/bear/uptrend/downtrend) in
+badges and labels, not English words that prose about moving averages cannot
+avoid.
+
+**`test_vani_routing.py`** (standalone, no DB, no pytest — `python
+test_vani_routing.py`) now guards this. It asserts **on the wire**: which
+backend was called and what it was sent, against a stub OpenAI-compatible
+server standing in for Qwen. Verified to FAIL against both historical bugs
+(prompt discarded → "own prompt sent"/"not generic"; `prefer_local` ignored →
+"cloud untouched").
+
+Two traps it was built around, both of which produced a false PASS first:
+
+1. **A stub reached via the cloud-first path is indistinguishable from
+   `prefer_local`** — cloud errors, falls back to local, same server, same
+   `provider='qwen-local'` return. So the test counts cloud *attempts*
+   directly by spying on `_primary_complete`, plus a control case proving
+   the tripwire can fire.
+2. **A test that rebuilds the logic tests nothing.** The first version
+   assembled `intent.system_prompt + grounding` itself and asserted that
+   substring appeared somewhere in `pipeline2_api.py`. It passed against the
+   broken code it was written to catch, because the broken version contained
+   that substring too — inside the branch that skipped dashboard intents.
+   It now executes the production `vani_ask_system` and asserts `vani_ask`
+   still calls it.
+
+**Still open** (unchanged): `prefer_local` reaches only the `/api/vani/ask`
+family. Every legacy `GET /api/ai/*` endpoint — panchang-insight,
+breadth-insight, market-pulse-insight and the rest — still routes to the
+cloud and still skips the SEBI filter.
+
 **Date resolution — a real bug, fixed here.** `vani_ask` defaulted an absent
 `req.date` to the IST **calendar** day and passed it into every assembler.
 `assemble_market_pulse_context` has an `ema_20`-gated fallback

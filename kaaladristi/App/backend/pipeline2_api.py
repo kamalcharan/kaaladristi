@@ -5270,6 +5270,63 @@ _VANI_ASK_SYSTEM = (
 )
 
 
+# Appended to every intent's own system prompt. Carries the two things the
+# generic _VANI_ASK_SYSTEM was doing that the per-intent prompts do not: the
+# grounding fence, and the hard word prohibitions.
+#
+# Deliberately NOT carried over from the generic prompt: its ban on the bare
+# words "up" and "down". SEBI/D39 prohibits directional MARKET language
+# (bull/bear/uptrend/downtrend) in badges and labels — not the English words
+# themselves, which ordinary prose about moving averages cannot avoid
+# ("above", "picking up"). The directional terms that do matter are banned
+# below and again in _VANI_RULES, and _sebi_post_filter is the backstop.
+_VANI_GROUNDING = (
+    "\n\nABSOLUTE GROUNDING RULES: Use ONLY the data provided between "
+    "[DATA START] and [DATA END]. Never invent, assume, or extrapolate "
+    "stock names, numbers, industries, planet positions, nakshatras, "
+    "percentages or dates not explicitly stated. "
+    "Refer to fields by their plain names (e.g. 'delivery surge', "
+    "'relative volume') — never echo raw field labels. "
+    "NEVER use these words: buy, sell, long, short, invest, recommend, "
+    "predict, forecast, bullish, bearish, rally, correction, target. "
+    "If a data field reads N/A, missing or unavailable, skip it entirely — "
+    "do not substitute or guess. If the data provided is insufficient to "
+    "answer, say so plainly in one sentence rather than filling the gap."
+)
+
+
+def vani_ask_system(intent) -> str:
+    """The system prompt an intent is actually sent: its own, plus grounding.
+
+    A named function rather than an inline branch in vani_ask because this is
+    the exact line that broke, and a branch buried mid-handler cannot be
+    tested without a database and a live LLM (see test_vani_routing.py).
+
+    History. This used to read `if scanner or equity: intent.system_prompt
+    else: _VANI_ASK_SYSTEM`, so every dashboard, astro_calendar and
+    industry_transition intent had its registry prompt silently discarded —
+    18 intents and ~31,000 characters of hand-written instruction that never
+    reached a model (found 2026-09-11 while verifying the autorun's Qwen
+    routing). Nothing errored: they all answered, in the same shape, because
+    they were all running the same prompt. The generic one caps output at
+    "exactly 3-4 sentences" and demands a closing sentence on the
+    macro/transit backdrop that most dashboard formatters supply no transit
+    data for, so a two-paragraph breadth intent could only ever come back
+    short with an invented or omitted astro tail.
+
+    A registry whose prompts are not sent is not a registry. The intent
+    prompt is now authoritative; _VANI_ASK_SYSTEM survives only as the
+    fallback for an intent that somehow carries none. Compliance is not
+    weakened: the hard prohibitions that lived only in the generic prompt
+    are in _VANI_GROUNDING and now apply to every intent, each registry
+    prompt already ends with _VANI_RULES, and _sebi_post_filter remains the
+    enforcing backstop.
+    """
+    if not getattr(intent, 'system_prompt', None):
+        return _VANI_ASK_SYSTEM
+    return intent.system_prompt + _VANI_GROUNDING
+
+
 def _wrap_vani_user_msg(user_msg: str) -> str:
     """Wrap every vani/ask user message with grounding delimiters."""
     return (
@@ -5539,23 +5596,7 @@ def vani_ask(req: VaNiAskRequest):
             'provider': None, 'error': 'No data available for this date',
         }
 
-    # Call LLM. Scanner AND equity intents carry their own carefully-
-    # structured system prompts — the generic _VANI_ASK_SYSTEM is written
-    # for the astro/macro intents and actively wrong for signal narration
-    # ("atmospheric conditions", "macro backdrop", 3-4 sentence cap).
-    # Dashboard/astro/industry intents keep _VANI_ASK_SYSTEM unchanged.
-    # Both paths keep the grounding wrapper so the model can't drift
-    # outside the provided data.
-    if _is_scanner or intent_id.startswith('equity.'):
-        _ask_system = intent.system_prompt + (
-            "\n\nABSOLUTE GROUNDING RULES: Use ONLY the data provided between "
-            "[DATA START] and [DATA END]. Never invent, assume, or extrapolate "
-            "stock names, numbers, industries, or dates not explicitly stated. "
-            "Refer to fields by their plain names (e.g. 'delivery surge', "
-            "'relative volume') — never echo raw field labels."
-        )
-    else:
-        _ask_system = _VANI_ASK_SYSTEM
+    _ask_system = vani_ask_system(intent)
     _wrapped_msg = _wrap_vani_user_msg(user_msg)
 
     # Up to 2 attempts: a compliance reject or empty generation retries once
