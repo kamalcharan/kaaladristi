@@ -5300,8 +5300,26 @@ def vani_ask(req: VaNiAskRequest):
     Response: { intent_id, date, response, ai, cached, provider, error? }
     """
     tz_ist = __import__('zoneinfo').ZoneInfo('Asia/Kolkata')
-    date_str = req.date or datetime.now(tz=tz_ist).strftime('%Y-%m-%d')
     intent_id = req.intent_id
+
+    # ── Resolve the working date ──
+    # An absent req.date used to fall back to the IST CALENDAR day, which is
+    # not the same thing as the latest date the pipeline has finished
+    # computing. Between the bhavcopy ingest and the indicator step (and all
+    # day on a holiday), the calendar day either has no row at all or has a
+    # row whose ema_20/magic_rs/flow_type are still NULL — and every branch
+    # below feeds that date straight into an assembler, so VaNi narrated a
+    # half-computed or empty bar as "today". Gate on ema_20, the same column
+    # (and the same reasoning) as scanEngine.ts's resolveConfirmedLatestDate.
+    # An explicit req.date is always honoured — the caller asked for that bar.
+    db = _db()
+    if req.date:
+        date_str = req.date
+    else:
+        _date_table = ('km_equity_eod' if intent_id.startswith('equity.')
+                       else 'km_index_eod')
+        date_str = (latest_confirmed_date(db, _date_table)
+                    or datetime.now(tz=tz_ist).strftime('%Y-%m-%d'))
 
     # Look up intent definition
     intent = _VANI_INTENTS.get(intent_id)
@@ -5335,7 +5353,6 @@ def vani_ask(req: VaNiAskRequest):
                 }
 
     # Assemble context + format user message based on intent page group
-    db = _db()
     try:
         prefix = intent_id.split('.')[0]
 

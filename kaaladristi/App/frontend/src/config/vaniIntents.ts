@@ -22,57 +22,94 @@ export interface VaNiIntentDef {
   page: VaNiPage;
   icon: string;
   displayOrder: number;
+  /** Fired automatically when the pane mounts on this page — the opening
+   *  brief, not a question the user picks. Excluded from every chip list by
+   *  getIntentsForPage(); read it with getAutorunIntent() instead. */
+  autorun?: boolean;
+  /** Its ground is already covered by the autorun brief. Hidden wherever the
+   *  brief runs (the docked pane) and still offered where it does not (the
+   *  overlay drawer on /dashboard) — so the prompts stay live and re-enabling
+   *  is one flag, not a rewrite. Owner triage, 2026-09-11. */
+  coveredByAutorun?: boolean;
+  /** Depends on work that has not landed — rendered, but it will answer from
+   *  placeholder data until that work does. Industry rotation, today. */
+  provisional?: boolean;
+  /** Parked: rendered nowhere until the flag is removed. Astro is on hold. */
+  hidden?: boolean;
 }
 
 export const VANI_INTENTS: Record<string, VaNiIntentDef> = {
   // ── Dashboard ──────────────────────────────────────────────────────────────
+  // Fires on arrival, before the user clicks anything: the docked pane opens
+  // on a reading of the day rather than a menu of questions. Panchangam is
+  // rendered beside it as a CARD (VaNiAutorunBrief), so this covers breadth
+  // and the ROC oscillator only.
+  'dashboard.autorun': {
+    label: "Today's read",
+    page: 'dashboard',
+    icon: 'sunrise',
+    displayOrder: 0,
+    autorun: true,
+  },
   'dashboard.market_summary': {
     label: "Summarize today's market",
     page: 'dashboard',
     icon: 'activity',
     displayOrder: 1,
+    coveredByAutorun: true,
   },
   'dashboard.regime_explain': {
     label: "What's the market regime today?",
     page: 'dashboard',
     icon: 'gauge',
     displayOrder: 2,
+    coveredByAutorun: true,
   },
   'dashboard.rotation_overview': {
     label: 'Which industries are leading?',
     page: 'dashboard',
     icon: 'trending-up',
     displayOrder: 3,
+    provisional: true,
   },
   'dashboard.warnings': {
     label: 'Are there any market warnings today?',
     page: 'dashboard',
     icon: 'alert-triangle',
     displayOrder: 4,
+    coveredByAutorun: true,
   },
   'dashboard.breadth_explain': {
     label: 'Explain the breadth data',
     page: 'dashboard',
     icon: 'bar-chart-3',
     displayOrder: 5,
+    coveredByAutorun: true,
   },
   'dashboard.panchangam_outlook': {
     label: 'Panchangam outlook — next 6 days',
     page: 'dashboard',
     icon: 'calendar',
     displayOrder: 6,
+    hidden: true,
   },
   'dashboard.breadth_trend': {
-    label: 'How has breadth changed in the last 2-3 days?',
+    label: 'Which timeframe is breadth moving on?',
     page: 'dashboard',
     icon: 'trending-up',
     displayOrder: 7,
   },
   'dashboard.breadth_momentum': {
-    label: 'Is momentum supporting longs or shorts?',
+    label: 'Is participation accelerating or fading?',
     page: 'dashboard',
     icon: 'zap',
     displayOrder: 8,
+  },
+  'dashboard.breadth_divergence': {
+    label: 'Which part of the market is carrying it?',
+    page: 'dashboard',
+    icon: 'git-compare',
+    displayOrder: 9,
   },
   // ── Scanner (parameterized by preset — same set for every scan) ──────────
   'scanner.explain_preset': {
@@ -195,10 +232,35 @@ export const EQUITY_INTENTS: Record<string, EquityIntentDef> = {
   // not gated behind a click). Intentionally no registry entry here.
 };
 
-export function getIntentsForPage(page: VaNiPage): Array<{ intentId: string } & VaNiIntentDef> {
+/** The intent this page fires on arrival, if it has one. */
+export function getAutorunIntent(page: VaNiPage): ({ intentId: string } & VaNiIntentDef) | null {
+  const hit = Object.entries(VANI_INTENTS).find(([, def]) => def.page === page && def.autorun);
+  return hit ? { intentId: hit[0], ...hit[1] } : null;
+}
+
+/**
+ * Questions offered as chips on a page.
+ *
+ * `withAutorun` says whether the opening brief is running on this surface.
+ * When it is, the intents it already covers are dropped — the brief has just
+ * stated today's breadth and ROC, and re-offering "Explain the breadth data"
+ * underneath it asks the user to pay for the same paragraph twice.
+ */
+export function getIntentsForPage(
+  page: VaNiPage,
+  withAutorun = false,
+): Array<{ intentId: string } & VaNiIntentDef> {
   return Object.entries(VANI_INTENTS)
-    .filter(([, def]) => def.page === page)
-    .sort(([, a], [, b]) => a.displayOrder - b.displayOrder)
+    .filter(([, def]) => def.page === page
+      && !def.autorun
+      && !def.hidden
+      && !(withAutorun && def.coveredByAutorun))
+    // Provisional intents sink to the bottom whatever their displayOrder —
+    // a question answering from placeholder data must not be the first thing
+    // offered. Clearing the flag restores its intended position, so the
+    // ordering above stays the real one.
+    .sort(([, a], [, b]) => (Number(!!a.provisional) - Number(!!b.provisional))
+      || (a.displayOrder - b.displayOrder))
     .map(([id, def]) => ({ intentId: id, ...def }));
 }
 

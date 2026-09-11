@@ -238,6 +238,64 @@ def _fetch_breadth_history(db, days: int = 3) -> list[dict]:
     return result
 
 
+# Segment ladder read by the divergence intent. Large -> broad, in that
+# order, so the model sees a ladder rather than a bag of indices. Every name
+# here must exist in km_index_breadth (migration 203); NIFTY SMLCAP 100 is
+# deliberately absent — it has no rows in that table.
+_BREADTH_SEGMENTS = [
+    'NIFTY 50',
+    'NIFTY NEXT 50',
+    'NIFTY MIDCAP 100',
+    'NIFTY 500',
+    'NIFTY BANK',
+]
+
+
+def _fetch_index_breadth_snapshot(db, trade_date: str) -> list[dict]:
+    """Per-index breadth for the segment ladder, on one date.
+
+    Reads km_index_breadth (migration 203) — the SAME numbers the chart draws,
+    not a recomputation. Note these are NOT comparable leg-for-leg with
+    km_market_breadth: per-index uses ema_20 + sma_50 + sma_150 on raw closes
+    (D40), market-wide is all-EMA on cliff-adjusted closes (D44). The gap
+    between them is a real difference in basis as well as in universe, which
+    is why the prompt is told to lead with the segment SPREAD (large vs mid vs
+    broad, all on the same basis) rather than with market-wide minus NIFTY 50.
+    """
+    try:
+        syms = db.select('km_index_symbols', 'id,name', limit=500) or []
+    except Exception:
+        return []
+    by_name = {r['name']: r['id'] for r in syms if r.get('name')}
+
+    out = []
+    for name in _BREADTH_SEGMENTS:
+        idx_id = by_name.get(name)
+        if not idx_id:
+            continue
+        try:
+            rows = db.select(
+                'km_index_breadth', '*',
+                filters={'index_id': idx_id, 'trade_date': trade_date},
+                limit=1,
+            )
+        except Exception:
+            continue
+        if not rows:
+            continue
+        r = rows[0]
+        score = _safe_float(r.get('breadth_score'), 0)
+        out.append({
+            'name': name,
+            'score': score,
+            'regime': _bucket_breadth_regime(score),
+            'pct_above_20': _safe_float(r.get('pct_above_20')),
+            'pct_above_50': _safe_float(r.get('pct_above_50')),
+            'pct_above_150': _safe_float(r.get('pct_above_150')),
+        })
+    return out
+
+
 def _fetch_breadth_roc_history(db, days: int = 3) -> list[dict]:
     """Fetch last N trading days of breadth ROC."""
     try:
@@ -284,6 +342,9 @@ def assemble_dashboard_context(db, target_date: str = None) -> dict | None:
     # Breadth ROC history: last 3 trading days
     breadth_roc_history = _fetch_breadth_roc_history(db, days=3)
 
+    # Per-index breadth ladder (large -> broad) for the divergence intent
+    index_breadth = _fetch_index_breadth_snapshot(db, actual_date)
+
     manipulation_count = 0
     broken_signals_count = 0
 
@@ -294,6 +355,7 @@ def assemble_dashboard_context(db, target_date: str = None) -> dict | None:
         'breadth_roc': pulse.get('breadth_roc'),
         'breadth_history': breadth_history,
         'breadth_roc_history': breadth_roc_history,
+        'index_breadth': index_breadth,
         'astro': pulse.get('astro', {}),
         'panchang': pulse.get('panchang'),
         'panchang_outlook': panchang_outlook,
@@ -350,6 +412,7 @@ def build_cache_context(intent_id: str, ctx: dict) -> dict:
 def format_user_message(intent_id: str, ctx: dict) -> str:
     """Format context into a user message string for the LLM."""
     formatters = {
+        'dashboard.autorun': _fmt_autorun,
         'dashboard.market_summary': _fmt_market_summary,
         'dashboard.regime_explain': _fmt_regime_explain,
         'dashboard.rotation_overview': _fmt_rotation_overview,
@@ -358,6 +421,7 @@ def format_user_message(intent_id: str, ctx: dict) -> str:
         'dashboard.panchangam_outlook': _fmt_panchangam_outlook,
         'dashboard.breadth_trend': _fmt_breadth_trend,
         'dashboard.breadth_momentum': _fmt_breadth_momentum,
+        'dashboard.breadth_divergence': _fmt_breadth_divergence,
     }
     formatter = formatters.get(intent_id)
     if not formatter:
@@ -366,6 +430,87 @@ def format_user_message(intent_id: str, ctx: dict) -> str:
 
 
 # ── Formatters ────────────────────────────────────────────────────────────────
+
+def _roc_state(roc13: float, sma: float, prev13: float | None) -> str:
+    """Name the ROC oscillator state in the ONLY vocabulary allowed on screen.
+
+    Mirrors ROC_BADGE_MAP in BreadthRocChart.tsx — D39 forbids bull/bear
+    language in any badge or label, and the prompt must not hand the model
+    the words its own voice rules ban.
+    """
+    if roc13 > sma and roc13 > 0:
+        return 'expanding'
+    if roc13 > 0 and roc13 <= sma:
+        return 'slowing'
+    if prev13 is not None and (prev13 > 0) != (roc13 > 0):
+        return 'turning'
+    if roc13 < 0 and roc13 < sma:
+        return 'contracting'
+    return 'warming up'
+
+
+def _fmt_autorun(ctx: dict) -> str:
+    """The opening brief: breadth level + ROC direction of travel.
+
+    Panchangam is NOT narrated here — it renders as its own card above the
+    brief, and VIX is parked (see docs/claude/VIX-Upgrade.md), so this stays
+    deliberately narrow rather than becoming a second market_summary.
+    """
+    b = ctx.get('breadth') or {}
+    score = _safe_float(b.get('score'), 0)
+    regime = _bucket_breadth_regime(score)
+
+    roc = ctx.get('breadth_roc') or {}
+    roc13 = _safe_float(roc.get('roc_13'), 0)
+    roc55 = _safe_float(roc.get('roc_55'), 0)
+    sma = _safe_float(roc.get('sma_breadth'), 0)
+
+    b_hist = ctx.get('breadth_history', []) or []
+    r_hist = ctx.get('breadth_roc_history', []) or []
+    prev13 = _safe_float(r_hist[-2].get('roc_13'), None) if len(r_hist) >= 2 else None
+    state = _roc_state(roc13, sma, prev13)
+
+    b_lines = '\n'.join(
+        f"  {h['date']}: Score={h['score']:.1f} ({h['regime']}), "
+        f"20 EMA: {h['pct_above_20']}%, 50 EMA: {h['pct_above_50']}%, "
+        f"150 EMA: {h['pct_above_150']}%"
+        for h in b_hist
+    ) or '  No history available'
+
+    r_lines = '\n'.join(
+        f"  {h['date']}: ROC_13={h['roc_13']:+.4f}, ROC_55={h['roc_55']:+.4f}, "
+        f"Spread={h['spread']:+.6f}"
+        for h in r_hist
+    ) or '  No history available'
+
+    # Which leg is out of line: the one furthest from the mean of the three.
+    legs = {
+        '20 EMA': _safe_float(b.get('pct_above_20'), 0),
+        '50 EMA': _safe_float(b.get('pct_above_50'), 0),
+        '150 EMA': _safe_float(b.get('pct_above_150'), 0),
+    }
+    mean = sum(legs.values()) / 3 if legs else 0
+    outlier = max(legs, key=lambda k: abs(legs[k] - mean)) if legs else 'N/A'
+
+    return (
+        f"Market participation as of the {ctx['date']} close "
+        f"(the last completed trading session):\n"
+        f"\n--- Breadth (all NSE, EMA-based, corporate-action adjusted) ---\n"
+        f"Score: {score:.1f} ({regime})\n"
+        f"Above 20 EMA: {legs['20 EMA']:.1f}%, "
+        f"50 EMA: {legs['50 EMA']:.1f}%, 150 EMA: {legs['150 EMA']:.1f}%\n"
+        f"Timeframe furthest from the other two: {outlier}\n"
+        f"\n--- Last 3 sessions ---\n{b_lines}\n"
+        f"\n--- Breadth ROC oscillator ---\n"
+        f"ROC_13 (fast): {roc13:+.4f}\n"
+        f"ROC_55 (slow): {roc55:+.4f}\n"
+        f"SMA_BREADTH (signal): {sma:+.4f}\n"
+        f"Fast/slow spread: {roc13 - roc55:+.4f}\n"
+        f"On-screen oscillator state: {state}\n"
+        f"\n--- ROC, last 3 sessions ---\n{r_lines}\n"
+        f"\nWrite the opening brief."
+    )
+
 
 def _fmt_market_summary(ctx: dict) -> str:
     idx_lines = []
@@ -641,14 +786,62 @@ def _fmt_breadth_momentum(ctx: dict) -> str:
     return (
         f"Breadth Momentum analysis as of {ctx['date']}:\n"
         f"\n--- Current ROC Readings ---\n"
-        f"ROC_13: {roc13:+.4f} ({'positive — bullish momentum breadth' if roc13 > 0 else 'negative — bearish momentum breadth'})\n"
-        f"ROC_55: {roc55:+.4f} ({'positive — longer-term bullish' if roc55 > 0 else 'negative — longer-term bearish'})\n"
+        f"ROC_13: {roc13:+.4f} "
+        f"({'positive — participation rising' if roc13 > 0 else 'negative — participation falling'})\n"
+        f"ROC_55: {roc55:+.4f} "
+        f"({'positive on the slow leg' if roc55 > 0 else 'negative on the slow leg'})\n"
         f"SMA_BREADTH: {sma:+.4f} ({'confirming ROC_13' if (sma > 0) == (roc13 > 0) else 'diverging from ROC_13'})\n"
         f"Fast/Slow spread: {spread:+.4f} ({'fast outpacing slow — expanding' if spread > 0 else 'fast lagging slow — narrowing'})\n"
         f"\n--- Last 3 Sessions ---\n{hist_str}\n"
         f"Momentum direction: {roc_direction}\n"
-        f"\nExplain why breadth momentum is {'positive' if roc13 > 0 else 'negative'} "
-        f"and what this means for existing long and short positions."
+        f"On-screen oscillator state: {_roc_state(roc13, sma, history[-2]['roc_13'] if len(history) >= 2 else None)}\n"
+        f"\nExplain what the rate of change is doing and how wide the "
+        f"momentum backdrop is. Do not discuss positions."
+    )
+
+
+def _fmt_breadth_divergence(ctx: dict) -> str:
+    segments = ctx.get('index_breadth') or []
+    b = ctx.get('breadth') or {}
+    mkt_score = _safe_float(b.get('score'), 0)
+
+    if not segments:
+        return (
+            f"No per-index breadth rows are available for {ctx['date']}.\n"
+            f"Say plainly that the segment comparison cannot be made for this "
+            f"session, and do not substitute any other number for it."
+        )
+
+    seg_lines = '\n'.join(
+        f"  {sg['name']}: Score={sg['score']:.1f} ({sg['regime']}), "
+        f"20: {sg['pct_above_20']:.1f}%, 50: {sg['pct_above_50']:.1f}%, "
+        f"150: {sg['pct_above_150']:.1f}%"
+        for sg in segments
+    )
+
+    scores = {sg['name']: sg['score'] for sg in segments}
+    strongest = max(scores, key=lambda k: scores[k])
+    weakest = min(scores, key=lambda k: scores[k])
+    spread = scores[strongest] - scores[weakest]
+
+    return (
+        f"Breadth by market segment as of the {ctx['date']} close:\n"
+        f"\n--- Per-index breadth (km_index_breadth: ema_20 + sma_50 + sma_150, "
+        f"raw closes — one basis, comparable across every line below) ---\n"
+        f"{seg_lines}\n"
+        f"\nWidest segment gap: {strongest} ({scores[strongest]:.1f}) vs "
+        f"{weakest} ({scores[weakest]:.1f}) — {spread:.1f} points apart.\n"
+        f"\n--- All-NSE market breadth, for scale only ---\n"
+        f"Score: {mkt_score:.1f} ({_bucket_breadth_regime(mkt_score)}) over the "
+        f"whole listed NSE universe.\n"
+        f"IMPORTANT: the all-NSE figure is computed on a DIFFERENT basis "
+        f"(all-EMA, corporate-action adjusted) and over a far larger universe, "
+        f"so it is not directly comparable to the per-index rows. Use it only "
+        f"to say roughly where the whole market sits; NEVER present the "
+        f"difference between it and an index row as a measured divergence, and "
+        f"never call it an error or a data problem.\n"
+        f"\nExplain which part of the market is carrying participation and "
+        f"which is lagging, using the segment rows against each other."
     )
 
 

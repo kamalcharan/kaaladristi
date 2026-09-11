@@ -643,6 +643,87 @@ These are in `LESSONS_LEARNED.md` in full; summary for quick reference:
 
 ## Known Issues
 
+### 📋 VaNi docked pane — autorun brief (2026-09-11)
+
+The docked pane on `/workspace` opens on a **reading of the day**, not a menu.
+Three blocks, owner-specified: today's panchangam as a CARD (the same
+`PanchangamCard` the dashboard renders — never re-narrated in prose), then
+VaNi's read of market participation, then the questions. VIX is deliberately
+absent: display-only today, scoring parked behind `docs/claude/VIX-Upgrade.md`.
+
+**`dashboard.autorun`** is a real intent with `autorun: true` in
+`config/vaniIntents.ts`, which excludes it from every chip list
+(`getAutorunIntent()` reads it instead). It covers breadth + ROC only, in
+~110 words, and is `complexity='low'` so it routes to Qwen through the shared
+`/api/vani/ask` path (`prefer_local`, `_sebi_post_filter` — both already on
+that branch). The frontend calls it through `useVaNiAutorun`, a **query**
+not a mutation: the docked pane remounts as the user moves between workspace
+tabs, and a mutation would re-POST on every one of them.
+
+**Date resolution — a real bug, fixed here.** `vani_ask` defaulted an absent
+`req.date` to the IST **calendar** day and passed it into every assembler.
+`assemble_market_pulse_context` has an `ema_20`-gated fallback
+(`latest_confirmed_date`) but it only fires when `target_date is None`, so
+the guard never ran for a VaNi intent. Between the bhavcopy ingest and the
+indicator step — and all day on a holiday — that date either has no row or
+has one whose indicator columns are still NULL, and VaNi narrated it as
+today. `vani_ask` now resolves the confirmed bar itself when the caller
+sends no date (`km_equity_eod` for `equity.*`, `km_index_eod` otherwise); an
+explicit `req.date` is still honoured verbatim.
+
+**Owner triage of the eight dashboard intents** (2026-09-11), encoded as
+flags rather than deletions so re-enabling is one line:
+`coveredByAutorun` on #1 market_summary, #2 regime_explain, #4 warnings,
+#5 breadth_explain — hidden **only where the brief runs** (the docked pane);
+still offered in the overlay drawer on `/dashboard`, where nothing has
+answered them. `provisional` on #3 rotation_overview (industry work
+incomplete — sorts last whatever its displayOrder). `hidden` on
+#6 panchangam_outlook (astro on hold).
+
+#7 and #8 were kept but **are not the same question**: #7 reads the breadth
+LEVEL (position), #8 the ROC (velocity) — on 2026-09-11 the level was flat
+while the oscillator decelerated for a third session, which is exactly when
+one is dull and the other is the signal. Both were relabelled to ask what
+the brief did NOT already answer: "Which timeframe is breadth moving on?"
+and "Is participation accelerating or fading?" #7's second paragraph was
+asking #8's question of the wrong dataset and now stops at participation
+width. #8's old label ("Is momentum supporting longs or shorts?") put a
+directional stance in the chip text — the D39 surface — and its prompt body
+instructed the model to say which side conditions favour; both are gone.
+
+**New: `dashboard.breadth_divergence`** — "Which part of the market is
+carrying it?", the one thing the single-line brief structurally cannot
+carry. Reads `km_index_breadth` (migration 203) for a segment ladder —
+NIFTY 50 / NEXT 50 / MIDCAP 100 / 500 / BANK — so every row shares one
+basis. On 2026-09-11: NIFTY BANK 37.9 vs NIFTY 50 21.4, a 16.5-point spread
+inside a market whose headline read 39.3. **The prompt is explicitly
+forbidden from subtracting the all-NSE figure from an index row**: per-index
+is ema_20+sma_50+sma_150 on raw closes (D40), market-wide is all-EMA on
+cliff-adjusted closes (D44) — different basis AND different universe. That
+is the trap the two-breadth-pipelines lesson warns about, one prompt away
+from being narrated as a finding. NIFTY SMLCAP 100 is absent from
+`km_index_breadth` and is deliberately not in the ladder.
+
+Also fixed while here: `_fmt_breadth_momentum` fed the model
+"positive — bullish momentum breadth" in its own prompt input, handing it
+the exact vocabulary `_VANI_RULES` bans two paragraphs later. Both
+momentum formatters now name the oscillator state through `_roc_state()`,
+which mirrors `ROC_BADGE_MAP` in `BreadthRocChart.tsx` — expanding /
+slowing / turning / contracting / warming up.
+
+**Componentisation** (owner: "you will end up creating different components
+if reusability is not here"). `components/domain/VaNi/` now holds
+`types.ts` (shared `ChatMessage`), `VaNiMessage.tsx` (+ `VaNiAvatar`,
+`VaNiThinking`), `VaNiIntentButton.tsx` and `VaNiIntentTray.tsx`.
+`VaNiChatPanel` had hand-maintained copies of the intent button in three
+places and the answer bubble inline; the brief needed a fourth and a second
+bubble. The tray is **pinned below the scroll area in docked mode** — the
+brief is taller than the pane, so an inline list put every question below
+the fold — and it replaces what used to be three separate inline surfaces
+(empty state, follow-up, "all answered"). The overlay drawer is untouched:
+it opens deliberately, with a question already in mind, so it neither
+autoruns nor uses the tray.
+
 ### 📋 NEXT SESSION (owner + Claude) — Flower Pot: VaNi intents (the card, tiles and ETF fix shipped)
 
 Session 2026-09-07 (2). Full record of the prior audit: `docs/claude/scanner-gap-audit-2026-09-06.md` §11.
