@@ -1,5 +1,7 @@
 # Sector leadership upgrade: rollout and review
 
+**Current menu scope:** see [VaNi intent scope and TODO](vani-intent-todo.md). Each main-page mode now exposes only its default and three agreed follow-ups. The fuller intent lists below document retained implementations, not the current visible menu.
+
 ## Rollout order
 
 1. Apply migration 207 if it is not already installed, then `kaaladristi/App/DBscripts/km_migration_208_leadership_snapshots.sql` to the test database. Migration 208 adds published snapshots and membership/catalog invalidation; it does not rewrite index prices.

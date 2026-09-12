@@ -24,6 +24,9 @@ const intents = {
   'sector.persistence': 'Has this flow persisted?', 'sector.participation': 'Is participation broad or concentrated?',
   'sector.learn': 'Help me read this page', 'sector.taxonomy': 'Indices, curated baskets and industries',
 } as const;
+// Main-page launch scope. Other implementations remain available for later review.
+// TODO: leaving, read, compare, learn and taxonomy as separate main-page intents.
+const MAIN_INTENTS = new Set(['sector.overview','sector.entering','sector.fading','sector.persistence']);
 type Intent = keyof typeof intents;
 interface Response {
   response?: string; error?: string; pending?: boolean; context_changed?: boolean; log_id?: string;
@@ -96,7 +99,7 @@ function CurrentSectorCompanion() {
   const body = <div className="sector-vani-body">
     {!overview && <>
     <p className="text-xs text-muted">Discover activity → check persistence → inspect participation → save an observation.</p>
-    <details open={indexId ? true : undefined} data-vani-detail={indexId ? undefined : "intents"}><summary className="sector-question cursor-pointer">Open current-flow intents</summary><div className="flex flex-wrap gap-2 pt-2" aria-label="Sector questions">{Object.entries(intents).filter(([id]) => indexId ? !['sector.overview','sector.entering','sector.fading','sector.leaving'].includes(id) : id !== 'sector.participation').map(([id, label]) =>
+    <details open={indexId ? true : undefined} data-vani-detail={indexId ? undefined : "intents"}><summary className="sector-question cursor-pointer">Open current-flow intents</summary><div className="flex flex-wrap gap-2 pt-2" aria-label="Sector questions">{Object.entries(intents).filter(([id]) => indexId ? !['sector.overview','sector.entering','sector.fading','sector.leaving'].includes(id) : MAIN_INTENTS.has(id)).map(([id, label]) =>
       <button key={id} aria-pressed={intent === id} onClick={() => choose(id as Intent)} className="sector-question">{label}</button>)}</div></details>
     {!staticIntent && <div className="flex flex-wrap gap-2">{['brief','simple','detailed'].map(d => <button className="sector-question" key={d} aria-pressed={depth === d} onClick={() => setDepth(d)}>{d === 'brief' ? 'Concise' : d === 'simple' ? 'Explain simply' : 'Go deeper'}</button>)}</div>}
     </>}
@@ -122,7 +125,7 @@ function CurrentSectorCompanion() {
       {evidence.data.facts?.map((fact,i)=><p key={i} className="text-xs leading-6 mt-2 text-muted">{fact}</p>)}
     </details>}
     {(indexId||overview||staticIntent||story)&&evidence.data?.rows && <SectorPersonalConnections sourceKey={evidence.data.snapshot} date={evidence.data.date} sectors={personalRows.map(r=>{const signal=sectorSignal(r);return {id:r.index_id,name:r.name,reading:signal?SECTOR_FLOW_LABEL[signal]:'Unavailable'}})}/>}
-    {overview && <details data-vani-detail="intents"><summary className="text-xs cursor-pointer min-h-11">Explore another question</summary>    <div className="flex flex-wrap gap-2" aria-label="Sector questions">{Object.entries(intents).filter(([id]) => indexId ? !['sector.overview','sector.entering','sector.fading','sector.leaving'].includes(id) : id !== 'sector.participation').map(([id, label]) =>
+    {overview && <details data-vani-detail="intents"><summary className="text-xs cursor-pointer min-h-11">Explore another question</summary>    <div className="flex flex-wrap gap-2" aria-label="Sector questions">{Object.entries(intents).filter(([id]) => indexId ? !['sector.overview','sector.entering','sector.fading','sector.leaving'].includes(id) : MAIN_INTENTS.has(id)).map(([id, label]) =>
       <button key={id} aria-pressed={intent === id} onClick={() => choose(id as Intent)} className="sector-question">{label}</button>)}</div></details>}
   </div>;
   return <aside {...analytics} className="ph-no-capture sector-vani" aria-label="VaNi Sector Rotation companion">

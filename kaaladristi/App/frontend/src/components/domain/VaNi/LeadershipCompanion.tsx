@@ -22,6 +22,9 @@ const questions = {
  'sector.leadership.flow':'How does current flow compare?',
  'sector.leadership.learn':'How do I read these groups?',
 } as const;
+// TODO: separate persistence, support and learning questions after adoption review.
+// Keep their definitions and evidence implementation; only trim the visible menu.
+const ACTIVE_INTENTS = new Set(['sector.leadership','sector.leadership.building','sector.leadership.cooling','sector.leadership.flow']);
 type Intent=keyof typeof questions;
 function examples(rows:LeadershipRow[],intent:Intent) {
  const selected=rows.filter(r=>intent.endsWith('.building')?r.status==='Building':intent.endsWith('.cooling')?r.status==='Cooling':intent.endsWith('.flow')?
@@ -58,7 +61,7 @@ export default function LeadershipCompanion() {
  return <aside {...analytics} className="ph-no-capture sector-vani p-4 space-y-3 xl:max-h-[calc(100dvh-110px)] xl:overflow-y-auto" aria-label="VaNi longer-term companion">
   <h2 className="text-lg font-serif">VaNi · Longer-term picture</h2>
   <p className="text-xs text-muted">{c.months??6} months · {c.category==='custom'?'Curated':c.category} · {c.date?sectorSessionDate(c.date):'Select a session'}</p>
-  <details data-vani-detail="intents"><summary className="sector-question cursor-pointer">Open longer-term intents</summary><div className="flex flex-col gap-2 pt-2" aria-label="Longer-term questions">{Object.entries(questions).map(([id,label])=><button key={id} className="sector-question text-left" aria-pressed={intent===id} onClick={()=>{trackVani('intent_selected',{...analyticsContext,intent_id:id,source:'manual'});setIntent(id as Intent);setCycle(v=>v+1)}}>{label}</button>)}</div></details>
+  <details data-vani-detail="intents"><summary className="sector-question cursor-pointer">Open longer-term intents</summary><div className="flex flex-col gap-2 pt-2" aria-label="Longer-term questions">{Object.entries(questions).filter(([id])=>ACTIVE_INTENTS.has(id)).map(([id,label])=><button key={id} className="sector-question text-left" aria-pressed={intent===id} onClick={()=>{trackVani('intent_selected',{...analyticsContext,intent_id:id,source:'manual'});setIntent(id as Intent);setCycle(v=>v+1)}}>{label}</button>)}</div></details>
   <h3 className="font-medium text-sm">{questions[intent]}</h3>
   {!evidence.isFetching&&!evidence.error&&evidence.data&&<Evidence rows={evidence.data.rows} intent={intent} date={evidence.data.date} months={c.months??6}/>}
   {loading?<p role="status" className="flex gap-2 items-center"><Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none"/>Consulting VaNi…</p>:error?<p role="alert">{error.message}</p>:<details data-vani-detail="explanation" key={intent} className="vani-explanation"><summary>VaNi explanation</summary><p className="text-sm leading-6">{reading.data?.response}</p>{reading.data?.log_id&&<VaNiFeedback analyticsContext={analyticsContext} key={`${intent}-${reading.data.log_id}`} logId={reading.data.log_id}/>}</details>}

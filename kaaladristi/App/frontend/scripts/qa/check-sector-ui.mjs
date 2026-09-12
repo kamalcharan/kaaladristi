@@ -103,24 +103,24 @@ try {
     assert(vaniCalls.some(r=>r.intent_id==='sector.overview' && !r.entity_id), 'Listing default should run automatically');
     await page.screenshot({path:path.join(out,`sector-default-${mode}-${width}.png`),fullPage:true});
     await noOverflow(`list ${width}`);
-    // All main-page Current Flow follow-ups, with the real backend projection.
+    // Only the three launch follow-ups are visible; deferred implementations stay hidden.
     const currentCompanion=page.getByRole('complementary',{name:'VaNi Sector Rotation companion'});
     await currentCompanion.getByText('Explore another question',{exact:true}).click();
-    for(const [id,label] of [['entering','Where is flow entering?'],['fading','Where is flow fading?'],['leaving','Where is flow leaving?'],['read','Explain this flow'],['compare','Why do Flow 5D and Flow 22D differ?'],['persistence','Has this flow persisted?'],['learn','Help me read this page'],['taxonomy','Indices, curated baskets and industries']]) {
+    assert.equal(await currentCompanion.locator('[aria-label="Sector questions"] button').count(),4,'Current Flow: default plus three questions');
+    for(const [id,label] of [['entering','Where is flow entering?'],['fading','Where is flow fading?'],['persistence','Has this flow persisted?']]) {
       const surface=width<1280&&await page.getByRole('dialog').isVisible()?page.getByRole('dialog'):currentCompanion;
       const menu=surface.getByText('Open current-flow intents',{exact:true});
       if(await menu.isVisible()&&!(await menu.locator('..').getAttribute('open')!==null)) await menu.click();
       await surface.getByRole('button',{name:label,exact:true}).click();
       const active=width<1280?page.getByRole('dialog'):currentCompanion;
       await active.getByText('Consulting VaNi…',{exact:true}).waitFor();
-      await active.getByRole('region',{name:['learn','taxonomy'].includes(id)?'Sector learning path':'Current-flow interpretation'}).waitFor();
+      await active.getByRole('region',{name:'Current-flow interpretation'}).waitFor();
       await active.getByText('VaNi explanation',{exact:true}).click();
       await active.locator('.vani-explanation').getByText('Near-term flow is above its underlying baseline.',{exact:false}).waitFor();
-      if(['fading','leaving'].includes(id)) {
+      if(id==='fading') {
         await active.getByText('None of your saved stocks are linked to the sectors highlighted in this reading.',{exact:true}).waitFor();
         assert.equal(await active.getByRole('link',{name:'PERSONAL_HOLD',exact:true}).count(),0);
       }
-      if(id==='compare') assert((await active.locator('.vani-score-pair').count())>0);
       if(id==='persistence') {
         await active.locator('.vani-flow-strip button').first().click();
         await active.getByText(/11 September · (Strong|Building)/).first().waitFor();
@@ -155,7 +155,8 @@ try {
     assert.equal(await companion.locator('[aria-label="Longer-term group counts"]').count(),0,'VaNi must not repeat the group statistics grid');
     await companion.getByRole('region',{name:'Longer-term interpretation'}).getByText('What stands out',{exact:true}).waitFor();
     await companion.getByText('Open longer-term intents',{exact:true}).click();
-    for(const [label,suffix] of [['Which baskets are building strength?','building'],['Where is strength weakening?','cooling'],['How long has the strength lasted?','persistence'],['Is strength supported across stocks?','support'],['How does current flow compare?','flow'],['How do I read these groups?','learn']]) {
+    assert.equal(await companion.locator('[aria-label="Longer-term questions"] button').count(),4,'Longer-Term: default plus three questions');
+    for(const [label,suffix] of [['Which baskets are building strength?','building'],['Where is strength weakening?','cooling'],['How does current flow compare?','flow']]) {
       await companion.getByRole('button',{name:label,exact:true}).click();
       await companion.getByRole('heading',{name:label,exact:true}).waitFor();
       await companion.getByText('Consulting VaNi…',{exact:true}).waitFor();
