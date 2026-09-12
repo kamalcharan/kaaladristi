@@ -1,3 +1,4 @@
+import MarketStructureCompanion from './VaNi/MarketStructureCompanion';
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { X, Sparkles, ChevronRight, MessageCircle, RotateCcw, Search, ArrowRight } from 'lucide-react';
@@ -64,7 +65,12 @@ async function resolveEquity(q: string): Promise<{ id: number; symbol: string } 
   return null;
 }
 
-export default function VaNiChatPanel({ docked = false }: { docked?: boolean } = {}) {
+export default function VaNiChatPanel(props: { docked?: boolean } = {}) {
+  const { page } = usePageContext();
+  return page === 'market_structure' ? <MarketStructureCompanion /> : <ExistingVaNiChatPanel {...props} />;
+}
+
+function ExistingVaNiChatPanel({ docked = false }: { docked?: boolean } = {}) {
   const {
     open, entity: storeEntity, close, clearEntity,
     scanContext, pendingIntentId, consumePendingIntent,

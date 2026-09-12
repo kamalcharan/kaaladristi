@@ -173,7 +173,7 @@ export const PERSONA_TEMPLATE: Record<Persona, string> = {
 // ── Guide checklist ─────────────────────────────────────────────────────────
 
 /** Non-scanner rows of the How-to-use-DristiQ checklist, keyed like guide_progress. */
-export const GUIDE_PAGES = ['workspace', 'chart'] as const
+export const GUIDE_PAGES = ['workspace', 'chart', 'market_structure'] as const
 
 /** Days after persona_set_at during which the Morning Brief carries the continuity line. */
 export const CONTINUITY_DAYS = 14

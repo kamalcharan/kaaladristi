@@ -252,6 +252,9 @@ class VaNiFeedbackRequest(BaseModel):
 
 
 class VaNiAskRequest(BaseModel):
+    structure_period: int = 66
+    structure_snapshot: Optional[str] = None
+    explanation_depth: str = "brief"
     intent_id: str
     date: Optional[str] = None          # YYYY-MM-DD; defaults to today (IST)
     entity_type: Optional[str] = None   # 'equity' | 'index'
@@ -5370,6 +5373,9 @@ def vani_ask(req: VaNiAskRequest):
     """
     tz_ist = __import__('zoneinfo').ZoneInfo('Asia/Kolkata')
     intent_id = req.intent_id
+    if intent_id.startswith('structure.'):
+        from lib.market_structure_vani import answer
+        return answer(req, _db(), _ai_complete_src, _sebi_post_filter, _log_interaction, _AI_MODEL)
 
     # ── Resolve the working date ──
     # An absent req.date used to fall back to the IST CALENDAR day, which is

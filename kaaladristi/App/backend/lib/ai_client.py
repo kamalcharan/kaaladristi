@@ -141,6 +141,7 @@ def complete_with_source(
     temperature: float | None = None,
     no_think: bool = False,
     prefer_local: bool = False,
+    allow_cloud_fallback: bool = False,
 ) -> tuple[str | None, str | None]:
     """
     Same routing as complete(), but also returns which backend actually
@@ -178,6 +179,10 @@ def complete_with_source(
                    the default (cloud-first, Qwen-as-fallback) path below
                    is unchanged for every non-registry /api/ai/* skill.
 
+    allow_cloud_fallback — explicitly opt a Qwen-first caller into the configured
+    cloud fallback. Market Structure uses this; older routes retain their
+    Qwen-only behavior by default.
+
     All errors are caught — callers never need to handle exceptions.
     """
     if no_think:
@@ -185,7 +190,12 @@ def complete_with_source(
 
     if prefer_local:
         result = _fallback_complete(system, user, max_tokens, temperature)
-        return (result, "qwen-local") if result is not None else (None, None)
+        if result is not None:
+            return result, "qwen-local"
+        if allow_cloud_fallback:
+            result = _primary_complete(system, user, max_tokens, temperature)
+            return (result, AI_PROVIDER) if result is not None else (None, None)
+        return None, None
 
     result = _primary_complete(system, user, max_tokens, temperature)
     if result is not None:

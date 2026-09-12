@@ -41,6 +41,7 @@ export function usePageContext(): PageContext {
   // for three of them.
   const pageOverride = useVaNiStore((s) => s.pageOverride);
 
+  if (path.startsWith('/market-structure')) return { page: 'market_structure' };
   if (pageOverride) return { page: pageOverride };
 
   for (const entry of PATH_MAP) {

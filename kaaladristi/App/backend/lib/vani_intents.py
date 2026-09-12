@@ -1562,6 +1562,10 @@ INTENTS: dict[str, VaNiIntent] = {
 
 # Equity intents use a special page="_equity" marker — they're not page-bound
 # but entity-bound. The frontend triggers them from any page.
+from .market_structure_vani import INTENTS as _STRUCTURE_INTENTS
+for _id, (_label, _section, _kind) in _STRUCTURE_INTENTS.items():
+    INTENTS[_id] = VaNiIntent('market_structure', _label, [], '', 400, 24 if _kind == 'live' else 720, 'low')
+
 EQUITY_INTENTS = {k: v for k, v in INTENTS.items() if v.page == '_equity'}
 
 

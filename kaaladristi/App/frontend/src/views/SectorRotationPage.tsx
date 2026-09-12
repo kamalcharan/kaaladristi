@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Flame, Table2 } from 'lucide-react';
 import { useSectorIndices, useIndexFlowMap, useVix, useIndexDateRange } from '@/hooks/useSectorRotation';
 import { SECTOR_TAB_LABELS, type SectorTab } from '@/services/sectorRotation';
@@ -355,6 +355,9 @@ function ExplainerStrip({ view }: { view: ViewMode }) {
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function SectorRotationPage() {
+  const [search] = useSearchParams();
+  const fromStructure = search.get('from') === 'market-structure';
+  const contextDate = /^\d{4}-\d{2}-\d{2}$/.test(search.get('asof') ?? '') ? search.get('asof') : null;
   const [activeTab, setActiveTab] = useState<SectorTab>('broad');
   const [view, setView] = useState<ViewMode>('table');
   const [heatDays, setHeatDays] = useState<5 | 22 | 66>(22);
@@ -369,6 +372,11 @@ export default function SectorRotationPage() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
       <PageHeader eyebrow="Sector Rotation" title="Sector Rotation" meta="NSE Index Flow" />
+      {fromStructure && <div className="glass-card rounded-xl m-4 p-4">
+        <p className="text-sm">Continue your market research{contextDate ? ` from ${contextDate}` : ''}: which sectors differ from the broader market?</p>
+        <p className="text-xs text-muted mt-2">Compare each sector’s 5D flow score with its 22D baseline, then inspect its constituents. Check the selected sector data date before comparing it with your Market Structure snapshot.</p>
+        <Link className="text-xs text-accent-indigo inline-block mt-2" to="/market-structure">Back to Market Structure →</Link>
+      </div>}
 
       {/* VIX band */}
       <VixBand />

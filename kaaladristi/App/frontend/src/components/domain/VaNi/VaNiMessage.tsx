@@ -83,7 +83,7 @@ export default function VaNiMessage({
           )}
         </div>
         <div className="flex items-center gap-2 mt-1.5 px-2">
-          {msg.logId && !msg.cached && <VaNiFeedback logId={msg.logId} />}
+          {msg.logId && <VaNiFeedback logId={msg.logId} />}
           {msg.cached && (
             <span className="text-[8px] font-mono text-[var(--accent-indigo)]/40 uppercase tracking-widest">
               instant response

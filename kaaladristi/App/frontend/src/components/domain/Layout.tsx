@@ -36,7 +36,9 @@ export default function Layout() {
   // leaves a 1440 laptop only 860px of canvas for a 12-column grid, where the
   // 52px rail leaves 1028. The stored preference is untouched — it applies
   // again on every other route.
-  const vaniDocked = useLocation().pathname.startsWith('/workspace');
+  const pathname = useLocation().pathname;
+  const structureDocked = pathname.startsWith('/market-structure');
+  const vaniDocked = pathname.startsWith('/workspace') || structureDocked;
   const railCollapsed = collapsed || vaniDocked;
 
   return (
@@ -143,7 +145,7 @@ export default function Layout() {
         {/* Page content. The docked pane lives INSIDE this row, below the
             topbar — as a sibling of <main> it split the topbar in two and the
             screen read as two applications stitched together. */}
-        <div className="relative z-10 flex gap-4 p-4 pb-8">
+        <div className={`relative z-10 flex gap-4 p-4 pb-8 ${structureDocked ? 'flex-col lg:flex-row' : ''}`}>
           {vaniDocked && <VaNiChatPanel docked />}
           <div className="flex-1 min-w-0">
             <Outlet />

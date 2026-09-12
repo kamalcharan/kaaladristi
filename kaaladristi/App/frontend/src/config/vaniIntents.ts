@@ -7,7 +7,10 @@
  * This file controls: labels, icons, display order, and page routing.
  */
 
+import { STRUCTURE_INTENTS } from './marketStructureIntents';
+
 export type VaNiPage =
+  | 'market_structure'
   | 'dashboard'
   | 'equity_vp'
   | 'index_vp'
@@ -39,6 +42,7 @@ export interface VaNiIntentDef {
 }
 
 export const VANI_INTENTS: Record<string, VaNiIntentDef> = {
+  ...Object.fromEntries(Object.entries(STRUCTURE_INTENTS).map(([id, item], i) => [id, { label: item.label, page: 'market_structure' as const, icon: 'Activity', displayOrder: i, autorun: id === 'structure.read' }])),
   // ── Dashboard ──────────────────────────────────────────────────────────────
   // Fires on arrival, before the user clicks anything: the docked pane opens
   // on a reading of the day rather than a menu of questions. Panchangam is

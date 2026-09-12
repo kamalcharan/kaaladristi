@@ -41,6 +41,9 @@ type MaLabels = typeof MA_LABELS[MaBasis];
 // ── Props ─────────────────────────────────────────────────────────────────────
 
 export interface MarketBreadthChartProps {
+  researchMode?: boolean;
+  periodDays?: 22 | 44 | 66;
+  onPeriodChange?: (days: 22 | 44 | 66) => void;
   /** External data. When provided, the internal hook fetch is ignored. */
   data?: MarketBreadthDay[];
   isLoading?: boolean;
@@ -131,7 +134,7 @@ function EmaStat({ label, value, prev }: { label: string; value: number | null; 
 
 // ── Custom tooltip ────────────────────────────────────────────────────────────
 
-function BreadthTooltip({ active, payload, ma }: any) {
+function BreadthTooltip({ active, payload, ma, researchMode }: any) {
   if (!active || !payload?.length) return null;
   const d = payload[0]?.payload as MarketBreadthDay;
   if (!d) return null;
@@ -141,7 +144,7 @@ function BreadthTooltip({ active, payload, ma }: any) {
       <div className="font-bold text-[var(--text-primary)] mb-2">{fmtDate(d.trade_date)}</div>
       <div className="flex justify-between gap-4 mb-1">
         <span className="text-muted">Score</span>
-        <span className={cn('font-bold mono', r.color)}>{d.breadth_score?.toFixed(1)} ({r.label})</span>
+        <span className={cn('font-bold mono', researchMode ? 'text-[var(--text-primary)]' : r.color)}>{d.breadth_score?.toFixed(1)} ({r.label})</span>
       </div>
       <div className="flex justify-between gap-4 mb-0.5">
         <span className="text-muted">Above {ma.m20}</span>
@@ -170,8 +173,10 @@ export default function MarketBreadthChart({
   zoneMode = 'absolute',
   percentileRank,
   maBasis: maBasisProp,
+  periodDays, onPeriodChange, researchMode = false,
 }: MarketBreadthChartProps = {}) {
-  const [period, setPeriod] = useState<PeriodLabel>('66D');
+  const [localPeriod, setPeriod] = useState<PeriodLabel>('66D');
+  const period = periodDays ? `${periodDays}D` : localPeriod;
   const days = PERIODS.find(p => p.label === period)!.days;
 
   // Fetch the full window once and slice locally, rather than refetching per
@@ -235,7 +240,7 @@ export default function MarketBreadthChart({
             {PERIODS.map(p => (
               <button
                 key={p.label}
-                onClick={() => setPeriod(p.label)}
+                onClick={() => onPeriodChange ? onPeriodChange(p.days) : setPeriod(p.label)}
                 className={cn(
                   'px-2.5 py-1 rounded-md text-[10px] font-bold transition-all',
                   period === p.label
@@ -249,7 +254,7 @@ export default function MarketBreadthChart({
           </div>
 
           {/* EMA stats */}
-          {!tooSmall && (
+          {!tooSmall && !researchMode && (
             <div className="flex items-center gap-4 pl-2 border-l border-kd-border">
               <EmaStat label={ma.m20}  value={latest?.pct_above_20  ?? null} prev={prev?.pct_above_20  ?? null} />
               <EmaStat label={ma.m50}  value={latest?.pct_above_50  ?? null} prev={prev?.pct_above_50  ?? null} />
@@ -259,7 +264,7 @@ export default function MarketBreadthChart({
 
           {/* Regime badge */}
           {r && !tooSmall && (
-            <span className={cn('px-2.5 py-1 rounded-lg text-[10px] font-bold border uppercase tracking-wider', r.bg, r.color, r.border)}>
+            <span className={cn('px-2.5 py-1 rounded-lg text-[10px] font-bold border uppercase tracking-wider', researchMode ? 'text-muted border-kd-border' : [r.bg, r.color, r.border])}>
               {r.label}
             </span>
           )}
@@ -277,7 +282,7 @@ export default function MarketBreadthChart({
         </div>
         {latest?.breadth_score != null && !tooSmall && (
           <div className="text-right">
-            <div className={cn('text-[22px] font-bold mono leading-none', r?.color)}>
+            <div className={cn('text-[22px] font-bold mono leading-none', researchMode ? 'text-[var(--text-primary)]' : r?.color)}>
               {latest.breadth_score.toFixed(1)}
             </div>
             <div className="text-[9px] text-muted">Current Score</div>
@@ -306,13 +311,12 @@ export default function MarketBreadthChart({
       ) : data.length === 0 ? (
         <div className="flex items-center justify-center h-[200px]">
           <p className="text-xs text-muted text-center">
-            No breadth data — run migration 020, then<br />
-            <code className="text-accent-indigo">python compute_market_breadth.py</code>
+            No breadth data is available for this selection.
           </p>
         </div>
       ) : (
         <ResponsiveContainer width="100%" height={200}>
-          <AreaChart data={data} margin={{ top: 4, right: 40, left: -20, bottom: 0 }}>
+          <AreaChart data={data} margin={{ top: 4, right: 70, left: -20, bottom: 0 }}>
             <defs>
               <linearGradient id="breadthGrad" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="5%"  stopColor="var(--accent)" stopOpacity={0.35} />
@@ -321,9 +325,9 @@ export default function MarketBreadthChart({
             </defs>
 
             {/* Regime background zones */}
-            <ReferenceArea y1={GREED_THRESHOLD} y2={100} fill="var(--bear)" fillOpacity={0.06} />
-            <ReferenceArea y1={FEAR_THRESHOLD}  y2={GREED_THRESHOLD} fill="var(--caution)" fillOpacity={0.06} />
-            <ReferenceArea y1={0}               y2={FEAR_THRESHOLD}  fill="var(--bull)" fillOpacity={0.06} />
+            <ReferenceArea y1={GREED_THRESHOLD} y2={100} fill={researchMode ? 'var(--text-muted)' : 'var(--bear)'} fillOpacity={0.06} />
+            <ReferenceArea y1={FEAR_THRESHOLD}  y2={GREED_THRESHOLD} fill={researchMode ? 'var(--text-muted)' : 'var(--caution)'} fillOpacity={0.06} />
+            <ReferenceArea y1={0}               y2={FEAR_THRESHOLD}  fill={researchMode ? 'var(--text-muted)' : 'var(--bull)'} fillOpacity={0.06} />
 
             <XAxis
               dataKey="trade_date"
@@ -343,20 +347,20 @@ export default function MarketBreadthChart({
             {/* Threshold reference lines */}
             <ReferenceLine
               y={GREED_THRESHOLD}
-              stroke="var(--bear)"
+              stroke={researchMode ? 'var(--text-muted)' : 'var(--bear)'}
               strokeDasharray="4 2"
               strokeOpacity={0.6}
-              label={{ value: `Greed ${GREED_THRESHOLD}`, position: 'right', fontSize: 9, fill: 'var(--bear)' }}
+              label={{ value: `Greed ${GREED_THRESHOLD}`, position: 'right', fontSize: 9, fill: researchMode ? 'var(--text-muted)' : 'var(--bear)' }}
             />
             <ReferenceLine
               y={FEAR_THRESHOLD}
-              stroke="var(--bull)"
+              stroke={researchMode ? 'var(--text-muted)' : 'var(--bull)'}
               strokeDasharray="4 2"
               strokeOpacity={0.6}
-              label={{ value: `Fear ${FEAR_THRESHOLD}`, position: 'right', fontSize: 9, fill: 'var(--bull)' }}
+              label={{ value: `Fear ${FEAR_THRESHOLD}`, position: 'right', fontSize: 9, fill: researchMode ? 'var(--text-muted)' : 'var(--bull)' }}
             />
 
-            <Tooltip content={<BreadthTooltip ma={ma} />} />
+            <Tooltip content={<BreadthTooltip ma={ma} researchMode={researchMode} />} />
 
             <Area
               dataKey="breadth_score"
@@ -379,7 +383,7 @@ export default function MarketBreadthChart({
             { color: 'bg-risk-green', label: `Fear (<${FEAR_THRESHOLD})` },
           ].map(({ color, label }) => (
             <div key={label} className="flex items-center gap-1.5">
-              <span className={cn('w-2 h-2 rounded-full', color)} />
+              <span className={cn('w-2 h-2 rounded-full', researchMode ? 'bg-[var(--text-muted)]' : color)} />
               <span className="text-[9px] text-muted">{label}</span>
             </div>
           ))}

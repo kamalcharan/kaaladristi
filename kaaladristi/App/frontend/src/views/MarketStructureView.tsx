@@ -1,12 +1,14 @@
 import { useState } from 'react';
 import MarketBreadthChart from '@/components/domain/MarketBreadthChart';
 import BreadthRocChart from '@/components/domain/BreadthRocChart';
-import BreadthHeatmap from '@/components/domain/BreadthHeatmap';
-import BreadthRocHeatmap from '@/components/domain/BreadthRocHeatmap';
+import MarketStructureHistory from '@/components/domain/MarketStructureHistory';
+import { useMarketStructureReading } from '@/hooks/useMarketStructureReading';
+import { useMarketStructureStore } from '@/stores/marketStructureStore';
+import { momentumLabel } from '@/lib/structureStates';
 import MarketWeatherCard from '@/components/domain/DashboardV3/MarketWeatherCard';
 import ConfluenceDotGrid from '@/components/domain/ConfluenceDotGrid';
 import { dashboardDate } from '@/stores/appStore';
-import { useConfluenceHeatmap, useMarketBreadth, useBreadthRoc } from '@/hooks';
+import { useConfluenceHeatmap } from '@/hooks';
 import { Loader2, AlertCircle } from 'lucide-react';
 import type { ConfluenceConditions, ConfluencePattern } from '@/types';
 import { PageHeader } from '@/components/ui';
@@ -455,26 +457,36 @@ function HistoricalConfluenceTab({ date }: { date: string }) {
 // ── Tab 1 — Today's Structure ─────────────────────────────────────────────────
 
 function TodayStructureTab({ date: _date }: { date: string }) {
-  // Shared fetch — the chart uses its own hook with the same query key, so React
-  // Query dedupes (no double request). Heatmaps read it here.
-  const breadth = useMarketBreadth(66);
-  const breadthData = breadth.data ?? [];
-  const roc = useBreadthRoc(66);
-
-  // Astro-Technical Alignment (MarketWeatherCard) is HIDDEN here pending owner
-  // review — see CLAUDE.md "Known Issues". The Historical Confluence tab keeps
-  // the astro × breadth content. The rotation lives on Workspace → Today (not
-  // repeated here). Scope is market-wide (All NSE — km_market_breadth, ~1,330
-  // stocks), distinct from Today's NIFTY 50 constituent breadth.
-  // Layout: each full-width chart is followed directly by its own heatmap.
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-      <MarketBreadthChart indexName="All NSE" />
-      <BreadthHeatmap data={breadthData} title="Breadth Heatmap · All NSE" />
-      <BreadthRocChart />
-      <BreadthRocHeatmap data={roc.data ?? []} title="Breadth Momentum (ROC) Heatmap · All NSE" />
+  const data = useMarketStructureReading();
+  const { setPeriod, setDate } = useMarketStructureStore();
+  const latest = data.breadth.at(-1);
+  const roc = data.roc.at(-1);
+  return <div className="flex flex-col gap-5">
+    <div className="glass-card rounded-xl p-5">
+      <h2 className="text-lg font-semibold">Understand participation, then momentum</h2>
+      <p className="text-sm text-muted mt-2">Start with how many stocks participate. Then compare momentum before applying your own research framework.</p>
+      <p className="text-xs text-muted mt-3">All NSE · Breadth: {data.breadthDate ?? 'unavailable'} · ROC: {data.rocDate ?? 'unavailable'} · {data.period} sessions</p>
+      {data.breadthDate && data.rocDate && data.breadthDate !== data.rocDate && <p role="status" className="text-sm text-risk-amber mt-2">The series have different latest dates. Read them separately.</p>}
+      {data.selectedDate && <button className="text-sm text-accent-indigo mt-2" onClick={() => setDate(null)}>Return to latest data →</button>}
     </div>
-  );
+    <section id="structure-participation" className="scroll-mt-24 space-y-4">
+      <h2 className="text-lg font-semibold">1. How widely is the market participating?</h2>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">{(['pct_above_20', 'pct_above_50', 'pct_above_150'] as const).map((key, i) => <div key={key} className="glass-card rounded-xl p-4"><p className="text-xs text-muted">Stocks above {[20, 50, 150][i]} EMA</p><p className="text-3xl font-semibold mt-2">{latest?.[key] == null ? '—' : `${latest[key].toFixed(1)}%`}</p><p className="text-xs text-muted mt-1">{['Short', 'Medium', 'Long'][i]} horizon</p></div>)}</div>
+      <MarketBreadthChart data={data.breadth} isLoading={data.isLoading} isError={data.isError} indexName="All NSE" maBasis="market" researchMode periodDays={data.period} onPeriodChange={setPeriod} />
+      <MarketStructureHistory breadth={data.breadth} roc={data.roc} mode="breadth" onSelectDate={setDate} />
+    </section>
+    <section id="structure-momentum" className="scroll-mt-24 space-y-4">
+      <h2 className="text-lg font-semibold">2. Is momentum building or fading?</h2>
+      <p className="text-sm text-muted">{momentumLabel(roc?.roc_13, roc?.sma_breadth)}. Positive ROC and strengthening momentum are different observations.</p>
+      <BreadthRocChart data={data.roc} isLoading={data.isLoading} isError={data.isError} researchMode periodDays={data.period} onPeriodChange={setPeriod} />
+      <MarketStructureHistory breadth={data.breadth} roc={data.roc} mode="roc" onSelectDate={setDate} />
+    </section>
+    <section id="structure-framework" className="glass-card rounded-xl p-5 scroll-mt-24">
+      <h2 className="text-lg font-semibold">3. Apply the Fear / Greed lens</h2>
+      <p className="text-sm text-muted mt-2">Fear below 35 and Greed above 55 describe the weighted breadth score. They are framework labels, not measurements of investor emotions.</p>
+      <p className="text-sm text-muted mt-2">In Fear, investigate whether participation is rebuilding. In Greed, investigate whether participation is fading. Neither zone establishes a reversal. Fear / Greed zones are neutral on the chart; history colors describe measured comparisons using the Flowmap palette.</p>
+    </section>
+  </div>;
 }
 
 // ── Tab bar ───────────────────────────────────────────────────────────────────
@@ -488,7 +500,9 @@ type TabId = typeof TABS[number]['id'];
 // ── Root ──────────────────────────────────────────────────────────────────────
 
 export default function MarketStructureView() {
-  const [activeTab, setActiveTab] = useState<TabId>('today');
+  const { section, setSection } = useMarketStructureStore();
+  const activeTab: TabId = section === 'historical' ? 'historical' : 'today';
+  const setActiveTab = (tab: TabId) => setSection(tab === 'historical' ? 'historical' : 'participation');
   const date = dashboardDate();
 
   return (
@@ -496,7 +510,7 @@ export default function MarketStructureView() {
       <PageHeader
         eyebrow="Market Intelligence"
         title="Market Structure & Confluence"
-        meta="Astro × breadth × momentum — 30-year confluence analysis"
+        meta="Read participation, compare momentum, build your research context"
       />
 
       <div style={{ padding: '20px 24px 40px' }}>

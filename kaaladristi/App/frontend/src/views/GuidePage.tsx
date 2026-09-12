@@ -16,6 +16,7 @@ import { DEFAULT_PERSONA, PERSONAS, PERSONA_SCANNERS, type Persona } from '@/con
 import { MONO, PrimaryButton, VaniDot } from '@/components/domain/Onboarding/ui'
 
 const PAGE_ROWS: Record<string, { name: string; why: string; path: string }> = {
+  market_structure: { name: 'Market Structure', why: 'Read participation, compare momentum, and understand the Fear / Greed framework with VaNi.', path: '/market-structure' },
   workspace: { name: 'Workspace', why: 'Your assembled workbench — the blocks, overlays and scanners VaNi placed for you, and the Morning Brief.', path: '/workspace' },
   chart:     { name: 'Study', why: 'Verify any setup on the chart with your own overlays, timeframes and zoom before you act.', path: '/chart/index/1' },
 }

@@ -1,3 +1,5 @@
+import { momentumState, momentumLabel } from '@/lib/structureStates';
+import { SIGNAL_COLOR, SIGNAL_TEXT } from './FlowIntensityMap';
 import { useMemo, useState } from 'react';
 import {
   ComposedChart, Line, Area, XAxis, YAxis, Tooltip,
@@ -23,6 +25,9 @@ const MAX_PERIOD_DAYS = Math.max(...PERIODS.map(p => p.days));
 export type RocBadge = 'expanding' | 'slowing' | 'turning' | 'contracting' | 'warming_up';
 
 export interface BreadthRocChartProps {
+  researchMode?: boolean;
+  periodDays?: 22 | 44 | 66;
+  onPeriodChange?: (days: 22 | 44 | 66) => void;
   /** External data. When provided, the internal hook fetch is ignored. */
   data?: BreadthRocDay[];
   isLoading?: boolean;
@@ -64,7 +69,8 @@ function fmtRoc(v: number | null): string {
 }
 
 function deriveRocBadge(roc13: number | null, smaBreadth: number | null): RocBadge {
-  const r = roc13 ?? 0;
+  if (roc13 == null || smaBreadth == null) return 'warming_up';
+  const r = roc13;
   const s = smaBreadth ?? 0;
   if (r > 0 && r > s)  return 'expanding';
   if (r > 0 && r <= s) return 'slowing';
@@ -74,7 +80,7 @@ function deriveRocBadge(roc13: number | null, smaBreadth: number | null): RocBad
 
 // ── Custom Tooltip ────────────────────────────────────────────────────────────
 
-function RocTooltip({ active, payload }: any) {
+function RocTooltip({ active, payload, researchMode }: any) {
   if (!active || !payload?.length) return null;
   const d = payload[0]?.payload as BreadthRocDay;
   if (!d) return null;
@@ -87,13 +93,13 @@ function RocTooltip({ active, payload }: any) {
       <div className="font-bold text-[var(--text-primary)] mb-2">{fmtDate(d.trade_date)}</div>
       <div className="flex justify-between gap-4 mb-0.5">
         <span className="text-muted">ROC 13</span>
-        <span className={cn('font-bold mono', bias13 ? 'text-risk-green' : 'text-risk-red')}>
+        <span className={cn('font-bold mono', researchMode ? 'text-[var(--text-primary)]' : bias13 ? 'text-risk-green' : 'text-risk-red')}>
           {fmtRoc(d.roc_13)}
         </span>
       </div>
       <div className="flex justify-between gap-4 mb-0.5">
         <span className="text-muted">ROC 55</span>
-        <span className={cn('font-bold mono', bias55 ? 'text-risk-green' : 'text-risk-red')}>
+        <span className={cn('font-bold mono', researchMode ? 'text-[var(--text-primary)]' : bias55 ? 'text-risk-green' : 'text-risk-red')}>
           {fmtRoc(d.roc_55)}
         </span>
       </div>
@@ -114,8 +120,10 @@ export default function BreadthRocChart({
   indexName,
   stockCount: stockCountProp,
   rocBadge: rocBadgeProp,
+  periodDays, onPeriodChange, researchMode = false,
 }: BreadthRocChartProps = {}) {
-  const [period, setPeriod] = useState<PeriodLabel>('66D');
+  const [localPeriod, setPeriod] = useState<PeriodLabel>('66D');
+  const period = periodDays ? `${periodDays}D` : localPeriod;
   const days = PERIODS.find(p => p.label === period)!.days;
 
   // Full window fetched once, sliced locally — see MarketBreadthChart for why:
@@ -136,11 +144,12 @@ export default function BreadthRocChart({
 
   // Resolve badge: prop wins; otherwise derive from latest data point
   const badge: RocBadge = rocBadgeProp ?? deriveRocBadge(latest?.roc_13 ?? null, latest?.sma_breadth ?? null);
-  const rocStatus = ROC_BADGE_MAP[badge];
+  const state = momentumState(latest?.roc_13, latest?.sma_breadth);
+  const rocStatus = researchMode ? { label: momentumLabel(latest?.roc_13, latest?.sma_breadth), style: { background: state === 'MISSING' ? 'var(--card)' : SIGNAL_COLOR[state], color: state === 'MISSING' ? 'var(--text-muted)' : SIGNAL_TEXT[state] } } : ROC_BADGE_MAP[badge];
 
   // Dynamic Y domain with some padding
   const allVals = data.flatMap(d => [d.roc_13, d.roc_55, d.sma_breadth].filter((v): v is number => v != null));
-  const yMax = allVals.length ? Math.max(...allVals.map(Math.abs)) * 1.2 : 0.02;
+  const yMax = allVals.length ? Math.max(0.001, ...allVals.map(Math.abs)) * 1.2 : 0.02;
   const yDomain: [number, number] = [-yMax, yMax];
 
   const title = indexName ? `Momentum (ROC) · ${indexName}` : 'Breadth Momentum (ROC)';
@@ -165,7 +174,7 @@ export default function BreadthRocChart({
             {PERIODS.map(p => (
               <button
                 key={p.label}
-                onClick={() => setPeriod(p.label)}
+                onClick={() => onPeriodChange ? onPeriodChange(p.days) : setPeriod(p.label)}
                 className={cn(
                   'px-2.5 py-1 rounded-md text-[10px] font-bold transition-all',
                   period === p.label
@@ -183,19 +192,19 @@ export default function BreadthRocChart({
             <div className="flex items-center gap-4 pl-2 border-l border-kd-border">
               <div className="text-center">
                 <div className="text-[9px] text-muted font-bold uppercase tracking-wider mb-0.5">ROC 13</div>
-                <div className={cn('text-[12px] font-bold mono', (latest.roc_13 ?? 0) >= 0 ? 'text-risk-green' : 'text-risk-red')}>
+                <div className={cn('text-[12px] font-bold mono', researchMode ? 'text-[var(--text-primary)]' : (latest.roc_13 ?? 0) >= 0 ? 'text-risk-green' : 'text-risk-red')}>
                   {fmtRoc(latest.roc_13)}
                 </div>
               </div>
               <div className="text-center">
                 <div className="text-[9px] text-muted font-bold uppercase tracking-wider mb-0.5">ROC 55</div>
-                <div className={cn('text-[12px] font-bold mono', (latest.roc_55 ?? 0) >= 0 ? 'text-risk-green' : 'text-risk-red')}>
+                <div className={cn('text-[12px] font-bold mono', researchMode ? 'text-[var(--text-primary)]' : (latest.roc_55 ?? 0) >= 0 ? 'text-risk-green' : 'text-risk-red')}>
                   {fmtRoc(latest.roc_55)}
                 </div>
               </div>
               <div className="text-center">
                 <div className="text-[9px] text-muted font-bold uppercase tracking-wider mb-0.5">SMA 5</div>
-                <div className={cn('text-[12px] font-bold mono', (latest.sma_breadth ?? 0) >= 0 ? 'text-risk-green' : 'text-risk-red')}>
+                <div className={cn('text-[12px] font-bold mono', researchMode ? 'text-[var(--text-primary)]' : (latest.sma_breadth ?? 0) >= 0 ? 'text-risk-green' : 'text-risk-red')}>
                   {fmtRoc(latest.sma_breadth)}
                 </div>
               </div>
@@ -218,7 +227,7 @@ export default function BreadthRocChart({
       <div className="flex items-start justify-between mb-2">
         <div>
           <div className="text-[11px] font-bold text-[var(--text-secondary)]">Momentum Breadth Oscillator</div>
-          <div className="text-[9px] text-muted">Above zero = avg stock accelerating up · Below zero = decelerating</div>
+          <div className="text-[9px] text-muted">Above zero = positive ROC · Compare ROC 13 with its signal to assess momentum</div>
         </div>
       </div>
 
@@ -236,8 +245,7 @@ export default function BreadthRocChart({
       ) : data.length === 0 ? (
         <div className="flex items-center justify-center h-[200px]">
           <p className="text-xs text-muted text-center">
-            No ROC data — run migration 021, then<br />
-            <code className="text-accent-indigo">python compute_breadth_roc.py</code>
+            No momentum data is available for this selection.
           </p>
         </div>
       ) : (
@@ -255,8 +263,8 @@ export default function BreadthRocChart({
             </defs>
 
             {/* Zero-line background zones */}
-            <ReferenceArea y1={0} y2={yDomain[1]}  fill="var(--bull)" fillOpacity={0.04} />
-            <ReferenceArea y1={yDomain[0]} y2={0}  fill="var(--bear)" fillOpacity={0.04} />
+            <ReferenceArea y1={0} y2={yDomain[1]}  fill={researchMode ? 'var(--text-muted)' : 'var(--bull)'} fillOpacity={0.04} />
+            <ReferenceArea y1={yDomain[0]} y2={0}  fill={researchMode ? 'var(--text-muted)' : 'var(--bear)'} fillOpacity={0.04} />
 
             <XAxis
               dataKey="trade_date"
@@ -282,12 +290,12 @@ export default function BreadthRocChart({
               strokeOpacity={0.5}
             />
 
-            <Tooltip content={<RocTooltip />} />
+            <Tooltip content={<RocTooltip researchMode={researchMode} />} />
 
             {/* ROC 55 — slow structural line */}
             <Line
               dataKey="roc_55"
-              stroke="var(--accent)"
+              stroke="var(--text-secondary)"
               strokeWidth={1}
               dot={false}
               strokeDasharray="4 2"
@@ -300,7 +308,8 @@ export default function BreadthRocChart({
               dataKey="roc_13"
               stroke="var(--accent)"
               strokeWidth={1.5}
-              fill="url(#rocBullGrad)"
+              fill={researchMode ? "var(--accent)" : "url(#rocBullGrad)"}
+              fillOpacity={researchMode ? 0.06 : 1}
               dot={false}
               activeDot={{ r: 3, fill: 'var(--accent)' }}
             />
@@ -308,10 +317,10 @@ export default function BreadthRocChart({
             {/* SMA 5 — smoothed signal */}
             <Line
               dataKey="sma_breadth"
-              stroke="var(--caution)"
+              stroke={researchMode ? "var(--text-primary)" : "var(--caution)"}
               strokeWidth={2}
               dot={false}
-              activeDot={{ r: 3, fill: 'var(--caution)' }}
+              activeDot={{ r: 3, fill: researchMode ? 'var(--text-primary)' : 'var(--caution)' }}
             />
           </ComposedChart>
         </ResponsiveContainer>
@@ -321,8 +330,8 @@ export default function BreadthRocChart({
       <div className="flex items-center justify-center gap-5 mt-2">
         {[
           { color: 'bg-accent-indigo',  label: 'ROC 13 (fast)'    },
-          { color: 'bg-risk-amber',     label: 'SMA 5 (smooth)'   },
-          { color: 'bg-accent-violet',  label: 'ROC 55 (slow)'    },
+          { color: researchMode ? 'bg-[var(--text-primary)]' : 'bg-risk-amber', label: 'SMA 5 (smooth)'   },
+          { color: 'bg-[var(--text-secondary)]',  label: 'ROC 55 (slow, dashed)'    },
         ].map(({ color, label }) => (
           <div key={label} className="flex items-center gap-1.5">
             <span className={cn('w-2 h-2 rounded-full', color)} />

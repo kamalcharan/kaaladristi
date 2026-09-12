@@ -83,7 +83,7 @@ export function flowSignal(c: CellData, strongCut: number): FlowSignal {
 
 const QUIET_BG = '#334155';  // slate — distinguishable from NO_DATA (#1e293b)
 
-const SIGNAL_COLOR: Record<FlowSignal, string> = {
+export const SIGNAL_COLOR: Record<FlowSignal, string> = {
   STRONG:   DARK_GREEN,
   BUILDING: 'var(--risk-green)',
   FADING:   'var(--risk-amber)',
@@ -93,7 +93,7 @@ const SIGNAL_COLOR: Record<FlowSignal, string> = {
 
 // Cell text must contrast with the cell background, not encode return sign
 // (the background already encodes the signal).
-const SIGNAL_TEXT: Record<FlowSignal, string> = {
+export const SIGNAL_TEXT: Record<FlowSignal, string> = {
   STRONG:   '#f8fafc',  // near-white on dark green
   BUILDING: '#0b1220',  // near-black on bright green
   FADING:   '#0b1220',  // near-black on amber
