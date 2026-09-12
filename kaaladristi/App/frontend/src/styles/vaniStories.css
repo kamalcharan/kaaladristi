@@ -1,0 +1,38 @@
+.vani-story {
+ --vani-story-tone:var(--accent-indigo);
+ border:1px solid color-mix(in srgb,var(--vani-story-tone) 32%,var(--border));
+ border-top:3px solid var(--vani-story-tone);
+ background:linear-gradient(145deg,color-mix(in srgb,var(--vani-story-tone) 9%,var(--card)),var(--card));
+ border-radius:14px; padding:16px; display:grid; gap:10px; overflow-wrap:anywhere;
+}
+.vani-story[data-tone=green] { --vani-story-tone:var(--risk-green); }
+.vani-story[data-tone=amber] { --vani-story-tone:var(--risk-amber); }
+.vani-story h4 { font-family:var(--font-serif); font-size:19px; line-height:1.4; font-weight:600; }
+.vani-story p { font-size:13px; line-height:1.65; color:var(--text-secondary); }
+.vani-story .vani-eyebrow { font-size:10px; text-transform:uppercase; letter-spacing:.1em; font-weight:600; color:var(--text-primary); }
+.vani-next { display:grid; gap:8px; padding-top:12px; margin-top:2px; border-top:1px solid var(--border); }
+.vani-next a { display:flex; align-items:center; text-decoration:none; font-weight:600; white-space:normal; }
+.vani-explanation { font-size:12px; color:var(--text-secondary); }
+.vani-explanation summary { min-height:44px; display:flex; align-items:center; cursor:pointer; text-decoration:underline; text-underline-offset:4px; }
+.vani-explanation summary::before { content:'＋'; margin-right:8px; }
+.vani-explanation[open] summary::before { content:'−'; }
+.vani-personal-heading { display:flex; align-items:center; flex-wrap:wrap; gap:7px; font-weight:600; }
+.vani-personal-content { display:grid; gap:12px; }
+.vani-personal-content[data-state=empty], .vani-personal-content[data-state=error] {
+ background:color-mix(in srgb,var(--accent-indigo) 8%,var(--card));
+ border:1px solid color-mix(in srgb,var(--accent-indigo) 30%,var(--border));
+ border-radius:14px; padding:15px; color:var(--text-primary); line-height:1.65;
+}
+.vani-personal-content[data-state=error] { border-color:var(--risk-amber); }
+.vani-personal-card {
+ --vani-personal-tone:var(--risk-amber);
+ border:1px solid color-mix(in srgb,var(--vani-personal-tone) 30%,var(--border));
+ border-left:4px solid var(--vani-personal-tone);
+ border-radius:12px; padding:12px; display:grid; gap:10px; overflow-wrap:anywhere;
+ background:linear-gradient(120deg,color-mix(in srgb,var(--vani-personal-tone) 10%,var(--card)),var(--card));
+}
+.vani-personal-card[data-kind=position] { --vani-personal-tone:var(--accent-indigo); }
+.vani-personal-card .vani-personal-heading strong { font-size:10px; text-transform:uppercase; letter-spacing:.06em; border:1px solid var(--border); border-radius:5px; padding:3px 6px; }
+.vani-personal-card .vani-personal-heading a { font-weight:600; text-decoration:none; }
+.vani-sector-connection { border-top:1px solid var(--border); padding-top:8px; font-size:12px; line-height:1.65; }
+.vani-personal-content>.sector-question, .vani-personal-content>div>a, .vani-personal-content>a { min-height:44px; display:inline-flex; align-items:center; }

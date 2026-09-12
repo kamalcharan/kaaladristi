@@ -40,23 +40,17 @@ Basket-name clicks open the existing `/sector-rotation/:id` evidence page with t
 
 Longer-Term Leadership now opens its own automatic default, with an **Open longer-term intents** menu:
 
-| Question | Visible evidence |
-|---|---|
-| Which baskets are holding strength? | Counts for all six longer-term groups |
-| Which baskets are building strength? | Building examples, W/M agreement, run and Leader counts |
-| Where is strength weakening? | Cooling examples and current W/M readings |
-| How long has the strength lasted? | Current completed-week runs, aligned/missing/non-aligned observations in the selected window |
-| Is strength supported across stocks? | Leaders, Watch and classified/total coverage |
-| How does current flow compare? | Running broadly with Fading/Outflow, or Cooling with Strong/Building flow |
-| How do I read these groups? | Fixed educational explanation of rules; no LLM call |
+The companion now leads with **What stands out / Why it matters / Inspect next**, derived from the published evidence. It no longer repeats the six group-count cards or lists of statistics from the main table. A focused sector link opens the supporting evidence. The optional **VaNi explanation** disclosure retains the cached Qwen/Haiku explanation and feedback; Consulting VaNi remains visible during loading.
 
-The first six questions use focused snapshot facts through the existing Qwen-first / Haiku-fallback route. Cache keys include the intent and snapshot. The educational question is cached fixed content. All show the Consulting VaNi loader, including repeat cached selections. Examples are capped at five; counts describe the complete selected group. No new database migration or snapshot refresh is required for this menu upgrade. Update the backend and frontend together.
+Stories distinguish agreement without broad support, interrupted history, incomplete coverage, and opposing current-flow/longer-term readings. They do not invent changes in constituent support, causes, or future outcomes. A measured Leader share below 60% is a shortfall, not missing data. The backend intent version is bumped so old misleading explanations are not reused.
+
+The first six questions use focused snapshot facts through the existing Qwen-first / Haiku-fallback route. Cache keys include the intent and snapshot. The educational question is cached fixed content. All show the Consulting VaNi loader, including repeat cached selections. Examples are capped at five; counts describe the complete selected group. No new database migration or snapshot refresh is required for this presentation upgrade. Update the backend and frontend together.
 
 Review each question at the same date/category, repeat a cached question, then switch category/window. Empty Building/Cooling groups should say no matches. Switch back to Current Flow to confirm its original questions return. Individual sector pages still use their existing companion; this increment is limited to the main page. Daily RS has not been added.
 
 ## Personal sector connections
 
-Both Current Flow and Longer-Term Leadership now include **Connected to your stocks**. Positions are the existing bookmarks with a non-null entry price; ordinary bookmarks have no entry. Each saved stock is counted once, even when it belongs to several baskets. Position connections appear first. The section shows the relevant sector condition and links to the stock chart and sector evidence, without assuming the stock shares the sector's strength.
+Both Current Flow and Longer-Term Leadership now include **Connected to your stocks**. Positions are the existing bookmarks with a non-null entry price; ordinary bookmarks have no entry. Each saved stock is counted once, even when it belongs to several baskets. Position connections appear first. Positions and bookmarks use tinted cards with distinct icons and badges; empty/no-match/error states also appear in styled cards. The section shows the relevant sector condition and links to the stock chart and sector evidence, without assuming the stock shares the sector's strength.
 
 Connections follow the sectors in the selected reading. Longer-term membership comes from the published snapshot; Current Flow uses a paginated read of recorded index constituents. This includes curated baskets. Saved stocks reflect the account today, even on historical market dates; this is not a historical holdings reconstruction.
 
@@ -99,6 +93,6 @@ Publication is transactional across all categories/windows. Membership generatio
 
 ## Local verification
 
-56 backend tests passed, including classification boundaries, small samples, display-window stability, read-only snapshot loading, stale membership, atomic publication failure, rebuild and daily-pipeline publication contracts, and existing VaNi/cache behavior. Browser regression passed at 320/390/768/1440px in both themes using synthetic fixtures, including filters, MagicRS canvas, date-carrying links and current-flow regressions. Frontend typecheck, production build, theme/persona checks and Discovery flow parity checks passed.
+57 backend tests passed, including classification boundaries, small samples, display-window stability, read-only snapshot loading, stale membership, atomic publication failure, rebuild and daily-pipeline publication contracts, and existing VaNi/cache behavior. Browser regression passed at 320/390/768/1440px in both themes using synthetic fixtures, including filters, MagicRS canvas, date-carrying links and current-flow regressions. Frontend typecheck, production build, theme/persona checks and Discovery flow parity checks passed.
 
 PostgreSQL is not available in this workspace: migration execution, live refresh performance, database permissions and deployed Qwen/Haiku behavior require testing in your environment. The build retains pre-existing bundle-size, Browserslist and Tailwind warnings.

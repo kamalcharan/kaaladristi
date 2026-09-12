@@ -16,6 +16,13 @@ def snapshot():
 
 
 class LeadershipIntents(unittest.TestCase):
+    def test_measured_support_shortfall_is_not_missing_data(self):
+        ctx=snapshot()
+        ctx['rows'][0]['current'].update(eligible=5,leaders_pct=40)
+        facts=' '.join(intent_facts(ctx,'sector.leadership.building'))
+        self.assertIn('measured Leader share is below 60%; this is not missing data',facts)
+        self.assertNotIn('Leader share unavailable',facts)
+
     def test_questions_select_relevant_examples_and_missing_requirements(self):
         facts=' '.join(intent_facts(snapshot(),'sector.leadership.building'))
         self.assertIn('Building example',facts)

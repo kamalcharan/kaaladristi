@@ -6,7 +6,7 @@ from datetime import date
 from .market_structure_vani import number, single_flight, ReadingInProgress
 from .vani_cache import make_cache_key, get_cached, set_cached
 
-VERSION = 3
+VERSION = 4
 CATEGORIES = {
     'broad': ['index', 'broad market index'], 'sectoral': ['sectoral index'],
     'thematic': ['thematic market index'], 'custom': ['custom'], 'overall': ['sectoral index', 'custom'],
@@ -198,6 +198,8 @@ def answer(req, db, complete, post_filter, log_interaction, model):
                               'is not index return contribution. Mention missing data. Plain English. ' +
                               ('At most 180 words.' if depth == 'detailed' else 'At most 80 words.') +
                               (' Explain terminology simply.' if depth == 'simple' else ''))
+                    if intent.startswith('sector.leadership'):
+                        system += ' Interpret one important pattern, explain why it matters, then suggest evidence to inspect. Do not recite a list of index statistics. Distinguish measured values below a threshold from unavailable data. Do not describe a below-threshold Leader share as missing data. Use at most two examples.'
                     if overview:
                         system += ' For this overall sector overview: at most TWO short sentences and 40 words. No index-by-index commentary, no formulas, no methodology paragraphs. Describe the balance of the groups and suggest inspecting persistence or participation. Never claim that the counts measure net money.'
                     start = time.monotonic()

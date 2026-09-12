@@ -120,11 +120,14 @@ try {
     assert(vaniCalls.some(r=>r.intent_id==='sector.leadership'&&r.leadership_months===12),'VaNi must follow longer-term window');
     await page.getByRole('region',{name:'Connected to your stocks'}).getByRole('link',{name:'PERSONAL_WATCH',exact:true}).waitFor();
     const companion=page.getByRole('complementary',{name:'VaNi longer-term companion'});
+    assert.equal(await companion.locator('[aria-label="Longer-term group counts"]').count(),0,'VaNi must not repeat the group statistics grid');
+    await companion.getByRole('region',{name:'Longer-term interpretation'}).getByText('What stands out',{exact:true}).waitFor();
     await companion.getByText('Open longer-term intents',{exact:true}).click();
     for(const [label,suffix] of [['Which baskets are building strength?','building'],['Where is strength weakening?','cooling'],['How long has the strength lasted?','persistence'],['Is strength supported across stocks?','support'],['How does current flow compare?','flow'],['How do I read these groups?','learn']]) {
       await companion.getByRole('button',{name:label,exact:true}).click();
       await companion.getByRole('heading',{name:label,exact:true}).waitFor();
       await companion.getByText('Consulting VaNi…',{exact:true}).waitFor();
+      await companion.getByText('VaNi explanation',{exact:true}).click();
       await companion.getByText('Near-term flow is above its underlying baseline.',{exact:false}).waitFor();
       assert(vaniCalls.some(r=>r.intent_id==='sector.leadership.'+suffix&&r.leadership_months===12),'Intent uses the selected longer-term snapshot');
     }

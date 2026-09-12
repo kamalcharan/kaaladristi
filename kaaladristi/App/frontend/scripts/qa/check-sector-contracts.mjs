@@ -106,3 +106,15 @@ await assert.rejects(()=>personal.fetchSectorPersonal('user-a',[97]),/could not 
 const recorded=await personal.fetchSectorPersonal('user-a',[97],{'97':[2]});
 assert.equal(personal.personalConnections(recorded,personalSectors)[0].stock.symbol,'WATCH','Longer-term membership follows published snapshot');
 console.log('PASS: personal stock deduplication, position labels, multiple memberships, empty account, membership errors and published membership');
+
+const {leadershipStory}=load('src/services/leadershipStory.ts');
+const storyRow={index_id:97,name:'Example',status:'Building',aligned_streak:10,current:{eligible:5,total:5,leaders:2,leaders_pct:40,weekly:true,monthly:true},alignment_history:[{weekly:true,monthly:true}],flow:{state:'Fading'}};
+assert.match(leadershipStory([storyRow],'sector.leadership').title,/broad leadership is not yet established/);
+assert.match(leadershipStory([storyRow],'sector.leadership.building').meaning,/broader share of Stage 2 Leaders/);
+assert.match(leadershipStory([storyRow],'sector.leadership.support').meaning,/not missing data/);
+assert.match(leadershipStory([{...storyRow,status:'Running broadly'}],'sector.leadership.flow').title,/recent flow is softer/);
+assert.match(leadershipStory([{...storyRow,status:'Not aligned'}],'sector.leadership').title,/agreement is not established/);
+assert.match(leadershipStory([],'sector.leadership').title,/No baskets/);
+assert.match(leadershipStory([storyRow],'sector.leadership.cooling').title,/No baskets/);
+assert.match(leadershipStory([{...storyRow,alignment_history:[{weekly:null,monthly:true},{weekly:true,monthly:true}]}],'sector.leadership.persistence').title,/Gaps/);
+console.log('PASS: interpretation stories distinguish incomplete support, missing data, interruptions and opposing horizons');
