@@ -189,5 +189,16 @@ def run_daily(conn: 'psycopg2.extensions.connection',
             error_msg=result.error_msg,
         ))
 
+    # Publish only after the full source refresh succeeds; retain old dated
+    # snapshots if any enrichment failed instead of presenting partial evidence.
+    if outcome.overall_status == 'completed':
+        try:
+            from lib.sector_leadership import refresh_snapshots
+            on_progress('Publishing longer-term sector readings', 99)
+            count = refresh_snapshots(conn, str(trade_date))
+            outcome.steps.append(StepOutcome('leadership_snapshot', 'completed', 0, 100, count))
+        except Exception as exc:
+            conn.rollback()
+            outcome.steps.append(StepOutcome('leadership_snapshot', 'failed', 0, 0, 0, str(exc)[:500]))
     on_progress(f'daily run {outcome.overall_status}', 100)
     return outcome

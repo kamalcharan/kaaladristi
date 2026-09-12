@@ -7,6 +7,7 @@ from types import SimpleNamespace
 from typing import Optional
 import time
 import unittest
+from unittest.mock import patch
 
 class HTTPException(Exception):
     def __init__(self,status_code,detail):self.status_code=status_code;self.detail=detail
@@ -44,6 +45,21 @@ def function(conn):
     return env['custom_index_compute']
 
 class RebuildTests(unittest.TestCase):
+    def test_successful_rebuild_publishes_on_same_locked_connection(self):
+        conn=Conn()
+        with patch('lib.sector_leadership.refresh_snapshots',return_value=15) as refresh:
+            result=asyncio.run(function(conn)(97))
+        refresh.assert_called_once_with(conn)
+        self.assertIsNone(result['leadership_refresh_error'])
+        self.assertTrue(any('pg_try_advisory_lock(208, 1)' in q for q,p in conn.calls))
+
+    def test_publication_failure_does_not_claim_index_calculation_failed(self):
+        conn=Conn()
+        with patch('lib.sector_leadership.refresh_snapshots',side_effect=ValueError('snapshot unavailable')):
+            result=asyncio.run(function(conn)(97))
+        self.assertTrue(result['ok'])
+        self.assertEqual(result['leadership_refresh_error'],'snapshot unavailable')
+
     def test_full_history_and_archive_before_replacement(self):
         conn=Conn();result=asyncio.run(function(conn)(97))
         self.assertTrue(result['ok']);self.assertTrue(conn.closed)

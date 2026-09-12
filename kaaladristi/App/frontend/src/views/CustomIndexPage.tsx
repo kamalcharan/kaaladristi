@@ -79,9 +79,10 @@ export default function CustomIndexPage() {
         throw new Error(body.detail ?? `HTTP ${res.status}`);
       }
       const data = await res.json();
+      await queryClient.invalidateQueries();
       setComputeState((prev) => ({
         ...prev,
-        [id]: { status: 'done', msg: `${data.rows_computed} bars in ${(data.elapsed_ms / 1000).toFixed(1)}s` },
+        [id]: { status: 'done', msg: `${data.rows_computed} bars in ${(data.elapsed_ms / 1000).toFixed(1)}s${data.leadership_refresh_error ? ' - index ready; longer-term snapshot refresh pending. Retry Calculate after other baskets finish rebuilding.' : ''}` },
       }));
     } catch (e) {
       setComputeState((prev) => ({

@@ -214,7 +214,8 @@ export default function CustomIndexManagePage() {
       }
       const data = await res.json();
       await queryClient.invalidateQueries();
-      setComputeMsg(`${data.rows_computed} bars computed in ${(data.elapsed_ms / 1000).toFixed(1)}s — Sector Rotation will now show this index.`);
+      if (data.leadership_refresh_error) setError('Index calculated, but the longer-term snapshot refresh is pending. Retry Calculate after other baskets finish rebuilding.');
+      setComputeMsg(`${data.rows_computed} bars computed in ${(data.elapsed_ms / 1000).toFixed(1)}s — Current Flow can now show this index.`);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Calculate failed');
     } finally {

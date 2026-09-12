@@ -157,6 +157,12 @@ export default function CustomIndexCreatePage() {
         const api=import.meta.env.VITE_PIPELINE_API_URL?.trim() || '';
         const response=await fetch(`${api}/api/custom-index/${newIndex.id}/compute`,{method:'POST'});
         if(!response.ok) throw new Error('Index saved, but calculation failed. Open Manage and retry Calculate.');
+        const calculation=await response.json();
+        if(calculation.leadership_refresh_error) {
+          createdIndexId=null;
+          navigate(`/custom-index/${newIndex.id}/manage`, {state:{computeError:'Index calculated; longer-term snapshot refresh is pending. Retry Calculate after other baskets finish rebuilding.'}});
+          return;
+        }
       } catch {
         createdIndexId=null;
         navigate(`/custom-index/${newIndex.id}/manage`, {state:{computeError:'Index saved, but its calculation failed. Retry Calculate to finish building its history.'}});

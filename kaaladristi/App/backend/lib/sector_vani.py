@@ -207,7 +207,7 @@ def answer(req, db, complete, post_filter, log_interaction, model):
                 model_version=None if cached or static else ('qwen-local' if provider=='qwen-local' else model), latency_ms=elapsed)
             return {**meta, 'response':text, 'cached':cached, 'provider':provider, 'log_id':log_id}
     except ValueError as exc:
-        if intent in ('sector.leadership', 'sector.leadership.context') and str(exc) in ('One or more curated baskets need recalculation', 'Basket membership changed while preparing this reading. Please retry.'):
+        if intent in ('sector.leadership', 'sector.leadership.context') and str(exc) in ('One or more curated baskets need recalculation', 'Basket membership changed while preparing this reading. Please retry.', 'Longer-term snapshot is being prepared. Please retry after the data refresh.'):
             return {**base, 'error':str(exc)}
         return {**base, 'error':'This sector reading could not be prepared. Please try again.'}
     except ReadingInProgress:

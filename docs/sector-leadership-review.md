@@ -1,49 +1,74 @@
-# Longer-Term Leadership — local review
+# Sector leadership upgrade: rollout and review
 
-## Deploy order
+## Rollout order
 
-1. Apply `kaaladristi/App/DBscripts/km_migration_207_sector_leadership.sql` to your test database first. It adds membership revisions, membership-change logs, archived observations/history and an index-scoped version of the existing score calculation. It does not rebuild or delete existing index data when applied.
-2. Update the backend and frontend together from `codex/vani-market-structure`.
-3. Start with a test curated basket before editing one used by beta customers. Membership edits now automatically rebuild the complete index history, including scores, breadth and indicators. The old bars are archived before replacement.
+1. Apply migration 207 if it is not already installed, then `kaaladristi/App/DBscripts/km_migration_208_leadership_snapshots.sql` to the test database. Migration 208 adds published snapshots and membership/catalog invalidation; it does not rewrite index prices.
+2. Pull backend and frontend together from `codex/vani-market-structure`.
+3. In `kaaladristi/App/backend`, using the deployed Python environment and database configuration, run:
 
-## What is implemented
+   ```sh
+   python scripts/refresh_sector_leadership.py
+   ```
 
-On `/sector-rotation`, Current Flow remains the default. Longer-Term Leadership adds three separate readings: weekly/monthly index alignment, constituent Stage 2 support, and persistence. There is no combined score, performance prediction, or new industry-basket construction. Existing Broad Market / Sectoral / Thematic / Curated tabs remain available.
+   This publishes the latest session for all five category scopes and three display windows. Subsequent complete daily runs publish automatically. Successful custom-index calculations also attempt publication. A failed publication is reported separately from a successful index calculation.
+4. For historical date selection, prepare the desired sessions explicitly:
 
-Weekly alignment uses the existing long MagicRS ratio baseline (144 periods) versus its 60-period mean, with short 21-period RS sign as the warmup fallback. Monthly uses short MagicRS sign, matching the Ascent alignment approach. Both use NIFTY 500. Period closes must match the benchmark session; missing periods are not compressed out. Only completed calendar weeks/months are used: the next calendar period must have started by the selected session. Consequently the latest forming period is deliberately excluded; source period-close dates are displayed.
+   ```sh
+   python scripts/refresh_sector_leadership.py --from 2026-06-01 --to 2026-09-11
+   ```
 
-Stage support uses raw `stage = S2` / `S2_CANDIDATE` across recorded constituents, not scanner result limits, user filters or the smoothed `stage_confirmed` field. Denominator = constituents with known S1/S2/S2_CANDIDATE/S3/S4 on that session. At least five classified constituents are needed. Classified/total coverage is visible. Scanner listings with extra filters may therefore show different counts.
+   Choose the dates appropriate to your database. Missing snapshots show a preparation message; opening the page never triggers heavy calculations.
 
-History is reconstructed using current recorded membership. Previous published leadership payloads are saved separately in `km_leadership_observations`; prior index bars are archived before full rebuild in `km_custom_index_history_archive`. Membership changes are retained in `km_custom_index_membership_log`. These are database records; there is no archive-browser UI in this increment.
+A membership/catalog edit invalidates existing snapshots across dates. The next successful refresh publishes the latest session; rerun the historical command for earlier dates you want to inspect. All curated revisions must be fully calculated before a batch can publish. An incomplete daily run retains earlier dated snapshots and does not publish the incomplete session. Resolve the failed source steps and rerun the daily pipeline or the refresh command afterward.
 
-## Test angles
+## What users see
+
+Current Flow remains the default. Longer-Term Leadership shows one comparison row per basket, with mobile cards on smaller screens. It combines separate visible readings: a descriptive group, weekly/monthly agreement, Stage 2 counts and coverage, agreement history, and current flow.
+
+- **Running broadly:** W/M agree for at least 8 completed weekly observations, at least 60% Stage 2 Leaders among classified constituents, at least 5 classified, and at least 80% membership coverage.
+- **Building:** W/M agree but the running-broadly persistence or support requirements are not met.
+- **Cooling:** W/M no longer agree after agreement within the preceding 26 completed weekly observations.
+- **Limited coverage:** fewer than 5 classified constituents or coverage below 80%. Raw Leader and Watch counts remain visible.
+- **Unavailable:** insufficient W/M readings when coverage is otherwise sufficient.
+- **Not aligned:** no current agreement and no recent agreement to classify as Cooling.
+
+These are explicit research rules, not a composite score, performance ranking or prediction. A basket can be Running broadly while current flow is Fading.
+
+Basket-name clicks open the existing `/sector-rotation/:id` evidence page with the selected date. The separate MagicRS button expands the existing ChartView canvas component, with Weekly/Monthly controls. No new chart library or synthetic production series is used.
+
+## Calculation and cache contract
+
+The snapshot job computes a canonical 12-month display history with another 60 months of indicator warmup. It produces 3M/6M/12M projections without recalculating current classifications or the completed-week run. Current runs can extend beyond the display window, within available warmup history. Missing alignment breaks the run.
+
+Weekly alignment uses the 144-period relative-strength baseline versus its 60-period mean, falling back to 21-period RS sign when the long mean is unavailable. Monthly uses 21-period RS sign. Both use matched NIFTY 500 period closes. A period is available only after the next calendar week/month starts, so the forming candle is excluded. Chart short averages use migration 169's 21-period average, with its warmup floor; chart shading describes RS versus average and can differ from the monthly above-zero agreement rule.
+
+Stage support counts raw `stage=S2` and `S2_CANDIDATE`, without scanner display limits or extra filters. Eligible means known S1/S2/S2_CANDIDATE/S3/S4 at the selected closing-data session. Percentages require five eligible constituents; counts do not. History uses currently recorded membership, not historical membership.
+
+Page and VaNi read the same published payload and snapshot hash. The read path performs a snapshot lookup and revision check; no constituent scanning, index calculation or LLM call is required to render the table. VaNi explanation retains Qwen-first routing, configured Haiku fallback, cache, Consulting VaNi loader and feedback.
+
+Publication is transactional across all categories/windows. Membership generation and custom revision checks reject stale results. Previous published payloads remain in `km_leadership_observations`; existing index-price and membership archives remain available.
+
+## Test angles for Kamal
 
 | Test | Expected result |
 |---|---|
-| Open the main page | Current Flow opens; its default VaNi uses the shared Discovery Sector Pulse component. |
-| Switch to Longer-Term Leadership | Three separate readings appear. VaNi changes to the longer-term picture for the same category, date and window. |
-| Change 3M / 6M / 12M | History/persistence changes. The latest readings should stay the same for an unchanged date and membership. |
-| Switch Sectoral / Thematic / Curated | The main reading and longer-term VaNi follow the selected category. Current Flow's overall default remains independent of the tab. |
-| Inspect a familiar mature basket | Check weekly/monthly source dates and alignment against the matching completed periods, not the forming chart candle. |
-| Select a past date | No future period or future stage reading enters the result. It remains a reconstruction of today's recorded membership. |
-| Open participation history | Latest date is first in the table. Graph shows chronological Leaders/Watch percentages; missing observations produce gaps. |
-| Compare a 5-stock and a larger basket | Counts and percentages use eligible constituents; coverage is visible. A basket with fewer than five classified stocks shows unavailable support. |
-| Find incomplete stage or price history | Missing data must not appear as zero strength or a negative alignment. It breaks an alignment streak and is excluded from known-sample counts. |
-| Sort by Stage 2 Leaders share | Compare basket support without a combined ranking score. Read coverage alongside the percentage. |
-| Find a long leader with recent fading flow | Longer-term alignment/support and current flow can disagree. VaNi must explain rather than collapse them into a single verdict. |
-| Add/remove a test constituent | Full recalculation starts automatically. Previous bars are archived, membership revision changes, and a completed rebuild refreshes related caches. |
-| Fail a rebuild in your test environment | The error is visible. Revision stays pending; VaNi/Discovery avoid the stale index snapshot. Retry Calculate. |
-| Change membership during a rebuild from another session | Completion detects the revision mismatch and requests a retry rather than declaring the newest basket ready. |
-| Create a new test basket | Saving triggers calculation. On failure you land on Manage with a retry message, without creating a second basket. |
-| Request VaNi twice | First request uses Qwen-first routing with the existing configured fallback; repeat uses cache when available. Both show Consulting VaNi. Check thumbs feedback. |
-| Mobile + themes | Test light/dark at 320/390px and desktop. Switch modes, expand history, inspect values, retry errors and open a basket. No whole-page horizontal overflow. |
+| Open Longer-Term Leadership | Compare baskets immediately; no expanded evidence by default. Group counts match rows. |
+| Click each group, including an empty group | Only matching baskets appear, or a clear empty message. All restores the full category. |
+| Change 3M / 6M / 12M | History changes; current group, current W/M readings, stage counts and run remain consistent for the same date. |
+| Switch Sectoral / Thematic / Curated | Table and longer-term VaNi follow the chosen scope. Current Flow's default still matches Discovery overall. |
+| Find a basket with strong structure and fading current flow | Both readings remain visible; VaNi must not merge them into one score. |
+| Compare 4-member, 5-member and partially covered baskets | Small baskets show actual Leader/Watch counts. Broad support needs both the five-classified and 80%-coverage floors. |
+| Expand MagicRS and switch Weekly/Monthly | Existing chart style, correct period dates, actual RS values and clearly labelled averages. Missing history has an explanatory message. |
+| Click a basket name or Open full sector evidence | Existing detail route opens for that basket and the selected date. |
+| Select a historical date | A prepared snapshot loads with no future periods. An unprepared date shows the preparation message. |
+| Edit a test basket, then finish Calculate | Old leadership snapshot becomes unavailable; rebuilt/latest publication reflects new membership. Reprepare old dates if needed. |
+| Simulate publication failure | No partially published batch. Successful index calculation is distinguished from pending leadership publication. |
+| Repeat VaNi request | Existing cache works, loader remains visible, feedback works. Check deployed Qwen/fallback logs. |
+| Use light/dark at 320/390px and desktop | Filters wrap; cards fit; expansion and navigation work without whole-page horizontal overflow. |
+| Check request timing and DB logs | Leadership context reads published JSON; heavy queries occur only in refresh jobs. Measure live refresh duration separately. |
 
-Reconstructed history is not evidence of when a theme was originally discovered. Current-run counts are bounded to the selected window. A missing benchmark or insufficient warmup must result in unavailable alignment.
+## Local verification
 
-## Verification performed here
+53 backend tests passed, including classification boundaries, small samples, display-window stability, read-only snapshot loading, stale membership, atomic publication failure, rebuild and daily-pipeline publication contracts, and existing VaNi/cache behavior. Browser regression passed at 320/390/768/1440px in both themes using synthetic fixtures, including filters, MagicRS canvas, date-carrying links and current-flow regressions. Frontend typecheck, production build, theme/persona checks and Discovery flow parity checks passed.
 
-- 42 backend tests: alignment warmup/missing data, denominator and sample floor, date/window behavior, snapshot invalidation, archive writes, rebuild order/failure/concurrency, existing VaNi/cache contracts.
-- Browser checks at 320/390/768/1440px in light and dark, including the new view/windows/history and automatic VaNi switching, using synthetic responses with external requests blocked.
-- Frontend typecheck, existing sector classification/parity checks, production build and theme/persona checks.
-
-The SQL migration has not been applied to a live PostgreSQL instance here. Live data accuracy, full-history rebuild duration, deployed Qwen/fallback and production permissions need verification in your environment. Existing build warnings concern bundle size, old Browserslist data and a pre-existing Tailwind class.
+PostgreSQL is not available in this workspace: migration execution, live refresh performance, database permissions and deployed Qwen/Haiku behavior require testing in your environment. The build retains pre-existing bundle-size, Browserslist and Tailwind warnings.

@@ -41,7 +41,7 @@ try {
         vaniCalls.push(body);
         if(body.intent_id==='sector.leadership.context') {
           const history=days.slice(-body.leadership_months*4).map((date,i)=>({date,weekly:true,monthly:i%3===0?null:true,weekly_date:date,monthly_date:date,eligible:5,total:5,leaders:3,watch:1,leaders_pct:60,watch_pct:20}));
-          return route.fulfill({json:{snapshot:`leadership-${body.date}-${body.leadership_months}-${body.sector_category}`,date:body.date,start:history[0].date,months:body.leadership_months,rows:[{index_id:97,name:symbols[0].name,category:body.sector_category,current:history.at(-1),history,aligned_samples:12,known_samples:18,aligned_streak:3}]}});
+          return route.fulfill({json:{snapshot:`leadership-${body.date}-${body.leadership_months}-${body.sector_category}`,date:body.date,start:history[0].date,months:body.leadership_months,rows:[{index_id:97,name:symbols[0].name,category:body.sector_category,current:history.at(-1),history,aligned_samples:12,known_samples:18,aligned_streak:12,status:'Running broadly',alignment_history:history,flow:{state:'Fading',score_5d:12,score_22d:25},charts:{weekly:history.map((s,i)=>({trade_date:s.date,magic_rs:2+i/10,magic_ma:1+i/20,magic_rs_zone:'Neutral Bull'})),monthly:history.slice(-4).map((s,i)=>({trade_date:s.date,magic_rs:2+i/10,magic_ma:1,magic_rs_zone:'Neutral Bull'})),weekly_method:'short'}}]}});
         }
         const pulse=body.intent_id==='sector.pulse.context';
         if(pulse) { body.date='2026-09-11'; body.sector_period=22; }
@@ -89,13 +89,22 @@ try {
     await page.screenshot({path:path.join(out,`sector-default-${mode}-${width}.png`),fullPage:true});
     await noOverflow(`list ${width}`);
     await page.getByRole('button',{name:'Longer-Term Leadership',exact:true}).click();
-    await page.getByRole('heading',{name:'Index structure',exact:true}).waitFor();
+    await page.getByRole('heading',{name:'Which baskets are holding their strength?',exact:true}).waitFor();
     await page.getByRole('heading',{name:'VaNi · Longer-term picture',exact:true}).waitFor();
     await page.getByRole('button',{name:'3M',exact:true}).click();
-    await page.getByRole('heading',{name:'Index structure',exact:true}).waitFor();
+    await page.getByRole('heading',{name:'Which baskets are holding their strength?',exact:true}).waitFor();
     await page.getByRole('button',{name:'12M',exact:true}).click();
-    await page.getByRole('heading',{name:'Index structure',exact:true}).waitFor();
-    await page.getByText('Inspect participation history',{exact:true}).click();
+    await page.getByRole('heading',{name:'Which baskets are holding their strength?',exact:true}).waitFor();
+    await page.getByRole('button',{name:'Cooling 0',exact:true}).click();
+    await page.getByText('No baskets in this group for the selected session.',{exact:true}).waitFor();
+    await page.getByRole('button',{name:'Running broadly 1',exact:true}).click();
+    await page.getByRole('button',{name:'MagicRS +',exact:true}).click();
+    await page.getByRole('heading',{name:/MagicRS .*Specialty/}).waitFor();
+    await page.getByRole('button',{name:'Monthly',exact:true}).click();
+    assert.equal(await page.locator('.leadership-evidence:visible canvas').count(),1,'Uses existing MagicRS canvas');
+    const detailLink=page.getByRole('link',{name:'Open full sector evidence',exact:false});
+    assert((await detailLink.getAttribute('href')).includes('asof=2026-09-11&research=leadership&months=12'));
+
     await noOverflow(`leadership ${width}`);
     assert(vaniCalls.some(r=>r.intent_id==='sector.leadership'&&r.leadership_months===12),'VaNi must follow longer-term window');
     await page.screenshot({path:path.join(out,`sector-leadership-${mode}-${width}.png`),fullPage:true});

@@ -1,51 +1,67 @@
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { useLeadership, type LeadershipRow } from '@/services/sectorLeadership';
 import type { SectorTab } from '@/services/sectorRotation';
-import { sectorSessionDate } from '@/lib/sectorFlow';
-const state=(value:boolean|null)=>value==null?'Unavailable':value?'Aligned':'Not aligned';
-const pct=(value:number|null)=>value==null?'Unavailable':`${value.toFixed(1)}%`;
-function Basket({row}:{row:LeadershipRow}) {
+import { sectorSessionDate, SECTOR_FLOW_STYLE } from '@/lib/sectorFlow';
+import type { FlowSignal } from '@/components/domain/FlowIntensityMap';
+import MagicRsSubchart from './VisualPulse/MagicRsSubchart';
+import '@/styles/sectorResearch.css';
+import { useMediaQuery } from '@/hooks/useMediaQuery';
+
+const groups = ['Running broadly', 'Building', 'Cooling', 'Limited coverage', 'Not aligned', 'Unavailable'] as const;
+const tone = (s:string) => s==='Running broadly'?'var(--risk-green)':s==='Building'||s==='Cooling'?'var(--risk-amber)':'var(--text-muted)';
+const state = (v:boolean|null) => v==null?'Unavailable':v?'Aligned':'Not aligned';
+function Alignment({label,value}:{label:string;value:boolean|null}) {
+ return <span className="leadership-alignment" title={`${label}: ${state(value)}`}><i style={{background:value==null?'var(--text-muted)':value?'var(--risk-green)':'var(--risk-red)'}}/>{label} {value==null?'—':value?'✓':'−'}</span>;
+}
+function Support({row}:{row:LeadershipRow}) {
  const c=row.current;
- return <article className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 min-w-0 space-y-3">
-  <Link className="font-medium underline" to={`/sector-rotation/${row.index_id}?asof=${c.date}`}>{row.name}</Link>
-  <div className="grid gap-4 md:grid-cols-3 text-sm">
-   <div><h3 className="font-medium">Index structure</h3><p>Weekly: {state(c.weekly)}</p><p>Monthly: {state(c.monthly)}</p>
-    <p className="text-xs text-muted">Period closes: {c.weekly_date ? sectorSessionDate(c.weekly_date):'unavailable'} / {c.monthly_date ? sectorSessionDate(c.monthly_date):'unavailable'}</p></div>
-   <div><h3 className="font-medium">Constituent support</h3><p>Stage 2 Leaders: {pct(c.leaders_pct)}{c.leaders!=null && ` (${c.leaders}/${c.eligible})`}</p>
-    <p>Stage 2 Watch: {pct(c.watch_pct)}{c.watch!=null && ` (${c.watch}/${c.eligible})`}</p>
-    <p className="text-xs text-muted">Classified: {c.eligible} of {c.total} members{c.eligible<5?' · At least 5 required':''}</p></div>
-   <div><h3 className="font-medium">Persistence</h3><p>Both aligned: {row.aligned_samples} of {row.known_samples} known samples</p><p>Run within this window: {row.aligned_streak} samples</p>
-    <p className="text-xs text-muted">Weekly samples plus selected session. Missing alignment breaks the run.</p></div>
-  </div>
-  <details><summary className="cursor-pointer min-h-11 text-sm">Inspect participation history</summary>
-   <p className="text-xs text-muted">Percentage of classified constituents; gaps mean fewer than five readings. These are stage categories, not returns.</p>
-   <div className="h-48 w-full min-w-0" role="img" aria-label={`${row.name} Stage 2 participation history`}>
-    <ResponsiveContainer width="100%" height="100%"><LineChart data={row.history}>
-     <XAxis dataKey="date" tickFormatter={sectorSessionDate} minTickGap={55} tick={{fontSize:10}}/><YAxis domain={[0,100]} width={32} tick={{fontSize:10}}/>
-     <Tooltip labelFormatter={v=>sectorSessionDate(String(v))} contentStyle={{background:'var(--card)',borderColor:'var(--border)'}}/>
-     <Line dataKey="leaders_pct" name="Leaders %" stroke="var(--risk-green)" dot={false} connectNulls={false} isAnimationActive={false}/>
-     <Line dataKey="watch_pct" name="Watch %" stroke="var(--risk-amber)" dot={false} connectNulls={false} isAnimationActive={false}/>
-    </LineChart></ResponsiveContainer>
-   </div>
-   <p className="text-xs">Green: Leaders · Amber: Watch</p>
-   <div className="max-h-72 overflow-auto"><table className="w-full text-xs"><thead><tr><th>Session</th><th>Weekly</th><th>Monthly</th><th>Leaders</th><th>Watch</th></tr></thead>
-    <tbody>{[...row.history].reverse().map(s=><tr key={s.date}><td>{sectorSessionDate(s.date)}</td><td>{state(s.weekly)}</td><td>{state(s.monthly)}</td><td>{pct(s.leaders_pct)}</td><td>{pct(s.watch_pct)}</td></tr>)}</tbody></table></div>
-  </details>
- </article>;
+ return <div><strong>{c.leaders??0}/{c.eligible} Leaders</strong><small>{c.watch??0} Watch · {c.eligible}/{c.total} classified</small>
+  <div className="leadership-support" aria-label={`${c.leaders??0} Leaders out of ${c.eligible} classified constituents`}><span style={{width:`${c.eligible?100*(c.leaders??0)/c.eligible:0}%`}}/></div>
+  {row.status==='Limited coverage'&&<small>Too few readings for broad support</small>}</div>;
+}
+function History({row}:{row:LeadershipRow}) {
+ return <div><strong>{row.aligned_streak} completed weeks</strong><div className="leadership-strip" role="img" aria-label={`${row.name}: weekly and monthly alignment history, oldest to latest`}>
+  {row.alignment_history.map(s=><span key={s.date} title={`${sectorSessionDate(s.date)}: W ${state(s.weekly)}, M ${state(s.monthly)}`} style={{background:s.weekly==null||s.monthly==null?'var(--text-muted)':s.weekly&&s.monthly?'var(--risk-green)':s.weekly||s.monthly?'var(--risk-amber)':'var(--risk-red)'}}/>)}</div><small>Current W/M agreement run</small></div>;
+}
+function Flow({row}:{row:LeadershipRow}) {
+ const f=row.flow; const style=SECTOR_FLOW_STYLE[f?.state.toUpperCase() as FlowSignal];
+ return <div><strong className="leadership-flow-badge" style={{color:style?.color??'var(--text-secondary)',background:style?.bg??'var(--border)'}}>{f?.state??'Unavailable'}</strong><small>5D {f?.score_5d?.toFixed(1)??'—'} · 22D {f?.score_22d?.toFixed(1)??'—'}</small></div>;
+}
+function Evidence({row,months}:{row:LeadershipRow;months:number}) {
+ const [tf,setTf]=useState<'weekly'|'monthly'>('weekly');
+ const series=row.charts[tf]; const latest=series.at(-1);
+ const variant=tf==='weekly'?row.charts.weekly_method:'short';
+ return <div className="leadership-evidence">
+  <div className="sector-toolbar"><h3>MagicRS · {row.name}</h3><div className="sector-tabs">{(['weekly','monthly'] as const).map(t=><button key={t} className="sector-question" aria-pressed={tf===t} onClick={()=>setTf(t)}>{t==='weekly'?'Weekly':'Monthly'}</button>)}</div></div>
+  <p>{tf==='weekly'?'Weekly':'Monthly'}: <strong>{state(row.current[tf])}</strong> · completed close {row.current[`${tf}_date`]?sectorSessionDate(row.current[`${tf}_date`]!):'unavailable'} · benchmark NIFTY 500</p>
+  {series.some(s=>s.magic_rs!=null)?<><MagicRsSubchart data={series} activeIndex={-1} benchmarkLabel="NIFTY 500" variant={variant} showStats={false}/>
+   <p>MagicRS <strong>{latest?.magic_rs?.toFixed(2)??'—'}</strong> · {variant==='long'?60:21}-period average <strong>{latest?.magic_ma?.toFixed(2)??'—'}</strong></p></>:<p>No completed MagicRS readings in this window. Try a longer history window.</p>}
+  <p className="text-xs text-muted">{variant==='long'?'144-period RS; weekly agreement means RS is above its 60-period average.':'21-period RS; agreement means RS is above zero.'} Chart shading shows RS relative to its average, which can differ from agreement. A missing average means insufficient warm-up history.</p>
+  <p className="text-xs text-muted">{series.length?`${sectorSessionDate(series[0].trade_date)} → ${sectorSessionDate(series.at(-1)!.trade_date)} · `:''}{months}-month display. Historical support uses current recorded constituents.</p>
+  <Link className="sector-question inline-flex items-center" to={`/sector-rotation/${row.index_id}?asof=${row.current.date}&research=leadership&months=${months}`}>Open full sector evidence →</Link>
+ </div>;
 }
 export default function SectorLeadership({category,date,months}:{category:SectorTab;date?:string;months:number}) {
  const {data,isFetching,error,refetch}=useLeadership(category,date,months);
- const [sort,setSort]=useState('name');
- if(isFetching) return <p role="status" className="p-4">Preparing longer-term readings…</p>;
+ const mobile=useMediaQuery('(max-width: 1100px)');
+ const [filter,setFilter]=useState('All'); const [expanded,setExpanded]=useState<number|null>(null);
+ if(isFetching) return <p role="status" className="p-4">Loading published longer-term readings…</p>;
  if(error) return <div role="alert" className="p-4"><p>{error.message}</p><button className="sector-question" onClick={()=>refetch()}>Retry longer-term readings</button></div>;
- const rows=[...(data?.rows??[])].sort((a,b)=>sort==='leaders'?(b.current.leaders_pct??-1)-(a.current.leaders_pct??-1)||a.name.localeCompare(b.name):a.name.localeCompare(b.name));
- return <section className="p-4 space-y-4" aria-label="Longer-term leadership">
-  <p className="text-sm">Three separate readings, with no combined score. Weekly/monthly MagicRS uses NIFTY 500 and completed calendar periods. Recent flow remains in Current Flow.</p>
-  <p className="text-xs text-muted">{data?.start} to {data?.date}. History is reconstructed using current recorded constituents. It is not a record of when the basket was first discovered. Stage percentages use raw classifications, without scanner display limits or extra filters.</p>
-  <label className="text-sm">Compare by <select className="sector-question" value={sort} onChange={e=>setSort(e.target.value)}><option value="name">Basket name</option><option value="leaders">Stage 2 Leaders share</option></select></label>
-  {!rows.length && <p>No baskets are available for this selection.</p>}
-  {rows.map(r=><Basket key={r.index_id} row={r}/>)}
+ const all=data?.rows??[];
+ const rows=all.filter(r=>filter==='All'||r.status===filter).sort((a,b)=>groups.indexOf(a.status)-groups.indexOf(b.status)||b.aligned_streak-a.aligned_streak||a.name.localeCompare(b.name));
+ const name=(r:LeadershipRow)=><Link to={`/sector-rotation/${r.index_id}?asof=${r.current.date}&research=leadership&months=${months}`}>{r.name}</Link>;
+ const toggle=(r:LeadershipRow)=><button className="sector-question" aria-expanded={expanded===r.index_id} onClick={()=>setExpanded(expanded===r.index_id?null:r.index_id)}>MagicRS {expanded===r.index_id?'−':'+'}</button>;
+ return <section className="leadership-view" aria-label="Longer-term leadership">
+  <div><h2>Which baskets are holding their strength?</h2><p className="text-sm text-muted">Compare longer-term agreement, constituent support and today’s flow.</p></div>
+  <div className="leadership-filters" aria-label="Filter longer-term groups">{['All',...groups].map(g=><button key={g} className="sector-question" aria-pressed={filter===g} onClick={()=>setFilter(g)}>{g} <strong>{g==='All'?all.length:all.filter(r=>r.status===g).length}</strong></button>)}</div>
+  <p className="text-xs text-muted">Closing data: {data?.date?sectorSessionDate(data.date):'unavailable'} · History: {months} months · Window changes history, not the current group.</p>
+  {!rows.length&&<p>No baskets in this group for the selected session.</p>}
+  {!!rows.length&&<>
+   {!mobile&&<div className="leadership-desktop"><table className="leadership-table"><thead><tr><th>Basket</th><th>Longer-term story</th><th>MagicRS</th><th>Stage 2 support</th><th>Agreement history</th><th>Current flow</th></tr></thead><tbody>{rows.map(r=><Fragment key={r.index_id}><tr><td>{name(r)}</td><td><strong style={{color:tone(r.status)}}>{r.status}</strong></td><td><div className="leadership-alignments"><Alignment label="W" value={r.current.weekly}/><Alignment label="M" value={r.current.monthly}/></div>{toggle(r)}</td><td><Support row={r}/></td><td><History row={r}/></td><td><Flow row={r}/></td></tr>{expanded===r.index_id&&<tr><td colSpan={6}><Evidence row={r} months={months}/></td></tr>}</Fragment>)}</tbody></table></div>}
+   {mobile&&<div className="leadership-mobile">{rows.map(r=><article key={r.index_id}><div className="space-y-2">{name(r)}<p style={{color:tone(r.status)}}>{r.status}</p></div><div className="leadership-mobile-grid"><div><small>MagicRS agreement</small><Alignment label="W" value={r.current.weekly}/><Alignment label="M" value={r.current.monthly}/></div><div><small>Current flow</small><Flow row={r}/></div><Support row={r}/><History row={r}/></div>{toggle(r)}{expanded===r.index_id&&<Evidence row={r} months={months}/>}</article>)}</div>}
+  </>}
+  <p className="text-xs text-muted">History: oldest → latest · Green: W/M agree · Amber: one agrees · Red: neither · Grey: missing. W = weekly, M = monthly. Leaders and Watch are observed stage classifications.</p>
+  <details className="leadership-rules"><summary>How are these groups decided?</summary><p>Running broadly: W/M agreement for at least 8 completed weeks, at least 60% Leaders among classified constituents, at least 5 classified and 80% membership coverage.</p><p>Building: W/M agree, but those persistence or support requirements are not met. Cooling: agreement was lost after agreement within the previous 26 weekly observations.</p><p>Limited coverage: fewer than 5 classified or less than 80% coverage. Unavailable: insufficient W/M readings. Not aligned: no current agreement and no recent agreement to classify as Cooling.</p><p>Changing current flow does not automatically change the longer-term story. These groups describe evidence; they do not predict continuation. Reconstructed history uses current membership.</p></details>
  </section>;
 }

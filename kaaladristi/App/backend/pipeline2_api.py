@@ -8217,9 +8217,16 @@ async def custom_index_compute(index_id: int, req: Optional[_CustomComputeReq] =
             cur.execute("SELECT pg_try_advisory_lock(207, %s)", [index_id])
             if not cur.fetchone()[0]:
                 raise HTTPException(status_code=409, detail='This index is already rebuilding. Retry after it completes.')
+            # Serialize custom source writes against leadership publication.
+            # refresh_snapshots uses the same key on this session after rebuild.
+            cur.execute('SELECT pg_try_advisory_lock(208, 1)')
+            if not cur.fetchone()[0]:
+                raise HTTPException(status_code=409, detail='A basket calculation or leadership refresh is running. Retry shortly.')
             cur.execute("SELECT revision FROM km_custom_index_revisions WHERE index_id=%s", [index_id])
             revision_row = cur.fetchone()
             rebuilding_revision = revision_row[0] if revision_row else 0
+            cur.execute('UPDATE km_leadership_generation SET generation=generation+1 WHERE id=1')
+            conn.commit()
             if from_date is None and to_date is None:
                 cur.execute('''INSERT INTO km_custom_index_history_archive(index_id,revision,bars)
                     SELECT %s, COALESCE((SELECT computed_revision FROM km_custom_index_revisions WHERE index_id=%s),0),
@@ -8278,6 +8285,16 @@ async def custom_index_compute(index_id: int, req: Optional[_CustomComputeReq] =
                     raise HTTPException(status_code=409, detail='Membership changed during rebuild. Retry Calculate for the newest basket.')
             conn.commit()
 
+        # A failed publication is reported separately: the index rebuild remains
+        # successful, and stale membership snapshots are rejected on reads.
+        leadership_refresh_error = None
+        try:
+            from lib.sector_leadership import refresh_snapshots
+            refresh_snapshots(conn)
+        except Exception as exc:
+            leadership_refresh_error = str(exc)[:300]
+            log.warning('Leadership snapshot refresh after rebuild: %s', exc)
+
     except HTTPException:
         conn.rollback()
         raise
@@ -8289,6 +8306,7 @@ async def custom_index_compute(index_id: int, req: Optional[_CustomComputeReq] =
 
     return {
         'ok': True,
+        'leadership_refresh_error': leadership_refresh_error,
         'index_id': index_id,
         'index_name': idx['name'],
         'rows_computed': rows_computed,

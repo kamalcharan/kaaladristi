@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import type { MagicRsDataPoint } from '@/components/domain/VisualPulse/MagicRsSubchart';
 import type { SectorTab } from '@/services/sectorRotation';
 export interface LeadershipSample {
  date:string; weekly:boolean|null; monthly:boolean|null; weekly_date:string|null; monthly_date:string|null;
@@ -6,9 +7,13 @@ export interface LeadershipSample {
 }
 export interface LeadershipRow {
  index_id:number; name:string; category:string; current:LeadershipSample; history:LeadershipSample[];
+ status:'Running broadly'|'Building'|'Cooling'|'Limited coverage'|'Not aligned'|'Unavailable';
+ alignment_history:{date:string;weekly:boolean|null;monthly:boolean|null}[];
+ charts:{weekly:MagicRsDataPoint[];monthly:MagicRsDataPoint[];weekly_method:'long'|'short'};
+ flow?:{state:string;score_5d:number|null;score_22d:number|null};
  aligned_samples:number; known_samples:number; aligned_streak:number;
 }
-export interface LeadershipSnapshot { snapshot:string; date:string; start:string; months:number; rows:LeadershipRow[] }
+export interface LeadershipSnapshot { snapshot:string; date:string; start:string; months:number; rows:LeadershipRow[]; counts:Record<string,number> }
 export async function askLeadership(body:object) {
  const api=import.meta.env.VITE_PIPELINE_API_URL?.trim() || '';
  const res=await fetch(`${api}/api/vani/ask`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});

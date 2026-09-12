@@ -43,6 +43,8 @@ interface MagicRsSubchartProps {
    *  label has to say which: reading a 21-bar RS as a 144-bar one is a real
    *  misread, not a cosmetic one. */
   variant?: 'long' | 'short';
+  /** Caller can supply cadence-specific facts for weekly/monthly data. */
+  showStats?: boolean;
 }
 
 function getCssVar(name: string, fallback: string): string {
@@ -82,7 +84,7 @@ function zoneColor(zone: string | null, green: string, red: string, neutral: str
   return neutral;
 }
 
-export default function MagicRsSubchart({ data, activeIndex, benchmarkLabel, variant = 'long' }: MagicRsSubchartProps) {
+export default function MagicRsSubchart({ data, activeIndex, benchmarkLabel, variant = 'long', showStats = true }: MagicRsSubchartProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -296,7 +298,7 @@ export default function MagicRsSubchart({ data, activeIndex, benchmarkLabel, var
   return (
     <div ref={containerRef} style={{ borderRadius: 6, overflow: 'hidden' }}>
       <canvas ref={canvasRef} style={{ display: 'block', width: '100%' }} />
-      <MagicRsStats data={data} activeIndex={activeIndex} benchmarkLabel={benchmarkLabel} variant={variant} />
+      {showStats && <MagicRsStats data={data} activeIndex={activeIndex} benchmarkLabel={benchmarkLabel} variant={variant} />}
     </div>
   );
 }
