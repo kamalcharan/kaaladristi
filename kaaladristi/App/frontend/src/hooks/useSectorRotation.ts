@@ -87,11 +87,11 @@ export function useStockMembership(equityId: number | null) {
 }
 
 /** Last 22 trading days of close prices for a single index. */
-export function useIndexSparkline(indexId: number | null) {
+export function useIndexSparkline(indexId: number | null, forDate?: string) {
   const dateKey = useDateKey();
   return useQuery<SparklinePoint[], Error>({
-    queryKey: ['index-sparkline', indexId, dateKey],
-    queryFn: () => fetchIndexSparkline(indexId!),
+    queryKey: ['index-sparkline', indexId, forDate ?? dateKey],
+    queryFn: () => fetchIndexSparkline(indexId!, forDate),
     enabled: indexId != null,
     staleTime: STALE,
     retry: 1,
@@ -179,11 +179,11 @@ export function useIndexDateRange() {
 }
 
 /** Per-constituent flow intensity heatmap for an index over the last 22 sessions. */
-export function useConstituentFlowMap(indexId: number | null) {
+export function useConstituentFlowMap(indexId: number | null, days: 5 | 22 | 66 = 22, forDate?: string) {
   const dateKey = useDateKey();
   return useQuery<FlowMapData, Error>({
-    queryKey: ['constituentFlowMap', indexId, dateKey],
-    queryFn:  () => fetchConstituentFlowMap(indexId!, 22),
+    queryKey: ['constituentFlowMap', indexId, forDate ?? dateKey, days],
+    queryFn: () => fetchConstituentFlowMap(indexId!, days, forDate),
     enabled:  indexId != null,
     staleTime: STALE,
     retry: 1,
@@ -191,12 +191,12 @@ export function useConstituentFlowMap(indexId: number | null) {
 }
 
 /** Per-index flow heatmap for a sector tab category over N trading days. */
-export function useIndexFlowMap(tab: SectorTab, days: 5 | 22 | 66) {
+export function useIndexFlowMap(tab: SectorTab, days: 5 | 22 | 66, forDate?: string) {
   const categories = SECTOR_TAB_CATEGORIES[tab];
   const dateKey = useDateKey();
   return useQuery<FlowMapData, Error>({
-    queryKey: ['indexFlowMap', tab, days, dateKey],
-    queryFn:  () => fetchIndexFlowMap(categories, days),
+    queryKey: ['indexFlowMap', tab, days, forDate ?? dateKey],
+    queryFn: () => fetchIndexFlowMap(categories, days, forDate),
     enabled:  categories.length > 0,
     staleTime: STALE,
     retry: 1,
@@ -204,11 +204,11 @@ export function useIndexFlowMap(tab: SectorTab, days: 5 | 22 | 66) {
 }
 
 /** Computed market breadth + ROC series for a specific index. */
-export function useIndexBreadth(indexId: number | null, days = 66) {
+export function useIndexBreadth(indexId: number | null, days = 66, forDate?: string) {
   const dateKey = useDateKey();
   return useQuery<IndexBreadthResult, Error>({
-    queryKey: ['indexBreadth', indexId, days, dateKey],
-    queryFn:  () => fetchIndexBreadth(indexId!, days),
+    queryKey: ['indexBreadth', indexId, days, forDate ?? dateKey],
+    queryFn: () => fetchIndexBreadth(indexId!, days, forDate),
     enabled:  indexId !== null,
     staleTime: STALE,
     retry: 1,

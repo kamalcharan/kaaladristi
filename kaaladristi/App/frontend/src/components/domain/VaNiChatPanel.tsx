@@ -1,3 +1,4 @@
+import SectorCompanion from './VaNi/SectorCompanion';
 import MarketStructureCompanion from './VaNi/MarketStructureCompanion';
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -67,7 +68,7 @@ async function resolveEquity(q: string): Promise<{ id: number; symbol: string } 
 
 export default function VaNiChatPanel(props: { docked?: boolean } = {}) {
   const { page } = usePageContext();
-  return page === 'market_structure' ? <MarketStructureCompanion /> : <ExistingVaNiChatPanel {...props} />;
+  return page === 'sector_rotation' ? <SectorCompanion /> : page === 'market_structure' ? <MarketStructureCompanion /> : <ExistingVaNiChatPanel {...props} />;
 }
 
 function ExistingVaNiChatPanel({ docked = false }: { docked?: boolean } = {}) {

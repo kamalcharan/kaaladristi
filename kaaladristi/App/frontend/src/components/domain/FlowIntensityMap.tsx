@@ -1,3 +1,4 @@
+import '@/styles/sectorResearch.css';
 // REUSE:
 // 1. IndexDetailPage Tab 4 — constituent mode (Sprint 10)
 // 2. SectorRotationPage Heat toggle — index mode (Sprint 10)
@@ -11,7 +12,7 @@
 // index scores (ret + capped surge, ~0–80) and equity scores (surge² × 25,
 // ~0–300) live on different scales and MUST NOT share a threshold.
 
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Card } from '@/components/ui/Card';
 
@@ -233,6 +234,13 @@ export default function FlowIntensityMap({
   const labelW = mode === 'index' ? LABEL_W_IDX : LABEL_W_CON;
   const strongCut = mode === 'index' ? STRONG_SCORE_CUT_INDEX : STRONG_SCORE_CUT_EQUITY;
 
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [canScroll, setCanScroll] = useState({ newer: false, older: false });
+  const [selectedCell, setSelectedCell] = useState<{ row: string; date: string; cell: CellData } | null>(null);
+  const updateScroll = useCallback(() => { const el = scrollRef.current; if (el) setCanScroll({ newer: el.scrollLeft > 1, older: el.scrollLeft + el.clientWidth < el.scrollWidth - 1 }); }, []);
+  useEffect(() => { const el = scrollRef.current; if (!el) return; const observer = new ResizeObserver(updateScroll); observer.observe(el); updateScroll(); return () => observer.disconnect(); }, [updateScroll, rows.length, dates.length]);
+  useEffect(() => { setSelectedCell(null); if (scrollRef.current) scrollRef.current.scrollLeft = 0; updateScroll(); }, [dates.join('|'), updateScroll]);
+  const scrollDates = (direction: number) => { const el = scrollRef.current; if (el) el.scrollBy({ left: direction * el.clientWidth * .8, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' }); };
   const [tooltip, setTooltip] = useState<TooltipState | null>(null);
 
   const signalFor = useCallback(
@@ -292,11 +300,11 @@ export default function FlowIntensityMap({
           </div>
 
           {/* Index toggle: 5D | 22D | 66D */}
-          {mode === 'index' && onDayWindowChange && (
+          {onDayWindowChange && (
             <div style={{ display: 'inline-flex', background: 'color-mix(in srgb, var(--text-primary) 4%, transparent)', borderRadius: 6, padding: 2, gap: 2 }}>
               {([5, 22, 66] as const).map((d) => (
                 <button key={d} style={toggleBtnStyle(dayWindow === d)} onClick={() => onDayWindowChange(d)}>
-                  {d}D
+                  {d} sessions
                 </button>
               ))}
             </div>
@@ -304,18 +312,22 @@ export default function FlowIntensityMap({
         </div>
       )}
 
+      {!bare && <nav aria-label="Flow history navigation" className="flex flex-wrap items-center justify-between gap-2 mb-3"><span className="text-xs text-muted">Latest → oldest · tap a cell for details</span><div className="flex gap-2"><button className="sector-question" disabled={!canScroll.newer} onClick={()=>scrollDates(-1)}>← Newer</button><button className="sector-question" disabled={!canScroll.older} onClick={()=>scrollDates(1)}>Older →</button></div></nav>}
+      {selectedCell && <div role="status" className="rounded-lg border border-[var(--border)] p-3 mb-3 text-xs leading-6"><button className="sector-question float-right" onClick={()=>setSelectedCell(null)}>Close</button><strong>{selectedCell.row} · {selectedCell.date}</strong><p>Flow 5D: {selectedCell.cell.s5?.toFixed(1) ?? '—'} · Flow 22D: {selectedCell.cell.s22?.toFixed(1) ?? '—'}</p><p>1D%: {fmtPct(selectedCell.cell.d1)} · 5D%: {fmtPct(selectedCell.cell.ret_5d)}</p><p>{selectedCell.cell.s5 == null || selectedCell.cell.s22 == null ? 'Flow unavailable' : SIGNAL_LABEL[signalFor(selectedCell.cell)]} · Scores are not return percentages.</p></div>}
       {/* ── Grid ── */}
       <div style={{ display: 'flex', alignItems: 'flex-start' }}>
 
         {/* Label column */}
         {!hideRowLabels && (
-        <div style={{ flexShrink: 0, width: labelW }}>
+        <div className="flow-label-column" style={{ flexShrink: 0, width: labelW }}>
           {/* Spacer for date header row */}
           <div style={{ height: HEADER_ROW_H + GAP }} />
           {rows.map((row) => (
             <div
               key={row}
               title={row}
+              role={onRowClick ? 'button' : undefined} tabIndex={onRowClick ? 0 : undefined}
+              onKeyDown={e => { if (onRowClick && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onRowClick(row); } }}
               onClick={onRowClick ? () => onRowClick(row) : undefined}
               style={{
                 height: CELL_H,
@@ -357,7 +369,7 @@ export default function FlowIntensityMap({
 
         {/* Micro-trend column */}
         {!hideTrend && (
-        <div style={{ flexShrink: 0, width: TREND_W, paddingRight: 8 }}>
+        <div className="flow-micro-column" style={{ flexShrink: 0, width: TREND_W, paddingRight: 8 }}>
           <div style={{
             height: HEADER_ROW_H + GAP,
             display: 'flex',
@@ -373,7 +385,7 @@ export default function FlowIntensityMap({
           {rows.map((row) => (
             <div
               key={row}
-              title="Score 5D (conviction) per session, oldest → newest. Green = accelerating vs its 1-month pace, amber = fading."
+              title="Flow 5D (conviction) per session, oldest → newest. Green = at or above its 1-month baseline, amber = fading."
               style={{
                 height: CELL_H,
                 marginBottom: GAP,
@@ -390,7 +402,7 @@ export default function FlowIntensityMap({
         {/* Scrollable cell area — minWidth:0 is required so this flex item
             actually scrolls horizontally instead of stretching its parent
             (without it, a wide grid overflows the page to the right). */}
-        <div style={{ overflowX: 'auto', flex: 1, minWidth: 0 }}>
+        <div ref={scrollRef} onScroll={updateScroll} className="flow-scroll" tabIndex={0} aria-label="Flow history, latest session first" style={{ overflowX: 'auto', flex: 1, minWidth: 0 }}>
 
           {/* Date header row */}
           <div style={{ display: 'flex', gap: GAP, marginBottom: GAP, width: totalCellW }}>
@@ -442,6 +454,10 @@ export default function FlowIntensityMap({
                   return (
                     <div
                       key={dateStr}
+                      role="button" tabIndex={0}
+                      aria-label={`${row}, ${dateStr}, Flow 5D ${c.s5 ?? 'unavailable'}, Flow 22D ${c.s22 ?? 'unavailable'}`}
+                      onClick={() => setSelectedCell({ row, date: dateStr, cell: c })}
+                      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedCell({ row, date: dateStr, cell: c }); } }}
                       onMouseEnter={(e) => handleMouseEnter(e, row, dateStr, c)}
                       onMouseLeave={handleMouseLeave}
                       style={{
@@ -449,7 +465,7 @@ export default function FlowIntensityMap({
                         height: CELL_H,
                         flexShrink: 0,
                         borderRadius: 3,
-                        background: SIGNAL_COLOR[sig],
+                        background: c.s5 == null || c.s22 == null ? NO_DATA : SIGNAL_COLOR[sig],
                         borderTop: `2.5px solid ${borderColor(c)}`,
                         cursor: 'default',
                         overflow: 'hidden',
@@ -483,7 +499,7 @@ export default function FlowIntensityMap({
       {/* ── Footer (chrome only — hidden when embedded bare) ── */}
       {!bare && (
         <div style={{ marginTop: 12, color: 'var(--text-muted)', fontSize: 10, lineHeight: 1.5 }}>
-          Cell fill = money-flow conviction (Score 5D vs its 1-month pace). Cell number = Score 5D. Top edge = price direction that session.
+          Cell fill = money-flow conviction (Flow 5D vs its 1-month pace). Cell number = Flow 5D. Top edge = 5D price-return direction.
           {onRowClick && (mode === 'index' ? ' Click an index name to open its detail.' : ' Click a symbol to open its detail.')}
         </div>
       )}
@@ -536,11 +552,11 @@ export default function FlowIntensityMap({
             <span style={{ fontSize: 10, fontFamily: 'monospace', color: 'var(--text-primary)', textAlign: 'right' }}>
               {tooltip.cell.amt_22d != null ? fmtCr(tooltip.cell.amt_22d) : '—'}
             </span>
-            <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>Score 5D</span>
+            <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>Flow 5D</span>
             <span style={{ fontSize: 10, fontFamily: 'monospace', color: 'var(--text-primary)', textAlign: 'right' }}>
               {tooltip.cell.s5 != null ? tooltip.cell.s5.toFixed(1) : '—'}
             </span>
-            <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>Score 22D</span>
+            <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>Flow 22D</span>
             <span style={{ fontSize: 10, fontFamily: 'monospace', color: 'var(--text-primary)', textAlign: 'right' }}>
               {tooltip.cell.s22 != null ? tooltip.cell.s22.toFixed(1) : '—'}
             </span>
@@ -567,7 +583,7 @@ export default function FlowIntensityMap({
             </span>
             <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>Flow Signal</span>
             <span style={{ fontSize: 10, fontFamily: 'monospace', color: 'var(--text-primary)', textAlign: 'right' }}>
-              {SIGNAL_LABEL[tooltip.signal]}
+              {tooltip.cell.s5 == null || tooltip.cell.s22 == null ? 'Unavailable' : SIGNAL_LABEL[tooltip.signal]}
             </span>
           </div>
         </div>

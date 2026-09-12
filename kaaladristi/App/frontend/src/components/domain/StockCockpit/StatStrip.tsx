@@ -90,7 +90,7 @@ export default function StatStrip({
           <span className={cn('text-lg font-mono font-bold', scoreTone(s5))}>
             {s5 != null ? Math.round(s5) : '—'}
           </span>
-          <span className="text-[10px] text-muted">Score 5D</span>
+          <span className="text-[10px] text-muted">Flow 5D</span>
           {s5 != null && s22 != null && (
             <span className={cn('ml-auto text-[9px] font-mono font-bold px-1.5 py-0.5 rounded',
               s5 >= s22 ? 'text-risk-green bg-risk-green/10' : 'text-risk-amber bg-risk-amber/10')}>
@@ -98,7 +98,7 @@ export default function StatStrip({
             </span>
           )}
         </div>
-        <Row label="Score 22D" value={s22 != null ? String(Math.round(s22)) : '—'} valueClass={scoreTone(s22)} />
+        <Row label="Flow 22D" value={s22 != null ? String(Math.round(s22)) : '—'} valueClass={scoreTone(s22)} />
         {isEquity && (
           <Row
             label="Deliv Surge"

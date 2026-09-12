@@ -525,8 +525,8 @@ export function studioXlsColumns(d: StudioDescriptor): XlsColumn[] {
     slot(d.cardHero),
     slot(d.cardLevels[0]),
     slot(d.cardLevels[1]),
-    { header: 'Score 5D', value: (r) => r.score_5d ?? null, dp: 1 },
-    { header: 'Score 22D', value: (r) => r.score_22d ?? null, dp: 1 },
+    { header: 'Flow 5D', value: (r) => r.score_5d ?? null, dp: 1 },
+    { header: 'Flow 22D', value: (r) => r.score_22d ?? null, dp: 1 },
     { header: 'D% from EMA20', value: (r) => r.d_pct ?? null },
     { header: '5D Ret%', value: (r) => r.ret_5d ?? null },
     { header: '22D Ret%', value: (r) => r.ret_22d ?? null },
@@ -539,7 +539,7 @@ export function studioXlsColumns(d: StudioDescriptor): XlsColumn[] {
 
 // ── Card sort ────────────────────────────────────────────────────────────────
 // The chip set: the preset's hero metric first (and its table sort key when
-// that differs — Breakout Surge sorts by Score 5D but leads its card with
+// that differs — Breakout Surge sorts by Flow 5D but leads its card with
 // % from Brk), then the same fixed tail the generic layout's chips carry.
 export function cardSortOptions(d: StudioDescriptor | null): { key: keyof ScanStock; label: string }[] {
   const opts: { key: keyof ScanStock; label: string }[] = []
@@ -548,12 +548,12 @@ export function cardSortOptions(d: StudioDescriptor | null): { key: keyof ScanSt
   }
   if (d) {
     push(d.cardHero.key, d.cardHero.filterLabel ?? d.cardHero.label)
-    if (d.sort.key === 'score_5d') push('score_5d', 'Score 5D')
+    if (d.sort.key === 'score_5d') push('score_5d', 'Flow 5D')
     else if (d.sort.key !== d.cardHero.key) push(d.sort.key, d.sort.key)
   }
   push('vaniOpportunity', '✦ VaNi Highlight')
-  push('score_5d', 'Score 5D')
-  push('score_22d', 'Score 22D')
+  push('score_5d', 'Flow 5D')
+  push('score_22d', 'Flow 22D')
   push('rvol', 'RVOL')
   push('pct_chng', '% Chg')
   push('rsi_14', 'RSI')

@@ -11,6 +11,7 @@ import { STRUCTURE_INTENTS } from './marketStructureIntents';
 
 export type VaNiPage =
   | 'market_structure'
+  | 'sector_rotation'
   | 'dashboard'
   | 'equity_vp'
   | 'index_vp'

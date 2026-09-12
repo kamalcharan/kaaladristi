@@ -396,7 +396,7 @@ export default function IndexDrawer({ indexId, row, onClose }: IndexDrawerProps)
             >
               {[
                 { label: 'Close',      value: fmt(row.close, 2),          color: 'var(--text-primary)' },
-                { label: 'Score 5D',   value: fmt(row.score_5d, 1),       color: 'var(--text-secondary)' },
+                { label: 'Flow 5D',   value: fmt(row.score_5d, 1),       color: 'var(--text-secondary)' },
                 { label: '1D%',        value: fmtPct(row.pct_chng),       color: pctColor(row.pct_chng) },
                 { label: 'RSI',        value: fmt(row.rsi_14, 1),         color: rsiColor(row.rsi_14) },
                 { label: 'Avg Amt 5D', value: row.avg_amt_5d != null ? `${row.avg_amt_5d.toFixed(2)} Cr` : '—', color: 'var(--text-secondary)' },

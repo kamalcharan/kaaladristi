@@ -45,8 +45,8 @@ type SortDir = 'asc' | 'desc';
 // (the chips used to render there too but were silently ignored).
 const SORT_OPTIONS: { key: SortKey; label: string }[] = [
   { key: 'vaniOpportunity', label: '✦ VaNi Highlight' },
-  { key: 'score_5d',        label: 'Score 5D' },
-  { key: 'score_22d',       label: 'Score 22D' },
+  { key: 'score_5d',        label: 'Flow 5D' },
+  { key: 'score_22d',       label: 'Flow 22D' },
   { key: 'magic_rs',        label: 'RS' },
   { key: 'rvol',            label: 'RVOL' },
   { key: 'reward',          label: 'Reward' },

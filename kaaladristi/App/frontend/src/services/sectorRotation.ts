@@ -208,11 +208,14 @@ export interface ConstituentDetail {
   magic_rs: number | null;
 }
 
-/** Last 22 trading days of close prices for a single index (newest first). */
-export async function fetchIndexSparkline(indexId: number): Promise<SparklinePoint[]> {
+/** Up to 30 sessions of close and flow scores, chronologically through asOf. */
+export async function fetchIndexSparkline(indexId: number, forDate?: string): Promise<SparklinePoint[]> {
+  const asOf = forDate ?? await fetchLatestIndexDate();
+  if (!asOf) return [];
   const { data, error } = await from('km_index_eod')
     .select('trade_date,close,score_5d,score_22d')
     .eq('index_id', indexId)
+    .lte('trade_date', asOf)
     .order('trade_date', { ascending: false })
     .limit(30)
     .execute();
@@ -242,6 +245,7 @@ export async function fetchIndexSparklines(
     .select('index_id,trade_date,close')
     .in('index_id', indexIds)
     .gte('trade_date', cutoffStr)
+    .lte('trade_date', latestDate)
     .order('trade_date', { ascending: true })
     .execute();
 
@@ -423,10 +427,26 @@ export interface FlowMapData {
  * (column 0 = latest session), exactly like fetchIndexFlowMap — the
  * MicroTrend bars provide the chronological oldest → newest read.
  */
+
+async function completeFlowRows(makeQuery: () => ReturnType<typeof from>) {
+  const rows: Record<string, unknown>[] = [];
+  for (let offset = 0; offset < 200000; offset += 500) {
+    const result = await makeQuery().range(offset, offset + 499).execute();
+    if (result.error) return { data: null, error: result.error };
+    const page = (result.data ?? []) as Record<string, unknown>[];
+    rows.push(...page);
+    if (page.length < 500) return { data: rows, error: null };
+  }
+  throw new Error('Flow history exceeds the supported read size.');
+}
+
 export async function fetchConstituentFlowMap(
   indexId: number,
   days = 22,
+  forDate?: string,
 ): Promise<FlowMapData> {
+  const asOf = forDate ?? await fetchLatestIndexDate();
+  if (!asOf) return { rows: [], dates: [], cells: {} };
   // Step 1: get constituent equity IDs + display names
   const { data: constData, error: constErr } = await from('km_index_constituents')
     .select('equity_id')
@@ -453,11 +473,12 @@ export async function fetchConstituentFlowMap(
     symRows.map((s) => [s.id, { symbol: s.symbol, company_name: s.company_name }]),
   );
 
-  // Step 2: latest N trade dates from first equity's EOD
-  const anchorId = equityIds[0];
-  const { data: dateData, error: dateErr } = await from('km_equity_eod')
+  // Step 2: index sessions, so an arbitrary constituent cannot shorten the history.
+  const anchorId = indexId;
+  const { data: dateData, error: dateErr } = await from('km_index_eod')
     .select('trade_date')
-    .eq('equity_id', anchorId)
+    .eq('index_id', anchorId)
+    .lte('trade_date', asOf)
     .order('trade_date', { ascending: false })
     .limit(days)
     .execute();
@@ -470,17 +491,19 @@ export async function fetchConstituentFlowMap(
 
   const fmtDate = (d: string) => {
     const dt = new Date(d + 'T00:00:00');
-    return dt.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
+    return dt.toLocaleDateString('en-IN', { day: 'numeric', month: 'long' });
   };
   const formattedDates = sortedDates.map(fmtDate);
 
   // Step 3: fetch EOD for all constituents in the date window
-  const { data: eodData, error: eodErr } = await from('km_equity_eod')
+  const { data: eodData, error: eodErr } = await completeFlowRows(() => from('km_equity_eod')
     .select('equity_id,trade_date,pct_chng,value_cr,ret_5d,ret_22d,score_5d,score_22d,avg_amt_5d,avg_amt_22d')
     .in('equity_id', equityIds)
     .gte('trade_date', earliestDate)
+    .lte('trade_date', asOf)
     .order('trade_date', { ascending: true })
-    .execute();
+    .order('equity_id', { ascending: true })
+    );
   if (eodErr) throw new Error(`[constituentFlowMap] eod: ${eodErr.message}`);
 
   type EodRow = {
@@ -575,12 +598,14 @@ export async function fetchSectorPulse(days = 22): Promise<SectorPulseRow[]> {
   cutoff.setDate(cutoff.getDate() - Math.ceil(days * 1.8));
   const cutoffStr = cutoff.toISOString().split('T')[0];
 
-  const { data: eodData, error: eodErr } = await from('km_index_eod')
+  const { data: eodData, error: eodErr } = await completeFlowRows(() => from('km_index_eod')
     .select('index_id,trade_date,pct_chng,value_cr,score_5d,score_22d,avg_amt_5d,avg_amt_22d,ret_5d,ret_22d')
     .in('index_id', indexIds)
     .gte('trade_date', cutoffStr)
+    .lte('trade_date', latestDate)
     .order('trade_date', { ascending: true })
-    .execute();
+    .order('index_id', { ascending: true })
+    );
   if (eodErr) throw new Error(`[sectorPulse] eod: ${eodErr.message}`);
 
   type Row = {
@@ -737,7 +762,10 @@ type EodRow = {
 export async function fetchIndexBreadth(
   indexId: number,
   days = 66,
+  forDate?: string,
 ): Promise<IndexBreadthResult> {
+  const asOf = forDate ?? await fetchLatestIndexDate();
+  if (!asOf) return { data: [], roc: [], percentileRank: null, stockCount: 0, zoneMode: 'absolute', rocBadge: 'warming_up' };
   // ── Step 1: resolve constituent equity IDs ────────────────────────────────
   const { data: constData, error: constErr } = await from('km_index_constituents')
     .select('equity_id')
@@ -754,7 +782,7 @@ export async function fetchIndexBreadth(
 
   // Calendar cutoff = 1.6× trading days to safely cover BREADTH_LOOKBACK sessions.
   const calendarDays = Math.ceil(BREADTH_LOOKBACK * 1.6);
-  const cutoffDate = new Date();
+  const cutoffDate = new Date(asOf + 'T00:00:00Z');
   cutoffDate.setDate(cutoffDate.getDate() - calendarDays);
   const cutoff = cutoffDate.toISOString().split('T')[0];
 
@@ -768,6 +796,7 @@ export async function fetchIndexBreadth(
     .select('trade_date,pct_above_20,pct_above_50,pct_above_150,breadth_score,stock_count,universe_count,above_20,above_50,above_150,up_5pct,down_5pct,up_20pct_5d,down_20pct_5d,roc_13,roc_55,sma_breadth')
     .eq('index_id', indexId)
     .gte('trade_date', cutoff)
+    .lte('trade_date', asOf)
     .order('trade_date', { ascending: true })
     .limit(1000)
     .execute();
@@ -824,6 +853,7 @@ export async function fetchIndexBreadth(
       .select('equity_id,trade_date,close,pct_chng,ema_20,sma_50,sma_150')
       .in('equity_id', equityIds)
       .gte('trade_date', cutoff)
+      .lte('trade_date', asOf)
       .order('trade_date', { ascending: true })
       .order('equity_id', { ascending: true })
       .range(from_, from_ + PAGE - 1)
@@ -1037,7 +1067,10 @@ function finaliseIndexBreadth(
 export async function fetchIndexFlowMap(
   category: string | string[],
   days: 5 | 22 | 66,
+  forDate?: string,
 ): Promise<FlowMapData> {
+  const asOf = forDate ?? await fetchLatestIndexDate();
+  if (!asOf) return { rows: [], dates: [], cells: {} };
   const categories = Array.isArray(category) ? category : [category];
 
   // Step 1: active indices for this category
@@ -1054,11 +1087,10 @@ export async function fetchIndexFlowMap(
   const idxMap  = new Map<number, string>(indices.map((r) => [r.id, r.name]));
   const indexIds = indices.map((r) => r.id);
 
-  // Step 2: latest N trade dates from first index's EOD
-  const anchorId = indexIds[0];
-  const { data: dateData, error: dateErr } = await from('km_index_eod')
+  // Step 2: market-session calendar, including dates absent from a newly created index.
+  const { data: dateData, error: dateErr } = await from('km_market_breadth')
     .select('trade_date')
-    .eq('index_id', anchorId)
+    .lte('trade_date', asOf)
     .order('trade_date', { ascending: false })
     .limit(days)
     .execute();
@@ -1071,17 +1103,19 @@ export async function fetchIndexFlowMap(
 
   const fmtDate = (d: string) => {
     const dt = new Date(d + 'T00:00:00');
-    return dt.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
+    return dt.toLocaleDateString('en-IN', { day: 'numeric', month: 'long' });
   };
   const formattedDates = sortedDates.map(fmtDate);
 
   // Step 3: fetch EOD for all indices in the date window
-  const { data: eodData, error: eodErr } = await from('km_index_eod')
+  const { data: eodData, error: eodErr } = await completeFlowRows(() => from('km_index_eod')
     .select('index_id,trade_date,pct_chng,value_cr,avg_amt_5d,avg_amt_22d,ret_5d,ret_22d,score_5d,score_22d')
     .in('index_id', indexIds)
     .gte('trade_date', earliestDate)
+    .lte('trade_date', asOf)
     .order('trade_date', { ascending: true })
-    .execute();
+    .order('index_id', { ascending: true })
+    );
   if (eodErr) throw new Error(`[indexFlowMap] eod: ${eodErr.message}`);
 
   type IxRow = {

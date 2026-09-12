@@ -252,6 +252,9 @@ class VaNiFeedbackRequest(BaseModel):
 
 
 class VaNiAskRequest(BaseModel):
+    sector_period: int = 22
+    sector_category: str = "sectoral"
+    sector_snapshot: Optional[str] = None
     structure_period: int = 66
     structure_snapshot: Optional[str] = None
     explanation_depth: str = "brief"
@@ -5373,6 +5376,9 @@ def vani_ask(req: VaNiAskRequest):
     """
     tz_ist = __import__('zoneinfo').ZoneInfo('Asia/Kolkata')
     intent_id = req.intent_id
+    if intent_id.startswith('sector.'):
+        from lib.sector_vani import answer
+        return answer(req, _db(), _ai_complete_src, _sebi_post_filter, _log_interaction, _AI_MODEL)
     if intent_id.startswith('structure.'):
         from lib.market_structure_vani import answer
         return answer(req, _db(), _ai_complete_src, _sebi_post_filter, _log_interaction, _AI_MODEL)

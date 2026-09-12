@@ -950,8 +950,8 @@ export const ALL_FIELDS: Record<string, FieldConfig> = {
 
   score_5d: {
     key: 'score_5d',
-    label: 'Score 5D',
-    tooltip: 'Stock-level conviction over ~1 week: how strongly delivery money is running above its own norm (squared, ×25). High = real money arriving. NOTE: stock scores run 0–300; index scores use a different formula (0–80) — do not compare across the two.',
+    label: 'Flow 5D',
+    tooltip: 'Near-term flow score · 5 trading sessions. A stock-level score based on return and delivery activity. This is not a percentage or rupee amount. Index scores use a different formula, so their numerical values are not directly comparable.',
     type: 'number',
     width: 90,
     thresholds: {
@@ -965,8 +965,8 @@ export const ALL_FIELDS: Record<string, FieldConfig> = {
 
   score_22d: {
     key: 'score_22d',
-    label: 'Score 22D',
-    tooltip: 'Stock-level conviction over ~1 month. Compare with Score 5D: a higher 5D score means money flow is accelerating recently.',
+    label: 'Flow 22D',
+    tooltip: 'Underlying flow score · 22 trading sessions. Compare Flow 5D with this longer baseline. A higher Flow 5D does not establish an increase since yesterday; inspect its history for that comparison.',
     type: 'number',
     width: 90,
     thresholds: {

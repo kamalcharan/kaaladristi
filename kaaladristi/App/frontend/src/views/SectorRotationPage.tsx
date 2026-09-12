@@ -1,3 +1,5 @@
+import { useSectorResearchStore } from '@/stores/sectorResearchStore';
+import '@/styles/sectorResearch.css';
 import React, { useState, useEffect, useMemo } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Flame, Table2 } from 'lucide-react';
@@ -125,7 +127,7 @@ function VixBand() {
     <div style={{ ...bandStyle, borderLeft: `3px solid ${closeColor}` }}>
       <span style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
         <span style={{ ...MONO, fontSize: '11px', color: 'var(--text-muted)', letterSpacing: '0.06em', textTransform: 'uppercase', fontWeight: 600 }}>
-          India VIX
+          India VIX · latest
         </span>
         <span style={{ ...MONO, fontSize: '9px', letterSpacing: '0.08em', textTransform: 'uppercase', color: closeColor, border: `1px solid ${closeColor}`, borderRadius: '3px', padding: '1px 5px', opacity: 0.85 }}>
           {regime}
@@ -162,7 +164,7 @@ function TabContent({ tab, view, forDate, heatDays }: {
 }) {
   const navigate = useNavigate();
   const { data: rows = [], isLoading, error } = useSectorIndices(tab, forDate);
-  const { data: heatData } = useIndexFlowMap(tab, heatDays);
+  const { data: heatData, isLoading: heatLoading, error: heatError } = useIndexFlowMap(tab, heatDays, forDate);
 
   // Heat rows are index NAMES; map back to ids so row labels can drill down
   // to the same detail page the table rows navigate to.
@@ -172,8 +174,10 @@ function TabContent({ tab, view, forDate, heatDays }: {
   );
 
   if (view === 'heat') {
+    if (heatLoading) return <DristiQLoader message="Loading flow history…" />;
+    if (heatError) return <p role="alert" className="p-4">Flow history could not be loaded. Please retry.</p>;
     return (
-      <div style={{ padding: '20px 24px' }}>
+      <div className="sector-inset" style={{ padding: '20px 24px' }}>
         <FlowIntensityMap
           mode="index"
           rows={heatData?.rows ?? []}
@@ -183,15 +187,15 @@ function TabContent({ tab, view, forDate, heatDays }: {
           subtitle={`${SECTOR_TAB_LABELS[tab]} · Last ${heatDays} Sessions`}
           onRowClick={(name) => {
             const id = nameToId.get(name);
-            if (id != null) navigate(`/sector-rotation/${id}`);
+            if (id != null) navigate(`/sector-rotation/${id}${forDate ? `?asof=${forDate}` : ""}`);
           }}
         />
         <div style={{ display: 'flex', gap: 16, marginTop: 12, flexWrap: 'wrap' }}>
           {([
-            { color: '#166534',           label: 'Strong Conviction', desc: 'Score 25+ and rising — exceptional money flow' },
-            { color: 'var(--risk-green)', label: 'Building',          desc: 'Score rising vs its 1-month pace — money arriving' },
-            { color: 'var(--risk-amber)', label: 'Fading',            desc: 'Score below its 1-month pace — conviction slipping' },
-            { color: 'var(--risk-red)',   label: 'Outflow',           desc: 'Money leaving + price falling' },
+            { color: '#166534',           label: 'Strong Conviction', desc: 'Flow 5D ≥25, at or above Flow 22D' },
+            { color: 'var(--risk-green)', label: 'Building',          desc: 'Positive Flow 5D at or above Flow 22D' },
+            { color: 'var(--risk-amber)', label: 'Fading',            desc: 'Positive Flow 5D below Flow 22D' },
+            { color: 'var(--risk-red)',   label: 'Outflow',           desc: 'Lower average amount and negative 5D return' },
             { color: '#334155',           label: 'Quiet',             desc: 'No conviction signal' },
           ] as const).map(({ color, label, desc }) => (
             <span key={label} style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
@@ -213,7 +217,7 @@ function TabContent({ tab, view, forDate, heatDays }: {
 
   if (error) {
     return (
-      <div style={{ padding: '48px 24px', textAlign: 'center' }}>
+      <div className="sector-inset" style={{ padding: '48px 24px', textAlign: 'center' }}>
         <span style={{ ...MONO, fontSize: '12px', color: 'var(--risk-red)' }}>
           Failed to load data — {error.message}
         </span>
@@ -223,7 +227,7 @@ function TabContent({ tab, view, forDate, heatDays }: {
 
   if (rows.length === 0) {
     return (
-      <div style={{ padding: '48px 24px', textAlign: 'center' }}>
+      <div className="sector-inset" style={{ padding: '48px 24px', textAlign: 'center' }}>
         <span style={{ ...MONO, fontSize: '12px', color: 'var(--text-faint)' }}>
           {forDate
             ? `No data for ${forDate} — market may have been closed on this date.`
@@ -266,7 +270,7 @@ function DatePicker({
         padding: '4px 8px',
         cursor: 'pointer',
         outline: 'none',
-        colorScheme: 'dark',
+        colorScheme: 'dark light',
         letterSpacing: '0.03em',
       }}
     />
@@ -314,42 +318,11 @@ function ViewToggle({ view, onChange }: { view: ViewMode; onChange: (v: ViewMode
 // this audience needs the repetition more than power users need the pixels.
 
 function ExplainerStrip({ view }: { view: ViewMode }) {
-  const chip = (color: string, label: string, dot = false) => (
-    <span key={label} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, whiteSpace: 'nowrap' }}>
-      <span style={{
-        width: dot ? 5 : 8, height: dot ? 5 : 8,
-        borderRadius: dot ? '50%' : 2, background: color, flexShrink: 0,
-      }} />
-      <span style={{ ...MONO, fontSize: 10, color: 'var(--text-muted)' }}>{label}</span>
-    </span>
-  );
-
-  return (
-    <div
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        flexWrap: 'wrap',
-        gap: '6px 20px',
-        padding: '7px 24px',
-        borderBottom: '1px solid var(--border)',
-        background: 'var(--card)',
-      }}
-    >
-      <span style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.5 }}>
-        <strong style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>5D / 22D / 66D</strong>
-        {' '}= price change over ~1 week / ~1 month / ~3 months.
-      </span>
-      {view === 'table' && (
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
-          {chip('var(--bull)', 'Flow Entering')}
-          {chip('var(--gold)', 'Sustained')}
-          {chip('var(--bear)', 'Flow Exiting')}
-          {chip('var(--accent-indigo, #6366f1)', '5D outrunning 22D — gaining strength', true)}
-        </span>
-      )}
-    </div>
-  );
+  return <details className="sector-inset" style={{ padding:'8px 24px', borderBottom:'1px solid var(--border)' }}>
+    <summary className="text-sm">How to read {view === 'heat' ? 'the flow history' : 'these columns'}</summary>
+    <p className="text-xs leading-6 text-muted">Flow 5D = near-term flow score. Flow 22D = underlying flow score. Scores are not percentages or rupee amounts. 1D% describes the last session’s price change; 5D% and 22D% are price returns over those periods.</p>
+    <p className="text-xs leading-6 text-muted">History controls change the number of sessions displayed, not the score formula. Green: Strong / Building; amber: Fading; red: Outflow; slate: Quiet. A missing score is unavailable. A score above its baseline need not have increased since yesterday.</p>
+  </details>;
 }
 
 // ── Page ──────────────────────────────────────────────────────────────────────
@@ -358,26 +331,28 @@ export default function SectorRotationPage() {
   const [search] = useSearchParams();
   const fromStructure = search.get('from') === 'market-structure';
   const contextDate = /^\d{4}-\d{2}-\d{2}$/.test(search.get('asof') ?? '') ? search.get('asof') : null;
-  const [activeTab, setActiveTab] = useState<SectorTab>('broad');
+  const [activeTab, setActiveTab] = useState<SectorTab>('sectoral');
   const [view, setView] = useState<ViewMode>('table');
   const [heatDays, setHeatDays] = useState<5 | 22 | 66>(22);
-  const [selectedDate, setSelectedDate] = useState<string>('');
+  const [selectedDate, setSelectedDate] = useState<string>(contextDate ?? '');
   const { latestDate, earliestDate } = useIndexDateRange();
-  const today = new Date().toISOString().split('T')[0];
+  const setContext = useSectorResearchStore(s => s.setContext);
+  useEffect(() => { setContext({ scope: '/sector-rotation', date: selectedDate || latestDate || undefined, category: activeTab, period: heatDays }); }, [selectedDate, latestDate, activeTab, heatDays, setContext]);
 
   useEffect(() => {
     if (latestDate && !selectedDate) setSelectedDate(latestDate);
   }, [latestDate, selectedDate]);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
-      <PageHeader eyebrow="Sector Rotation" title="Sector Rotation" meta="NSE Index Flow" />
+    <div className="sector-page" style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
+      <PageHeader eyebrow="Sector Rotation" title="Sector Rotation" meta="Discover activity · check persistence · inspect participation" />
       {fromStructure && <div className="glass-card rounded-xl m-4 p-4">
         <p className="text-sm">Continue your market research{contextDate ? ` from ${contextDate}` : ''}: which sectors differ from the broader market?</p>
         <p className="text-xs text-muted mt-2">Compare each sector’s 5D flow score with its 22D baseline, then inspect its constituents. Check the selected sector data date before comparing it with your Market Structure snapshot.</p>
         <Link className="text-xs text-accent-indigo inline-block mt-2" to="/market-structure">Back to Market Structure →</Link>
       </div>}
 
+      <p className="text-xs text-muted px-4 py-3">{activeTab === 'custom' ? 'Curated baskets · maintained by DristiQ administrators' : 'NSE-composed index groups'} · Exchange industry tags are a separate classification.</p>
       {/* VIX band */}
       <VixBand />
 
@@ -385,14 +360,14 @@ export default function SectorRotationPage() {
       <div
         style={{
           display: 'flex',
-          alignItems: 'flex-end',
+          alignItems: 'flex-end', flexWrap: 'wrap', gap: 12,
           justifyContent: 'space-between',
           padding: '12px 24px 0',
           borderBottom: '1px solid var(--border)',
           background: 'var(--bg)',
         }}
       >
-        <div style={{ display: 'flex', gap: '2px' }}>
+        <div className="sector-tabs">
           {TABS.map((tab) => {
             const isActive = tab === activeTab;
             return (
@@ -426,15 +401,14 @@ export default function SectorRotationPage() {
           })}
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingBottom: 8 }}>
-          {view === 'heat'
-            ? <DayToggle days={heatDays} onChange={setHeatDays} />
-            : selectedDate && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingBottom: 8, flexWrap: 'wrap' }}>
+          {view === 'heat' && <><span className="text-xs text-muted">History:</span><DayToggle days={heatDays} onChange={setHeatDays} /></>}
+          {selectedDate && (
                 <DatePicker
                   value={selectedDate}
                   onChange={setSelectedDate}
                   min={earliestDate ?? undefined}
-                  max={today}
+                  max={latestDate ?? undefined}
                 />
               )
           }

@@ -211,8 +211,8 @@ export default function MarketBreadthChart({
 
   const displayStockCount = stockCountProp ?? latest?.stock_count ?? null;
 
-  // Minimum-constituent guard: suppress gauge below 8 stocks
-  const tooSmall = displayStockCount != null && displayStockCount < 8;
+  // Owner-defined minimum: five constituents; the sector page flags samples of 5–7.
+  const tooSmall = displayStockCount != null && displayStockCount < 5;
 
   const r = latest?.breadth_score != null
     ? resolveRegime(latest.breadth_score, zoneMode, percentileRank)
@@ -295,7 +295,7 @@ export default function MarketBreadthChart({
         <div className="flex flex-col items-center justify-center h-[200px] gap-1">
           <AlertCircle className="w-4 h-4 text-muted" />
           <p className="text-xs text-muted text-center">
-            Insufficient constituents ({displayStockCount}) — breadth requires ≥ 8 stocks
+            Insufficient constituents ({displayStockCount}) — breadth requires ≥ 5 stocks
           </p>
         </div>
       ) : isLoading ? (

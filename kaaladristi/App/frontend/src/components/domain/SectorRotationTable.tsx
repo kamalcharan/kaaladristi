@@ -1,3 +1,7 @@
+import { Link } from 'react-router-dom';
+import '@/styles/sectorResearch.css';
+import { sectorSignal as computeSignal, SECTOR_FLOW_LABEL, SECTOR_FLOW_STYLE as SIGNAL_STYLE, sectorSessionDate } from '@/lib/sectorFlow';
+import type { FlowSignal } from '@/components/domain/FlowIntensityMap';
 /**
  * SectorRotationTable
  * ===================
@@ -20,7 +24,6 @@ import { useNavigate } from 'react-router-dom';
 import { ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react';
 import { Tooltip } from '@/components/ui';
 import { formatValue, getColor } from '@/config/fieldConfig';
-import { FLOW_LABELS } from '@/constants/signalScale';
 import {
   SECTOR_ROTATION_COLUMN_ORDER,
   type SectorRotationColKey,
@@ -29,42 +32,8 @@ import type { SectorIndexRow } from '@/services/sectorRotation';
 
 // ── Signal logic (spec Section 5) ────────────────────────────────────────────
 
-type SignalType = 'flow_entering' | 'flow_exiting' | 'sustained_flow' | null;
-
-function computeSignal(row: SectorIndexRow): SignalType {
-  const pctAmtChg =
-    row.avg_amt_5d != null && row.avg_amt_22d != null && row.avg_amt_22d !== 0
-      ? ((row.avg_amt_5d - row.avg_amt_22d) / row.avg_amt_22d) * 100
-      : null;
-
-  const rotatingIn =
-    (row.ret_5d ?? 0) > 0 &&
-    (row.score_5d ?? 0) > (row.score_22d ?? 0) &&
-    pctAmtChg != null &&
-    pctAmtChg > 15;
-
-  const rotatingOut =
-    (row.ret_5d ?? 0) < 0 &&
-    (row.score_5d ?? 0) < (row.score_22d ?? 0) &&
-    pctAmtChg != null &&
-    pctAmtChg < -15;
-
-  if (rotatingIn) return 'flow_entering';
-  if (rotatingOut) return 'flow_exiting';
-  if ((row.ret_22d ?? 0) > 5 && (row.rsi_14 ?? 0) > 55 && !rotatingOut)
-    return 'sustained_flow';
-  return null;
-}
-
-// Labels sourced from canonical FLOW_LABELS in signalScale.ts
-const signalLabel = (sig: NonNullable<SignalType>): string =>
-  FLOW_LABELS[sig]?.label ?? sig;
-
-const SIGNAL_STYLE: Record<NonNullable<SignalType>, { color: string; bg: string; border: string }> = {
-  flow_entering:  { color: 'var(--bull)',  bg: 'rgba(34,197,94,0.12)',  border: 'rgba(34,197,94,0.3)' },
-  flow_exiting:   { color: 'var(--bear)',  bg: 'rgba(239,68,68,0.12)',  border: 'rgba(239,68,68,0.3)' },
-  sustained_flow: { color: 'var(--gold)',  bg: 'rgba(251,191,36,0.12)', border: 'rgba(251,191,36,0.3)' },
-};
+type SignalType = FlowSignal | null;
+const signalLabel = (sig: FlowSignal): string => SECTOR_FLOW_LABEL[sig];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -156,7 +125,7 @@ const COL_DEFS: Record<SectorRotationColKey, ColDef> = {
   },
   ret_5d: {
     key: 'ret_5d', label: '5D%',
-    tooltip: 'Price change over the last 5 trading days (~1 week). A dot next to this value means 5D is outrunning 22D — the index is gaining strength.',
+    tooltip: 'Price change over the last 5 trading days (~1 week). A dot next to this value means the 5D return exceeds the 22D return; this is a return comparison, not a flow signal.',
     width: 72, align: 'right', sortable: true, sortVal: (r) => r.ret_5d,
     render: (r) => (
       <span style={{ color: pctColor(r.ret_5d), whiteSpace: 'nowrap' }}>
@@ -173,8 +142,8 @@ const COL_DEFS: Record<SectorRotationColKey, ColDef> = {
     ),
   },
   score_5d: {
-    key: 'score_5d', label: 'Score 5D',
-    tooltip: 'Money-flow score over ~1 week: combines the 5-day return with rising delivery turnover. Higher = stronger flow into this index. 0 when the return is negative.',
+    key: 'score_5d', label: 'Flow 5D',
+    tooltip: 'Near-term flow score · 5 trading sessions. Combines index return with increased rolling constituent amounts. Not a percentage or rupee amount; zero for a non-positive return.',
     width: 85, align: 'right', sortable: true, sortVal: (r) => r.score_5d,
     render: (r) => <span style={{ color: scoreColor(r.score_5d) }}>{fmtScore(r.score_5d)}</span>,
   },
@@ -184,8 +153,8 @@ const COL_DEFS: Record<SectorRotationColKey, ColDef> = {
     render: (r) => <span style={{ color: pctColor(r.ret_22d) }}>{fmtPct(r.ret_22d)}</span>,
   },
   score_22d: {
-    key: 'score_22d', label: 'Score 22D',
-    tooltip: 'Money-flow score over ~1 month. Compare with Score 5D: a higher 5D score means flow is accelerating recently.',
+    key: 'score_22d', label: 'Flow 22D',
+    tooltip: 'Underlying flow score · 22 trading sessions. Compare Flow 5D against this baseline, then inspect history separately to see whether it is increasing or decreasing.',
     width: 85, align: 'right', sortable: true, sortVal: (r) => r.score_22d,
     render: (r) => <span style={{ color: scoreColor(r.score_22d) }}>{fmtScore(r.score_22d)}</span>,
   },
@@ -222,7 +191,7 @@ const COL_DEFS: Record<SectorRotationColKey, ColDef> = {
   },
   signal: {
     key: 'signal', label: 'Signal',
-    tooltip: 'Rotation state: money Entering (green), Sustained (amber), or Exiting (red) this index — based on returns, scores, and turnover together.',
+    tooltip: 'Same flow states as Discovery and Flow Map: Strong / Building, Fading, Outflow or Quiet. Missing inputs remain unavailable.',
     width: 120, align: 'left', sortable: true, sortVal: (r) => r.signal ?? '',
     render: (r) =>
       r.signal ? (
@@ -437,6 +406,18 @@ export default function SectorRotationTable({ rows }: Props) {
       borderRadius: 14,
       overflow: 'hidden',
     }}>
+      <details className="px-4 text-xs text-muted"><summary>Column meanings</summary><dl className="pb-3 space-y-2">{ORDERED_COLS.map(c => <div key={c.key}><dt className="font-medium">{c.label}</dt><dd>{c.tooltip}</dd></div>)}</dl></details>
+      <div className="sector-mobile-rows">
+        <label className="text-xs">Sort by <select className="sector-question" value={sortKey} onChange={e => { setSortKey(e.target.value as SectorRotationColKey); setSortDir('desc'); }}>{ORDERED_COLS.filter(c=>c.sortable).map(c=><option key={c.key} value={c.key}>{c.label}</option>)}</select></label>
+        {sorted.map(row => <article key={row.index_id}>
+          <Link className="font-medium underline text-sm" to={`/sector-rotation/${row.index_id}?asof=${row.trade_date}`}>{row.name}</Link>
+          <p className="text-xs text-muted mt-2">{row.stock_count ?? '—'} constituents · {sectorSessionDate(row.trade_date)}</p>
+          <dl>{(['score_5d','score_22d','pct_chng'] as const).map(k=><div key={k}><dt>{COL_DEFS[k].label}</dt><dd>{COL_DEFS[k].render(row)}</dd></div>)}</dl>
+          <div className="mt-3">{COL_DEFS.signal.render(row) ?? <span className="text-xs text-muted">Flow unavailable</span>}</div>
+          <details className="text-xs mt-2"><summary>More figures</summary><dl>{(['close','ret_5d','ret_22d','ret_66d','rsi_14','pct_amt_chg'] as const).map(k=><div key={k}><dt>{COL_DEFS[k].label}</dt><dd>{COL_DEFS[k].render(row)}</dd></div>)}</dl></details>
+        </article>)}
+      </div>
+      <div className="sector-desktop-table">
       {/* ── Toolbar: column picker ── */}
       <div
         style={{
@@ -647,7 +628,7 @@ export default function SectorRotationTable({ rows }: Props) {
                     borderBottom: '1px solid color-mix(in srgb, var(--text-primary) 4%, transparent)',
                     cursor: 'pointer',
                   }}
-                  onClick={() => navigate(`/sector-rotation/${row.index_id}`)}
+                  onClick={() => navigate(`/sector-rotation/${row.index_id}?asof=${row.trade_date}`)}
                   onMouseEnter={(e) => {
                     (e.currentTarget as HTMLElement).style.background = 'color-mix(in srgb, var(--text-primary) 6%, transparent)';
                   }}
@@ -679,6 +660,7 @@ export default function SectorRotationTable({ rows }: Props) {
             })}
           </tbody>
         </table>
+      </div>
       </div>
     </div>
   );

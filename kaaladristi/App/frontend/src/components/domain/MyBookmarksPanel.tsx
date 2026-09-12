@@ -83,8 +83,8 @@ function HeaderRow() {
       <div style={{ ...HEAD, width: W.sector }}>Sector / Industry</div>
       <div style={{ ...HEAD, width: W.rsi, textAlign: 'right' }}>RSI</div>
       <div style={{ ...HEAD, width: W.rs, textAlign: 'right' }}>RS</div>
-      <div style={{ ...HEAD, width: W.s5, textAlign: 'right' }}>Score 5D</div>
-      <div style={{ ...HEAD, width: W.s22, textAlign: 'right' }}>Score 22D</div>
+      <div style={{ ...HEAD, width: W.s5, textAlign: 'right' }}>Flow 5D</div>
+      <div style={{ ...HEAD, width: W.s22, textAlign: 'right' }}>Flow 22D</div>
       <div style={{ ...HEAD, width: W.scanners }}>Scanners</div>
       <div style={{ ...HEAD, width: W.state, color: 'var(--accent, var(--gold-soft))' }}>State</div>
       <div style={{ ...HEAD, flex: 1, minWidth: 200 }}>5D Money Flow</div>
@@ -211,11 +211,11 @@ function BookmarkRowCard({
           title={market?.magic_rs_zone ?? undefined}>
           {market?.magic_rs != null ? (market.magic_rs >= 0 ? '+' : '') + market.magic_rs.toFixed(1) : '—'}
         </div>
-        {/* Score 5D */}
+        {/* Flow 5D */}
         <div style={{ ...CELL_MONO, width: W.s5, flexShrink: 0, textAlign: 'right', color: 'var(--text-secondary)' }}>
           {num(market?.score_5d, 0)}
         </div>
-        {/* Score 22D */}
+        {/* Flow 22D */}
         <div style={{ ...CELL_MONO, width: W.s22, flexShrink: 0, textAlign: 'right', color: 'var(--text-secondary)' }}>
           {num(market?.score_22d, 0)}
         </div>

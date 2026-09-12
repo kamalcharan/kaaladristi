@@ -23,10 +23,11 @@ interface ZoneExplain {
 interface Props {
   instrument: InstrumentRef
   overlays?: ChartOverlay[]
+  asOf?: string
   standalone?: boolean
 }
 
-export default function WorkspaceChart({ instrument, overlays: overlaysProp, standalone = false }: Props) {
+export default function WorkspaceChart({ instrument, overlays: overlaysProp, standalone = false, asOf }: Props) {
   const frameworkOverlays = useFrameworkStore(s => s.framework?.chart_overlays ?? NO_OVERLAYS)
   const effectiveOverlays = useMemo(
     () => overlaysProp !== undefined ? overlaysProp : frameworkOverlays,
@@ -36,14 +37,16 @@ export default function WorkspaceChart({ instrument, overlays: overlaysProp, sta
   const containerRef = useRef<HTMLDivElement>(null)
   const [chartHeight, setChartHeight] = useState(400)
 
-  const { data = [], isLoading } = useQuery({
-    queryKey: ['workspace-chart', instrument.id, instrument.type],
+  const { data: allData = [], isLoading } = useQuery({
+    queryKey: ['workspace-chart', instrument.id, instrument.type, asOf],
     queryFn: () =>
       instrument.type === 'equity'
         ? fetchEquityEodById(instrument.id, '1Y')
-        : fetchIndicatorDataById(instrument.id, '1Y'),
+        : fetchIndicatorDataById(instrument.id, '1Y', asOf),
     staleTime: 120_000,
   })
+
+  const data = useMemo(() => asOf ? allData.filter(row => row.trade_date <= asOf) : allData, [allData, asOf])
 
   const playerBarIndex = useChartSyncStore(s => s.playerBarIndex)
   const { setTotalBars, setActiveBarIndex, setVisibleRange } = useChartSyncStore.getState()
@@ -97,7 +100,7 @@ export default function WorkspaceChart({ instrument, overlays: overlaysProp, sta
       {/* Mercury story chip — floats over the chart top (Study's ribbon,
           overlay-styled: the workspace block has no spare layout row).
           Index charts only — astro is index-only (owner 2026-07-22). */}
-      {!isLoading && isIndexChart && <MercuryStoryRibbon overlay />}
+      {!isLoading && isIndexChart && !asOf && <MercuryStoryRibbon overlay />}
       {isLoading && (
         <div style={{
           position: 'absolute', top: HEADER_H, left: 0, right: 0,

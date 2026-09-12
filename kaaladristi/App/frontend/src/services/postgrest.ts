@@ -201,7 +201,8 @@ class QueryBuilder {
     const nulls = opts?.nullsFirst === true ? '.nullsfirst'
                 : opts?.nullsFirst === false ? '.nullslast'
                 : '';
-    this.state.params.append('order', `${column}.${dir}${nulls}`);
+    const previous = this.state.params.get('order');
+    this.state.params.set('order', [previous, `${column}.${dir}${nulls}`].filter(Boolean).join(','));
     return this;
   }
 

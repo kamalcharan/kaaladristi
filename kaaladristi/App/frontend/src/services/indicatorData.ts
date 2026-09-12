@@ -178,8 +178,9 @@ export async function fetchIndicatorData(
 export async function fetchIndicatorDataById(
   indexId: number,
   range: TimeRange,
+  asOf?: string,
 ): Promise<IndicatorRow[]> {
-  const startDate = getStartDate(range);
+  const startDate = asOf ? format(subYears(new Date(asOf + 'T00:00:00'), 1), 'yyyy-MM-dd') : getStartDate(range);
   // Index returns (ret_5d/22d/66d) live on km_index_eod (computed by
   // handle_index_returns) — needed by the index cockpit's Returns pillar +
   // the story's conviction/returns read. NOT in shared INDICATOR_COLS.
@@ -195,6 +196,7 @@ export async function fetchIndicatorDataById(
     query = query.gte('trade_date', startDate);
   }
 
+  if (asOf) query = query.lte('trade_date', asOf);
   const { data, error } = await query.execute();
   if (error) throw new Error(error.message);
 

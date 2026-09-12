@@ -10,8 +10,8 @@ const sessionDate = (iso: string) => {
   return `${Number(day)} ${MONTH_FULL[Number(month) - 1]}`;
 };
 type Row = { label: string; values: (number | null)[]; states: StructureState[]; digits: number; suffix: string };
-export default function MarketStructureHistory({ breadth, roc, mode, onSelectDate }: {
-  breadth: MarketBreadthDay[]; roc: BreadthRocDay[]; mode: 'breadth' | 'roc'; onSelectDate: (date: string) => void;
+export default function MarketStructureHistory({ breadth, roc, mode, onSelectDate, maBasis = 'market' }: {
+  maBasis?: 'market' | 'index'; breadth: MarketBreadthDay[]; roc: BreadthRocDay[]; mode: 'breadth' | 'roc'; onSelectDate: (date: string) => void;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [scrollable, setScrollable] = useState({ newer: false, older: false });
@@ -40,7 +40,7 @@ export default function MarketStructureHistory({ breadth, roc, mode, onSelectDat
   // Reverse only display order: states still compare each session with its past.
   const displayOrder = dates.map((_, i) => i).reverse();
   const rows: Row[] = mode === 'breadth' ? (['pct_above_20', 'pct_above_50', 'pct_above_150'] as const).map((k, i) => ({
-    label: `Above ${[20, 50, 150][i]} EMA`, values: breadth.map(r => r[k]),
+    label: `Above ${[20, 50, 150][i]} ${maBasis === 'index' && i > 0 ? 'SMA' : 'EMA'}`, values: breadth.map(r => r[k]),
     states: breadth.map((r, j) => participationState(r[k], breadth[j - 1]?.[k])), digits: 1, suffix: '%',
   })) : (['roc_13', 'roc_55', 'sma_breadth'] as const).map((k, i) => ({
     label: ['ROC 13', 'ROC 55', 'Signal (5)'][i], values: roc.map(r => r[k]),

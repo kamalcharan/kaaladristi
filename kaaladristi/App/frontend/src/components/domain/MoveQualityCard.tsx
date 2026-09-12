@@ -113,19 +113,20 @@ export default function MoveQualityCard({
       </div>
 
       {/* Three internals */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 10 }}>
-        <Stat label="Breadth" value={`${mq.upCount}/${mq.total}`} sub="up on day"
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 12, marginBottom: 10 }}>
+        <Stat label="Session advances" value={`${mq.upCount}/${mq.total}`} sub="up on day"
           tone={mq.upCount / mq.total >= 0.6 ? 'ok' : mq.upCount / mq.total <= 0.4 ? 'bad' : 'warn'} />
         <Stat label="Consensus" value={`${mq.bullFlowCount}/${mq.total}`} sub="confirm flow"
           tone={mq.bullFlowCount >= Math.ceil(mq.total / 2) ? 'ok' : mq.bullFlowCount === 0 ? 'bad' : 'warn'} />
         <Stat
-          label="Concentration"
+          label="Score concentration"
           value={mq.topSharePct != null ? `${mq.topSharePct}%` : '—'}
           sub={mq.topName ? `top: ${mq.topName}` : 'score share'}
           tone={mq.topSharePct != null && mq.topSharePct >= 60 ? 'bad' : mq.topSharePct != null && mq.topSharePct >= 45 ? 'warn' : 'ok'}
         />
       </div>
 
+      <p style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 10 }}>Concentration is the largest share of positive constituent Flow 5D scores, not contribution to the index price move. Session advances and multi-session scores measure different horizons.</p>
       {/* Reason bullets */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 14px' }}>
         {mq.flags.map((f, i) => (

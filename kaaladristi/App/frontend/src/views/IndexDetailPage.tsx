@@ -1,3 +1,9 @@
+import { useEffect } from 'react';
+import { useLocation, useSearchParams } from 'react-router-dom';
+import { useSectorResearchStore } from '@/stores/sectorResearchStore';
+import MarketStructureHistory from '@/components/domain/MarketStructureHistory';
+import '@/styles/sectorResearch.css';
+import { sectorSignal as computeSignal, SECTOR_FLOW_LABEL, SECTOR_FLOW_STYLE as SIGNAL_STYLE, SECTOR_FLOW_CONDITIONS as SIGNAL_CONDITIONS, sectorSessionDate } from '@/lib/sectorFlow';
 /**
  * IndexDetailPage — /sector-rotation/:indexId
  *
@@ -9,7 +15,7 @@ import React, { useState, useMemo, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, ArrowUp, ArrowDown, ChevronUp, ChevronDown, LineChart as LineChartIcon } from 'lucide-react';
 import { DristiQLoader } from '@/components/ui';
-import { LineChart, Line, ResponsiveContainer, Tooltip } from 'recharts';
+import { LineChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { FLOW_LABELS, ZONE_LABELS } from '@/constants/signalScale';
 import { useIndexDetail, useIndexSparkline, useConstituentDetails, useConstituentFlowMap, useIndexBreadth, useIndexDateRange } from '@/hooks/useSectorRotation';
 import WorkspaceChart from '@/components/workspace/WorkspaceChart';
@@ -23,52 +29,15 @@ import { BREADTH_MIN_N, BREADTH_SMALL_N, type SectorIndexRow, type RocBadge } fr
 import type { IndexBreadthResult, ConstituentDetail } from '@/services/sectorRotation';
 import FlowIntensityMap from '@/components/domain/FlowIntensityMap';
 import MarketBreadthChart, { resolveRegime } from '@/components/domain/MarketBreadthChart';
-import BreadthHeatmap from '@/components/domain/BreadthHeatmap';
-import BreadthRocHeatmap from '@/components/domain/BreadthRocHeatmap';
 import BreadthRocChart from '@/components/domain/BreadthRocChart';
-import VaNiInsight from '@/components/domain/VaNiInsight';
-import { useSectorInsight } from '@/hooks/useDashboardExtras';
 import MoveQualityCard, { type MoveBadge } from '@/components/domain/MoveQualityCard';
 import { computeMoveQuality } from '@/services/moveQuality';
 
 // ── Signal ────────────────────────────────────────────────────────────────────
 
-type SignalType = 'flow_entering' | 'flow_exiting' | 'sustained_flow' | null;
-
-function computeSignal(row: SectorIndexRow): SignalType {
-  const pctAmtChg =
-    row.avg_amt_5d != null && row.avg_amt_22d != null && row.avg_amt_22d !== 0
-      ? ((row.avg_amt_5d - row.avg_amt_22d) / row.avg_amt_22d) * 100
-      : null;
-  const rotatingIn =
-    (row.ret_5d ?? 0) > 0 &&
-    (row.score_5d ?? 0) > (row.score_22d ?? 0) &&
-    pctAmtChg != null &&
-    pctAmtChg > 15;
-  const rotatingOut =
-    (row.ret_5d ?? 0) < 0 &&
-    (row.score_5d ?? 0) < (row.score_22d ?? 0) &&
-    pctAmtChg != null &&
-    pctAmtChg < -15;
-  if (rotatingIn) return 'flow_entering';
-  if (rotatingOut) return 'flow_exiting';
-  if ((row.ret_22d ?? 0) > 5 && (row.rsi_14 ?? 0) > 55 && !rotatingOut) return 'sustained_flow';
-  return null;
-}
-
-const SIGNAL_STYLE: Record<NonNullable<SignalType>, { color: string; bg: string; border: string }> = {
-  flow_entering:  { color: 'var(--bull)',  bg: 'rgba(34,197,94,0.12)',  border: 'rgba(34,197,94,0.3)' },
-  flow_exiting:   { color: 'var(--bear)',  bg: 'rgba(239,68,68,0.12)',  border: 'rgba(239,68,68,0.3)' },
-  sustained_flow: { color: 'var(--gold)',  bg: 'rgba(251,191,36,0.12)', border: 'rgba(251,191,36,0.3)' },
-};
-
-const SIGNAL_CONDITIONS: Record<NonNullable<SignalType>, string[]> = {
-  flow_entering:  ['5D return positive', 'Score 5D above Score 22D', 'Delivery amount up >15% vs 22D avg'],
-  flow_exiting:   ['5D return negative', 'Score 5D below Score 22D', 'Delivery amount down >15% vs 22D avg'],
-  sustained_flow: ['22D return above 5%', 'RSI 14 above 55'],
-};
 
 const CATEGORY_LABELS: Record<string, string> = {
+  'custom':                'Curated · DristiQ maintained',
   'index':                 'Index',
   'broad market index':    'Broad Market',
   'sectoral index':        'Sectoral',
@@ -236,7 +205,7 @@ function ConstituentTable({
 
   if (sortedRows.length === 0) {
     return (
-      <div style={{ padding: '24px', textAlign: 'center' }}>
+      <div className="sector-inset" style={{ padding: '24px', textAlign: 'center' }}>
         <span style={{ ...MONO, fontSize: 12, color: 'var(--text-faint)' }}>No constituent data</span>
       </div>
     );
@@ -248,7 +217,17 @@ function ConstituentTable({
     // maxHeight keeps the sticky header working — sticky anchors to the
     // nearest scroll container, so an unbounded overflowX-only wrapper would
     // silently stop the header from sticking.
-    <div style={{ overflow: 'auto', maxHeight: '70vh' }}>
+    <>
+    <div className="sector-mobile-rows">
+      <p className="text-xs text-muted">Constituents · highest Flow 5D first. Flow type describes position activity; it differs from the score-based Flow Map state.</p>
+      {sortedRows.map(row => <article key={row.equity_id}>
+        <div className="flex justify-between gap-2"><button className="text-left text-sm font-medium underline" onClick={()=>onRowClick?.(row.equity_id,displaySymbol(row))}>{displaySymbol(row)}</button><BookmarkToggle equityId={row.equity_id} size={18}/></div>
+        <p className="text-xs text-muted">{row.company_name}</p>
+        <dl><div><dt>Flow 5D</dt><dd>{fmt(row.score_5d,1)}</dd></div><div><dt>Flow 22D</dt><dd>{fmt(row.score_22d,1)}</dd></div><div><dt>1D%</dt><dd>{fmtPct(row.pct_chng)}</dd></div></dl>
+        <details className="text-xs"><summary>More figures</summary><dl><div><dt>5D%</dt><dd>{fmtPct(row.ret_5d)}</dd></div><div><dt>22D%</dt><dd>{fmtPct(row.ret_22d)}</dd></div><div><dt>RSI</dt><dd>{fmt(row.rsi_14,1)}</dd></div></dl><p className="mt-2">Position activity: {row.flow_type ? FLOW_LABELS[row.flow_type]?.label ?? row.flow_type : 'Unavailable'}</p></details>
+      </article>)}
+    </div>
+    <div className="sector-desktop-table flow-scroll" style={{ overflow: 'auto', maxHeight: '70vh' }}>
       <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: 'var(--font-mono)', fontSize: 12, minWidth: 980 }}>
         <thead>
           <tr>
@@ -258,12 +237,12 @@ function ConstituentTable({
             <th style={{ ...thBase, textAlign: 'right', width: 80 }}>Close</th>
             <th style={{ ...thSortable, textAlign: 'right', width: 76 }} onClick={() => handleSort('score_5d')}>
               <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'flex-end' }}>
-                Score 5D<SortIcon col="score_5d" sortKey={sortKey} sortDir={sortDir} />
+                Flow 5D<SortIcon col="score_5d" sortKey={sortKey} sortDir={sortDir} />
               </span>
             </th>
             <th style={{ ...thSortable, textAlign: 'right', width: 82 }} onClick={() => handleSort('score_22d')}>
               <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'flex-end' }}>
-                Score 22D<SortIcon col="score_22d" sortKey={sortKey} sortDir={sortDir} />
+                Flow 22D<SortIcon col="score_22d" sortKey={sortKey} sortDir={sortDir} />
               </span>
             </th>
             <th style={{ ...thSortable, textAlign: 'right', width: 60 }} onClick={() => handleSort('rsi_14')}>
@@ -378,6 +357,7 @@ function ConstituentTable({
         </tbody>
       </table>
     </div>
+    </>
   );
 }
 
@@ -428,7 +408,7 @@ function IndexScoreCard({ row }: { row: SectorIndexRow }) {
               border: `1px solid ${signalStyle.border}`,
             }}
           >
-            {FLOW_LABELS[signal]?.label ?? signal}
+            {SECTOR_FLOW_LABEL[signal]}
           </span>
         )}
         {zoneInfo && (
@@ -526,8 +506,8 @@ function IndexScoreCard({ row }: { row: SectorIndexRow }) {
 // crosses above the 1-month line, flow into this index is accelerating. This
 // replaced a close-price sparkline that carried no rotation information (the
 // Chart tab has the full price chart).
-function FlowTrendCard({ indexId, height = 110 }: { indexId: number; height?: number }) {
-  const { data: sparkline = [], isLoading } = useIndexSparkline(indexId);
+function FlowTrendCard({ indexId, date, height = 170 }: { indexId: number; date: string; height?: number }) {
+  const { data: sparkline = [], isLoading } = useIndexSparkline(indexId, date);
   const hasScores = sparkline.some((p) => p.score_5d != null);
 
   return (
@@ -541,10 +521,10 @@ function FlowTrendCard({ indexId, height = 110 }: { indexId: number; height?: nu
     >
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, flexWrap: 'wrap', marginBottom: 10 }}>
         <span style={{ ...MONO, fontSize: 9, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--text-faint)' }}>
-          Money Flow Trend · 30 Sessions
+          Money Flow Trend · {sparkline.length} sessions through {sectorSessionDate(date)}
         </span>
         <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>
-          Bright line above dim line = flow accelerating into this index
+          Flow 5D above Flow 22D = stronger relative to its baseline; inspect the slope for change over time.
         </span>
       </div>
       {isLoading ? (
@@ -554,7 +534,9 @@ function FlowTrendCard({ indexId, height = 110 }: { indexId: number; height?: nu
       ) : hasScores && sparkline.length > 1 ? (
         <>
           <ResponsiveContainer width="100%" height={height}>
-            <LineChart data={sparkline} margin={{ top: 4, right: 4, bottom: 4, left: 4 }}>
+            <LineChart data={sparkline} margin={{ top: 4, right: 10, bottom: 4, left: 0 }}>
+              <XAxis dataKey="trade_date" tickFormatter={sectorSessionDate} tick={{ fontSize: 9, fill: 'var(--text-muted)' }} minTickGap={45} />
+              <YAxis width={36} tick={{ fontSize: 9, fill: 'var(--text-muted)' }} />
               <Tooltip
                 contentStyle={{
                   background: 'var(--card)',
@@ -567,23 +549,23 @@ function FlowTrendCard({ indexId, height = 110 }: { indexId: number; height?: nu
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 formatter={(v: any, name: any) => [
                   typeof v === 'number' ? v.toFixed(1) : v,
-                  name === 'score_5d' ? 'Score 5D (1 week)' : 'Score 22D (1 month)',
+                  name === 'score_5d' ? 'Flow 5D (1 week)' : 'Flow 22D (1 month)',
                 ]}
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                labelFormatter={(l: any) => String(l)}
+                labelFormatter={(l: any) => sectorSessionDate(String(l))}
               />
-              <Line type="monotone" dataKey="score_22d" stroke="var(--text-faint)" strokeWidth={1.5} strokeDasharray="4 3" dot={false} />
+              <Line type="monotone" dataKey="score_22d" stroke="var(--text-primary)" strokeWidth={1.5} strokeDasharray="4 3" dot={false} />
               <Line type="monotone" dataKey="score_5d" stroke="var(--gold-soft)" strokeWidth={2} dot={false} activeDot={{ r: 3, fill: 'var(--gold-soft)' }} />
             </LineChart>
           </ResponsiveContainer>
           <div style={{ display: 'flex', gap: 16, marginTop: 6 }}>
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
               <span style={{ width: 14, height: 2, background: 'var(--gold-soft)', flexShrink: 0 }} />
-              <span style={{ ...MONO, fontSize: 9, color: 'var(--text-muted)' }}>Score 5D — 1-week flow</span>
+              <span style={{ ...MONO, fontSize: 9, color: 'var(--text-muted)' }}>Flow 5D — 1-week flow</span>
             </span>
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
               <span style={{ width: 14, height: 0, borderTop: '2px dashed var(--text-faint)', flexShrink: 0 }} />
-              <span style={{ ...MONO, fontSize: 9, color: 'var(--text-muted)' }}>Score 22D — 1-month flow</span>
+              <span style={{ ...MONO, fontSize: 9, color: 'var(--text-muted)' }}>Flow 22D — 1-month flow</span>
             </span>
           </div>
         </>
@@ -625,14 +607,14 @@ function SynthesisStrip({
   // Real confluence signal wins.
   if (signal) {
     const st = SIGNAL_STYLE[signal];
-    const label = FLOW_LABELS[signal]?.label ?? signal;
+    const label = SECTOR_FLOW_LABEL[signal];
     const conditions = SIGNAL_CONDITIONS[signal];
     return (
       <div
         style={{
           borderLeft: `2px solid ${st.color}`, background: st.bg, borderRadius: 6,
           padding: '10px 14px', marginBottom: 16, ...MONO, fontSize: 12.5,
-          lineHeight: 1.6, color: 'var(--text-secondary)',
+          lineHeight: 1.6, color: st.color,
         }}
       >
         <span style={{ color: st.color, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', marginRight: 8 }}>
@@ -657,7 +639,7 @@ function SynthesisStrip({
         fontSize: 12.5, lineHeight: 1.6, color: 'var(--text-secondary)',
       }}
     >
-      Money flowing into{' '}
+      Positive Flow 5D in{' '}
       <span style={{ color: 'var(--bull)', fontWeight: 600 }}>{inflowCount}/{totalCount}</span> stocks
       {regime && latestScore != null && (
         <>
@@ -672,8 +654,8 @@ function SynthesisStrip({
   );
 }
 
-// ── Hero tiles (Overview) — top movers by Score 5D ─────────────────────────────
-// Fixed top-8 by Score 5D (not reactive to table sort). Tile fill scales with
+// ── Hero tiles (Overview) — top movers by Flow 5D ─────────────────────────────
+// Fixed top-8 by Flow 5D (not reactive to table sort). Tile fill scales with
 // score. Click → the stock's chart.
 function HeroTiles({
   details,
@@ -696,7 +678,7 @@ function HeroTiles({
   return (
     <div style={{ marginBottom: 16 }}>
       <div style={{ ...MONO, fontSize: 9, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--text-faint)', marginBottom: 8 }}>
-        Top Movers · Score 5D · click to open chart
+        Top Movers · Flow 5D · click to open chart
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 8 }}>
         {top.map((d) => {
@@ -739,8 +721,7 @@ function HeroTiles({
 // column-count). Clicking a hero tile or a table row opens that stock's chart.
 function OverviewTab({ row, indexId }: { row: SectorIndexRow; indexId: number }) {
   const navigate = useNavigate();
-  const { data: breadthData, isLoading: breadthLoading } = useIndexBreadth(indexId, 66);
-  const { data: sectorInsight, isLoading: insightLoading } = useSectorInsight(indexId, row.trade_date);
+  const { data: breadthData, isLoading: breadthLoading } = useIndexBreadth(indexId, 66, row.trade_date);
 
   // Constituent details — deduped with ConstituentTable's identical React Query
   // call (same queryKey). Feeds the hero tiles + the synthesis money-flow count.
@@ -748,7 +729,7 @@ function OverviewTab({ row, indexId }: { row: SectorIndexRow; indexId: number })
   const equityIds = useMemo(() => (constituents ?? []).map((c) => c.equity_id), [constituents]);
   const { data: details } = useConstituentDetails(equityIds, row.trade_date);
 
-  // "Flowing in" = positive Score 5D (the page's Score = money-flow framing).
+  // "Flowing in" = positive Flow 5D (the page's Score = money-flow framing).
   const inflowCount = useMemo(() => (details ?? []).filter((d) => (d.score_5d ?? 0) > 0).length, [details]);
   const totalCount = details?.length ?? equityIds.length;
 
@@ -762,7 +743,7 @@ function OverviewTab({ row, indexId }: { row: SectorIndexRow; indexId: number })
   const moveBadge = useMemo<MoveBadge | null>(() => {
     const sig = computeSignal(row);
     if (!sig) return null;
-    return { label: FLOW_LABELS[sig]?.label ?? sig, bullish: sig === 'flow_entering' || sig === 'sustained_flow' };
+    return { label: SECTOR_FLOW_LABEL[sig], bullish: sig === 'BUILDING' || sig === 'STRONG' };
   }, [row]);
 
   const goToChart = useCallback(
@@ -771,7 +752,8 @@ function OverviewTab({ row, indexId }: { row: SectorIndexRow; indexId: number })
   );
 
   return (
-    <div style={{ padding: '24px' }}>
+    <div className="sector-inset" style={{ padding: '24px' }}>
+      <p className="text-xs text-muted mb-4">Closing-data session: {sectorSessionDate(row.trade_date)}. Historical analysis uses the currently recorded constituents. Flow scores and price returns are different measures.</p>
 
       {/* 1. Synthesis strip — verdict or auto-composed read */}
       <SynthesisStrip row={row} breadth={breadthData} inflowCount={inflowCount} totalCount={totalCount} />
@@ -780,34 +762,22 @@ function OverviewTab({ row, indexId }: { row: SectorIndexRow; indexId: number })
              directly above the constituents it summarises. */}
       {moveQuality && (
         <div style={{ marginBottom: 16 }}>
-          <MoveQualityCard mq={moveQuality} badge={moveBadge} subject={row.name} />
+          <MoveQualityCard mq={moveQuality} badge={moveBadge} />
         </div>
       )}
 
-      {/* 2. Hero tiles — top movers by Score 5D → stock chart on click */}
+      {/* 2. Hero tiles — top movers by Flow 5D → stock chart on click */}
       <HeroTiles details={details} onPick={goToChart} />
 
-      {/* 3. VaNi narrative — full width, chip-highlighted */}
-      {(insightLoading || sectorInsight?.insight) && (
-        <div style={{ marginBottom: 16 }}>
-          <VaNiInsight
-            insight={sectorInsight?.insight}
-            isLoading={insightLoading}
-            className="mt-0"
-            highlightChips
-          />
-        </div>
-      )}
-
       {/* 4. Compact row — numeric summary + money-flow trend side by side */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 16, marginBottom: 16, alignItems: 'stretch' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 320px), 1fr))', gap: 16, marginBottom: 16, alignItems: 'stretch' }}>
         <IndexScoreCard row={row} />
-        <FlowTrendCard indexId={indexId} height={80} />
+        <FlowTrendCard indexId={indexId} date={row.trade_date} />
       </div>
 
       {/* 5. Constituents — full width, all columns, click a row → the stock's chart */}
       <div style={{ border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden', marginBottom: 24 }}>
-        <div style={{ padding: '10px 14px', background: 'var(--card)', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'baseline', gap: 8 }}>
+        <div className="sector-inset" style={{ padding: '10px 14px', background: 'var(--card)', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'baseline', gap: 8 }}>
           <span style={{ ...MONO, fontSize: 9, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--text-faint)' }}>
             Constituents
           </span>
@@ -831,7 +801,7 @@ function OverviewTab({ row, indexId }: { row: SectorIndexRow; indexId: number })
           }}
         >
           <span style={{ ...MONO, fontSize: 9, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--text-faint)', display: 'block', marginBottom: 6 }}>
-            Market Breadth · Breadth Momentum
+            Constituent Participation · Breadth Momentum
           </span>
           <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
             Breadth charts will be available once this index has at least {BREADTH_MIN_N} constituents
@@ -850,8 +820,9 @@ function OverviewTab({ row, indexId }: { row: SectorIndexRow; indexId: number })
             </div>
           )}
           {/* Side by side on wide screens; auto-stack below ~440px each */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(440px, 1fr))', gap: 16, marginBottom: 24, alignItems: 'start' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 360px), 1fr))', gap: 16, marginBottom: 24, alignItems: 'start' }}>
             <MarketBreadthChart
+              researchMode
               data={breadthData?.data}
               isLoading={breadthLoading}
               zoneMode={breadthData?.zoneMode}
@@ -869,8 +840,8 @@ function OverviewTab({ row, indexId }: { row: SectorIndexRow; indexId: number })
               thin indexes via the heatmap's minMoverUniverse gate. */}
           {!breadthLoading && breadthData != null && breadthData.data.length > 0 && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginBottom: 24 }}>
-              <BreadthHeatmap data={breadthData.data} />
-              <BreadthRocHeatmap data={breadthData.roc} />
+              <MarketStructureHistory breadth={breadthData.data} roc={breadthData.roc} mode="breadth" maBasis="index" onSelectDate={d => navigate(`?asof=${d}`)} />
+              <MarketStructureHistory breadth={breadthData.data} roc={breadthData.roc} mode="roc" maBasis="index" onSelectDate={d => navigate(`?asof=${d}`)} />
             </div>
           )}
         </>
@@ -882,10 +853,11 @@ function OverviewTab({ row, indexId }: { row: SectorIndexRow; indexId: number })
 // ── Momentum card (Chart tab) ─────────────────────────────────────────────────
 
 function MomentumCard({ row, indexId }: { row: SectorIndexRow; indexId: number }) {
-  const { data: sparkline = [], isLoading: sparkLoading } = useIndexSparkline(indexId);
+  const date = row.trade_date;
+  const { data: sparkline = [], isLoading: sparkLoading } = useIndexSparkline(indexId, date);
   const signal = computeSignal(row);
   const signalStyle = signal ? SIGNAL_STYLE[signal] : null;
-  const signalLabel = signal ? (FLOW_LABELS[signal]?.label ?? signal) : null;
+  const signalLabel = signal ? (SECTOR_FLOW_LABEL[signal]) : null;
 
   const pctAmtChg =
     row.avg_amt_5d != null && row.avg_amt_22d != null && row.avg_amt_22d !== 0
@@ -911,7 +883,7 @@ function MomentumCard({ row, indexId }: { row: SectorIndexRow; indexId: number }
       {/* Mini sparkline */}
       <div style={{ width: 160, flexShrink: 0 }}>
         <span style={{ ...MONO, fontSize: 9, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--text-faint)', display: 'block', marginBottom: 4 }}>
-          22D Close
+          {sparkline.length}-session close
         </span>
         {sparkLoading ? (
           <div style={{ height: 48, display: 'flex', alignItems: 'center' }}>
@@ -928,7 +900,7 @@ function MomentumCard({ row, indexId }: { row: SectorIndexRow; indexId: number }
         )}
       </div>
 
-      {/* Score 5D vs 22D */}
+      {/* Flow 5D vs 22D */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
         <span style={{ ...MONO, fontSize: 9, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--text-faint)' }}>
           Score Momentum
@@ -987,7 +959,7 @@ function MomentumCard({ row, indexId }: { row: SectorIndexRow; indexId: number }
 
 function ChartTab({ row, indexId }: { row: SectorIndexRow; indexId: number }) {
   return (
-    <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+    <div className="sector-inset" style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
       <MomentumCard row={row} indexId={indexId} />
       <div
         style={{
@@ -1002,6 +974,7 @@ function ChartTab({ row, indexId }: { row: SectorIndexRow; indexId: number }) {
           instrument={{ id: indexId, symbol: row.name, type: 'index' }}
           overlays={EMPTY_OVERLAYS}
           standalone
+          asOf={row.trade_date}
         />
       </div>
     </div>
@@ -1010,9 +983,9 @@ function ChartTab({ row, indexId }: { row: SectorIndexRow; indexId: number }) {
 
 // ── FlowMap tab ───────────────────────────────────────────────────────────────
 
-function FlowMapTab({ indexId, indexName }: { indexId: number; indexName: string }) {
+function FlowMapTab({ indexId, indexName, date, days, setDays }: { indexId: number; indexName: string; date: string; days: 5 | 22 | 66; setDays: (days: 5 | 22 | 66) => void }) {
   const navigate = useNavigate();
-  const { data, isLoading, error } = useConstituentFlowMap(indexId);
+  const { data, isLoading, error } = useConstituentFlowMap(indexId, days, date);
 
   // BSE-only rows (numeric scrip) → BSE chip on the heatmap label.
   const bseRows = useMemo(() => {
@@ -1039,14 +1012,15 @@ function FlowMapTab({ indexId, indexName }: { indexId: number; indexName: string
   }
 
   return (
-    <div style={{ padding: '20px 24px' }}>
+    <div className="sector-inset" style={{ padding: '20px 24px' }}>
       <FlowIntensityMap
         mode="constituent"
         rows={data?.rows ?? []}
         dates={data?.dates ?? []}
         cells={data?.cells ?? {}}
         title="Flow Intensity"
-        subtitle={`${indexName} · Last 22 Sessions`}
+        subtitle={`${indexName} · ${days} sessions through ${sectorSessionDate(date)}`}
+        dayWindow={days} onDayWindowChange={setDays}
         bseRows={bseRows}
         onRowClick={(rowName) => {
           const meta = data?.rowMeta?.[rowName];
@@ -1063,7 +1037,7 @@ type DetailTab = 'overview' | 'chart' | 'flowmap';
 
 const TAB_LABELS: Record<DetailTab, string> = {
   overview: 'Overview',
-  chart:    'Chart',
+  chart:    'Price Context',
   flowmap:  'Flow Map',
 };
 
@@ -1073,12 +1047,18 @@ export default function IndexDetailPage() {
   const { indexId: indexIdStr } = useParams<{ indexId: string }>();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<DetailTab>('overview');
+  const [flowDays, setFlowDays] = useState<5 | 22 | 66>(22);
   // Date picker — null tracks the latest session; a pinned date reads history.
-  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [search, setSearch] = useSearchParams();
+  const { pathname } = useLocation();
+  const [selectedDate, setSelectedDate] = useState<string | null>(() => /^\d{4}-\d{2}-\d{2}$/.test(search.get('asof') ?? '') ? search.get('asof') : null);
+  const setContext = useSectorResearchStore(s => s.setContext);
+  useEffect(() => { const value = search.get("asof"); setSelectedDate(value && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : null); }, [search]);
 
   const indexId = indexIdStr ? parseInt(indexIdStr, 10) : undefined;
   const { data: row, isLoading, error } = useIndexDetail(indexId, selectedDate ?? undefined);
   const { earliestDate, latestDate } = useIndexDateRange();
+  useEffect(() => { setContext({ scope: pathname, date: row?.trade_date, period: activeTab === 'flowmap' ? flowDays : 66 }); }, [pathname, row?.trade_date, activeTab, flowDays, setContext]);
 
   if (isLoading) {
     return (
@@ -1101,7 +1081,7 @@ export default function IndexDetailPage() {
   const catLabel = CATEGORY_LABELS[row.category?.toLowerCase() ?? ''] ?? row.category;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
+    <div className="sector-page" style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
 
       {/* ── Header ── */}
       <div
@@ -1178,6 +1158,7 @@ export default function IndexDetailPage() {
               onChange={(e) => {
                 const v = e.target.value;
                 setSelectedDate(!v || v === latestDate ? null : v);
+                setSearch(!v || v === latestDate ? {} : { asof: v });
               }}
               style={{
                 ...MONO,
@@ -1193,7 +1174,7 @@ export default function IndexDetailPage() {
             />
             {selectedDate && (
               <button
-                onClick={() => setSelectedDate(null)}
+                onClick={() => { setSelectedDate(null); setSearch({}); }}
                 style={{
                   ...MONO, fontSize: 10, color: 'var(--gold-soft)', background: 'none',
                   border: 'none', cursor: 'pointer', padding: 0,
@@ -1265,7 +1246,7 @@ export default function IndexDetailPage() {
       <div style={{ flex: 1, overflowY: 'auto', background: 'var(--bg)' }}>
         {activeTab === 'overview' && <OverviewTab row={row} indexId={indexId!} />}
         {activeTab === 'chart' && <ChartTab row={row} indexId={indexId!} />}
-        {activeTab === 'flowmap' && <FlowMapTab indexId={indexId!} indexName={row.name} />}
+        {activeTab === 'flowmap' && <FlowMapTab indexId={indexId!} indexName={row.name} date={row.trade_date} days={flowDays} setDays={setFlowDays} />}
       </div>
     </div>
   );

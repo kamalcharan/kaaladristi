@@ -55,6 +55,8 @@ export function computeMoveQuality(
 ): MoveQuality | null {
   if (!details || details.length === 0) return null
   const total = details.length
+  const sessionCount = details.filter(d => d.pct_chng != null).length
+  const scoreCount = details.filter(d => d.score_5d != null).length
 
   let upCount = 0, positiveRsCount = 0, bullFlowCount = 0, bearFlowCount = 0
   let topName: string | null = null, topScore = -Infinity, sumPosScore = 0
@@ -76,7 +78,9 @@ export function computeMoveQuality(
   const concentrated = topSharePct != null && topSharePct >= MQ_THRESHOLDS.concentrated
 
   let verdict: MoveVerdict
-  if (upRatio <= MQ_THRESHOLDS.narrowUp || concentrated || (bullFlowCount === 0 && bearFlowCount > 0)) {
+  if (sessionCount < total || scoreCount < total) {
+    verdict = 'mixed'
+  } else if (upRatio <= MQ_THRESHOLDS.narrowUp || concentrated || (bullFlowCount === 0 && bearFlowCount > 0)) {
     verdict = 'narrow'
   } else if (
     upRatio >= MQ_THRESHOLDS.broadUp &&
@@ -91,14 +95,15 @@ export function computeMoveQuality(
   const headline =
     verdict === 'broad' ? 'Broad — participation confirms'
       : verdict === 'narrow'
-        ? (concentrated ? 'Narrow — carried by one name' : 'Narrow — few participating')
+        ? (concentrated ? 'Narrow — positive scores concentrated' : 'Narrow — few participating')
         : 'Mixed — watch participation'
 
   const flags: string[] = []
+  if (sessionCount < total || scoreCount < total) flags.push(`Incomplete coverage: session changes ${sessionCount}/${total}, Flow 5D scores ${scoreCount}/${total}. Missing data is not weakness.`)
   flags.push(`${upCount}/${total} up on the day`)
   if (bullFlowCount === 0 && bearFlowCount > 0) flags.push(`0/${total} confirm the flow — ${bearFlowCount} turning bearish`)
-  else flags.push(`${bullFlowCount}/${total} confirm with fresh longs`)
-  if (concentrated && topName) flags.push(`${topName} is ${topSharePct}% of the score`)
+  else flags.push(`${bullFlowCount}/${total} show fresh longs or short covering`)
+  if (concentrated && topName) flags.push(`${topName} is ${topSharePct}% of positive constituent Flow 5D scores`)
   if (aboveTrendPct != null) flags.push(`${Math.round(aboveTrendPct)}% above their 20-EMA`)
 
   return {
