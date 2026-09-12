@@ -420,7 +420,7 @@ AI_MODEL=claude-haiku-4-5      # any model the provider supports
 
 New migrations go in `App/DBscripts/km_migration_NNN_description.sql`.
 Run them directly in pgAdmin, DBeaver, or `psql` — **no Python wrapper scripts**.
-Next migration number: **206** (disk is at 205 — `km_migration_205_fpb_card_columns.sql`, Flower Pot card columns + ETFs out of the whole matview: mutual-fund units (`isin LIKE 'INF%'`) leave `active`/`wg_pool`/the exclusion-count universe, `km_equity_symbols.is_etf` is set from the same rule (it had been FALSE on all 16,938 rows since the column existed), the `flower_pot_burst` arm LEFT JOINs `stock` so it carries the shared card's columns instead of typed NULLs, three new columns `fpb_hi10`/`fpb_lo10`/`fpb_tight_today`, and `d_pct` stops being NULL on sixteen of the seventeen arms; **owner runs it then `REFRESH MATERIALIZED VIEW km_scan_results;` and `REFRESH MATERIALIZED VIEW km_scan_exclusion_counts;`**; measured effect on the 2026-09-07 bar: flower_pot_burst 106→68 rows with 67 of 68 carrying an industry, breakdown_watch 441→364, breakout_surge 295→277, conviction_flow stays at its cap of 50 with 12 real stocks replacing fund units; 204 = `km_migration_204_profile_persona.sql`, onboarding persona persistence: `km_profiles.persona/acts_on/hold_horizon/concede_level/persona_set_at/guide_progress`, `kd_update_profile` whitelist, `km_ux_events`; vocabulary mirrored in `src/constants/personaConfig.ts` and gated by `npm run check:persona` inside `npm run build`; plan: `docs/claude/onboarding-poa.md`; 203 = `km_migration_203_index_breadth.sql`, per-index breadth table + `compute_index_breadth()`; owner runs it then `python scripts/backfill_index_breadth.py`; 202 = `km_migration_202_gl_matview_arms.sql`, Golden Line arms + GL/Big Money bar columns on `km_scan_results`; 195/197/200/202/205 recreate the `km_scan_results` matview `WITH NO DATA`. **Convention as of 205 (gap audit C3): a migration that recreates it ENDS with the two `REFRESH` statements as executable SQL, after `COMMIT`** — a comment asking the next person to remember failed twice (200 on 2026-09-06, 205 on 2026-09-07), and each time every matview-served preset answered PostgREST with "materialized view has not been populated", which the UI shows as "Failed to run scan." on eleven scanners at once. Order matters: `km_scan_results` first, `km_scan_exclusion_counts` second (it SELECTs from the first); 200b is a suffixed duplicate). Older history: (166 = `km_migration_166_golarambh_almanac.sql` — Golārambha family: 4 generator-fed `planet_state` Sun rules (Uttara/Dakshina Gola halves + equinox ±1d turn windows, tag 'Gola'), windows from `scripts/generate_golarambh_windows.py` (TROPICAL equinox crossings — deliberately not the sidereal sankranti), almanac body in AlmanacPage + `astro_group:Gola` overlay; 165 = force-reonboard theme; 164 = forgot-password token leak; 163 = pricing GST beta default; NOTE 161/162 have DUPLICATE numbers (rule_evidence + scan_presets at 161, rule_evidence_transitions + user_bookmarks at 162); 160 = Mercury-slice launch catalog scope; see `docs/claude/astro-story.md`. ⚠ Numbering drifted: duplicates also at 152/153 and no 155 — always `ls App/DBscripts/ | sort` before picking a number, don't trust this line alone.)
+Next migration number: **207** (disk is at 206 — `km_migration_206_onboarding_version.sql`, version-stamped re-onboarding: `km_profiles.onboarding_version INT DEFAULT 0` + the key added to `kd_update_profile`'s whitelist + a TARGETED stamp of `1` for everyone who already carries `persona_set_at` (2 of 17 on 2026-09-12). Replaces migration 165's blanket `onboarded = false`. Sending a cohort back through setup is now: bump `ONBOARDING_VERSION` in `src/constants/onboarding.ts`, then stamp whoever is exempt. Owner runs it in pgAdmin; no REFRESH needed; 205 — `km_migration_205_fpb_card_columns.sql`, Flower Pot card columns + ETFs out of the whole matview: mutual-fund units (`isin LIKE 'INF%'`) leave `active`/`wg_pool`/the exclusion-count universe, `km_equity_symbols.is_etf` is set from the same rule (it had been FALSE on all 16,938 rows since the column existed), the `flower_pot_burst` arm LEFT JOINs `stock` so it carries the shared card's columns instead of typed NULLs, three new columns `fpb_hi10`/`fpb_lo10`/`fpb_tight_today`, and `d_pct` stops being NULL on sixteen of the seventeen arms; **owner runs it then `REFRESH MATERIALIZED VIEW km_scan_results;` and `REFRESH MATERIALIZED VIEW km_scan_exclusion_counts;`**; measured effect on the 2026-09-07 bar: flower_pot_burst 106→68 rows with 67 of 68 carrying an industry, breakdown_watch 441→364, breakout_surge 295→277, conviction_flow stays at its cap of 50 with 12 real stocks replacing fund units; 204 = `km_migration_204_profile_persona.sql`, onboarding persona persistence: `km_profiles.persona/acts_on/hold_horizon/concede_level/persona_set_at/guide_progress`, `kd_update_profile` whitelist, `km_ux_events`; vocabulary mirrored in `src/constants/personaConfig.ts` and gated by `npm run check:persona` inside `npm run build`; plan: `docs/claude/onboarding-poa.md`; 203 = `km_migration_203_index_breadth.sql`, per-index breadth table + `compute_index_breadth()`; owner runs it then `python scripts/backfill_index_breadth.py`; 202 = `km_migration_202_gl_matview_arms.sql`, Golden Line arms + GL/Big Money bar columns on `km_scan_results`; 195/197/200/202/205 recreate the `km_scan_results` matview `WITH NO DATA`. **Convention as of 205 (gap audit C3): a migration that recreates it ENDS with the two `REFRESH` statements as executable SQL, after `COMMIT`** — a comment asking the next person to remember failed twice (200 on 2026-09-06, 205 on 2026-09-07), and each time every matview-served preset answered PostgREST with "materialized view has not been populated", which the UI shows as "Failed to run scan." on eleven scanners at once. Order matters: `km_scan_results` first, `km_scan_exclusion_counts` second (it SELECTs from the first); 200b is a suffixed duplicate). Older history: (166 = `km_migration_166_golarambh_almanac.sql` — Golārambha family: 4 generator-fed `planet_state` Sun rules (Uttara/Dakshina Gola halves + equinox ±1d turn windows, tag 'Gola'), windows from `scripts/generate_golarambh_windows.py` (TROPICAL equinox crossings — deliberately not the sidereal sankranti), almanac body in AlmanacPage + `astro_group:Gola` overlay; 165 = force-reonboard theme; 164 = forgot-password token leak; 163 = pricing GST beta default; NOTE 161/162 have DUPLICATE numbers (rule_evidence + scan_presets at 161, rule_evidence_transitions + user_bookmarks at 162); 160 = Mercury-slice launch catalog scope; see `docs/claude/astro-story.md`. ⚠ Numbering drifted: duplicates also at 152/153 and no 155 — always `ls App/DBscripts/ | sort` before picking a number, don't trust this line alone.)
 
 **Target database**: most migrations target `kaala_dristi_db`. Migrations that target `vani_db` must say so explicitly in the file header (example: migration 092).
 
@@ -642,6 +642,65 @@ These are in `LESSONS_LEARNED.md` in full; summary for quick reference:
 ---
 
 ## Known Issues
+
+### Onboarding: version-stamped re-onboarding + the step-3 skip (2026-09-12)
+
+Owner: onboarding "does not lead to theme and pricing pages", and existing
+users must be forced through it again. Options discussed; owner picked
+**version stamp + targeted first run**.
+
+**The skip — confirmed and fixed.** `ProfileSetup.handleBrowse` ("Customize
+in Catalog →" on step 3) did `setStep(6)`, jumping past step 4 (How VaNi will
+guide) AND step 5 (Plan). Anyone taking that exit finished onboarding having
+never been shown pricing. `browseIntent` already remembers to land them in
+the catalog at the end, so the short-circuit bought nothing; it now walks
+4 → 5 → 6 like "Start here →". Theme was always reached on that path — step 6
+is where `onboarded` flips — so **if you also lost the theme step, that is a
+second defect and I have not found it.**
+
+**Version stamping, not another blanket clear.** Migration 165 did
+`UPDATE km_profiles SET onboarded = false`: works once, indiscriminate, and
+it disarms the ProfileSetup guard that stops a user re-walking the wizard.
+`onboarding_version` (migration 206) records which flow a profile completed;
+`needsOnboarding()` in `constants/onboarding.ts` is the single predicate both
+ProtectedRoute and the wizard's own guard use — if they disagreed the user
+would bounce between /setup and /workspace forever. `finishOnboarding` stamps
+the version in the same write that flips `onboarded`, for the same reason.
+Version 1 = the persona/ICP flow; the version log in that file must say what
+each bump was for.
+
+**Why bother: 15 of 17 profiles carry no ICP.** That is what makes the VaNi
+opening brief personal (`concede_level` → breadth leg), so without the
+re-onboard almost every user gets the generic market read.
+
+**"Keep my current workspace →"** — step 3's third exit, shown only to a
+returning user who arrived with their own arrangement. `applyTemplate`
+REPLACES blocks and chart_overlays wholesale and both other exits call it, so
+without this a version bump resets every customised workbench. ProfileSetup's
+own guard comment records that exact bug from the last forced re-onboard.
+
+**Two traps in deciding "do they have a workspace", both found by test, both
+would have shipped:**
+
+1. Reading `framework.blocks` at render time answers *has*, not *had* — the
+   wizard can add blocks before step 3 reveals its actions. Latched once on
+   first load instead.
+2. `blocks.length > 0` is **never false**: `loadFramework` bootstraps a
+   default NIFTY 50 chart block into any framework lacking one and saves it
+   (`frameworkStore` ~line 262), so a brand-new user reads as having one
+   block. The bootstrap is exactly one chart block, so the real test is
+   anything beyond that: `length > 1 || some(b => b.type !== 'chart')`.
+   That stray `PUT /api/framework` on step 3 is this bootstrap — additive,
+   pre-existing, not a template overwrite.
+
+**Friction to expect:** 16 of 17 profiles have no phone, and step 1 blocks on
+a valid Indian mobile before "Begin". Every re-onboarded user must supply
+one. Left as-is — it is a required field by design — but say so if that is
+not wanted.
+
+No frontend test runner exists, so both rules are covered by Playwright
+against the dev server: six routing cases (including both bounce-loop
+directions) and four visibility cases for the preserve exit.
 
 ### 📋 VaNi docked pane — autorun brief (2026-09-11)
 

@@ -214,6 +214,8 @@ export async function updateProfile(
     | 'full_name' | 'display_name' | 'phone' | 'avatar_url' | 'onboarded' | 'theme' | 'mode' | 'icp_mode'
     // migration 204 — persona_set_at is stamped by the RPC, never sent
     | 'persona' | 'acts_on' | 'hold_horizon' | 'concede_level' | 'guide_progress'
+    // migration 206 — stamped only by finishOnboarding(), alongside `onboarded`
+    | 'onboarding_version'
   >>,
 ) {
   const user = getUser();

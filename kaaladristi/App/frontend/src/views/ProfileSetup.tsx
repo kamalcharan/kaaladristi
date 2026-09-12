@@ -11,6 +11,7 @@ import { PAID_TIERS } from '@/constants/frameworkConstants'
 import { TEMPLATE_MAP } from '@/constants/frameworkTemplates'
 import type { FrameworkTemplate } from '@/constants/frameworkTemplates'
 import { PERSONAS, PERSONA_SCANNERS, PERSONA_TEMPLATE, derivePersona, type Persona, type PersonaAnswers } from '@/constants/personaConfig'
+import { ONBOARDING_VERSION, needsOnboarding, isReturningForUpgrade } from '@/constants/onboarding'
 import { getPresetMeta } from '@/services/scanEngine'
 import { useIsPhone } from '@/hooks/useMediaQuery'
 import PersonalityScreen, { type PersonalityState } from '@/components/domain/Onboarding/PersonalityScreen'
@@ -280,11 +281,13 @@ interface S3Props {
   isFree: boolean
   onAccept: () => Promise<void>
   onBrowse: () => void
+  /** Returning for a version bump AND already has blocks — offer to keep them. */
+  onKeepWorkspace?: () => void
   isCommitting: boolean
   errorMsg: string | null
 }
 
-function Screen3({ template, persona, isFree: _isFree, onAccept, onBrowse, isCommitting, errorMsg }: S3Props) {
+function Screen3({ template, persona, isFree: _isFree, onAccept, onBrowse, onKeepWorkspace, isCommitting, errorMsg }: S3Props) {
   const phone = useIsPhone()
   const scanners = PERSONA_SCANNERS[persona].map(id => getPresetMeta(id)).filter((m): m is NonNullable<typeof m> => !!m)
   const animBlocks = buildAnimBlocks(template)
@@ -412,7 +415,9 @@ function Screen3({ template, persona, isFree: _isFree, onAccept, onBrowse, isCom
           {done && (
             <div style={{ marginTop:8, animation:'text-in .6s ease both' }}>
               <p style={{ fontSize:14, color:'var(--text-muted)', lineHeight:1.65, marginBottom:20 }}>
-                Your starter framework is already applied — you can change any part of it later, from the Catalog.
+                {onKeepWorkspace
+                  ? 'You already have a workspace. Starting from this template would replace the blocks you have arranged — keep yours instead and nothing changes.'
+                  : 'Your starter framework is already applied — you can change any part of it later, from the Catalog.'}
               </p>
               <div style={{ display:'flex', gap:10, flexWrap:'wrap' }}>
                 <button onClick={onAccept} disabled={isCommitting}
@@ -431,6 +436,20 @@ function Screen3({ template, persona, isFree: _isFree, onAccept, onBrowse, isCom
                   Customize in Catalog →
                 </button>
               </div>
+              {/* The safe exit for a user we sent back. Its own row, below the
+                  template actions, because it is the one that does NOT write:
+                  applyTemplate replaces blocks and overlays wholesale, so for
+                  someone returning with a built workspace this is the only
+                  choice that preserves it. */}
+              {onKeepWorkspace && (
+                <button onClick={onKeepWorkspace} disabled={isCommitting}
+                  style={{ marginTop:12, width:'100%', padding:'12px 0', background:'transparent',
+                    border:'1px solid color-mix(in srgb, var(--accent) 35%, transparent)', borderRadius:100,
+                    fontSize:14, fontWeight:500, color:'var(--accent)', cursor:'pointer',
+                    fontFamily:'inherit', transition:'all .2s ease' }}>
+                  Keep my current workspace →
+                </button>
+              )}
               {errorMsg && (
                 <p role="alert" style={{ marginTop:14, fontSize:13, lineHeight:1.5,
                   color:'var(--risk-red, #f87171)',
@@ -541,11 +560,41 @@ export default function ProfileSetup() {
   // then re-walk the whole wizard (re-applying the starter template over
   // their customized framework). If the profile says onboarded, leave —
   // unless we're the ones flipping the flag right now (finishOnboarding).
+  // A user sent BACK by a version bump is `onboarded` but not current, so the
+  // guard asks needsOnboarding() rather than reading the flag directly — the
+  // same predicate ProtectedRoute uses, or the two would fight and bounce the
+  // user between /setup and /workspace.
   const completingRef = useRef(false)
   useEffect(() => {
     if (completingRef.current) return
-    if (profile?.onboarded) navigate('/workspace', { replace: true })
-  }, [profile?.onboarded, navigate])
+    if (profile && !needsOnboarding(profile)) navigate('/workspace', { replace: true })
+  }, [profile, navigate])
+
+  // Returning for an upgrade, not arriving for the first time. They already
+  // have a workspace, so step 3 must offer to keep it rather than silently
+  // overwriting it with the starter template.
+  const returning = isReturningForUpgrade(profile)
+
+  // Did this user ARRIVE with a workspace of their own? Latched once, the
+  // first time a framework loads, and never recomputed.
+  //
+  // Two traps, both found by test:
+  //  · reading framework.blocks live at render time asks "has blocks", not
+  //    "had blocks" — the wizard can put blocks there before step 3 reveals
+  //    its actions, so the answer drifts. Hence the latch.
+  //  · `length > 0` is never false. loadFramework BOOTSTRAPS a default
+  //    NIFTY50 chart block into any framework that has none (frameworkStore
+  //    ~line 262) and saves it, so a brand-new user reads as having one
+  //    block. The bootstrap is exactly one chart block, so anything MORE
+  //    than that is the user's own arrangement — that is the real question.
+  const arrivedWithWorkspace = useRef<boolean | null>(null)
+  useEffect(() => {
+    if (arrivedWithWorkspace.current !== null) return
+    if (!framework) return
+    const blocks = framework.blocks ?? []
+    arrivedWithWorkspace.current =
+      blocks.length > 1 || blocks.some(b => b.type !== 'chart')
+  }, [framework])
 
   // Resume: a returning user who answered the Personality step (persona_set_at
   // stamped by the RPC, migration 204) but never finished lands here
@@ -687,11 +736,14 @@ export default function ProfileSetup() {
     }
   }
 
-  // Complete onboarding — the single place onboarded flips to true.
+  // Complete onboarding — the single place onboarded flips to true, and the
+  // only place onboarding_version is stamped. Written together on purpose: a
+  // profile saying onboarded but carrying a stale version would be sent
+  // straight back here by ProtectedRoute, looping forever.
   async function completeOnboarding() {
-    await updateProfile({ onboarded: true })
+    await updateProfile({ onboarded: true, onboarding_version: ONBOARDING_VERSION })
     try { await refreshProfile() } catch {
-      if (profile) setProfile({ ...profile, onboarded: true })
+      if (profile) setProfile({ ...profile, onboarded: true, onboarding_version: ONBOARDING_VERSION })
     }
   }
 
@@ -718,6 +770,12 @@ export default function ProfileSetup() {
     navigate(dest ?? '/workspace', { replace: true })
   }
 
+  // "Customize in Catalog →". This used to jump to step 6, skipping BOTH How
+  // VaNi will guide (4) and Plan (5) — so anyone taking this exit finished
+  // onboarding having never been shown pricing. `browseIntent` already
+  // remembers to land them in the catalog at the end, so there was never a
+  // reason to short-circuit; it now walks the same 4 → 5 → 6 as "Start
+  // here →" (owner, 2026-09-12).
   async function handleBrowse() {
     setCommitting(true)
     setError(null)
@@ -726,10 +784,23 @@ export default function ProfileSetup() {
       await saveWorkbenchMarker()   // onboarded flips at the look step
       setBrowseIntent(true)
       setCommitting(false)
-      setStep(6)
+      setStep(4)
     } catch (e) {
       await handleCommitError(e)
     }
+  }
+
+  // "Keep my current workspace →" — step 3's third exit, offered only to a
+  // user returning for a version bump who already has blocks.
+  //
+  // This is what makes forced re-onboarding safe. applyTemplate() REPLACES
+  // blocks and chart_overlays wholesale — it does not merge — and both other
+  // exits call it, so without this a version bump resets every customised
+  // workbench to the starter template. ProfileSetup's own guard comment
+  // records that exact bug from the last time users re-walked the wizard.
+  // Writes nothing: skips the commit and moves on.
+  function handleKeepWorkspace() {
+    setStep(4)
   }
 
   return (
@@ -757,6 +828,12 @@ export default function ProfileSetup() {
           isFree={false}
           onAccept={handleAccept}
           onBrowse={handleBrowse}
+          // Offered only when there is something to lose: a returning user
+          // who ARRIVED with blocks. A first-run user has an empty framework,
+          // so "keep" would mean keeping nothing.
+          onKeepWorkspace={
+            returning && arrivedWithWorkspace.current ? handleKeepWorkspace : undefined
+          }
           isCommitting={committing}
           errorMsg={error}
         />

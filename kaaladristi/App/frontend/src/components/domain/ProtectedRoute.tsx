@@ -1,6 +1,7 @@
 import { Navigate, Outlet } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
+import { needsOnboarding } from '@/constants/onboarding';
 import BetaWelcomeModal from '@/components/ui/BetaWelcomeModal';
 
 interface ProtectedRouteProps {
@@ -32,13 +33,17 @@ export default function ProtectedRoute({ requireOnboarded = true }: ProtectedRou
     return <Navigate to="/" replace />;
   }
 
-  // Authenticated but not onboarded → send to setup.
+  // Authenticated but not onboarded, OR onboarded against an older flow than
+  // we now require → send to setup. needsOnboarding() owns both rules
+  // (constants/onboarding.ts) so the gate and the wizard can never disagree
+  // about who is current.
+  //
   // profile === null is treated as NOT onboarded: once auth initialization is
   // done (isLoading handled above), a null profile with NO fetch error means
   // the km_profiles row is genuinely missing — that must never skip
   // onboarding. LoginPage awaits refreshProfile() before navigating, so
   // onboarded users don't hit this with a transiently-null profile.
-  if (requireOnboarded && !profile?.onboarded) {
+  if (requireOnboarded && needsOnboarding(profile)) {
     return <Navigate to="/setup" replace />;
   }
 

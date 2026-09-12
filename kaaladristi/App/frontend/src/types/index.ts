@@ -158,6 +158,10 @@ export interface KmProfile {
   hold_horizon?: HoldHorizon | null;
   concede_level?: ConcedeLevel | null;
   persona_set_at?: string | null;   // stamped server-side whenever persona is written
+  // migration 206 — which onboarding flow this profile last completed.
+  // Compared against ONBOARDING_VERSION (constants/onboarding.ts); behind
+  // means the user is sent back to /setup. Absent is treated as 0.
+  onboarding_version?: number | null;
   guide_progress?: Record<string, string>; // {"<preset id | page>": "YYYY-MM-DD"} — Show-me tours walked
 }
 
