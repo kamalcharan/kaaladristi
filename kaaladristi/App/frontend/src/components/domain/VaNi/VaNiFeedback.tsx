@@ -1,3 +1,5 @@
+import { trackVani, type VaniAnalyticsContext } from '@/lib/vaniAnalytics';
+import { usePageContext } from '@/hooks/usePageContext';
 import { useState, useEffect } from 'react';
 import { ThumbsUp, ThumbsDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -6,9 +8,12 @@ const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? '';
 
 interface VaNiFeedbackProps {
   logId: string;
+  analyticsContext?: VaniAnalyticsContext;
 }
 
-export default function VaNiFeedback({ logId }: VaNiFeedbackProps) {
+export default function VaNiFeedback({ logId, analyticsContext }: VaNiFeedbackProps) {
+  const {page}=usePageContext();
+  const analytics=analyticsContext??{page,mode:'chat' as const};
   const storageKey = `vani_feedback:${logId}`;
   const [voted, setVoted] = useState<1 | -1 | null>(() => {
     try { return (localStorage.getItem(storageKey) as '1' | '-1' | null) ? Number(localStorage.getItem(storageKey)) as 1 | -1 : null } catch { return null }
@@ -34,9 +39,11 @@ export default function VaNiFeedback({ logId }: VaNiFeedbackProps) {
         body: JSON.stringify({ log_id: logId, rating }),
       });
       if (!response.ok || !(await response.json()).ok) throw new Error('Feedback was not saved');
+      trackVani('feedback_submitted',{...analytics,rating:rating===1?'helpful':'not_helpful'});
       setVoted(rating);
       try { localStorage.setItem(storageKey, String(rating)) } catch { /* preference only */ }
     } catch {
+      trackVani('feedback_failed',{...analytics,rating:rating===1?'helpful':'not_helpful'});
       setError(true);
     } finally { setPending(false); }
   };

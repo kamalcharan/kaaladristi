@@ -1,3 +1,5 @@
+import { useVaniAnalytics } from '@/hooks/useVaniAnalytics';
+import { trackVani } from '@/lib/vaniAnalytics';
 import SectorPersonalConnections from './SectorPersonalConnections';
 import {useEffect,useState} from 'react';
 import {useQuery} from '@tanstack/react-query';
@@ -50,14 +52,16 @@ export default function LeadershipCompanion() {
   queryFn:()=>askLeadership({intent_id:intent,date:c.date,sector_category:c.category,leadership_months:c.months??6,sector_snapshot:evidence.data?.snapshot})});
  const loading=key!==presented||evidence.isFetching||reading.isFetching||reading.data?.pending;
  const error=evidence.error||reading.error;
- const retry=async()=>{setCycle(v=>v+1);const fresh=await evidence.refetch();if(fresh.data?.snapshot===evidence.data?.snapshot&&!fresh.error)await reading.refetch();};
- return <aside className="sector-vani p-4 space-y-3 xl:max-h-[calc(100dvh-110px)] xl:overflow-y-auto" aria-label="VaNi longer-term companion">
+ const analyticsContext={page: 'sector_rotation',mode: 'longer_term' as const,intent_id:intent,months:c.months??6};
+ const analytics=useVaniAnalytics(analyticsContext,{key:JSON.stringify([intent,cycle,c.category,c.date,c.months,user]),ready:!loading&&!!reading.data?.response&&!reading.data?.context_changed,failed:!loading&&!!(error||reading.data?.context_changed)},true);
+ const retry=async()=>{trackVani('retry',analyticsContext);setCycle(v=>v+1);const fresh=await evidence.refetch();if(fresh.data?.snapshot===evidence.data?.snapshot&&!fresh.error)await reading.refetch();};
+ return <aside {...analytics} className="ph-no-capture sector-vani p-4 space-y-3 xl:max-h-[calc(100dvh-110px)] xl:overflow-y-auto" aria-label="VaNi longer-term companion">
   <h2 className="text-lg font-serif">VaNi · Longer-term picture</h2>
   <p className="text-xs text-muted">{c.months??6} months · {c.category==='custom'?'Curated':c.category} · {c.date?sectorSessionDate(c.date):'Select a session'}</p>
-  <details><summary className="sector-question cursor-pointer">Open longer-term intents</summary><div className="flex flex-col gap-2 pt-2" aria-label="Longer-term questions">{Object.entries(questions).map(([id,label])=><button key={id} className="sector-question text-left" aria-pressed={intent===id} onClick={()=>{setIntent(id as Intent);setCycle(v=>v+1)}}>{label}</button>)}</div></details>
+  <details data-vani-detail="intents"><summary className="sector-question cursor-pointer">Open longer-term intents</summary><div className="flex flex-col gap-2 pt-2" aria-label="Longer-term questions">{Object.entries(questions).map(([id,label])=><button key={id} className="sector-question text-left" aria-pressed={intent===id} onClick={()=>{trackVani('intent_selected',{...analyticsContext,intent_id:id,source:'manual'});setIntent(id as Intent);setCycle(v=>v+1)}}>{label}</button>)}</div></details>
   <h3 className="font-medium text-sm">{questions[intent]}</h3>
   {!evidence.isFetching&&!evidence.error&&evidence.data&&<Evidence rows={evidence.data.rows} intent={intent} date={evidence.data.date} months={c.months??6}/>}
-  {loading?<p role="status" className="flex gap-2 items-center"><Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none"/>Consulting VaNi…</p>:error?<p role="alert">{error.message}</p>:<details key={intent} className="vani-explanation"><summary>VaNi explanation</summary><p className="text-sm leading-6">{reading.data?.response}</p>{reading.data?.log_id&&<VaNiFeedback key={`${intent}-${reading.data.log_id}`} logId={reading.data.log_id}/>}</details>}
+  {loading?<p role="status" className="flex gap-2 items-center"><Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none"/>Consulting VaNi…</p>:error?<p role="alert">{error.message}</p>:<details data-vani-detail="explanation" key={intent} className="vani-explanation"><summary>VaNi explanation</summary><p className="text-sm leading-6">{reading.data?.response}</p>{reading.data?.log_id&&<VaNiFeedback analyticsContext={analyticsContext} key={`${intent}-${reading.data.log_id}`} logId={reading.data.log_id}/>}</details>}
   {!loading&&reading.data?.context_changed&&<p>The data changed. Refresh the reading.</p>}
   {!loading&&(error||reading.data?.context_changed)&&<button className="sector-question" onClick={retry}>Refresh reading</button>}
   {!evidence.error&&evidence.data&&<SectorPersonalConnections sourceKey={evidence.data.snapshot} date={evidence.data.date} membership={evidence.data.membership} sectors={examples(evidence.data.rows,intent).map(r=>({id:r.index_id,name:r.name,reading:`${r.status}; current flow: ${r.flow?.state??'Unavailable'}`}))}/>}

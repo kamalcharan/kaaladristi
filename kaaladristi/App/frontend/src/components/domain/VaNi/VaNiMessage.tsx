@@ -1,3 +1,5 @@
+import { trackVani, vaniDestination } from '@/lib/vaniAnalytics';
+import { usePageContext } from '@/hooks/usePageContext';
 import { ArrowRight, Trash2, Loader2 } from 'lucide-react';
 import VaNiFeedback from './VaNiFeedback';
 import type { ChatMessage } from './types';
@@ -54,6 +56,8 @@ export default function VaNiMessage({
   onClearCache,
   onFollowLink,
 }: VaNiMessageProps) {
+  const {page}=usePageContext();
+  const analyticsContext={page,mode:'chat' as const,intent_id:msg.intentId};
   if (msg.type === 'intent') {
     return (
       <div className="flex justify-end">
@@ -74,7 +78,7 @@ export default function VaNiMessage({
           </p>
           {msg.link && onFollowLink && (
             <button
-              onClick={() => onFollowLink(msg.link!.href)}
+              onClick={() => {const destination=vaniDestination(msg.link!.href);if(destination)trackVani('next_step',{...analyticsContext,destination,area:'reading'});onFollowLink(msg.link!.href)}}
               className="mt-2.5 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--accent-indigo)]/15 border border-[var(--accent-indigo)]/30 text-[11px] font-medium text-[var(--accent-indigo)] hover:bg-[var(--accent-indigo)]/25 transition-colors"
             >
               {msg.link.label}
@@ -83,7 +87,7 @@ export default function VaNiMessage({
           )}
         </div>
         <div className="flex items-center gap-2 mt-1.5 px-2">
-          {msg.logId && <VaNiFeedback logId={msg.logId} />}
+          {msg.logId && <VaNiFeedback analyticsContext={analyticsContext} logId={msg.logId} />}
           {msg.cached && (
             <span className="text-[8px] font-mono text-[var(--accent-indigo)]/40 uppercase tracking-widest">
               instant response

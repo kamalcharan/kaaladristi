@@ -1,3 +1,5 @@
+import { useVaniAnalytics } from '@/hooks/useVaniAnalytics';
+import { usePageContext } from '@/hooks/usePageContext';
 import { AlertCircle } from 'lucide-react';
 import PanchangamCard from '../PanchangamCard';
 import VaNiMessage, { VaNiThinking } from './VaNiMessage';
@@ -63,6 +65,8 @@ export default function VaNiAutorunBrief({
   };
 
   const { data, isLoading, isError } = useVaNiAutorun(intentId, undefined, true, icp);
+  const {page}=usePageContext();
+  useVaniAnalytics({page,mode:'chat',intent_id:intentId},{key:JSON.stringify([intentId,profile?.id,dataDate]),ready:!isLoading&&!!data?.response&&!data?.error,failed:!isLoading&&!!(isError||data?.error)},true);
   const { data: breadth } = useMarketBreadth(10);
 
   // Oldest-first, matching the prompt's window. The ladder reads the newest

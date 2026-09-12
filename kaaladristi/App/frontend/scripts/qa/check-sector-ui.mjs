@@ -39,6 +39,8 @@ try {
   page.on('pageerror',e=>{errors.push(e.message);console.error(e.message)});
   await page.route('**/*',async route=>{
     const url=new URL(route.request().url());
+    if(url.pathname==='/src/lib/analytics.ts') return route.fulfill({contentType:'application/javascript',body:`export function trackEvent(name,props){(window.__qaAnalytics??=[]).push({name,props})} export function initAnalytics(){} export function identifyUser(){} export function resetAnalytics(){}`});
+    if(url.pathname.endsWith('/api/vani/feedback')) return route.fulfill({json:{ok:true}});
     if(url.pathname.includes('/api/')) {
       const body=route.request().postDataJSON?.() || {};
       if(url.pathname.includes('/api/bookmarks/')) {
@@ -129,8 +131,20 @@ try {
       await companion.getByText('Consulting VaNi…',{exact:true}).waitFor();
       await companion.getByText('VaNi explanation',{exact:true}).click();
       await companion.getByText('Near-term flow is above its underlying baseline.',{exact:false}).waitFor();
+      const events=await page.evaluate(()=>window.__qaAnalytics??[]);
+      assert.equal(events.filter(e=>e.name==='vani_intent_selected'&&e.props.intent_id==='sector.leadership.'+suffix&&e.props.source==='manual').length,1,'One selection per deliberate click');
+      assert.equal(events.filter(e=>e.name==='vani_reading_ready'&&e.props.intent_id==='sector.leadership.'+suffix).length,1,'One completion, including cache hits');
+      assert(events.some(e=>e.name==='vani_detail_opened'&&e.props.detail==='explanation'&&e.props.intent_id==='sector.leadership.'+suffix),'Opening the explanation is separate engagement');
       assert(vaniCalls.some(r=>r.intent_id==='sector.leadership.'+suffix&&r.leadership_months===12),'Intent uses the selected longer-term snapshot');
     }
+    await companion.getByRole('button',{name:'Helpful',exact:true}).click();
+    await page.waitForFunction(()=>(window.__qaAnalytics??[]).some(e=>e.name==='vani_feedback_submitted'));
+    await page.evaluate(()=>localStorage.removeItem('vani_feedback:qa'));
+    const measured=await page.evaluate(()=>window.__qaAnalytics??[]);
+    assert(measured.some(e=>e.name==='vani_panel_viewed'&&e.props.mode==='longer_term'));
+    assert(measured.some(e=>e.name==='vani_intent_selected'&&e.props.source==='automatic'&&e.props.mode==='current_flow'));
+    assert(!JSON.stringify(measured).includes('PERSONAL_'),'No saved stock names in telemetry');
+    assert(!JSON.stringify(measured).includes('Near-term flow is above'),'No answer text in telemetry');
     await companion.getByRole('button',{name:'Which baskets are holding strength?',exact:true}).click();
     await companion.getByText('Consulting VaNi…',{exact:true}).waitFor();
     await noOverflow(`leadership intents ${width}`);
@@ -180,6 +194,8 @@ try {
       assert.equal(await personal.getByRole('link',{name:'Add bookmarks'}).getAttribute('href'),'/bookmarks?tab=watchlist');
       await personal.getByRole('link',{name:'Add positions'}).click();
       await page.getByText('No positions yet',{exact:false}).waitFor();
+      const events=await page.evaluate(()=>window.__qaAnalytics??[]);
+      assert.equal(events.filter(e=>e.name==='vani_next_step'&&e.props.destination==='positions'&&e.props.area==='personal_connections').length,1);
     } else if(state==='unmatched') await personal.getByText('None of your saved stocks are linked to the sectors highlighted in this reading.',{exact:true}).waitFor();
     else await personal.getByRole('button',{name:'Retry personal connections'}).waitFor();
   }

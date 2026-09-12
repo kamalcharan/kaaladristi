@@ -118,3 +118,18 @@ assert.match(leadershipStory([],'sector.leadership').title,/No baskets/);
 assert.match(leadershipStory([storyRow],'sector.leadership.cooling').title,/No baskets/);
 assert.match(leadershipStory([{...storyRow,alignment_history:[{weekly:null,monthly:true},{weekly:true,monthly:true}]}],'sector.leadership.persistence').title,/Gaps/);
 console.log('PASS: interpretation stories distinguish incomplete support, missing data, interruptions and opposing horizons');
+
+// Telemetry forwards only approved dimensions, even if an untyped caller passes
+// an entire request by mistake. Analytics failures must never break research.
+const captured=[];
+const analytics=load('src/lib/vaniAnalytics.ts',{'./analytics':{trackEvent:(name,props)=>captured.push({name,props})}},{URLSearchParams});
+analytics.trackVani('intent_selected',{page:'sector_rotation',mode:'longer_term',intent_id:'sector.leadership',source:'manual',symbol:'PRIVATE',response:'PRIVATE',holdings:[1],token:'PRIVATE'});
+assert.equal(captured[0].name,'vani_intent_selected');
+assert(!JSON.stringify(captured).includes('PRIVATE'));
+assert.equal(captured[0].props.$current_url,'/vani/sector_rotation');
+assert.equal(analytics.vaniDestination('/chart/equity/38701?name=PRIVATE'),'stock_chart');
+assert.equal(analytics.vaniDestination('/bookmarks?tab=positions'),'positions');
+assert.equal(analytics.vaniDestination('https://outside.example/bookmarks'),undefined);
+const unavailableAnalytics=load('src/lib/vaniAnalytics.ts',{'./analytics':{trackEvent:()=>{throw new Error('offline')}}});
+assert.doesNotThrow(()=>unavailableAnalytics.trackVani('panel_viewed',{page:'dashboard'}));
+console.log('PASS VaNi analytics privacy and failure isolation');

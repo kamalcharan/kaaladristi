@@ -1,3 +1,5 @@
+import { useVaniAnalytics } from '@/hooks/useVaniAnalytics';
+import { trackVani } from '@/lib/vaniAnalytics';
 import SectorCompanion from './VaNi/SectorCompanion';
 import MarketStructureCompanion from './VaNi/MarketStructureCompanion';
 import { useState, useRef, useEffect } from 'react';
@@ -81,6 +83,7 @@ function ExistingVaNiChatPanel({ docked = false }: { docked?: boolean } = {}) {
   const { latestDataDate, latestDataDateFormatted, isPendingToday, status: pipelineStatus } = usePipelineStatus();
   const askMutation = useVaNiAsk();
   const navigate = useNavigate();
+  const analytics=useVaniAnalytics({page,mode:'chat'});
 
   // Auto-detect entity from URL on chart/pulse pages
   const urlEntity: VaNiEntity | null = (entityType && entityId) ? {
@@ -138,14 +141,18 @@ function ExistingVaNiChatPanel({ docked = false }: { docked?: boolean } = {}) {
   const askedIntents = new Set(messages.filter(m => m.type === 'intent').map(m => m.intentId));
   const remainingIntents = allIntents.filter(i => !askedIntents.has(i.intentId));
 
-  const handleAsk = (intentId: string, label: string, overrideEntity?: VaNiEntity) => {
+  const handleAsk = (intentId: string, label: string, overrideEntity?: VaNiEntity, source: 'manual' | 'external' = 'manual') => {
     if (askMutation.isPending) return;
+    const started=Date.now();
+    const eventContext={page,mode:'chat' as const,intent_id:intentId,source};
+    trackVani('intent_selected',eventContext);
 
     // Empty result set → answer deterministically, never via the LLM.
     // Narrating emptiness wastes a call, and while the pipeline is still
     // processing an empty scan means "data not loaded yet", not "no stocks
     // qualify" — VaNi must not present the first as the second.
     if (intentId === 'scanner.read_results' && scanContext && scanContext.rows.length === 0) {
+      trackVani('reading_ready',{...eventContext,duration_ms:0});
       const dataInFlux = isPendingToday || pipelineStatus === 'delayed' || pipelineStatus === 'stale';
       setMessages(prev => [...prev,
         { id: `q-${Date.now()}`, type: 'intent', intentId, text: label, timestamp: Date.now() },
@@ -219,6 +226,7 @@ function ExistingVaNiChatPanel({ docked = false }: { docked?: boolean } = {}) {
       },
       {
         onSuccess: (data: VaNiAskResponse) => {
+          trackVani(data.response&&!data.error?'reading_ready':'reading_failed',{...eventContext,duration_ms:Date.now()-started});
           setMessages(prev => [...prev, {
             id: `r-${Date.now()}`,
             type: 'response',
@@ -232,6 +240,7 @@ function ExistingVaNiChatPanel({ docked = false }: { docked?: boolean } = {}) {
           setActiveIntentId(null);
         },
         onError: () => {
+          trackVani('reading_failed',{...eventContext,duration_ms:Date.now()-started});
           setMessages(prev => [...prev, {
             id: `e-${Date.now()}`,
             type: 'response',
@@ -254,7 +263,7 @@ function ExistingVaNiChatPanel({ docked = false }: { docked?: boolean } = {}) {
     const id = consumePendingIntent();
     if (!id || askedIntents.has(id)) return;
     const def = allIntents.find((i) => i.intentId === id);
-    handleAsk(id, def?.label ?? 'VaNi explains');
+    handleAsk(id, def?.label ?? 'VaNi explains', undefined, 'external');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, pendingIntentId]);
 
@@ -405,8 +414,9 @@ function ExistingVaNiChatPanel({ docked = false }: { docked?: boolean } = {}) {
       )}
 
       <div
+        ref={analytics.ref}
         className={cn(
-          'flex flex-col',
+          'ph-no-capture flex flex-col',
           // Docked, the pane is a surface of THIS app and must use its tokens.
           // The overlay's literal below is a purple-black belonging to no theme
           // here; docked it read as a foreign panel bolted onto the page.
