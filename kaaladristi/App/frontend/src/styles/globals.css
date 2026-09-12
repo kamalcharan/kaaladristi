@@ -252,6 +252,22 @@ body::before {
 }
 
 @layer utilities {
+  /* History needs a visible horizontal thumb in both light and dark themes.
+     Override the global translucent-white scrollbar only for these tables. */
+  .market-structure-history-scroll {
+    scrollbar-width: auto;
+    scrollbar-color: var(--text-secondary) var(--card);
+    padding-bottom: 8px;
+  }
+  .market-structure-history-scroll::-webkit-scrollbar { height: 12px; }
+  .market-structure-history-scroll::-webkit-scrollbar-track { background: var(--card); }
+  .market-structure-history-scroll::-webkit-scrollbar-thumb {
+    background: var(--text-secondary);
+    border: 2px solid var(--card);
+    border-radius: 10px;
+  }
+  .market-structure-history-scroll::-webkit-scrollbar-thumb:hover { background: var(--text-primary); }
+
   .mono {
     font-family: var(--font-mono);
   }
