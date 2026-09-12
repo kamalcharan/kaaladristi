@@ -13,7 +13,7 @@ export interface LeadershipRow {
  flow?:{state:string;score_5d:number|null;score_22d:number|null};
  aligned_samples:number; known_samples:number; aligned_streak:number;
 }
-export interface LeadershipSnapshot { snapshot:string; date:string; start:string; months:number; rows:LeadershipRow[]; counts:Record<string,number> }
+export interface LeadershipSnapshot { membership?:Record<string,number[]>; snapshot:string; date:string; start:string; months:number; rows:LeadershipRow[]; counts:Record<string,number> }
 export async function askLeadership(body:object) {
  const api=import.meta.env.VITE_PIPELINE_API_URL?.trim() || '';
  const res=await fetch(`${api}/api/vani/ask`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});

@@ -84,3 +84,25 @@ pulse.forEach((row,i)=>{
   assert.equal(sectorSignal({score_5d:c.s5??null,score_22d:c.s22??null,avg_amt_5d:c.amt_5d??null,avg_amt_22d:c.amt_22d??null,ret_5d:c.ret_5d??null}),sectorSignal(pulseRows[i]));
 });
 console.log('Discovery and VaNi snapshot parity passed.');
+
+// Personal joins use authenticated bookmarks and preserve all basket memberships.
+const privateRows=[{equity_id:1,symbol:'HOLD',entry_price:100},{equity_id:2,symbol:'WATCH',entry_price:null},{equity_id:1,symbol:'HOLD',entry_price:100}];
+let memberCalls=0,failMembership=false;
+const personal=load('src/services/sectorPersonal.ts',{
+ './bookmarks':{fetchBookmarks:async uid=>uid==='empty'?[]:privateRows},
+ './postgrest':{from:()=>{const q={select(){return q},in(){return q},order(){return q},range(a,b){q.offset=a;return q},async execute(){memberCalls++;return failMembership?{error:{message:'failed'}}:{data:q.offset===0?Array.from({length:500},()=>({index_id:97,equity_id:1})):[{index_id:98,equity_id:1},{index_id:98,equity_id:2}]}}};return q}}
+});
+const personalSectors=[{id:97,name:'Sector',reading:'Strong'},{id:98,name:'Curated',reading:'Building'}];
+const personalData=await personal.fetchSectorPersonal('user-a',[97,98]);
+assert.equal(memberCalls,2,'Membership must paginate');
+const matched=personal.personalConnections(personalData,personalSectors);
+assert.equal(matched.length,2,'Count each saved stock once');
+assert.equal(matched[0].kind,'Position');assert.equal(matched[0].sectors.length,2);
+assert.equal(matched[1].kind,'Bookmark');
+assert.equal(personal.personalConnections(personalData,[{id:99,name:'Other',reading:'Quiet'}]).length,0);
+assert.equal((await personal.fetchSectorPersonal('empty',[97])).bookmarks.length,0);
+failMembership=true;
+await assert.rejects(()=>personal.fetchSectorPersonal('user-a',[97]),/could not be loaded/);
+const recorded=await personal.fetchSectorPersonal('user-a',[97],{'97':[2]});
+assert.equal(personal.personalConnections(recorded,personalSectors)[0].stock.symbol,'WATCH','Longer-term membership follows published snapshot');
+console.log('PASS: personal stock deduplication, position labels, multiple memberships, empty account, membership errors and published membership');

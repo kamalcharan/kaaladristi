@@ -54,6 +54,18 @@ The first six questions use focused snapshot facts through the existing Qwen-fir
 
 Review each question at the same date/category, repeat a cached question, then switch category/window. Empty Building/Cooling groups should say no matches. Switch back to Current Flow to confirm its original questions return. Individual sector pages still use their existing companion; this increment is limited to the main page. Daily RS has not been added.
 
+## Personal sector connections
+
+Both Current Flow and Longer-Term Leadership now include **Connected to your stocks**. Positions are the existing bookmarks with a non-null entry price; ordinary bookmarks have no entry. Each saved stock is counted once, even when it belongs to several baskets. Position connections appear first. The section shows the relevant sector condition and links to the stock chart and sector evidence, without assuming the stock shares the sector's strength.
+
+Connections follow the sectors in the selected reading. Longer-term membership comes from the published snapshot; Current Flow uses a paginated read of recorded index constituents. This includes curated baskets. Saved stocks reflect the account today, even on historical market dates; this is not a historical holdings reconstruction.
+
+The authenticated bookmark API checks the requesting user. Personal results stay in an account-keyed browser query, are removed when unobserved, and never enter shared VaNi prompts or response caches. No new LLM request or database migration is needed. This connects the current reading to saved stocks; it does not create background alerts.
+
+Empty accounts see “I didn’t find any bookmarks or active positions” with **Add bookmarks** and **Add positions** links. These open `/bookmarks?tab=watchlist` and `/bookmarks?tab=positions`. The existing page explains how to save a stock or add its position. Existing stocks with no membership match get a different message. Request failures show Retry, not an empty-account message. Signed-out users get a sign-in link.
+
+Review with: an empty account; bookmarks only; positions only; both; a stock in multiple baskets; a saved stock outside the selected group; a failed request; and switching accounts/signing out. Verify both research modes, including changing the longer-term intent. Check the Positions link opens that tab directly and that personal names never appear in shared VaNi requests.
+
 ## Calculation and cache contract
 
 The snapshot job computes a canonical 12-month display history with another 60 months of indicator warmup. It produces 3M/6M/12M projections without recalculating current classifications or the completed-week run. Current runs can extend beyond the display window, within available warmup history. Missing alignment breaks the run.

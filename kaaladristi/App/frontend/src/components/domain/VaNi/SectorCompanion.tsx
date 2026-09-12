@@ -1,3 +1,4 @@
+import SectorPersonalConnections from './SectorPersonalConnections';
 import LeadershipCompanion from './LeadershipCompanion';
 import { fetchSectorPulseContext, sectorPulseRows, type SectorIndexRow } from '@/services/sectorRotation';
 import { SectorPulseContent } from '@/components/domain/DashboardV3/SectorPulse';
@@ -8,7 +9,7 @@ import { Loader2 } from 'lucide-react';
 import { LineChart, Line, ResponsiveContainer, XAxis, YAxis, Tooltip } from 'recharts';
 import { useSectorResearchStore } from '@/stores/sectorResearchStore';
 import { useAuthStore } from '@/stores/authStore';
-import { sectorSessionDate } from '@/lib/sectorFlow';
+import { sectorSessionDate, sectorSignal, SECTOR_FLOW_LABEL } from '@/lib/sectorFlow';
 import VaNiFeedback from './VaNiFeedback';
 import '@/styles/sectorResearch.css';
 
@@ -104,6 +105,7 @@ function CurrentSectorCompanion() {
       </LineChart></ResponsiveContainer></div>}
       {evidence.data.facts?.map((fact,i)=><p key={i} className="text-xs leading-6 mt-2 text-muted">{fact}</p>)}
     </details>}
+    {evidence.data?.rows && <SectorPersonalConnections sourceKey={evidence.data.snapshot} date={evidence.data.date} sectors={evidence.data.rows.map(r=>{const signal=sectorSignal(r);return {id:r.index_id,name:r.name,reading:signal?SECTOR_FLOW_LABEL[signal]:'Unavailable'}})}/>}
     {overview && <details><summary className="text-xs cursor-pointer min-h-11">Explore another question</summary>    <div className="flex flex-wrap gap-2" aria-label="Sector questions">{Object.entries(intents).filter(([id]) => indexId ? id !== 'sector.overview' : id !== 'sector.participation').map(([id, label]) =>
       <button key={id} aria-pressed={intent === id} onClick={() => choose(id as Intent)} className="sector-question">{label}</button>)}</div></details>}
   </div>;

@@ -16,10 +16,14 @@ fs.writeFileSync(html, '<html><head><meta name="viewport" content="width=device-
 fs.writeFileSync(entry, `import React from 'react'; import {createRoot} from 'react-dom/client';
 import {MemoryRouter,Routes,Route} from 'react-router-dom'; import {QueryClient,QueryClientProvider} from '@tanstack/react-query';
 import SectorRotationPage from './src/views/SectorRotationPage'; import IndexDetailPage from './src/views/IndexDetailPage';
+import MyBookmarksPage from './src/views/MyBookmarksPage';
 import SectorCompanion from './src/components/domain/VaNi/SectorCompanion'; import './src/styles/globals.css';
 import {initTheme,useThemeStore} from './src/stores/themeStore'; initTheme(); useThemeStore.getState().setMode(new URLSearchParams(location.search).get('mode') === 'light' ? 'light' : 'dark');
+import {useAuthStore} from './src/stores/authStore';
+useAuthStore.setState({profile:{id:'qa-personal'} as any,session:{access_token:'qa-token'} as any,isLoading:false});
+(window as any).__setPersonalUser=(id:string|null)=>useAuthStore.setState({profile:id?{id} as any:null,session:id?{access_token:'qa-token'} as any:null,isLoading:false});
 const detail = new URLSearchParams(location.search).get('detail') === '1';
-createRoot(document.getElementById('root')!).render(<QueryClientProvider client={new QueryClient({defaultOptions:{queries:{retry:false}}})}><MemoryRouter initialEntries={[detail ? '/sector-rotation/97?asof=2026-09-11' : '/sector-rotation?asof=2026-09-11']}><div style={{padding:12,color:'var(--text-primary)',background:'var(--bg)',minHeight:'100vh'}} className="flex flex-col xl:flex-row gap-4"><SectorCompanion/><div className="min-w-0 flex-1"><Routes><Route path="/sector-rotation" element={<SectorRotationPage/>}/><Route path="/sector-rotation/:indexId" element={<IndexDetailPage/>}/></Routes></div></div></MemoryRouter></QueryClientProvider>);`);
+createRoot(document.getElementById('root')!).render(<QueryClientProvider client={new QueryClient({defaultOptions:{queries:{retry:false}}})}><MemoryRouter initialEntries={[detail ? '/sector-rotation/97?asof=2026-09-11' : '/sector-rotation?asof=2026-09-11']}><div style={{padding:12,color:'var(--text-primary)',background:'var(--bg)',minHeight:'100vh'}} className="flex flex-col xl:flex-row gap-4"><SectorCompanion/><div className="min-w-0 flex-1"><Routes><Route path="/bookmarks" element={<MyBookmarksPage/>}/><Route path="/sector-rotation" element={<SectorRotationPage/>}/><Route path="/sector-rotation/:indexId" element={<IndexDetailPage/>}/></Routes></div></div></MemoryRouter></QueryClientProvider>);`);
 
 const days=[];
 for(let d=new Date('2026-06-01T00:00:00Z'); d<=new Date('2026-09-11T00:00:00Z'); d.setUTCDate(d.getUTCDate()+1)) if(![0,6].includes(d.getUTCDay())) days.push(d.toISOString().slice(0,10));
@@ -37,11 +41,17 @@ try {
     const url=new URL(route.request().url());
     if(url.pathname.includes('/api/')) {
       const body=route.request().postDataJSON?.() || {};
+      if(url.pathname.includes('/api/bookmarks/')) {
+        const personalState=new URL(page.url()).searchParams.get('personal');
+        if(personalState==='error') return route.fulfill({status:500,json:{detail:'fixture failure'}});
+        if(personalState==='empty'||url.pathname.endsWith('/qa-other')) return route.fulfill({json:[]});
+        return route.fulfill({json:[{id:'p1',equity_id:personalState==='unmatched'?999:1,symbol:'PERSONAL_HOLD',entry_price:100},{id:'p2',equity_id:personalState==='unmatched'?998:2,symbol:'PERSONAL_WATCH',entry_price:null}]});
+      }
       if(url.pathname.endsWith('/api/vani/ask')) {
         vaniCalls.push(body);
         if(body.intent_id==='sector.leadership.context') {
           const history=days.slice(-body.leadership_months*4).map((date,i)=>({date,weekly:true,monthly:i%3===0?null:true,weekly_date:date,monthly_date:date,eligible:5,total:5,leaders:3,watch:1,leaders_pct:60,watch_pct:20}));
-          return route.fulfill({json:{snapshot:`leadership-${body.date}-${body.leadership_months}-${body.sector_category}`,date:body.date,start:history[0].date,months:body.leadership_months,rows:[{index_id:97,name:symbols[0].name,category:body.sector_category,current:history.at(-1),history,aligned_samples:12,known_samples:18,aligned_streak:12,status:'Running broadly',alignment_history:history,flow:{state:'Fading',score_5d:12,score_22d:25},charts:{weekly:history.map((s,i)=>({trade_date:s.date,magic_rs:2+i/10,magic_ma:1+i/20,magic_rs_zone:'Neutral Bull'})),monthly:history.slice(-4).map((s,i)=>({trade_date:s.date,magic_rs:2+i/10,magic_ma:1,magic_rs_zone:'Neutral Bull'})),weekly_method:'short'}}]}});
+          return route.fulfill({json:{membership:{97:[1,2,3,4,5]},snapshot:`leadership-${body.date}-${body.leadership_months}-${body.sector_category}`,date:body.date,start:history[0].date,months:body.leadership_months,rows:[{index_id:97,name:symbols[0].name,category:body.sector_category,current:history.at(-1),history,aligned_samples:12,known_samples:18,aligned_streak:12,status:'Running broadly',alignment_history:history,flow:{state:'Fading',score_5d:12,score_22d:25},charts:{weekly:history.map((s,i)=>({trade_date:s.date,magic_rs:2+i/10,magic_ma:1+i/20,magic_rs_zone:'Neutral Bull'})),monthly:history.slice(-4).map((s,i)=>({trade_date:s.date,magic_rs:2+i/10,magic_ma:1,magic_rs_zone:'Neutral Bull'})),weekly_method:'short'}}]}});
         }
         const pulse=body.intent_id==='sector.pulse.context';
         if(pulse) { body.date='2026-09-11'; body.sector_period=22; }
@@ -80,6 +90,7 @@ try {
     await page.locator(width < 768 ? '.sector-mobile-rows article' : '.sector-desktop-table tbody tr').first().waitFor();
     await page.getByRole('heading',{name:/What.*happening here/}).waitFor();
     await page.getByRole('heading',{name:'Money Entering',exact:true}).waitFor();
+    await page.getByRole('region',{name:'Connected to your stocks'}).getByRole('link',{name:'PERSONAL_HOLD',exact:true}).waitFor();
     const before=await page.locator('[aria-label="Sector flow snapshot"]').innerText();
     await page.getByRole('button',{name:'Curated',exact:true}).click();
     assert.equal(await page.locator('[aria-label="Sector flow snapshot"]').innerText(),before,'Overall flow must survive tab changes');
@@ -107,6 +118,7 @@ try {
 
     await noOverflow(`leadership ${width}`);
     assert(vaniCalls.some(r=>r.intent_id==='sector.leadership'&&r.leadership_months===12),'VaNi must follow longer-term window');
+    await page.getByRole('region',{name:'Connected to your stocks'}).getByRole('link',{name:'PERSONAL_WATCH',exact:true}).waitFor();
     const companion=page.getByRole('complementary',{name:'VaNi longer-term companion'});
     await companion.getByText('Open longer-term intents',{exact:true}).click();
     for(const [label,suffix] of [['Which baskets are building strength?','building'],['Where is strength weakening?','cooling'],['How long has the strength lasted?','persistence'],['Is strength supported across stocks?','support'],['How does current flow compare?','flow'],['How do I read these groups?','learn']]) {
@@ -156,6 +168,27 @@ try {
     await page.screenshot({path:path.join(out,`sector-detail-${mode}-${width}.png`),fullPage:true});
     console.log(`PASS ${mode} ${width}px: table, maps, scroll, date, price, ${width<1280?'VaNi sheet/cache loader':'desktop companion'}`);
   }
+  for(const state of ['empty','unmatched','error']) {
+    await page.goto(base+'/__sector_qa.html?personal='+state);
+    const personal=page.getByRole('region',{name:'Connected to your stocks'});
+    if(state==='empty') {
+      await personal.getByText('I didn’t find any bookmarks or active positions.',{exact:true}).waitFor();
+      assert.equal(await personal.getByRole('link',{name:'Add positions'}).getAttribute('href'),'/bookmarks?tab=positions');
+      assert.equal(await personal.getByRole('link',{name:'Add bookmarks'}).getAttribute('href'),'/bookmarks?tab=watchlist');
+      await personal.getByRole('link',{name:'Add positions'}).click();
+      await page.getByText('No positions yet',{exact:false}).waitFor();
+    } else if(state==='unmatched') await personal.getByText('None of your saved stocks are linked to the sectors highlighted in this reading.',{exact:true}).waitFor();
+    else await personal.getByRole('button',{name:'Retry personal connections'}).waitFor();
+  }
+  await page.goto(base+'/__sector_qa.html');
+  const personal=page.getByRole('region',{name:'Connected to your stocks'});
+  await personal.getByRole('link',{name:'PERSONAL_HOLD',exact:true}).waitFor();
+  await page.evaluate(()=>window.__setPersonalUser('qa-other'));
+  await personal.getByText('I didn’t find any bookmarks or active positions.',{exact:true}).waitFor();
+  assert.equal(await personal.getByRole('link',{name:'PERSONAL_HOLD',exact:true}).count(),0,'Previous account data must disappear');
+  await page.evaluate(()=>window.__setPersonalUser(null));
+  await personal.getByRole('link',{name:'Sign in',exact:true}).waitFor();
+  assert(!JSON.stringify(vaniCalls).includes('PERSONAL_HOLD'),'Private stocks must not enter shared VaNi requests');
   assert.equal(errors.length,0,errors.join('\n'));
   const histories=queries.filter(u=>u.pathname.endsWith('km_index_breadth')&&u.searchParams.get('index_id'));
   assert(histories.some(u=>u.searchParams.getAll('trade_date').includes('lte.2026-09-10')),'Breadth must follow historical date');

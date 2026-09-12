@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { Star, Loader2 } from 'lucide-react';
 import { Card, DristiQLoader } from '@/components/ui';
 import { displaySymbol, displaySubName, navName as toNavName, bseTooltip } from '@/lib/symbolUtils';
@@ -451,7 +451,11 @@ function PositionsBody() {
  * (WorkspacePage.tsx) and the /bookmarks deep-link route both render this.
  */
 export default function MyBookmarksPanel() {
-  const [tab, setTab] = useState<'watchlist' | 'positions'>('watchlist');
+  const {pathname}=useLocation();
+  const [search,setSearch]=useSearchParams();
+  const requestedTab=pathname==='/bookmarks'&&search.get('tab')==='positions'?'positions':'watchlist';
+  const [tab, setTab] = useState<'watchlist' | 'positions'>(requestedTab);
+  useEffect(()=>{if(pathname==='/bookmarks')setTab(requestedTab)},[pathname,requestedTab]);
   const bookmarks = useBookmarkStore((s) => s.bookmarks);
   const hasLoaded = useBookmarkStore((s) => s.hasLoaded);
   const load = useBookmarkStore((s) => s.load);
@@ -465,7 +469,7 @@ export default function MyBookmarksPanel() {
         {([['watchlist', 'Watchlist', bookmarks.length], ['positions', 'Positions', posCount]] as const).map(([id, label, n]) => (
           <button
             key={id}
-            onClick={() => setTab(id)}
+            onClick={() => {setTab(id);if(pathname==='/bookmarks')setSearch({...Object.fromEntries(search),tab:id});}}
             style={{
               fontSize: 14, fontWeight: 600, padding: '9px 16px', cursor: 'pointer', marginBottom: -1,
               background: 'none', border: 'none', borderBottom: `2px solid ${tab === id ? 'var(--accent, var(--gold-soft))' : 'transparent'}`,

@@ -1,3 +1,4 @@
+import SectorPersonalConnections from './SectorPersonalConnections';
 import {useEffect,useState} from 'react';
 import {useQuery} from '@tanstack/react-query';
 import {Link} from 'react-router-dom';
@@ -66,6 +67,7 @@ export default function LeadershipCompanion() {
   {!loading&&reading.data?.context_changed&&<p>The data changed. Refresh the reading.</p>}
   {!loading&&(error||reading.data?.context_changed)&&<button className="sector-question" onClick={retry}>Refresh reading</button>}
   {!loading&&!error&&reading.data?.log_id&&<VaNiFeedback key={`${intent}-${reading.data.log_id}`} logId={reading.data.log_id}/>}
+  {!evidence.error&&evidence.data&&<SectorPersonalConnections sourceKey={evidence.data.snapshot} date={evidence.data.date} membership={evidence.data.membership} sectors={examples(evidence.data.rows,intent).map(r=>({id:r.index_id,name:r.name,reading:`${r.status}; current flow: ${r.flow?.state??'Unavailable'}`}))}/>}
   <p className="text-xs text-muted">Readings describe the selected category and closing-data session. Alignment is an observation, not a prediction.</p>
  </aside>;
 }
