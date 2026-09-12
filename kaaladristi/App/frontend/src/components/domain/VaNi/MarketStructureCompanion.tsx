@@ -82,6 +82,7 @@ export default function MarketStructureCompanion() {
     <div className="p-4 border-b border-[var(--border)]"><h2 className="text-lg font-serif text-[var(--text-primary)]">VaNi · वाणी</h2>
       <p className="text-xs text-[var(--text-secondary)]">Market Structure · All NSE · {data.period}-session window</p>
       <p className="text-[11px] text-muted mt-1">Breadth: {data.breadthDate ?? 'unavailable'} · ROC: {data.rocDate ?? 'unavailable'}</p>
+      <p className="text-[11px] text-muted mt-1">Dates identify the source market sessions. Readings use closing data, not live prices.</p>
       <button className="lg:hidden text-sm text-accent-indigo mt-3" aria-expanded={mobileExpanded} onClick={() => { if (!mobileExpanded) setPresentationCycle(n => n + 1); setMobileExpanded(!mobileExpanded); }}>{mobileExpanded ? 'Close explanation' : 'Help me read this page'}</button>
     </div>
     <div className={`p-4 space-y-4 lg:max-h-[calc(100vh-220px)] overflow-y-auto ${mobileExpanded ? 'block' : 'hidden'} lg:block`}>

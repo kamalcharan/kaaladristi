@@ -12,7 +12,7 @@ experiences remain in place. No deployment or database migration is included.
 - `/guide` includes Market Structure alongside the existing persona-based walks.
   Completion uses the existing profile progress service; dismissal is also
   remembered locally. The existing guide convention counts skipping as walked.
-- Seven versioned intents distinguish live readings from fixed education.
+- Eight versioned intents distinguish live readings from fixed education.
   Definitions bypass the LLM. Live requests validate their snapshot against the
   database and supply precomputed comparisons to the model.
 - The persistent VaNi cache keys include intent version, explanation depth,

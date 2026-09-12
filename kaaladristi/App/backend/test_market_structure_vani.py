@@ -115,6 +115,18 @@ class MarketStructureTests(unittest.TestCase):
         self.assertTrue(self.answer()['cached'])
         self.assertEqual(self.calls, [])
 
+    def test_score_explanation_distinguishes_components_and_source_date(self):
+        self.req.intent_id = 'structure.score_date'
+        result = self.answer()
+        self.assertFalse(result['ai'])
+        self.assertIn('50%, 30% and 20%', result['response'])
+        self.assertIn('does not automatically relabel 10 September as 11 September', result['response'])
+        self.assertEqual(self.calls, [])
+        facts = '\n'.join(v.derive_facts(self.breadth, self.roc))
+        self.assertIn('Participation data date: 2026-09-11', facts)
+        self.assertIn('Do not shift it back one day', facts)
+        self.assertIn('It is not the 20 EMA percentage', facts)
+
     def test_mismatch_dates_missing_zero_and_negative_recovery(self):
         self.roc[0].update(trade_date='2026-09-10', roc_13=-.01, sma_breadth=-.02, roc_55=None)
         facts = '\n'.join(v.derive_facts(self.breadth, self.roc))

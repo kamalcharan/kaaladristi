@@ -14,17 +14,19 @@ from datetime import date
 
 from .vani_cache import get_cached, make_cache_key, set_cached
 
-VERSION = 1
+VERSION = 2
 INTENTS = {
     'structure.read': ('Read this market snapshot', 'participation', 'live'),
     'structure.participation': ('Compare the three participation horizons', 'participation', 'live'),
     'structure.momentum': ('Why can positive ROC still be fading?', 'momentum', 'live'),
     'structure.synthesis': ('Bring participation and momentum together', 'framework', 'live'),
     'structure.ema': ('What does above 20 EMA mean?', 'participation', 'static'),
+    'structure.score_date': ('Why do the score and heatmap differ?', 'participation', 'static'),
     'structure.fear_greed': ('Understand Fear and Greed', 'framework', 'static'),
     'structure.next': ('What does sector rotation add?', 'framework', 'static'),
 }
 STATIC = {
+    'structure.score_date': 'The large breadth score and an individual heatmap cell measure different things. Each EMA row shows the percentage of eligible stocks above that moving average. The score blends the 20 EMA, 50 EMA and 150 EMA percentages with weights of 50%, 30% and 20%. It uses the stored values before display rounding, so it need not match any single cell. The date labels identify the source trading session: 11 September represents that session’s closing data, even if you read it the following morning. Before a new session is processed, the latest available reading may still be from the preceding trading session, which can be more than one calendar day earlier. The pipeline does not automatically relabel 10 September as 11 September. A suspected source-date error needs verification rather than assuming a fixed one-day delay.',
     'structure.ema': 'EMA means exponential moving average. Breadth counts stocks closing above their own average and expresses that count as a percentage of the eligible universe. Above 20, 50 and 150 EMA are three different horizons. The breadth score combines these percentages with weights of 50%, 30% and 20%; it is not itself a count of stocks.',
     'structure.fear_greed': 'DristiQ labels a breadth score below 35 as Fear and above 55 as Greed. These describe the framework’s participation zones, not measured emotions. The contrarian lens asks whether low participation is beginning to rebuild, and whether high participation is beginning to fade. Neither threshold establishes a reversal or an instruction to trade.',
     'structure.next': 'Sector rotation lets you compare individual sectors with the broader market. Compare each sector’s 5D flow score with its 22D baseline, then inspect the constituents behind a difference. Flow scores and breadth ROC have different formulas; their numerical values are not interchangeable. Keep the original research question when moving to a stock chart.',
@@ -71,6 +73,7 @@ def derive_facts(breadth, roc):
     if breadth:
         latest = breadth[-1]
         facts.append(f"Participation data date: {latest['trade_date']}.")
+        facts.append('The participation data date identifies the source trading session and its closing data, not the date the page is viewed. Do not shift it back one day or infer a fixed reporting lag.')
         for key, name in [('pct_above_20', '20 EMA'), ('pct_above_50', '50 EMA'), ('pct_above_150', '150 EMA')]:
             value = number(latest.get(key))
             if value is None:
@@ -92,6 +95,7 @@ def derive_facts(breadth, roc):
         if score is not None:
             zone = 'Fear' if score < 35 else 'Greed' if score > 55 else 'Neutral'
             facts.append(f'Weighted breadth score: {score:.1f} out of 100, in the {zone} framework zone.')
+            facts.append('This score combines the same-session percentages above 20 EMA, 50 EMA and 150 EMA with weights of 50%, 30% and 20%. It is not the 20 EMA percentage. Stored precision is used before display rounding.')
     else:
         facts.append('Participation data is unavailable.')
     if roc:

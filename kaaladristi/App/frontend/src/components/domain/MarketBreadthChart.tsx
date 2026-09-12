@@ -285,7 +285,7 @@ export default function MarketBreadthChart({
             <div className={cn('text-[22px] font-bold mono leading-none', researchMode ? 'text-[var(--text-primary)]' : r?.color)}>
               {latest.breadth_score.toFixed(1)}
             </div>
-            <div className="text-[9px] text-muted">Current Score</div>
+            <div className="text-[9px] text-muted">{researchMode ? `Session score · ${fmtDate(latest.trade_date)}` : 'Current Score'}</div>
           </div>
         )}
       </div>
