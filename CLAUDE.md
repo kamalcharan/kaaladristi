@@ -783,6 +783,63 @@ the fold — and it replaces what used to be three separate inline surfaces
 it opens deliberately, with a question already in mind, so it neither
 autoruns nor uses the tray.
 
+### The opening brief is a DECISION aid, keyed to the user's ICP (2026-09-12)
+
+Owner, on the first live brief: *"it is not about numbers only, it is about
+how we help the user to decide something"*, and *"we have ICP of each user —
+how can we tell this with related to ICP"*.
+
+The brief was describing a market. It should orient a person toward the
+decision they are about to make. The product had already promised this and
+was not keeping it — `GuideStep.tsx` (setup step 4, "How VaNi will guide
+you") tells the user *"Tomorrow's Morning Brief opens with the name you
+pick."*
+
+**The mapping that makes it work.** Onboarding asks where the user would
+concede they were wrong, and every answer NAMES A PRICE LINE at a timeframe
+breadth is already measured at. So the ICP selects which breadth row is
+*theirs*:
+
+| `concede_level` | line | breadth leg |
+|---|---|---|
+| `tight` | 10-day low | 20 EMA share |
+| `swing_low` | 22-day low | 50 EMA share |
+| `structure` | Golden Line (150-day) | 150 EMA share |
+
+On 2026-09-11 — 35.7% held the 20 EMA, 41.4% the 50, 45.4% the 150 — that is
+a broken tape to someone conceding at the 10-day low and a largely intact one
+to someone conceding at the Golden Line. **Identical numbers, opposite
+meaning.** `acts_on` adds the second half: breakouts depend on the short leg,
+so a thin 20 row means those setups fire against the tape; compression
+(coils, quiet accumulation) tolerates a dull tape; confirmed-strength names
+need the long leg, which is the one still holding.
+
+`src/constants/breadthLegs.ts` owns the mapping (constants-first);
+`_CONCEDE_LEG` / `_ACTS_ON_READ` in `vani_assemblers.py` mirror it. The ICP
+travels on the request the same way `bookmarked_symbols` already does — the
+client sends the viewer's own context, no user lookup or auth plumbing
+server-side. Absent ICP (onboarding skipped) the brief stays market-level
+rather than inventing a reader; a test pins that.
+
+The autorun prompt is now **(1) what kind of day this is → (2) what it means
+for the way YOU work, and what would change it**, second person, with the
+standing ban extended: no buy/sell/wait/size/reduce/avoid, *"not even
+softened as 'caution is warranted'"*. The ICP is part of the React Query key,
+so changing "How you invest" changes tomorrow's brief.
+
+**`BreadthLadder.tsx`** — the picture, above the prose. Three bars (short /
+medium / long), the viewer's own row marked "yours" and coloured by whether
+that timeframe is thin, plus a trajectory strip stating the move
+("−5.3 over 4 sessions"). Three percentages are the whole story and prose
+buries them. Theme tokens only — `check:theme` rejects literals.
+
+**Harness note, worth remembering:** the ladder first rendered 42/46/49
+(the OLDEST bar) and it looked like a component bug. It was the stub:
+`fetchMarketBreadth` queries `trade_date` DESC and `.reverse()`s to
+oldest-first, so a stub returning ascending rows gets flipped. The component
+was right. Same lesson as the diagnostic-hygiene entry — fix the test before
+you "fix" the code.
+
 ### ⚠ Small models must never be handed a signed number to interpret
 
 First live autorun, 2026-09-11 close. VaNi wrote: *"The fast and slow

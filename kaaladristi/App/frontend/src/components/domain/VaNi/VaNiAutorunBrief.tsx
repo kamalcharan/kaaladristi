@@ -1,7 +1,10 @@
 import { AlertCircle } from 'lucide-react';
 import PanchangamCard from '../PanchangamCard';
 import VaNiMessage, { VaNiThinking } from './VaNiMessage';
+import BreadthLadder from './BreadthLadder';
 import { useVaNiAutorun } from '@/hooks/useVaNiChat';
+import { useMarketBreadth } from '@/hooks/useDashboardExtras';
+import { useAuthStore } from '@/stores/authStore';
 import { fmtDateLong } from '@/lib/dateUtils';
 import type { ChatMessage } from './types';
 
@@ -47,7 +50,25 @@ export default function VaNiAutorunBrief({
   dataDate,
   isAdmin = false,
 }: VaNiAutorunBriefProps) {
-  const { data, isLoading, isError } = useVaNiAutorun(intentId);
+  // The viewer's ICP — the four onboarding answers. Sent with the request so
+  // the read is about the way THIS user works, and used here to mark their
+  // own line on the ladder. A user who skipped onboarding sends nothing and
+  // gets an unmarked ladder and a market-level read.
+  const profile = useAuthStore((s) => s.profile);
+  const icp = {
+    persona: profile?.persona ?? null,
+    acts_on: profile?.acts_on ?? null,
+    hold_horizon: profile?.hold_horizon ?? null,
+    concede_level: profile?.concede_level ?? null,
+  };
+
+  const { data, isLoading, isError } = useVaNiAutorun(intentId, undefined, true, icp);
+  const { data: breadth } = useMarketBreadth(10);
+
+  // Oldest-first, matching the prompt's window. The ladder reads the newest
+  // bar for its three rows and the whole slice for the trajectory strip.
+  const series = breadth ?? [];
+  const latest = series.length ? series[series.length - 1] : null;
 
   // The date VaNi actually read. The backend gates on ema_20 and hands the
   // resolved bar back, so trust its answer over the caller's guess — on a
@@ -77,6 +98,24 @@ export default function VaNiAutorunBrief({
       <BriefRule>
         {sameDay || !readDate ? 'Market participation' : `Market participation · ${fmtDateLong(readDate)} close`}
       </BriefRule>
+
+      {/* The picture before the prose. The three shares ARE the story — a
+          market can lose its short line while the long one barely moves —
+          and a paragraph buries that. The viewer's own concede line is
+          marked, so the same bars read differently for different people. */}
+      {latest && (
+        <BreadthLadder
+          legs={[
+            { leg: 'short', pct: latest.pct_above_20 ?? 0 },
+            { leg: 'medium', pct: latest.pct_above_50 ?? 0 },
+            { leg: 'long', pct: latest.pct_above_150 ?? 0 },
+          ]}
+          concedeLevel={icp.concede_level}
+          history={series
+            .filter((r) => r.breadth_score != null)
+            .map((r) => ({ date: r.trade_date, score: r.breadth_score as number }))}
+        />
+      )}
 
       {isLoading && <VaNiThinking label="VaNi is reading the market..." />}
 

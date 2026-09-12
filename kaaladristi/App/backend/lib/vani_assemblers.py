@@ -449,6 +449,92 @@ def _roc_state(roc13: float, sma: float, prev13: float | None) -> str:
     return 'warming up'
 
 
+# ── ICP → breadth leg ────────────────────────────────────────────────────────
+# Mirrors src/constants/breadthLegs.ts. Onboarding asks where the user would
+# concede they were wrong and every answer names a price line at a timeframe
+# breadth is already measured at, so the answer selects which leg is THEIRS.
+# This is what lets the brief be decision-shaped instead of descriptive: on
+# 2026-09-11, 35.7% of NSE held their 20 EMA against 45.4% holding their 150 —
+# the same day is a broken tape to someone conceding at the 10-day low and a
+# largely intact one to someone conceding at the Golden Line.
+_CONCEDE_LEG = {
+    'tight': ('20 EMA', 'pct_above_20', 'the 10-day low'),
+    'swing_low': ('50 EMA', 'pct_above_50', 'the 22-day low'),
+    'structure': ('150 EMA', 'pct_above_150', 'the Golden Line (150-day)'),
+}
+
+# What each acts_on style hunts, and what a thin tape does to it. Used only to
+# state the consequence — never to tell the user to stop.
+_ACTS_ON_READ = {
+    'confirmed': (
+        'already-established strength (Stage 2 leaders, strength confluence)',
+        'these need the long leg intact, so read the 150 row before the 20',
+    ),
+    'early': (
+        'quiet building before the move shows (coils, quiet accumulation)',
+        'compression tolerates a dull tape — a thin short leg is less of an '
+        'obstacle here than it is for breakout hunting',
+    ),
+    'extreme': (
+        'the loudest bar — breakouts and range expansion',
+        'breakouts depend on the short leg, so a thin 20 EMA row means these '
+        'setups are firing against the tape rather than with it',
+    ),
+}
+
+_HOLD_PHRASE = {'days': 'for days', 'weeks': 'for weeks', 'months': 'for months'}
+
+
+def _fmt_icp_block(ctx: dict) -> str:
+    """The viewer's ICP, resolved against today's breadth legs.
+
+    Returns '' when onboarding was skipped — the brief then stays market-level
+    rather than inventing a reader.
+    """
+    icp = ctx.get('icp') or {}
+    concede = icp.get('concede_level')
+    acts_on = icp.get('acts_on')
+    horizon = icp.get('hold_horizon')
+    if not any((concede, acts_on, horizon)):
+        return ''
+
+    b = ctx.get('breadth') or {}
+    lines = ["\n--- WHO IS READING THIS (their own setup answers) ---"]
+
+    if concede in _CONCEDE_LEG:
+        ma, key, line_name = _CONCEDE_LEG[concede]
+        pct = _safe_float(b.get(key), 0)
+        others = [v for k, v in (
+            ('pct_above_20', _safe_float(b.get('pct_above_20'), 0)),
+            ('pct_above_50', _safe_float(b.get('pct_above_50'), 0)),
+            ('pct_above_150', _safe_float(b.get('pct_above_150'), 0)),
+        ) if k != key]
+        rank = ('the WEAKEST of the three' if all(pct < o for o in others)
+                else 'the STRONGEST of the three' if all(pct > o for o in others)
+                else 'the middle of the three')
+        lines.append(
+            f"They concede at {line_name}, so THEIR timeframe is the {ma}: "
+            f"{pct:.1f}% of the market is holding it today, {rank}. "
+            f"Lead the second paragraph with this row — it is the one that "
+            f"decides whether today's tape is with them or against them."
+        )
+
+    if horizon in _HOLD_PHRASE:
+        lines.append(f"They hold positions {_HOLD_PHRASE[horizon]}.")
+
+    if acts_on in _ACTS_ON_READ:
+        hunts, consequence = _ACTS_ON_READ[acts_on]
+        lines.append(f"They act on {hunts}. In this tape: {consequence}.")
+
+    lines.append(
+        "Address them in the second person ('your line', 'the setups you "
+        "hunt'). Never tell them to trade, avoid trading, size, or wait — "
+        "state what the tape means for the way they already work and let "
+        "them decide."
+    )
+    return '\n'.join(lines) + '\n'
+
+
 def _fmt_autorun(ctx: dict) -> str:
     """The opening brief: breadth level + ROC direction of travel.
 
@@ -573,6 +659,7 @@ def _fmt_autorun(ctx: dict) -> str:
         f"{fast_slow}\n"
         f"{signal}\n"
         f"{roc_traj}\n"
+        f"{_fmt_icp_block(ctx)}"
         f"\nWrite the opening brief. Quote the actual percentages above — a "
         f"brief that names only the headline score is not specific enough. "
         f"Use the relationships exactly as stated: do not re-derive which "

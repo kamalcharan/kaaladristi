@@ -270,6 +270,18 @@ class VaNiAskRequest(BaseModel):
     # count, % accelerating, % on real volume, leading industry. Optional;
     # pages that don't send it get the old sample-derived narration.
     cohort_stats: Optional[dict] = None
+    # dashboard.autorun only — the viewer's ICP, sent by the client the same
+    # way bookmarked_symbols is (no user lookup server-side, no auth plumbing).
+    # These are what let the brief say what the market means FOR THIS USER
+    # instead of describing it in the abstract: concede_level names a price
+    # line at a timeframe breadth is already measured at, so it selects which
+    # leg is "theirs", and acts_on says which setups they hunt, so the brief
+    # can note whether today's tape is with or against those. Absent (a user
+    # who skipped onboarding) the brief simply stays market-level.
+    persona: Optional[str] = None          # investor | swing | intensity
+    acts_on: Optional[str] = None          # confirmed | early | extreme
+    hold_horizon: Optional[str] = None     # days | weeks | months
+    concede_level: Optional[str] = None    # tight | swing_low | structure
     # scanner.your_view only — computed client-side from data the page
     # already has (the user's own watchlist store, score_5d - score_22d
     # over the visible rows). Both optional/empty for every other intent.
@@ -5415,6 +5427,13 @@ def vani_ask(req: VaNiAskRequest):
 
         if prefix == 'dashboard':
             ctx = assemble_dashboard_context(db, date_str)
+            if ctx:
+                ctx['icp'] = {
+                    'persona': req.persona,
+                    'acts_on': req.acts_on,
+                    'hold_horizon': req.hold_horizon,
+                    'concede_level': req.concede_level,
+                }
             user_msg = format_user_message(intent_id, ctx) if ctx else None
 
         elif prefix == 'astro_calendar':

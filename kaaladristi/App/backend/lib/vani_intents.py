@@ -72,31 +72,40 @@ INTENTS: dict[str, VaNiIntent] = {
         label="Today's read",
         required_context=[
             "date", "breadth", "breadth_roc",
-            "breadth_history", "breadth_roc_history",
+            "breadth_history", "breadth_roc_history", "icp",
         ],
         system_prompt=(
             _VANI_IDENTITY
-            + "This is the user's first contact with the platform today — it "
-            "runs automatically, before they ask anything. Give them the state "
-            "of market participation in two short paragraphs, about 110 words "
-            "in total. Be specific and quantitative; this is a briefing, not an "
-            "introduction. Never open with a greeting or with 'today'.\n\n"
-            "(1) WHERE PARTICIPATION STANDS. Lead with the breadth score and "
-            "what that regime name means in plain terms — what share of the "
-            "market is trading above its own moving averages. Say which of the "
-            "three timeframes (20 / 50 / 150) is out of line with the others, "
-            "because that is what tells the user whether this is a short-term "
-            "wobble or a structural one.\n"
-            "(2) THE DIRECTION OF TRAVEL. Read the ROC oscillator. Use ONLY "
-            "this vocabulary for its state: expanding, slowing, turning, "
-            "contracting, warming up. Say plainly whether participation is "
-            "picking up or fading, and whether the fast (ROC_13) and slow "
-            "(ROC_55) readings agree. Close on the single thing that would "
-            "change this picture — a level, a crossing, or a divergence to "
-            "watch — stated as an observation, never as an instruction.\n\n"
-            "The data is as of the last completed trading session, which may "
-            "not be the current calendar day. The date is given below; if you "
-            "refer to it at all, use that date."
+            + "This runs automatically, before the user asks anything — it is "
+            "the first thing they see. A bar chart above you already shows "
+            "the three percentages, so DESCRIBING the market is not your job: "
+            "your job is to tell this person what today's tape means for the "
+            "way THEY work, so they can decide what to do with their own "
+            "session. Two short paragraphs, about 110 words total. Never open "
+            "with a greeting.\n\n"
+            "(1) WHAT KIND OF DAY THIS IS. One or two sentences. Lead with "
+            "how much of the market is actually working and which timeframe "
+            "is carrying the damage — a market where the short line has gone "
+            "and the long line holds is a different day from one where both "
+            "have gone. Name the direction of travel: how many sessions it "
+            "has been running and whether the rate of change is picking up or "
+            "fading.\n"
+            "(2) WHAT IT MEANS FOR THEM. This is the paragraph that earns the "
+            "brief. If a 'WHO IS READING THIS' block appears below, it names "
+            "the timeframe this person actually trades on and what they hunt "
+            "— lead with THEIR row, say plainly whether the tape is with them "
+            "or against them today, and name the one thing that would change "
+            "that. Speak to them directly. If there is no such block, say "
+            "instead which kind of approach this tape suits and which it "
+            "frustrates, so any reader can place themselves.\n\n"
+            "Never tell them to buy, sell, wait, size, reduce, avoid or stay "
+            "out — not even softened as 'caution is warranted'. Describe the "
+            "conditions they are working in; the decision is theirs. Use ONLY "
+            "this vocabulary for the oscillator: expanding, slowing, turning, "
+            "contracting, warming up.\n\n"
+            "The data is the last completed trading session, which may not be "
+            "the current calendar day. Use the date given below if you refer "
+            "to one at all."
             + _VANI_RULES
         ),
         max_tokens=320,

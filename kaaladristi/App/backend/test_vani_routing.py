@@ -204,6 +204,36 @@ def check_derived_statements() -> int:
         for pz in present:
             print(f"          ✗ present but must not be: {pz}")
 
+    # ── ICP → breadth leg ───────────────────────────────────────────────
+    # The whole reason the brief can be decision-shaped: concede_level names
+    # a price line at a timeframe breadth already measures, so it selects
+    # which row is THEIRS. Pick the wrong leg and the brief confidently tells
+    # someone the market is against them when it is not, or the reverse.
+    # Live 2026-09-11: 35.7 / 41.4 / 45.4 — weakest short, strongest long.
+    icp_base = ctx_for(0.0235, 0.0596, 0.0700, [44.6, 43.2, 41.7, 39.3])
+    icp_base['breadth'] = {'score': 39.33, 'pct_above_20': 35.69,
+                           'pct_above_50': 41.35, 'pct_above_150': 45.42}
+    icp_cases = [
+        ('tight', 'the 10-day low', '20 EMA', '35.7%', 'the WEAKEST of the three'),
+        ('swing_low', 'the 22-day low', '50 EMA', '41.4%', 'the middle of the three'),
+        ('structure', 'the Golden Line', '150 EMA', '45.4%', 'the STRONGEST of the three'),
+    ]
+    for concede, line_name, ma, pct, rank in icp_cases:
+        text = _fmt_autorun({**icp_base, 'icp': {'concede_level': concede}})
+        wanted = [line_name, f'THEIR timeframe is the {ma}', pct, rank]
+        missing = [w for w in wanted if w not in text]
+        ok = not missing
+        failures += 0 if ok else 1
+        print(f"{'PASS' if ok else 'FAIL'}  icp: concede '{concede}' -> {ma} row, {rank}")
+        for m in missing:
+            print(f"          ✗ missing: {m}")
+
+    # No ICP (onboarding skipped) must stay market-level, not invent a reader.
+    no_icp = _fmt_autorun({**icp_base, 'icp': {}})
+    clean = 'WHO IS READING THIS' not in no_icp
+    failures += 0 if clean else 1
+    print(f"{'PASS' if clean else 'FAIL'}  icp: absent ICP leaves the brief market-level")
+
     # The safe-vocabulary list must not read as an instruction to use it.
     # "Capital is flowing towards the market" appeared, unsupported, on a day
     # every measure fell — a small model read "Use: <phrases>" as fill-in.

@@ -171,9 +171,28 @@ export function useVaNiAsk() {
  * indicator-complete bar itself (ema_20-gated), which is the only date whose
  * numbers are safe to narrate.
  */
-export function useVaNiAutorun(intentId: string, date?: string, enabled = true) {
+export interface VaNiIcp {
+  persona?: string | null;
+  acts_on?: string | null;
+  hold_horizon?: string | null;
+  concede_level?: string | null;
+}
+
+export function useVaNiAutorun(
+  intentId: string,
+  date?: string,
+  enabled = true,
+  icp?: VaNiIcp,
+) {
+  // The ICP is part of the key: two users on the same bar get different
+  // briefs, and the brief a user sees must change when they change how they
+  // invest (Account -> "How you invest"). Keyed on the four answers rather
+  // than the user id so it is stable and carries no identity.
+  const icpKey = icp
+    ? `${icp.persona ?? ''}|${icp.acts_on ?? ''}|${icp.hold_horizon ?? ''}|${icp.concede_level ?? ''}`
+    : 'none';
   return useQuery<VaNiAskResponse>({
-    queryKey: ['vani', 'autorun', intentId, date ?? 'latest'],
+    queryKey: ['vani', 'autorun', intentId, date ?? 'latest', icpKey],
     enabled: enabled && !!intentId,
     staleTime: 1000 * 60 * 30,
     gcTime: 1000 * 60 * 60,
@@ -182,7 +201,11 @@ export function useVaNiAutorun(intentId: string, date?: string, enabled = true) 
       const res = await fetch(`${pipelineUrl}/api/vani/ask`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ intent_id: intentId, ...(date ? { date } : {}) }),
+        body: JSON.stringify({
+          intent_id: intentId,
+          ...(date ? { date } : {}),
+          ...(icp ?? {}),
+        }),
       });
       if (!res.ok) {
         return {
