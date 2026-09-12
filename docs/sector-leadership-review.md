@@ -96,3 +96,40 @@ Publication is transactional across all categories/windows. Membership generatio
 57 backend tests passed, including classification boundaries, small samples, display-window stability, read-only snapshot loading, stale membership, atomic publication failure, rebuild and daily-pipeline publication contracts, and existing VaNi/cache behavior. Browser regression passed at 320/390/768/1440px in both themes using synthetic fixtures, including filters, MagicRS canvas, date-carrying links and current-flow regressions. Frontend typecheck, production build, theme/persona checks and Discovery flow parity checks passed.
 
 PostgreSQL is not available in this workspace: migration execution, live refresh performance, database permissions and deployed Qwen/Haiku behavior require testing in your environment. The build retains pre-existing bundle-size, Browserslist and Tailwind warnings.
+
+## Remaining main-page intents: Current Flow completion
+
+Deploy frontend and backend together, then restart the API. No new migration, snapshot publication or model configuration is needed for this increment. Sector intent/cache version is now 5.
+
+The default remains the reused Discovery component with latest overall Sectoral + Curated coverage. Follow-up questions explicitly use the selected category, date and history window:
+
+| Current Flow question | Presentation |
+| --- | --- |
+| Where is flow entering? | Strong + Building examples, condition, next inspection and matching personal stocks. |
+| Where is flow fading? | Positive near-term score below baseline; an empty group stays empty. |
+| Where is flow leaving? | Outflow examples only; Quiet and missing readings are excluded. |
+| Explain this flow | Condition-first interpretation and up to three classified examples. |
+| Why do Flow 5D and Flow 22D differ? | Side-by-side score pairs with Above/Below/Equal; no claim of daily acceleration. |
+| Has this flow persisted? | Currently entering baskets ordered by their observed entering run, with a latest-first Flow Map colour strip. Tap or keyboard-select a cell to see its date and state. |
+| Help me read this page | Three visual learning steps: condition, horizons and history. |
+| Indices, curated baskets and industries | Three distinct explanatory cards; no synthetic industry rotation added. |
+
+Live cards and model facts come from one deterministic projection of the existing authoritative snapshot. Projection adds no database queries and no new scoring formula. Examples are capped at three; personal matches cover all baskets matching that question, including those outside the displayed examples. Missing category readings remain explicitly unavailable. Persistence uses recorded category sessions, breaks at missing/other states, and is bounded by the chosen window. It cannot date the origin of a months-long theme.
+
+VaNi's prose is behind “VaNi explanation” for these follow-ups. Qwen-first, configured Haiku fallback, cache, the 450ms Consulting VaNi presentation, feedback and PostHog events remain active. Education uses the existing fixed-content path. Main-page raw fact dumps are replaced by visual evidence; individual-sector questions remain available.
+
+The seven Longer-Term Leadership intents remain available and are regression-tested alongside the Current Flow questions: holding strength, building, cooling, persistence, constituent support, current-flow comparison and learning the groups. Their approved interpretation cards and personal connections remain in place.
+
+### Review after pulling
+
+1. Confirm default flow records still match Discovery after changing category tabs.
+2. Open every Current Flow question. Check that group examples match the table for that selected category/date; positive below-baseline scores belong to Fading, not Entering.
+3. Try an empty flow group and missing records: neither should populate with unrelated baskets or personal stocks.
+4. In score comparison, verify 5D and 22D values against the table. Above baseline must not be described as acceleration since yesterday.
+5. In persistence, tap the newest cell, inspect interruptions, and change 5/22/66 sessions. Runs filling a window may have begun earlier; missing observations break the run.
+6. Open example and personal links; the sector links retain the closing-data date. Personal matching must include matching baskets beyond the three examples.
+7. Repeat a cached intent and expand its explanation; confirm the loader, feedback and analytics still work.
+8. Switch to Longer-Term Leadership and exercise all seven questions, then return to Current Flow. Menus must stay mode-specific.
+9. Test light/dark at mobile and desktop widths; no whole-page horizontal scrolling. On mobile, follow-ups open the sheet, and returning to the default closes it.
+
+Automated coverage: 65 backend tests, including eight new projection/grounding checks, frontend typecheck, production build and the shared contract suite. Browser regression exercises all eight Current Flow follow-ups and all six Longer-Term follow-ups in both themes at 320/390/768/1440px. Browser fixtures are synthetic; verify live records and deployed model behaviour in your environment.

@@ -36,3 +36,15 @@
 .vani-personal-card .vani-personal-heading a { font-weight:600; text-decoration:none; }
 .vani-sector-connection { border-top:1px solid var(--border); padding-top:8px; font-size:12px; line-height:1.65; }
 .vani-personal-content>.sector-question, .vani-personal-content>div>a, .vani-personal-content>a { min-height:44px; display:inline-flex; align-items:center; }
+
+.vani-story[data-tone=red] { --vani-story-tone:var(--risk-red); }
+.vani-flow-example { min-width:0; display:grid; gap:10px; border:1px solid var(--border); border-radius:10px; padding:12px; background:var(--card); }
+.vani-flow-example strong { font-size:13px; }
+.vani-flow-example>a { white-space:normal; min-height:44px; display:flex; align-items:center; font-size:12px; }
+.vani-flow-state { display:inline-flex; padding:3px 7px; border:1px solid var(--border); border-radius:6px; font-size:10px; }
+.vani-score-pair { display:grid; grid-template-columns:1fr auto 1fr; gap:8px; align-items:center; text-align:center; }
+.vani-score-pair>span { font-size:11px; }
+.vani-score-pair strong { display:block; font-size:18px; }
+.vani-score-relation small { display:block; font-size:10px; }
+.vani-flow-strip { display:flex; flex-wrap:wrap; gap:4px; }
+.vani-flow-strip>button { width:28px; height:32px; border:1px solid var(--border); border-radius:3px; }

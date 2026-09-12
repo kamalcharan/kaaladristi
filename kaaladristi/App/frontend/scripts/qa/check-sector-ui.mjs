@@ -1,6 +1,7 @@
 // Isolated UI regression: actual routes, synthetic data, no external requests.
 // Run against a local Vite server: SECTOR_QA_URL=http://127.0.0.1:4318 node scripts/qa/check-sector-ui.mjs
 import fs from 'node:fs';
+import {execFileSync} from 'node:child_process';
 import path from 'node:path';
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright-core';
@@ -32,6 +33,7 @@ const stocks=Array.from({length:5},(_,i)=>({id:i+1,symbol:`STOCK${i+1}`,company_
 const indices=symbols.flatMap(s=>days.map((d,i)=>({index_id:s.id,name:s.name,trade_date:d,open:100+i,high:104+i,low:98+i,close:102+i,volume:100000,value_cr:300,ema_20:95+i,score_5d:i%7===0?0:20+i%20,score_22d:15,avg_amt_5d:120,avg_amt_22d:100,avg_amt_66d:90,ret_5d:3,ret_22d:4,ret_66d:6,pct_chng:1,rsi_14:55,magic_rs:2,stock_count:5})));
 const equities=stocks.flatMap(s=>days.map((d,i)=>({equity_id:s.id,trade_date:d,close:100+i,pct_chng:s.id===1?20:-1,ema_20:95+i,sma_50:90+i,sma_150:88+i,ret_5d:3,ret_22d:5,score_5d:s.id===1?80:5,score_22d:4,value_cr:20,avg_amt_5d:20,avg_amt_22d:10,flow_type:'SHORT_COVERING',rsi_14:55})));
 const breadth=days.map((d,i)=>({index_id:97,trade_date:d,stock_count:5,universe_count:5,pct_above_20:40+i%20,pct_above_50:60,pct_above_150:80,breadth_score:54,roc_13:.03,roc_55:.02,sma_breadth:.04,above_20:2,above_50:3,above_150:4}));
+const currentViews=JSON.parse(execFileSync('python',['-c','import sys,json; from lib.sector_flow_intents import build_views; print(json.dumps(build_views(json.load(sys.stdin))))'],{cwd:path.join(root,'../backend'),encoding:'utf8',input:JSON.stringify({date:'2026-09-11',category:'sectoral',period:22,index_count:2,rows:indices.filter(r=>r.trade_date==='2026-09-11'),history:indices})}));
 let browser;
 try {
   browser=await chromium.launch(process.env.SECTOR_QA_BROWSER ? {executablePath:process.env.SECTOR_QA_BROWSER,headless:true} : {channel:'chrome',headless:true});
@@ -57,7 +59,7 @@ try {
         }
         const pulse=body.intent_id==='sector.pulse.context';
         if(pulse) { body.date='2026-09-11'; body.sector_period=22; }
-        const data=(pulse || body.intent_id==='sector.context') ? {snapshot:`${body.date}-${body.sector_period}`,date:body.date,facts:['Synthetic fixture: 5 constituents.'],period:22,index_count:2,rows:indices.filter(r=>r.trade_date===body.date),history:indices.filter(r=>r.trade_date<=body.date)} : {response:'Near-term flow is above its underlying baseline. Check participation across the constituents.',cached:true,log_id:'qa'};
+        const data=(pulse || body.intent_id==='sector.context') ? {intent_views:body.entity_id?undefined:currentViews,snapshot:`${body.date}-${body.sector_period}`,date:body.date,facts:['Synthetic fixture: 5 constituents.'],period:22,index_count:2,rows:indices.filter(r=>r.trade_date===body.date),history:indices.filter(r=>r.trade_date<=body.date)} : {response:'Near-term flow is above its underlying baseline. Check participation across the constituents.',cached:true,log_id:'qa'};
         return route.fulfill({json:data});
       }
       return route.fulfill({json:{}});
@@ -86,7 +88,7 @@ try {
     const overflow=await page.evaluate(()=>({width:innerWidth,actual:document.documentElement.scrollWidth, offenders:[...document.querySelectorAll('body *')].filter(e=>e.getBoundingClientRect().right>innerWidth+2 && getComputedStyle(e).position!=='fixed').slice(0,8).map(e=>e.tagName+'.'+e.className)}));
     assert(overflow.actual<=overflow.width+2,`${label}: ${JSON.stringify(overflow)}`);
   }
-  for(const mode of ['dark','light']) for(const width of [320,390,768,1440]) {
+  for(const mode of (process.env.SECTOR_QA_MODES??'dark,light').split(',')) for(const width of (process.env.SECTOR_QA_WIDTHS??'320,390,768,1440').split(',').map(Number)) {
     await page.setViewportSize({width,height:950});
     await page.goto(base+'/__sector_qa.html?mode='+mode);
     await page.locator(width < 768 ? '.sector-mobile-rows article' : '.sector-desktop-table tbody tr').first().waitFor();
@@ -101,6 +103,34 @@ try {
     assert(vaniCalls.some(r=>r.intent_id==='sector.overview' && !r.entity_id), 'Listing default should run automatically');
     await page.screenshot({path:path.join(out,`sector-default-${mode}-${width}.png`),fullPage:true});
     await noOverflow(`list ${width}`);
+    // All main-page Current Flow follow-ups, with the real backend projection.
+    const currentCompanion=page.getByRole('complementary',{name:'VaNi Sector Rotation companion'});
+    await currentCompanion.getByText('Explore another question',{exact:true}).click();
+    for(const [id,label] of [['entering','Where is flow entering?'],['fading','Where is flow fading?'],['leaving','Where is flow leaving?'],['read','Explain this flow'],['compare','Why do Flow 5D and Flow 22D differ?'],['persistence','Has this flow persisted?'],['learn','Help me read this page'],['taxonomy','Indices, curated baskets and industries']]) {
+      const surface=width<1280&&await page.getByRole('dialog').isVisible()?page.getByRole('dialog'):currentCompanion;
+      const menu=surface.getByText('Open current-flow intents',{exact:true});
+      if(await menu.isVisible()&&!(await menu.locator('..').getAttribute('open')!==null)) await menu.click();
+      await surface.getByRole('button',{name:label,exact:true}).click();
+      const active=width<1280?page.getByRole('dialog'):currentCompanion;
+      await active.getByText('Consulting VaNi…',{exact:true}).waitFor();
+      await active.getByRole('region',{name:['learn','taxonomy'].includes(id)?'Sector learning path':'Current-flow interpretation'}).waitFor();
+      await active.getByText('VaNi explanation',{exact:true}).click();
+      await active.locator('.vani-explanation').getByText('Near-term flow is above its underlying baseline.',{exact:false}).waitFor();
+      if(['fading','leaving'].includes(id)) {
+        await active.getByText('None of your saved stocks are linked to the sectors highlighted in this reading.',{exact:true}).waitFor();
+        assert.equal(await active.getByRole('link',{name:'PERSONAL_HOLD',exact:true}).count(),0);
+      }
+      if(id==='compare') assert((await active.locator('.vani-score-pair').count())>0);
+      if(id==='persistence') {
+        await active.locator('.vani-flow-strip button').first().click();
+        await active.getByText(/11 September · (Strong|Building)/).first().waitFor();
+        await page.screenshot({path:path.join(out,`sector-intent-persistence-${mode}-${width}.png`),fullPage:true});
+      }
+      const events=await page.evaluate(()=>window.__qaAnalytics??[]);
+      assert.equal(events.filter(e=>e.name==='vani_intent_selected'&&e.props.intent_id==='sector.'+id&&e.props.source==='manual').length,1);
+      await noOverflow(`current intent ${id} ${width}`);
+    }
+    if(width<1280) await page.getByRole('dialog').getByRole('button',{name:'Close',exact:true}).click();
     await page.getByRole('button',{name:'Longer-Term Leadership',exact:true}).click();
     await page.getByRole('heading',{name:'Which baskets are holding their strength?',exact:true}).waitFor();
     await page.getByRole('heading',{name:'VaNi · Longer-term picture',exact:true}).waitFor();
@@ -131,6 +161,7 @@ try {
       await companion.getByText('Consulting VaNi…',{exact:true}).waitFor();
       await companion.getByText('VaNi explanation',{exact:true}).click();
       await companion.getByText('Near-term flow is above its underlying baseline.',{exact:false}).waitFor();
+      await page.waitForFunction(intent=>(window.__qaAnalytics??[]).some(e=>e.name==='vani_detail_opened'&&e.props.detail==='explanation'&&e.props.intent_id===intent),'sector.leadership.'+suffix);
       const events=await page.evaluate(()=>window.__qaAnalytics??[]);
       assert.equal(events.filter(e=>e.name==='vani_intent_selected'&&e.props.intent_id==='sector.leadership.'+suffix&&e.props.source==='manual').length,1,'One selection per deliberate click');
       assert.equal(events.filter(e=>e.name==='vani_reading_ready'&&e.props.intent_id==='sector.leadership.'+suffix).length,1,'One completion, including cache hits');

@@ -6,7 +6,7 @@ from datetime import date
 from .market_structure_vani import number, single_flight, ReadingInProgress
 from .vani_cache import make_cache_key, get_cached, set_cached
 
-VERSION = 4
+VERSION = 5
 CATEGORIES = {
     'broad': ['index', 'broad market index'], 'sectoral': ['sectoral index'],
     'thematic': ['thematic market index'], 'custom': ['custom'], 'overall': ['sectoral index', 'custom'],
@@ -19,6 +19,9 @@ QUESTIONS = {
     'sector.leadership.flow': 'Compare longer-term groups with current flow. Explain disagreements without merging them into a score. Daily MagicRS is not supplied.',
     'sector.leadership': 'Explain the separate index alignment, constituent Stage 2 support and persistence readings. Name at most two examples; do not invent a master score or predict continuation.',
     'sector.overview': 'Summarize the balance of flow across Sectoral and Curated baskets together without naming individual indices.',
+    'sector.entering': 'Explain the entering-flow pattern in the supplied examples and what participation evidence to inspect.',
+    'sector.fading': 'Explain positive near-term flow below baseline. Do not invent a day-over-day deterioration.',
+    'sector.leaving': 'Explain the outflow classification, keeping Quiet and missing data separate.',
     'sector.read': 'Explain the selected sector flow snapshot.',
     'sector.compare': 'Explain near-term Flow 5D versus underlying Flow 22D.',
     'sector.persistence': 'Describe how flow changed over the available sessions.',
@@ -141,7 +144,11 @@ def load_context(req, db):
     evidence = {'date': target, 'period': period, 'category': category, 'index_id': index_id,
                 'history': history, 'constituents': constituents, 'breadth': breadth, 'facts': facts}
     digest = hashlib.sha256(json.dumps(evidence, sort_keys=True, default=str).encode()).hexdigest()
-    return {**evidence, 'snapshot': digest, 'rows': ordered, 'counts': states, 'index_count': len(ids)}
+    result = {**evidence, 'snapshot': digest, 'rows': ordered, 'counts': states, 'index_count': len(ids)}
+    if not index_id and not overall:
+        from .sector_flow_intents import build_views
+        result['intent_views'] = build_views(result)
+    return result
 
 
 def answer(req, db, complete, post_filter, log_interaction, model):
@@ -167,6 +174,9 @@ def answer(req, db, complete, post_filter, log_interaction, model):
         if intent == 'sector.leadership' or intent.startswith('sector.leadership.'):
             from .sector_leadership_intents import intent_facts
             facts = intent_facts(ctx, intent)
+        if intent in ctx.get('intent_views', {}):
+            from .sector_flow_intents import intent_facts as flow_facts
+            facts = flow_facts(ctx, intent)
         overview = intent == 'sector.overview'
         if overview:
             counts = ctx['counts']
@@ -200,6 +210,8 @@ def answer(req, db, complete, post_filter, log_interaction, model):
                               (' Explain terminology simply.' if depth == 'simple' else ''))
                     if intent.startswith('sector.leadership'):
                         system += ' Interpret one important pattern, explain why it matters, then suggest evidence to inspect. Do not recite a list of index statistics. Distinguish measured values below a threshold from unavailable data. Do not describe a below-threshold Leader share as missing data. Use at most two examples.'
+                    if intent in ctx.get('intent_views', {}):
+                        system += ' Explain one pattern in at most three short sentences. Do not repeat the statistics, list every index, or invent a transition. Name at most one supplied example. If no examples match, say so.'
                     if overview:
                         system += ' For this overall sector overview: at most TWO short sentences and 40 words. No index-by-index commentary, no formulas, no methodology paragraphs. Describe the balance of the groups and suggest inspecting persistence or participation. Never claim that the counts measure net money.'
                     start = time.monotonic()
