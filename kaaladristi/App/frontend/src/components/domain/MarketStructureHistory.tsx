@@ -8,6 +8,8 @@ export default function MarketStructureHistory({ breadth, roc, mode, onSelectDat
   breadth: MarketBreadthDay[]; roc: BreadthRocDay[]; mode: 'breadth' | 'roc'; onSelectDate: (date: string) => void;
 }) {
   const dates = (mode === 'breadth' ? breadth : roc).map(r => r.trade_date);
+  // Reverse only display order: states still compare each session with its past.
+  const displayOrder = dates.map((_, i) => i).reverse();
   const rows: Row[] = mode === 'breadth' ? (['pct_above_20', 'pct_above_50', 'pct_above_150'] as const).map((k, i) => ({
     label: `Above ${[20, 50, 150][i]} EMA`, values: breadth.map(r => r[k]),
     states: breadth.map((r, j) => participationState(r[k], breadth[j - 1]?.[k])), digits: 1, suffix: '%',
@@ -24,12 +26,13 @@ export default function MarketStructureHistory({ breadth, roc, mode, onSelectDat
     });
   }
   return <details className="glass-card rounded-xl p-4"><summary className="cursor-pointer text-sm font-medium">{mode === 'breadth' ? 'Participation' : 'Momentum'} history · visible values</summary>
-    <p className="text-xs text-muted my-3">Oldest → latest. Select a session to read that snapshot with VaNi. {dates.length} available sessions.</p>
-    <div className="overflow-x-auto" tabIndex={0} aria-label="Scrollable historical readings"><table className="text-[11px] border-separate border-spacing-1 w-full"><caption className="sr-only">{mode} historical values, chronological order</caption><thead><tr><th className="min-w-[140px] text-left">Measure</th>{dates.map(d => <th key={d} className="min-w-[68px] font-normal"><button className="text-accent-indigo underline" onClick={() => onSelectDate(d)} aria-label={`Read ${d}`}>{d.slice(5)}</button></th>)}</tr></thead><tbody>{rows.map(row => <tr key={row.label}><th scope="row" className="text-left font-normal text-[var(--text-secondary)]">{row.label}</th>{row.values.map((v, i) => {
+    <p className="text-xs text-muted my-3">Latest → oldest. Select a session to read that snapshot with VaNi. {dates.length} available sessions.</p>
+    <div className="overflow-x-auto" tabIndex={0} aria-label="Scrollable historical readings"><table className="text-[11px] border-separate border-spacing-1 w-full"><caption className="sr-only">{mode} historical values, latest session first</caption><thead><tr><th className="min-w-[140px] text-left">Measure</th>{displayOrder.map(i => <th key={dates[i]} className="min-w-[68px] font-normal"><button className="text-accent-indigo underline" onClick={() => onSelectDate(dates[i])} aria-label={`Read ${dates[i]}`}>{dates[i].slice(5)}</button></th>)}</tr></thead><tbody>{rows.map(row => <tr key={row.label}><th scope="row" className="text-left font-normal text-[var(--text-secondary)]">{row.label}</th>{displayOrder.map(i => {
+      const v = row.values[i];
       const state = v == null ? 'MISSING' : row.states[i];
       const title = mode === 'roc' && row.label === 'ROC 13' ? momentumLabel(roc[i].roc_13, roc[i].sma_breadth) : state.toLowerCase();
       return <td key={dates[i]} title={`${dates[i]} · ${title}`} className="rounded text-center px-2 py-2 font-mono border border-[var(--border)]" style={{ background: color(state), color: state === 'MISSING' ? 'var(--text-muted)' : SIGNAL_TEXT[state] }}><span>{v == null ? '—' : `${v.toFixed(row.digits)}${row.suffix}`}</span><span className="sr-only"> {title}</span></td>;
     })}</tr>)}</tbody></table></div>
-    <p className="text-[11px] text-muted mt-3">{mode === 'breadth' ? 'Participation: green = higher than the previous available session; amber = lower; slate = unchanged. The first session has no comparison. Mover rows show percentages without a condition color.' : 'ROC 13: green = above signal (recovering if negative); amber = positive, below signal; red = negative, below signal; slate = zero or equal to signal. ROC 55 and signal rows are neutral comparisons.'} Missing values use a dash. Colors are fixed rules, not scaled to the selected window.</p>
+    <p className="text-[11px] text-muted mt-3">{mode === 'breadth' ? 'Participation: green = higher than the previous available session; amber = lower; slate = unchanged. The oldest session has no comparison. Mover rows show percentages without a condition color.' : 'ROC 13: green = above signal (recovering if negative); amber = positive, below signal; red = negative, below signal; slate = zero or equal to signal. ROC 55 and signal rows are neutral comparisons.'} Missing values use a dash. Colors are fixed rules, not scaled to the selected window.</p>
   </details>;
 }
