@@ -455,6 +455,17 @@ def _fmt_autorun(ctx: dict) -> str:
     Panchangam is NOT narrated here — it renders as its own card above the
     brief, and VIX is parked (see docs/claude/VIX-Upgrade.md), so this stays
     deliberately narrow rather than becoming a second market_summary.
+
+    Every comparison is stated IN WORDS, not left as a signed number for the
+    model to interpret. This is not padding — the first live run got it
+    exactly backwards. On 2026-09-11 roc_13 was 0.0235 against roc_55 of
+    0.0596, which this used to emit only as "Fast/slow spread: -0.0361";
+    the local model read that and wrote "the fast reading slightly above the
+    slow reading", inverting the sign on the one comparison the paragraph
+    was about. A small model will not reliably reason about the sign of a
+    four-decimal difference, so it is never asked to: the relationship, the
+    direction of travel and the size of each move are all pre-computed and
+    written out as sentences it can only copy.
     """
     b = ctx.get('breadth') or {}
     score = _safe_float(b.get('score'), 0)
@@ -470,45 +481,102 @@ def _fmt_autorun(ctx: dict) -> str:
     prev13 = _safe_float(r_hist[-2].get('roc_13'), None) if len(r_hist) >= 2 else None
     state = _roc_state(roc13, sma, prev13)
 
-    b_lines = '\n'.join(
-        f"  {h['date']}: Score={h['score']:.1f} ({h['regime']}), "
-        f"20 EMA: {h['pct_above_20']}%, 50 EMA: {h['pct_above_50']}%, "
-        f"150 EMA: {h['pct_above_150']}%"
-        for h in b_hist
-    ) or '  No history available'
-
-    r_lines = '\n'.join(
-        f"  {h['date']}: ROC_13={h['roc_13']:+.4f}, ROC_55={h['roc_55']:+.4f}, "
-        f"Spread={h['spread']:+.6f}"
-        for h in r_hist
-    ) or '  No history available'
-
-    # Which leg is out of line: the one furthest from the mean of the three.
     legs = {
         '20 EMA': _safe_float(b.get('pct_above_20'), 0),
         '50 EMA': _safe_float(b.get('pct_above_50'), 0),
         '150 EMA': _safe_float(b.get('pct_above_150'), 0),
     }
-    mean = sum(legs.values()) / 3 if legs else 0
-    outlier = max(legs, key=lambda k: abs(legs[k] - mean)) if legs else 'N/A'
+    mean = sum(legs.values()) / 3
+    outlier = max(legs, key=lambda k: abs(legs[k] - mean))
+
+    # ── Breadth trajectory, stated ──
+    if len(b_hist) >= 2:
+        first, last = b_hist[0]['score'], b_hist[-1]['score']
+        delta = last - first
+        falling = sum(1 for i in range(1, len(b_hist))
+                      if b_hist[i]['score'] < b_hist[i - 1]['score'])
+        rising = sum(1 for i in range(1, len(b_hist))
+                     if b_hist[i]['score'] > b_hist[i - 1]['score'])
+        if falling == len(b_hist) - 1:
+            shape = f'FALLING in every one of the last {len(b_hist)} sessions'
+        elif rising == len(b_hist) - 1:
+            shape = f'RISING in every one of the last {len(b_hist)} sessions'
+        elif delta < -1:
+            shape = 'net LOWER across the window, but not in a straight line'
+        elif delta > 1:
+            shape = 'net HIGHER across the window, but not in a straight line'
+        else:
+            shape = 'broadly FLAT across the window'
+        trajectory = (
+            f"Breadth is {shape}: {first:.1f} on {b_hist[0]['date']} to "
+            f"{last:.1f} on {b_hist[-1]['date']}, a change of {delta:+.1f} points."
+        )
+    else:
+        trajectory = 'Breadth trajectory: not enough history to state.'
+
+    # ── Fast vs slow, stated (never left as a signed number) ──
+    if roc13 < roc55:
+        fast_slow = (
+            f"The FAST reading ({roc13:+.4f}) is BELOW the slow reading "
+            f"({roc55:+.4f}). Short-term momentum is running behind the "
+            f"longer one — thrust is fading, not building."
+        )
+    elif roc13 > roc55:
+        fast_slow = (
+            f"The FAST reading ({roc13:+.4f}) is ABOVE the slow reading "
+            f"({roc55:+.4f}). Short-term momentum is running ahead of the "
+            f"longer one — fresh thrust."
+        )
+    else:
+        fast_slow = f"Fast and slow readings are level at {roc13:+.4f}."
+
+    signal = (
+        f"The fast reading is BELOW its signal line ({sma:+.4f}), which is "
+        f"what makes the on-screen state '{state}'."
+        if roc13 < sma else
+        f"The fast reading is ABOVE its signal line ({sma:+.4f}), which is "
+        f"what makes the on-screen state '{state}'."
+    )
+
+    if len(r_hist) >= 2:
+        r_delta = r_hist[-1]['roc_13'] - r_hist[0]['roc_13']
+        r_dir = ('fallen' if r_delta < 0 else 'risen' if r_delta > 0 else 'held')
+        roc_traj = (
+            f"Over the same sessions the fast reading has {r_dir} from "
+            f"{r_hist[0]['roc_13']:+.4f} to {r_hist[-1]['roc_13']:+.4f}."
+        )
+    else:
+        roc_traj = ''
+
+    b_lines = '\n'.join(
+        f"  {h['date']}: score {h['score']:.1f} ({h['regime']}) — "
+        f"{h['pct_above_20']}% above their 20 EMA, {h['pct_above_50']}% above "
+        f"their 50, {h['pct_above_150']}% above their 150"
+        for h in b_hist
+    ) or '  No history available'
 
     return (
         f"Market participation as of the {ctx['date']} close "
         f"(the last completed trading session):\n"
-        f"\n--- Breadth (all NSE, EMA-based, corporate-action adjusted) ---\n"
-        f"Score: {score:.1f} ({regime})\n"
-        f"Above 20 EMA: {legs['20 EMA']:.1f}%, "
-        f"50 EMA: {legs['50 EMA']:.1f}%, 150 EMA: {legs['150 EMA']:.1f}%\n"
-        f"Timeframe furthest from the other two: {outlier}\n"
-        f"\n--- Last 3 sessions ---\n{b_lines}\n"
+        f"\n--- Breadth, all NSE ---\n"
+        f"Score {score:.1f} — the '{regime}' band.\n"
+        f"Share of stocks holding above each of their own moving averages: "
+        f"{legs['20 EMA']:.1f}% above the 20 EMA, {legs['50 EMA']:.1f}% above "
+        f"the 50, {legs['150 EMA']:.1f}% above the 150.\n"
+        f"The {outlier} share is the one furthest from the other two. NOTE: "
+        f"it is the SHARE OF STOCKS that differs, not the moving average "
+        f"itself — never write that an EMA is divergent.\n"
+        f"{trajectory}\n"
+        f"\n--- Sessions in the window ---\n{b_lines}\n"
         f"\n--- Breadth ROC oscillator ---\n"
-        f"ROC_13 (fast): {roc13:+.4f}\n"
-        f"ROC_55 (slow): {roc55:+.4f}\n"
-        f"SMA_BREADTH (signal): {sma:+.4f}\n"
-        f"Fast/slow spread: {roc13 - roc55:+.4f}\n"
-        f"On-screen oscillator state: {state}\n"
-        f"\n--- ROC, last 3 sessions ---\n{r_lines}\n"
-        f"\nWrite the opening brief."
+        f"On-screen state: {state}.\n"
+        f"{fast_slow}\n"
+        f"{signal}\n"
+        f"{roc_traj}\n"
+        f"\nWrite the opening brief. Quote the actual percentages above — a "
+        f"brief that names only the headline score is not specific enough. "
+        f"Use the relationships exactly as stated: do not re-derive which "
+        f"reading is higher."
     )
 
 
@@ -764,7 +832,6 @@ def _fmt_breadth_momentum(ctx: dict) -> str:
     roc13 = _safe_float(roc.get('roc_13'), 0)
     roc55 = _safe_float(roc.get('roc_55'), 0)
     sma = _safe_float(roc.get('sma_breadth'), 0)
-    spread = roc13 - roc55
 
     history = ctx.get('breadth_roc_history', [])
     hist_lines = []
@@ -786,12 +853,23 @@ def _fmt_breadth_momentum(ctx: dict) -> str:
     return (
         f"Breadth Momentum analysis as of {ctx['date']}:\n"
         f"\n--- Current ROC Readings ---\n"
-        f"ROC_13: {roc13:+.4f} "
-        f"({'positive — participation rising' if roc13 > 0 else 'negative — participation falling'})\n"
-        f"ROC_55: {roc55:+.4f} "
-        f"({'positive on the slow leg' if roc55 > 0 else 'negative on the slow leg'})\n"
-        f"SMA_BREADTH: {sma:+.4f} ({'confirming ROC_13' if (sma > 0) == (roc13 > 0) else 'diverging from ROC_13'})\n"
-        f"Fast/Slow spread: {spread:+.4f} ({'fast outpacing slow — expanding' if spread > 0 else 'fast lagging slow — narrowing'})\n"
+        # Every comparison stated as ABOVE/BELOW, never as a sign check or a
+        # bare signed number. Two defects lived in the old lines: ROC_13 was
+        # labelled "participation rising" on any positive value, even while
+        # breadth fell four sessions running (a positive but shrinking rate
+        # of change is deceleration, not growth); and SMA_BREADTH read
+        # "confirming ROC_13" whenever the two merely shared a sign, which is
+        # true on exactly the days the fast reading sits UNDER its signal —
+        # the thing that makes the state 'slowing'. Same class as the
+        # inverted fast/slow claim recorded in _fmt_autorun's docstring.
+        f"ROC_13 (fast): {roc13:+.4f}\n"
+        f"ROC_55 (slow): {roc55:+.4f}\n"
+        f"Fast vs slow: ROC_13 is "
+        f"{'BELOW' if roc13 < roc55 else 'ABOVE' if roc13 > roc55 else 'level with'} "
+        f"ROC_55 — "
+        f"{'thrust fading' if roc13 < roc55 else 'fresh thrust' if roc13 > roc55 else 'no spread'}\n"
+        f"SMA_BREADTH (signal line): {sma:+.4f} — ROC_13 is "
+        f"{'BELOW' if roc13 < sma else 'ABOVE' if roc13 > sma else 'level with'} it\n"
         f"\n--- Last 3 Sessions ---\n{hist_str}\n"
         f"Momentum direction: {roc_direction}\n"
         f"On-screen oscillator state: {_roc_state(roc13, sma, history[-2]['roc_13'] if len(history) >= 2 else None)}\n"

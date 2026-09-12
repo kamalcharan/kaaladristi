@@ -783,6 +783,47 @@ the fold — and it replaces what used to be three separate inline surfaces
 it opens deliberately, with a question already in mind, so it neither
 autoruns nor uses the tray.
 
+### ⚠ Small models must never be handed a signed number to interpret
+
+First live autorun, 2026-09-11 close. VaNi wrote: *"The fast and slow
+readings agree, with the fast reading slightly above the slow reading."*
+`roc_13` was **0.0235** against `roc_55` of **0.0596** — the fast reading was
+well BELOW the slow one. A confident, specific, inverted factual claim.
+
+The plumbing was fine. `_fmt_autorun` emitted only
+`Fast/slow spread: -0.0361` and expected the model to read the sign. Qwen
+did not. Everything the brief was *about* — thrust fading, four straight
+falling sessions — was missed for the same reason: the data block gave rows
+and left the derivation to the model.
+
+**Rule: pre-compute every comparison into a sentence.** The formatters now
+write "The FAST reading (+0.0235) is BELOW the slow reading (+0.0596)",
+"BELOW its signal line", "Breadth is FALLING in every one of the last 4
+sessions: 43.2 → 39.3, a change of -3.9 points". The model copies a
+relationship; it never derives one. That moves the risk from the model into
+our arithmetic, so the arithmetic is now tested —
+`check_derived_statements()` in `test_vani_routing.py` pins the wording to
+the numbers across fast-under-slow, fast-over-slow and both-negative cases,
+and is verified to fail on a flipped comparison.
+
+`_fmt_breadth_momentum` carried two more of the same class, both fixed:
+`SMA_BREADTH: (confirming ROC_13)` whenever the two merely shared a **sign**
+— true on exactly the days the fast reading sits UNDER its signal line, the
+thing that makes the state 'slowing'; and `ROC_13 (positive — participation
+rising)` on any positive value, while breadth fell four sessions running. A
+positive but shrinking rate of change is deceleration, not growth.
+
+**Second defect, same brief:** it closed with *"Capital is flowing towards
+the market."* — unsupported, and directionally positive on a day every
+measure fell. Source: `_VANI_RULES` ended with
+`"Use: 'elevated caution', … 'capital is flowing toward'."` A small model
+reads a list under **Use:** as fill-in-the-blank and bolts one on as a
+flourish. Reframed as a *permitted* vocabulary, explicitly "NOT a checklist",
+plus "every sentence must be supported by a number or a state given in the
+data; if you cannot point to the line that backs a sentence, delete it."
+This applies to **every** intent, not just the autorun — expect the whole
+family to get less generic. Guarded by a test.
+
 ### 📋 NEXT SESSION (owner + Claude) — Flower Pot: VaNi intents (the card, tiles and ETF fix shipped)
 
 Session 2026-09-07 (2). Full record of the prior audit: `docs/claude/scanner-gap-audit-2026-09-06.md` §11.

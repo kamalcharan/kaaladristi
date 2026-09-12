@@ -134,6 +134,87 @@ UNDER_TEST = [
 ]
 
 
+def check_derived_statements() -> int:
+    """The formatters state comparisons in words — assert the words are right.
+
+    Why this is separate from the routing checks: the first live autorun came
+    back saying "the fast reading slightly above the slow reading" on a day
+    roc_13 was 0.0235 against roc_55 of 0.0596. The plumbing was perfect. The
+    data block said only "Fast/slow spread: -0.0361" and a small local model
+    inverted the sign on the one comparison the paragraph was about.
+
+    The fix was to pre-compute every relationship into a sentence. That moves
+    the risk from the model into OUR arithmetic — so the arithmetic gets a
+    test. Each case below pins the wording to the numbers; a flipped
+    comparison fails here instead of appearing in a user's morning brief as a
+    confident, specific, wrong claim.
+    """
+    from lib.vani_assemblers import _fmt_autorun, _fmt_breadth_momentum
+
+    def ctx_for(roc13, roc55, sma, scores):
+        hist = [
+            {'date': f'2026-09-{8 + i:02d}', 'score': sc, 'regime': 'Neutral',
+             'pct_above_20': sc - 4, 'pct_above_50': sc + 2, 'pct_above_150': sc + 6}
+            for i, sc in enumerate(scores)
+        ]
+        rhist = [
+            {'date': f'2026-09-{8 + i:02d}', 'roc_13': roc13, 'roc_55': roc55,
+             'spread': roc13 - roc55, 'bias': 'positive'}
+            for i in range(len(scores))
+        ]
+        return {
+            'date': '2026-09-11',
+            'breadth': {'score': scores[-1], 'pct_above_20': scores[-1] - 4,
+                        'pct_above_50': scores[-1] + 2, 'pct_above_150': scores[-1] + 6},
+            'breadth_roc': {'roc_13': roc13, 'roc_55': roc55, 'sma_breadth': sma},
+            'breadth_history': hist, 'breadth_roc_history': rhist,
+        }
+
+    cases = [
+        # (label, roc13, roc55, sma, scores, must_appear, must_NOT_appear)
+        ('live 2026-09-11 — fast under slow, under signal',
+         0.0235, 0.0596, 0.0700, [44.6, 43.2, 41.7, 39.3],
+         ['FAST reading (+0.0235) is BELOW the slow reading (+0.0596)',
+          'BELOW its signal line (+0.0700)',
+          'FALLING in every one of the last 4 sessions'],
+         ['is ABOVE the slow reading']),
+        ('fast over slow and over signal',
+         0.0900, 0.0300, 0.0500, [39.3, 41.7, 43.2],
+         ['FAST reading (+0.0900) is ABOVE the slow reading (+0.0300)',
+          'ABOVE its signal line',
+          'RISING in every one of the last 3 sessions'],
+         ['is BELOW the slow reading', 'FALLING in every']),
+        ('negative fast, still above a more-negative slow',
+         -0.0100, -0.0400, -0.0200, [43.2, 41.0, 42.0],
+         ['FAST reading (-0.0100) is ABOVE the slow reading (-0.0400)'],
+         ['is BELOW the slow reading']),
+    ]
+
+    failures = 0
+    for label, roc13, roc55, sma, scores, wanted, unwanted in cases:
+        ctx = ctx_for(roc13, roc55, sma, scores)
+        text = _fmt_autorun(ctx) + '\n' + _fmt_breadth_momentum(ctx)
+        missing = [w for w in wanted if w not in text]
+        present = [u for u in unwanted if u in text]
+        ok = not missing and not present
+        failures += 0 if ok else 1
+        print(f"{'PASS' if ok else 'FAIL'}  derived: {label}")
+        for m in missing:
+            print(f"          ✗ missing: {m}")
+        for pz in present:
+            print(f"          ✗ present but must not be: {pz}")
+
+    # The safe-vocabulary list must not read as an instruction to use it.
+    # "Capital is flowing towards the market" appeared, unsupported, on a day
+    # every measure fell — a small model read "Use: <phrases>" as fill-in.
+    from lib.vani_intents import _VANI_RULES
+    rules_ok = 'permitted vocabulary' in _VANI_RULES and 'NOT a checklist' in _VANI_RULES
+    failures += 0 if rules_ok else 1
+    print(f"{'PASS' if rules_ok else 'FAIL'}  voice rules frame safe phrases as "
+          f"permitted, not required")
+    return failures
+
+
 def main() -> int:
     # The cloud provider is left CONFIGURED and plausible on purpose: if
     # prefer_local regressed, the call would go there first and the tripwire
@@ -209,6 +290,8 @@ def main() -> int:
         failures += 0 if control_ok else 1
         print(f"{'PASS' if control_ok else 'FAIL'}  control: prefer_local=False does "
               f"attempt cloud (the 401 above is expected)")
+
+        failures += check_derived_statements()
 
         print('\nALL PASSED' if failures == 0 else f'\n{failures} CHECK(S) FAILED')
         return 0 if failures == 0 else 1

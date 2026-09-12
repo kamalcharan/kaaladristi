@@ -47,8 +47,13 @@ _VANI_RULES = (
     "distribution, stop loss, buying/selling opportunity. For relative-strength "
     "zones use only the on-screen labels: Leading, Improving, Neutral, "
     "Weakening, Lagging. Describe flows as rising flow / falling flow. "
-    "Use: 'elevated caution', 'favorable window', 'structural stress', "
-    "'historically correlated with', 'risk is heightened', 'capital is flowing toward'. "
+    "These phrasings are AVAILABLE if the data actually supports them — they "
+    "are a permitted vocabulary, NOT a checklist and NOT something to include "
+    "for its own sake: 'elevated caution', 'favorable window', 'structural "
+    "stress', 'historically correlated with', 'risk is heightened', 'capital "
+    "is flowing toward'. Never close with one of these as a flourish. "
+    "Every sentence must be supported by a number or a state given in the "
+    "data; if you cannot point to the line that backs a sentence, delete it. "
     "No bullet points — write flowing paragraphs. About 150 words."
 )
 
