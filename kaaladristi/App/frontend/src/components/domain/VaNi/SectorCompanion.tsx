@@ -1,3 +1,4 @@
+import SectorFlowOverview, { type OverviewRow } from './SectorFlowOverview';
 import { useEffect, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
@@ -11,6 +12,7 @@ import '@/styles/sectorResearch.css';
 
 const API = import.meta.env.VITE_PIPELINE_API_URL?.trim() || '';
 const intents = {
+  'sector.overview': 'What’s happening here?',
   'sector.read': 'Explain this flow', 'sector.compare': 'Why do Flow 5D and Flow 22D differ?',
   'sector.persistence': 'Has this flow persisted?', 'sector.participation': 'Is participation broad or concentrated?',
   'sector.learn': 'Help me read this page', 'sector.taxonomy': 'Indices, curated baskets and industries',
@@ -19,7 +21,7 @@ type Intent = keyof typeof intents;
 interface Response {
   response?: string; error?: string; pending?: boolean; context_changed?: boolean; log_id?: string;
   facts?: string[]; snapshot?: string; date?: string;
-  history?: { index_id: number; trade_date: string; name: string; score_5d: number | null; score_22d: number | null }[];
+  history?: OverviewRow[]; rows?: OverviewRow[]; index_count?: number;
 }
 async function ask(body: object): Promise<Response> {
   const res = await fetch(`${API}/api/vani/ask`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
@@ -32,13 +34,14 @@ export default function SectorCompanion() {
   const context = useSectorResearchStore();
   const user = useAuthStore(s => s.profile?.id);
   const indexId = Number(pathname.match(/^\/sector-rotation\/(\d+)/)?.[1]) || undefined;
-  const [intent, setIntent] = useState<Intent>('sector.learn');
+  const [intent, setIntent] = useState<Intent>(indexId ? 'sector.learn' : 'sector.overview');
   const [depth, setDepth] = useState('brief');
   const [open, setOpen] = useState(false);
   const dialog = useRef<HTMLDialogElement>(null);
   const launcher = useRef<HTMLButtonElement>(null);
   const [cycle, setCycle] = useState(0);
   const [presented, setPresented] = useState('');
+  const overview = !indexId && intent === 'sector.overview';
   const staticIntent = intent === 'sector.learn' || intent === 'sector.taxonomy';
   const selected = { date: context.date, entity_type: 'index', entity_id: indexId,
     sector_category: context.category, sector_period: context.period };
@@ -57,13 +60,13 @@ export default function SectorCompanion() {
   });
   const key = JSON.stringify([identity, intent, depth, cycle, evidence.data?.snapshot]);
   useEffect(() => { const timer = window.setTimeout(() => setPresented(key), 450); return () => window.clearTimeout(timer); }, [key]);
-  useEffect(() => { setIntent('sector.learn'); setDepth('brief'); }, [pathname]);
+  useEffect(() => { setIntent(indexId ? 'sector.learn' : 'sector.overview'); setDepth('brief'); }, [pathname, indexId]);
   useEffect(() => {
     const el = dialog.current;
     if (open && el && !el.open) el.showModal();
     if (!open && el?.open) el.close();
   }, [open]);
-  const choose = (id: Intent) => { setIntent(id); setCycle(c => c + 1); };
+  const choose = (id: Intent) => { setIntent(id); setCycle(c => c + 1); if (!indexId && id !== 'sector.overview' && window.matchMedia('(max-width: 1279px)').matches) setOpen(true); };
   const loading = key !== presented || reading.isFetching || reading.data?.pending || (!staticIntent && evidence.isFetching);
   const issue = reading.error?.message || reading.data?.error || (!staticIntent && evidence.error?.message);
   const retry = async () => {
@@ -72,17 +75,20 @@ export default function SectorCompanion() {
     else await reading.refetch();
   };
   const body = <div className="sector-vani-body">
+    {!overview && <>
     <p className="text-xs text-muted">Discover activity → check persistence → inspect participation → save an observation.</p>
-    <div className="flex flex-wrap gap-2" aria-label="Sector questions">{Object.entries(intents).filter(([id]) => indexId || id !== 'sector.participation').map(([id, label]) =>
+    <div className="flex flex-wrap gap-2" aria-label="Sector questions">{Object.entries(intents).filter(([id]) => indexId ? id !== 'sector.overview' : id !== 'sector.participation').map(([id, label]) =>
       <button key={id} aria-pressed={intent === id} onClick={() => choose(id as Intent)} className="sector-question">{label}</button>)}</div>
     {!staticIntent && <div className="flex flex-wrap gap-2">{['brief','simple','detailed'].map(d => <button className="sector-question" key={d} aria-pressed={depth === d} onClick={() => setDepth(d)}>{d === 'brief' ? 'Concise' : d === 'simple' ? 'Explain simply' : 'Go deeper'}</button>)}</div>}
+    </>}
     <h3 className="text-sm font-medium">{intents[intent]}</h3>
+    {overview && evidence.data?.rows && <SectorFlowOverview key={evidence.data.snapshot} rows={evidence.data.rows} history={evidence.data.history ?? []} date={evidence.data.date ?? context.date!} period={context.period} total={evidence.data.index_count ?? evidence.data.rows.length}/>}
     {loading ? <div role="status" className="flex items-center gap-2 text-sm"><Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" />Consulting VaNi…</div>
       : issue ? <div role="status"><p className="text-sm">{issue}</p><button className="sector-question mt-2" onClick={retry}>Try again</button></div>
       : !staticIntent && !evidence.data ? <p className="text-sm">Select an available session to read its evidence.</p>
       : <p className="text-sm leading-7 whitespace-pre-wrap">{reading.data?.response}</p>}
     {!loading && !issue && reading.data?.log_id && <VaNiFeedback key={reading.data.log_id} logId={reading.data.log_id} />}
-    {evidence.data && <details><summary className="cursor-pointer text-sm">Inspect the evidence</summary>
+    {!overview && evidence.data && <details><summary className="cursor-pointer text-sm">Inspect the evidence</summary>
       {indexId && <div className="h-44 mt-3" role="img" aria-label="Selected index Flow 5D and Flow 22D history"><ResponsiveContainer width="100%" height="100%"><LineChart data={evidence.data.history}>
         <XAxis dataKey="trade_date" tickFormatter={sectorSessionDate} tick={{ fontSize: 9 }} minTickGap={40} /><YAxis width={35} tick={{fontSize:9}} />
         <Tooltip labelFormatter={v => sectorSessionDate(String(v))} contentStyle={{ background:'var(--card)',borderColor:'var(--border)' }} />
@@ -90,11 +96,13 @@ export default function SectorCompanion() {
       </LineChart></ResponsiveContainer></div>}
       {evidence.data.facts?.map((fact,i)=><p key={i} className="text-xs leading-6 mt-2 text-muted">{fact}</p>)}
     </details>}
+    {overview && <details><summary className="text-xs cursor-pointer min-h-11">Explore another question</summary>    <div className="flex flex-wrap gap-2" aria-label="Sector questions">{Object.entries(intents).filter(([id]) => indexId ? id !== 'sector.overview' : id !== 'sector.participation').map(([id, label]) =>
+      <button key={id} aria-pressed={intent === id} onClick={() => choose(id as Intent)} className="sector-question">{label}</button>)}</div></details>}
   </div>;
   return <aside className="sector-vani" aria-label="VaNi Sector Rotation companion">
     <header className="p-4 border-b border-[var(--border)]"><h2 className="text-lg font-serif">VaNi · वाणी</h2><p className="text-xs text-muted">Sector research · {context.date ? sectorSessionDate(context.date) : 'Select a session'}</p>
-      <button ref={launcher} className="sector-vani-launch sector-question mt-3" onClick={() => { setOpen(true); setCycle(c=>c+1); }}>Help me read this page</button></header>
-    <div className="sector-vani-desktop">{body}</div>
+      <button ref={launcher} className={`${overview ? 'hidden' : 'sector-vani-launch'} sector-question mt-3`} onClick={() => { setOpen(true); setCycle(c=>c+1); }}>Help me read this page</button></header>
+    <div className={overview ? "sector-vani-overview" : "sector-vani-desktop"}>{body}</div>
     <dialog ref={dialog} className="sector-vani-dialog" onCancel={() => setOpen(false)} onClose={() => { setOpen(false); launcher.current?.focus(); }}>
       <header className="flex items-center justify-between p-4 border-b border-[var(--border)]"><h2 className="font-medium">VaNi · Sector research</h2><button autoFocus className="sector-question" onClick={() => setOpen(false)}>Close</button></header>{open && body}
     </dialog>

@@ -25,20 +25,21 @@ const days=[];
 for(let d=new Date('2026-06-01T00:00:00Z'); d<=new Date('2026-09-11T00:00:00Z'); d.setUTCDate(d.getUTCDate()+1)) if(![0,6].includes(d.getUTCDay())) days.push(d.toISOString().slice(0,10));
 const symbols=[{id:97,name:'Specialty manufacturing research basket',category:'sectoral index',is_active:true},{id:98,name:'Second comparison sector',category:'sectoral index',is_active:true}];
 const stocks=Array.from({length:5},(_,i)=>({id:i+1,symbol:`STOCK${i+1}`,company_name:`Example constituent ${i+1}`}));
-const indices=symbols.flatMap(s=>days.map((d,i)=>({index_id:s.id,trade_date:d,open:100+i,high:104+i,low:98+i,close:102+i,volume:100000,value_cr:300,ema_20:95+i,score_5d:i%7===0?0:20+i%20,score_22d:15,avg_amt_5d:120,avg_amt_22d:100,avg_amt_66d:90,ret_5d:3,ret_22d:4,ret_66d:6,pct_chng:1,rsi_14:55,magic_rs:2,stock_count:5})));
+const indices=symbols.flatMap(s=>days.map((d,i)=>({index_id:s.id,name:s.name,trade_date:d,open:100+i,high:104+i,low:98+i,close:102+i,volume:100000,value_cr:300,ema_20:95+i,score_5d:i%7===0?0:20+i%20,score_22d:15,avg_amt_5d:120,avg_amt_22d:100,avg_amt_66d:90,ret_5d:3,ret_22d:4,ret_66d:6,pct_chng:1,rsi_14:55,magic_rs:2,stock_count:5})));
 const equities=stocks.flatMap(s=>days.map((d,i)=>({equity_id:s.id,trade_date:d,close:100+i,pct_chng:s.id===1?20:-1,ema_20:95+i,sma_50:90+i,sma_150:88+i,ret_5d:3,ret_22d:5,score_5d:s.id===1?80:5,score_22d:4,value_cr:20,avg_amt_5d:20,avg_amt_22d:10,flow_type:'SHORT_COVERING',rsi_14:55})));
 const breadth=days.map((d,i)=>({index_id:97,trade_date:d,stock_count:5,universe_count:5,pct_above_20:40+i%20,pct_above_50:60,pct_above_150:80,breadth_score:54,roc_13:.03,roc_55:.02,sma_breadth:.04,above_20:2,above_50:3,above_150:4}));
 let browser;
 try {
   browser=await chromium.launch(process.env.SECTOR_QA_BROWSER ? {executablePath:process.env.SECTOR_QA_BROWSER,headless:true} : {channel:'chrome',headless:true});
-  const page=await browser.newPage(); const errors=[]; const queries=[];
-  page.on('pageerror',e=>errors.push(e.message));
+  const page=await browser.newPage(); const errors=[]; const queries=[]; const vaniCalls=[];
+  page.on('pageerror',e=>{errors.push(e.message);console.error(e.message)});
   await page.route('**/*',async route=>{
     const url=new URL(route.request().url());
     if(url.pathname.includes('/api/')) {
       const body=route.request().postDataJSON?.() || {};
       if(url.pathname.endsWith('/api/vani/ask')) {
-        const data=body.intent_id==='sector.context' ? {snapshot:`${body.date}-${body.sector_period}`,date:body.date,facts:['Synthetic fixture: 5 constituents.'],history:indices.filter(r=>r.index_id===97&&r.trade_date<=body.date).slice(-body.sector_period)} : {response:'Near-term flow is above its underlying baseline. Check participation across the constituents.',cached:true,log_id:'qa'};
+        vaniCalls.push(body);
+        const data=body.intent_id==='sector.context' ? {snapshot:`${body.date}-${body.sector_period}`,date:body.date,facts:['Synthetic fixture: 5 constituents.'],index_count:2,rows:indices.filter(r=>r.trade_date===body.date),history:indices.filter(r=>r.index_id===97&&r.trade_date<=body.date).slice(-body.sector_period)} : {response:'Near-term flow is above its underlying baseline. Check participation across the constituents.',cached:true,log_id:'qa'};
         return route.fulfill({json:data});
       }
       return route.fulfill({json:{}});
@@ -71,6 +72,11 @@ try {
     await page.setViewportSize({width,height:950});
     await page.goto(base+'/__sector_qa.html?mode='+mode);
     await page.locator(width < 768 ? '.sector-mobile-rows article' : '.sector-desktop-table tbody tr').first().waitFor();
+    await page.getByRole('heading',{name:/What.*happening here/}).waitFor();
+    await page.getByRole('heading',{name:'Money Entering',exact:true}).waitFor();
+    assert.equal(await page.getByText('Inspect the evidence',{exact:true}).count(),0);
+    assert(vaniCalls.some(r=>r.intent_id==='sector.overview' && !r.entity_id), 'Listing default should run automatically');
+    await page.screenshot({path:path.join(out,`sector-default-${mode}-${width}.png`),fullPage:true});
     await noOverflow(`list ${width}`);
     await page.getByRole('button',{name:'Heat',exact:true}).click();
     await page.getByRole('button',{name:'Older →',exact:true}).waitFor();

@@ -12,6 +12,7 @@ CATEGORIES = {
     'thematic': ['thematic market index'], 'custom': ['custom'],
 }
 QUESTIONS = {
+    'sector.overview': 'Summarize the balance of flow across the selected category without naming individual indices.',
     'sector.read': 'Explain the selected sector flow snapshot.',
     'sector.compare': 'Explain near-term Flow 5D versus underlying Flow 22D.',
     'sector.persistence': 'Describe how flow changed over the available sessions.',
@@ -127,7 +128,7 @@ def load_context(req, db):
     evidence = {'date': target, 'period': period, 'category': category, 'index_id': index_id,
                 'history': history, 'constituents': constituents, 'breadth': breadth, 'facts': facts}
     digest = hashlib.sha256(json.dumps(evidence, sort_keys=True, default=str).encode()).hexdigest()
-    return {**evidence, 'snapshot': digest, 'rows': ordered, 'counts': states}
+    return {**evidence, 'snapshot': digest, 'rows': ordered, 'counts': states, 'index_count': len(ids)}
 
 
 def answer(req, db, complete, post_filter, log_interaction, model):
@@ -146,6 +147,17 @@ def answer(req, db, complete, post_filter, log_interaction, model):
         if not static and getattr(req, 'sector_snapshot', None) != ctx['snapshot']:
             return {**base, 'context_changed': True, 'error': 'The sector data changed. Refresh this reading.'}
         facts = ctx.get('facts', [])
+        overview = intent == 'sector.overview'
+        if overview:
+            counts = ctx['counts']
+            entering = counts['Strong'] + counts['Building']
+            leaving = counts['Outflow']
+            unavailable = ctx['index_count'] - len(ctx['rows']) + counts['Unavailable']
+            comparison = 'MORE' if entering > leaving else 'FEWER' if entering < leaving else 'AS MANY'
+            facts = [f"Closing session {ctx['date']}; selected category {ctx['category']}.",
+                     f"Money Entering: {entering}; Fading: {counts['Fading']}; Money Leaving: {leaving}; Quiet: {counts['Quiet']}; Unavailable: {unavailable}.",
+                     f'There are {comparison} indices entering than leaving (equal counts when AS MANY).',
+                     'Entering combines Strong and Building. Quiet and missing readings are not outflow. These counts describe index groups, not rupee amounts or the whole market.']
         context = {'version': VERSION, 'snapshot': ctx.get('snapshot'), 'depth': depth if not static else 'static'}
         key = make_cache_key(intent, context)
         meta = {**base, 'facts': facts, 'date': ctx.get('date'), 'ai': not static}
@@ -166,9 +178,11 @@ def answer(req, db, complete, post_filter, log_interaction, model):
                               'is not index return contribution. Mention missing data. Plain English. ' +
                               ('At most 180 words.' if depth == 'detailed' else 'At most 80 words.') +
                               (' Explain terminology simply.' if depth == 'simple' else ''))
+                    if overview:
+                        system += ' For this category overview: at most TWO short sentences and 40 words. No index-by-index commentary, no formulas, no methodology paragraphs. Describe the balance of the groups and suggest inspecting persistence or participation. Never claim that the counts measure net money.'
                     start = time.monotonic()
                     raw, provider = complete(system=system, user=QUESTIONS[intent]+'\n'+'\n'.join(facts),
-                        max_tokens=450 if depth=='detailed' else 230, temperature=0.2,
+                        max_tokens=120 if overview else 450 if depth=='detailed' else 230, temperature=0.2,
                         no_think=True, prefer_local=True, allow_cloud_fallback=True)
                     elapsed = int((time.monotonic()-start)*1000)
                     text, rejected = post_filter(raw) if raw else (None, False)

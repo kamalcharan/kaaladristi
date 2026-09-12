@@ -65,7 +65,7 @@ snapshot and includes its own date.
 
 ## Validation
 
-- `python -m unittest test_sector_vani test_market_structure_vani`: 24 tests.
+- `python -m unittest test_sector_vani test_market_structure_vani`: 25 tests.
 - `node scripts/qa/check-sector-contracts.mjs`: browser/server classification,
   missing data, concentration, 600-constituent pagination, historical bounds,
   readable dates, query ordering and minimum count.
@@ -85,3 +85,9 @@ No live VPS model invocation or production data audit was performed. Please
 verify the deployed model/fallback, production data and user permissions when
 testing locally against your environment. Existing build warnings concern
 bundle size, Browserslist age and an ambiguous pre-existing Tailwind class.
+
+## Default listing intent follow-up
+
+The listing route automatically opens `sector.overview`: Discovery-style Money Entering (Strong + Building), Fading and Money Leaving (Outflow) cards, up to three linked examples per group with expandable lists and mini-trends. Quiet and unavailable coverage remain separate. The default is inline on mobile. Other questions are available under Explore another question; index-detail defaults are unchanged.
+
+The overview prompt receives only computed group balance and requests at most two short sentences, without index-by-index narration. Existing Qwen-first routing, configured fallback, cache, feedback and the visible loading state are reused. Raw evidence paragraphs are hidden for this intent. Frontend and backend must be updated together. Automated UI checks now also verify default opening and evidence visibility.

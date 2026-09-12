@@ -19,6 +19,7 @@
 .flow-scroll::-webkit-scrollbar-track { background: var(--card); }
 @media(min-width:1280px) {
  .sector-vani { width: 320px; position: sticky; top: 90px; }
+ .sector-vani-overview { max-height:calc(100dvh - 210px); overflow-y:auto; }
  .sector-vani-desktop { display:block; max-height:calc(100dvh - 210px); overflow-y:auto; }
  .sector-vani-launch { display:none; }
 }

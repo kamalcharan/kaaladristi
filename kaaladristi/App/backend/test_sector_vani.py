@@ -93,5 +93,21 @@ class SectorContracts(unittest.TestCase):
         req=request(); req.sector_period=1000
         self.assertIn('error',sector.answer(req,Database(),None,None,None,None))
 
+    def test_overview_only_supplies_group_balance_to_llm(self):
+        db=Database(); req=request('sector.overview'); req.entity_id=None
+        req.sector_snapshot=sector.load_context(req,db)['snapshot']
+        calls=[]
+        def complete(**kwargs):
+            calls.append(kwargs)
+            return ('More indices show entering flow. Inspect their persistence next.','qwen-local')
+        with patch.object(sector,'get_cached',return_value=None), patch.object(sector,'set_cached'):
+            result=sector.answer(req,db,complete,lambda s:(s,False),lambda **kw:'overview','haiku')
+        self.assertNotIn('error',result)
+        self.assertIn('Money Entering: 1',calls[0]['user'])
+        self.assertNotIn('Example sector',calls[0]['user'])
+        self.assertNotIn('constituent',calls[0]['user'])
+        self.assertIn('40 words',calls[0]['system'])
+        self.assertTrue(calls[0]['prefer_local'])
+
 
 if __name__ == '__main__': unittest.main()
