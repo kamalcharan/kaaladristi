@@ -693,10 +693,25 @@ would have shipped:**
    That stray `PUT /api/framework` on step 3 is this bootstrap — additive,
    pre-existing, not a template overwrite.
 
-**Friction to expect:** 16 of 17 profiles have no phone, and step 1 blocks on
-a valid Indian mobile before "Begin". Every re-onboarded user must supply
-one. Left as-is — it is a required field by design — but say so if that is
-not wanted.
+**Phone is forced** (owner, 2026-09-12: *"if there is no phone number we will
+force it now"*). 16 of 17 profiles have none and step 1 blocks on a valid
+Indian mobile, so the re-onboard collects them. Two places would have let a
+user slip past, both fixed:
+
+* **The resume rule.** `persona_set_at && step < 3 → setStep(3)` skipped step
+  1, the only screen that captures a phone — so a profile with a persona and
+  no number would never be asked. It now refuses to resume unless the stored
+  phone passes `isValidIndianMobile`.
+* **The migration's exemption.** Stamping everyone with `persona_set_at`
+  exempted them permanently. It now requires a valid phone too: of the two
+  persona-holders on 2026-09-12 only one had a number, so the stamp exempts
+  **1 profile and sends 16 back** (dry-run verified against live data).
+
+The SQL phone test mirrors `lib/phone.ts` exactly, length conditions
+included. A plain `^(\+?91|0)` strip looks equivalent and is not — it mangles
+a genuine ten-digit mobile starting 91 (`9123456789` → `23456789`, rejected)
+while the wizard accepts it, bouncing that user to re-enter a number the app
+already considers valid. Both forms were run against the DB before choosing.
 
 No frontend test runner exists, so both rules are covered by Playwright
 against the dev server: six routing cases (including both bounce-loop

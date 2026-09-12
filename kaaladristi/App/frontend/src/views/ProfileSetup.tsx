@@ -607,9 +607,18 @@ export default function ProfileSetup() {
   // profile has it from creation and the old rule sent EVERY new signup
   // straight to Plan → Look — nobody ever saw the VaNi intro or the ICP
   // question (found 2026-09-07 on the first real signup after the rework).
+  //
+  // The phone overrides the resume (owner, 2026-09-12: "if there is no phone
+  // number we will force it now"). Step 1 is the only place a phone is
+  // captured, so resuming past it would permanently exempt exactly the users
+  // we are trying to reach — a profile can carry a persona and still have no
+  // phone, and that combination is real (1 of the 2 persona-holders on
+  // 2026-09-12). Answering the questions again is cheap; never being asked
+  // for a number is not.
   useEffect(() => {
     if (!profile) return
     if (profile.onboarded) return
+    if (!isValidIndianMobile(profile.phone ?? '')) return
     if (profile.persona_set_at && step < 3) setStep(3)
   }, [profile, step])
 
