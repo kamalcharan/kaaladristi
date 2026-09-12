@@ -9,7 +9,7 @@ import { sectorSignal } from '@/lib/sectorFlow';
  * (owner decision 2026-07-06 — one taxonomy, the stable one).
  */
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSectorPulse } from '@/hooks/useSectorRotation';
 import {
@@ -60,7 +60,7 @@ function PulseRow({ row, onClick }: { row: SectorPulseRow; onClick: () => void }
         title={row.name}
         style={{
           ...MONO, fontSize: 11, color: 'var(--text-secondary)',
-          flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
         }}
       >
         {row.name.replace(/^NIFTY /, '')}
@@ -79,8 +79,15 @@ function PulseRow({ row, onClick }: { row: SectorPulseRow; onClick: () => void }
 }
 
 export default function SectorPulse() {
-  const navigate = useNavigate();
   const { data = [], isLoading } = useSectorPulse();
+  return <SectorPulseContent data={data} isLoading={isLoading} />;
+}
+
+export function SectorPulseContent({ data, isLoading = false, embedded = false }: {
+  data: SectorPulseRow[]; isLoading?: boolean; embedded?: boolean;
+}) {
+  const navigate = useNavigate();
+  const [expanded, setExpanded] = useState<Bucket[]>([]);
 
   const buckets = useMemo(() => {
     const b: Record<Bucket, SectorPulseRow[]> = { entering: [], fading: [], leaving: [] };
@@ -99,7 +106,7 @@ export default function SectorPulse() {
   }, [data]);
 
   return (
-    <div>
+    <div aria-label="Sector flow snapshot">
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
         <span style={{ ...MONO, fontSize: 11, color: 'var(--text-faint)', letterSpacing: '.06em', textTransform: 'uppercase' }}>
           Sector Pulse
@@ -107,7 +114,7 @@ export default function SectorPulse() {
         <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>
           Money-flow verdict per sector · bars = 22-session conviction trend
         </span>
-        <button
+        {!embedded && <button
           onClick={() => navigate('/sector-rotation')}
           style={{
             ...MONO, marginLeft: 'auto', fontSize: 10, color: 'var(--gold)',
@@ -115,16 +122,17 @@ export default function SectorPulse() {
           }}
         >
           full rotation →
-        </button>
+        </button>}
       </div>
 
       {isLoading ? (
         <div style={{ ...MONO, fontSize: 11, color: 'var(--text-faint)', padding: '12px 0' }}>Loading sector pulse…</div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 12 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 240px), 1fr))', gap: 12 }}>
           {(Object.keys(BUCKET_META) as Bucket[]).map((bucket) => {
             const meta = BUCKET_META[bucket];
             const rows = buckets[bucket];
+            const all = expanded.includes(bucket);
             const overflow = rows.length - MAX_PER_BUCKET;
             return (
               <div
@@ -139,7 +147,7 @@ export default function SectorPulse() {
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
                   <span style={{ width: 6, height: 6, borderRadius: '50%', background: meta.color }} />
-                  <span style={{ ...MONO, fontSize: 10, fontWeight: 700, letterSpacing: '.07em', textTransform: 'uppercase', color: meta.color }}>
+                  <span role="heading" aria-level={4} style={{ ...MONO, fontSize: 10, fontWeight: 700, letterSpacing: '.07em', textTransform: 'uppercase', color: meta.color }}>
                     {meta.title}
                   </span>
                   <span style={{ ...MONO, fontSize: 10, color: 'var(--text-faint)', marginLeft: 'auto' }}>
@@ -158,18 +166,19 @@ export default function SectorPulse() {
                   </div>
                 ) : (
                   <>
-                    {rows.slice(0, MAX_PER_BUCKET).map((row) => (
+                    {rows.slice(0, all ? rows.length : MAX_PER_BUCKET).map((row) => (
                       <PulseRow key={row.id} row={row} onClick={() => navigate(`/sector-rotation/${row.id}`)} />
                     ))}
                     {overflow > 0 && (
                       <button
-                        onClick={() => navigate('/sector-rotation')}
+                        onClick={() => embedded ? setExpanded(current => all ? current.filter(b => b !== bucket) : [...current, bucket]) : navigate('/sector-rotation')}
+                        aria-expanded={embedded ? all : undefined}
                         style={{
                           ...MONO, fontSize: 10, color: 'var(--text-muted)', background: 'none',
                           border: 'none', cursor: 'pointer', padding: '4px 6px',
                         }}
                       >
-                        +{overflow} more →
+                        {all ? 'Show fewer' : `+${overflow} more →`}
                       </button>
                     )}
                   </>

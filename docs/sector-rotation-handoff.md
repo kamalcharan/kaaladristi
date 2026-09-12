@@ -97,3 +97,7 @@ The overview prompt receives only computed group balance and requests at most tw
 The default now ignores the active tab, table date and history selection. It uses the latest completed session, Sectoral + Curated coverage and 22 sessions of history, matching Discovery's intended overall scope. Both clients use `fetchSectorPulseContext` and the new read-only `sector.pulse.context` endpoint (no LLM invocation). The overview narration validates that same snapshot. Frontend and backend must be updated together.
 
 Discovery no longer substitutes an older index reading when the current session is missing. Both views classify current-session records with the same missing-data handling. Entering/fading sort by Flow 5D descending; leaving sorts by 5D return ascending; name breaks ties. Tests cover tab-independent snapshots, stale-row exclusion and Discovery/VaNi record-and-signal parity. Live database values still need local verification.
+
+## Reuse Discovery presentation
+
+VaNi now renders the existing Discovery `SectorPulseContent` from `DashboardV3/SectorPulse.tsx`, using the same row projection, grouping, sorting, formatting, six-row limit and micro-trends. The duplicate `SectorFlowOverview.tsx` is removed. Embedded mode hides the self-link to sector rotation and expands additional rows in place. The shared grid fits narrow containers. Typecheck, production build, flow parity checks and eight browser configurations passed.

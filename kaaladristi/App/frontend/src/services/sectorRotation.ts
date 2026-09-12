@@ -600,6 +600,10 @@ export async function fetchSectorPulse(days = 22): Promise<SectorPulseRow[]> {
   // Both Discovery and VaNi use this authoritative overall snapshot. Never
   // substitute an older constituent-index row for the snapshot session.
   const context = await fetchSectorPulseContext();
+  return sectorPulseRows(context, days);
+}
+
+export function sectorPulseRows(context: Pick<SectorPulseSnapshot, 'rows' | 'history'>, days = 22): SectorPulseRow[] {
   return context.rows.map((row: SectorIndexRow) => ({
     id: row.index_id, name: row.name, isCustom: row.category === 'custom',
     cells: context.history.filter((r: SectorIndexRow) => r.index_id === row.index_id)

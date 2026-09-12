@@ -1,5 +1,5 @@
-import { fetchSectorPulseContext } from '@/services/sectorRotation';
-import SectorFlowOverview, { type OverviewRow } from './SectorFlowOverview';
+import { fetchSectorPulseContext, sectorPulseRows, type SectorIndexRow } from '@/services/sectorRotation';
+import { SectorPulseContent } from '@/components/domain/DashboardV3/SectorPulse';
 import { useEffect, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
@@ -22,7 +22,7 @@ type Intent = keyof typeof intents;
 interface Response {
   response?: string; error?: string; pending?: boolean; context_changed?: boolean; log_id?: string;
   facts?: string[]; snapshot?: string; date?: string;
-  period?: number; history?: OverviewRow[]; rows?: OverviewRow[]; index_count?: number;
+  period?: number; history?: SectorIndexRow[]; rows?: SectorIndexRow[]; index_count?: number;
 }
 async function ask(body: object): Promise<Response> {
   const res = await fetch(`${API}/api/vani/ask`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
@@ -84,7 +84,7 @@ export default function SectorCompanion() {
     </>}
     <h3 className="text-sm font-medium">{intents[intent]}</h3>
     {overview && <p className="text-xs text-muted">Overall sector flow · Sectoral + Curated · same coverage as Discovery</p>}
-    {overview && evidence.data?.rows && <SectorFlowOverview key={evidence.data.snapshot} rows={evidence.data.rows} history={evidence.data.history ?? []} date={evidence.data.date ?? context.date!} period={evidence.data.period ?? 22} total={evidence.data.index_count ?? evidence.data.rows.length}/>}
+    {overview && evidence.data?.rows && <SectorPulseContent key={evidence.data.snapshot} embedded data={sectorPulseRows({ rows: evidence.data.rows, history: evidence.data.history ?? [] })} />}
     {loading ? <div role="status" className="flex items-center gap-2 text-sm"><Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" />Consulting VaNi…</div>
       : issue ? <div role="status"><p className="text-sm">{issue}</p><button className="sector-question mt-2" onClick={retry}>Try again</button></div>
       : !staticIntent && !evidence.data ? <p className="text-sm">Select an available session to read its evidence.</p>
