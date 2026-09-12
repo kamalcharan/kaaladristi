@@ -1,3 +1,4 @@
+import { fetchSectorPulseContext } from '@/services/sectorRotation';
 import SectorFlowOverview, { type OverviewRow } from './SectorFlowOverview';
 import { useEffect, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
@@ -21,7 +22,7 @@ type Intent = keyof typeof intents;
 interface Response {
   response?: string; error?: string; pending?: boolean; context_changed?: boolean; log_id?: string;
   facts?: string[]; snapshot?: string; date?: string;
-  history?: OverviewRow[]; rows?: OverviewRow[]; index_count?: number;
+  period?: number; history?: OverviewRow[]; rows?: OverviewRow[]; index_count?: number;
 }
 async function ask(body: object): Promise<Response> {
   const res = await fetch(`${API}/api/vani/ask`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
@@ -43,13 +44,13 @@ export default function SectorCompanion() {
   const [presented, setPresented] = useState('');
   const overview = !indexId && intent === 'sector.overview';
   const staticIntent = intent === 'sector.learn' || intent === 'sector.taxonomy';
-  const selected = { date: context.date, entity_type: 'index', entity_id: indexId,
-    sector_category: context.category, sector_period: context.period };
-  const identity = JSON.stringify([pathname, context.date, context.category, context.period]);
+  const selected = { date: overview ? undefined : context.date, entity_type: 'index', entity_id: indexId,
+    sector_category: overview ? 'overall' : context.category, sector_period: overview ? 22 : context.period };
+  const identity = JSON.stringify([pathname, overview ? 'overall' : [context.date, context.category, context.period]]);
   const evidence = useQuery({
     queryKey: ['sector-vani-context', identity], enabled: context.scope === pathname && !!context.date,
     staleTime: 60_000, retry: false,
-    queryFn: async () => { const r = await ask({ ...selected, intent_id: 'sector.context' }); if (r.error) throw new Error(r.error); return r; },
+    queryFn: async () => { const r: Response = overview ? await fetchSectorPulseContext() : await ask({ ...selected, intent_id: 'sector.context' }); if (r.error) throw new Error(r.error); return r; },
   });
   const reading = useQuery({
     queryKey: ['vani', 'sector', 1, user, intent, depth, staticIntent ? 'static' : evidence.data?.snapshot],
@@ -82,7 +83,8 @@ export default function SectorCompanion() {
     {!staticIntent && <div className="flex flex-wrap gap-2">{['brief','simple','detailed'].map(d => <button className="sector-question" key={d} aria-pressed={depth === d} onClick={() => setDepth(d)}>{d === 'brief' ? 'Concise' : d === 'simple' ? 'Explain simply' : 'Go deeper'}</button>)}</div>}
     </>}
     <h3 className="text-sm font-medium">{intents[intent]}</h3>
-    {overview && evidence.data?.rows && <SectorFlowOverview key={evidence.data.snapshot} rows={evidence.data.rows} history={evidence.data.history ?? []} date={evidence.data.date ?? context.date!} period={context.period} total={evidence.data.index_count ?? evidence.data.rows.length}/>}
+    {overview && <p className="text-xs text-muted">Overall sector flow · Sectoral + Curated · same coverage as Discovery</p>}
+    {overview && evidence.data?.rows && <SectorFlowOverview key={evidence.data.snapshot} rows={evidence.data.rows} history={evidence.data.history ?? []} date={evidence.data.date ?? context.date!} period={evidence.data.period ?? 22} total={evidence.data.index_count ?? evidence.data.rows.length}/>}
     {loading ? <div role="status" className="flex items-center gap-2 text-sm"><Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" />Consulting VaNi…</div>
       : issue ? <div role="status"><p className="text-sm">{issue}</p><button className="sector-question mt-2" onClick={retry}>Try again</button></div>
       : !staticIntent && !evidence.data ? <p className="text-sm">Select an available session to read its evidence.</p>
@@ -100,7 +102,7 @@ export default function SectorCompanion() {
       <button key={id} aria-pressed={intent === id} onClick={() => choose(id as Intent)} className="sector-question">{label}</button>)}</div></details>}
   </div>;
   return <aside className="sector-vani" aria-label="VaNi Sector Rotation companion">
-    <header className="p-4 border-b border-[var(--border)]"><h2 className="text-lg font-serif">VaNi · वाणी</h2><p className="text-xs text-muted">Sector research · {context.date ? sectorSessionDate(context.date) : 'Select a session'}</p>
+    <header className="p-4 border-b border-[var(--border)]"><h2 className="text-lg font-serif">VaNi · वाणी</h2><p className="text-xs text-muted">Sector research · {(overview ? evidence.data?.date : context.date) ? sectorSessionDate((overview ? evidence.data?.date : context.date)!) : 'Select a session'}</p>
       <button ref={launcher} className={`${overview ? 'hidden' : 'sector-vani-launch'} sector-question mt-3`} onClick={() => { setOpen(true); setCycle(c=>c+1); }}>Help me read this page</button></header>
     <div className={overview ? "sector-vani-overview" : "sector-vani-desktop"}>{body}</div>
     <dialog ref={dialog} className="sector-vani-dialog" onCancel={() => setOpen(false)} onClose={() => { setOpen(false); launcher.current?.focus(); }}>

@@ -6,13 +6,13 @@ from datetime import date
 from .market_structure_vani import number, single_flight, ReadingInProgress
 from .vani_cache import make_cache_key, get_cached, set_cached
 
-VERSION = 1
+VERSION = 2
 CATEGORIES = {
     'broad': ['index', 'broad market index'], 'sectoral': ['sectoral index'],
-    'thematic': ['thematic market index'], 'custom': ['custom'],
+    'thematic': ['thematic market index'], 'custom': ['custom'], 'overall': ['sectoral index', 'custom'],
 }
 QUESTIONS = {
-    'sector.overview': 'Summarize the balance of flow across the selected category without naming individual indices.',
+    'sector.overview': 'Summarize the balance of flow across Sectoral and Curated baskets together without naming individual indices.',
     'sector.read': 'Explain the selected sector flow snapshot.',
     'sector.compare': 'Explain near-term Flow 5D versus underlying Flow 22D.',
     'sector.persistence': 'Describe how flow changed over the available sessions.',
@@ -52,11 +52,12 @@ def row_facts(row, previous=None):
 
 
 def load_context(req, db):
-    category = getattr(req, 'sector_category', 'sectoral')
-    period = getattr(req, 'sector_period', 22)
+    overall = req.intent_id in ('sector.overview', 'sector.pulse.context')
+    category = 'overall' if overall else getattr(req, 'sector_category', 'sectoral')
+    period = 22 if overall else getattr(req, 'sector_period', 22)
     if category not in CATEGORIES or period not in (5, 22, 66):
         raise ValueError('Invalid sector selection')
-    target = req.date
+    target = None if overall else req.date
     if target:
         date.fromisoformat(target)
     else:
@@ -64,7 +65,7 @@ def load_context(req, db):
         target = str(dates[0]['d'])[:10] if dates and dates[0]['d'] else None
     if not target:
         raise ValueError('No completed session')
-    index_id = req.entity_id
+    index_id = None if overall else req.entity_id
     if index_id is not None and (req.entity_type != 'index' or index_id <= 0):
         raise ValueError('Invalid index')
     symbols = db.execute('SELECT id,name,category FROM km_index_symbols WHERE is_active = true AND ' +
@@ -80,9 +81,11 @@ def load_context(req, db):
         FROM km_index_eod WHERE index_id = ANY(%s) AND trade_date <= %s
     ) h WHERE rn <= %s ORDER BY index_id, trade_date''', (ids, target, period))
     names = {r['id']: r['name'] for r in symbols}
+    categories = {r['id']: r['category'] for r in symbols}
     for r in history:
         r['trade_date'] = str(r['trade_date'])[:10]
         r['name'] = names[r['index_id']]
+        r['category'] = categories[r['index_id']]
     current = [r for r in history if r['trade_date'] == target]
     facts = [f'Selected closing-data session: {target}. History window: {period} trading sessions.',
              'Flow is an inferred research condition from price and amount measures, not identified investor inflows. Missing readings are unavailable, not zero.',
@@ -135,14 +138,14 @@ def answer(req, db, complete, post_filter, log_interaction, model):
     intent = req.intent_id
     base = {'intent_id': intent, 'intent_version': VERSION, 'response': None, 'cached': False}
     try:
-        if intent not in {*QUESTIONS, *STATIC, 'sector.context'}:
+        if intent not in {*QUESTIONS, *STATIC, 'sector.context', 'sector.pulse.context'}:
             return {**base, 'error': 'This sector question is unavailable.'}
         depth = getattr(req, 'explanation_depth', 'brief')
         if depth not in ('brief', 'simple', 'detailed'):
             raise ValueError('Invalid depth')
         static = intent in STATIC
         ctx = {} if static else load_context(req, db)
-        if intent == 'sector.context':
+        if intent in ('sector.context', 'sector.pulse.context'):
             return {**base, **ctx}
         if not static and getattr(req, 'sector_snapshot', None) != ctx['snapshot']:
             return {**base, 'context_changed': True, 'error': 'The sector data changed. Refresh this reading.'}
@@ -154,7 +157,7 @@ def answer(req, db, complete, post_filter, log_interaction, model):
             leaving = counts['Outflow']
             unavailable = ctx['index_count'] - len(ctx['rows']) + counts['Unavailable']
             comparison = 'MORE' if entering > leaving else 'FEWER' if entering < leaving else 'AS MANY'
-            facts = [f"Closing session {ctx['date']}; selected category {ctx['category']}.",
+            facts = [f"Closing session {ctx['date']}; overall Sectoral + Curated coverage.",
                      f"Money Entering: {entering}; Fading: {counts['Fading']}; Money Leaving: {leaving}; Quiet: {counts['Quiet']}; Unavailable: {unavailable}.",
                      f'There are {comparison} indices entering than leaving (equal counts when AS MANY).',
                      'Entering combines Strong and Building. Quiet and missing readings are not outflow. These counts describe index groups, not rupee amounts or the whole market.']
@@ -179,7 +182,7 @@ def answer(req, db, complete, post_filter, log_interaction, model):
                               ('At most 180 words.' if depth == 'detailed' else 'At most 80 words.') +
                               (' Explain terminology simply.' if depth == 'simple' else ''))
                     if overview:
-                        system += ' For this category overview: at most TWO short sentences and 40 words. No index-by-index commentary, no formulas, no methodology paragraphs. Describe the balance of the groups and suggest inspecting persistence or participation. Never claim that the counts measure net money.'
+                        system += ' For this overall sector overview: at most TWO short sentences and 40 words. No index-by-index commentary, no formulas, no methodology paragraphs. Describe the balance of the groups and suggest inspecting persistence or participation. Never claim that the counts measure net money.'
                     start = time.monotonic()
                     raw, provider = complete(system=system, user=QUESTIONS[intent]+'\n'+'\n'.join(facts),
                         max_tokens=120 if overview else 450 if depth=='detailed' else 230, temperature=0.2,

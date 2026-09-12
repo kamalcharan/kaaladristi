@@ -65,7 +65,7 @@ snapshot and includes its own date.
 
 ## Validation
 
-- `python -m unittest test_sector_vani test_market_structure_vani`: 25 tests.
+- `python -m unittest test_sector_vani test_market_structure_vani`: 27 tests.
 - `node scripts/qa/check-sector-contracts.mjs`: browser/server classification,
   missing data, concentration, 600-constituent pagination, historical bounds,
   readable dates, query ordering and minimum count.
@@ -91,3 +91,9 @@ bundle size, Browserslist age and an ambiguous pre-existing Tailwind class.
 The listing route automatically opens `sector.overview`: Discovery-style Money Entering (Strong + Building), Fading and Money Leaving (Outflow) cards, up to three linked examples per group with expandable lists and mini-trends. Quiet and unavailable coverage remain separate. The default is inline on mobile. Other questions are available under Explore another question; index-detail defaults are unchanged.
 
 The overview prompt receives only computed group balance and requests at most two short sentences, without index-by-index narration. Existing Qwen-first routing, configured fallback, cache, feedback and the visible loading state are reused. Raw evidence paragraphs are hidden for this intent. Frontend and backend must be updated together. Automated UI checks now also verify default opening and evidence visibility.
+
+## Overall flow parity correction
+
+The default now ignores the active tab, table date and history selection. It uses the latest completed session, Sectoral + Curated coverage and 22 sessions of history, matching Discovery's intended overall scope. Both clients use `fetchSectorPulseContext` and the new read-only `sector.pulse.context` endpoint (no LLM invocation). The overview narration validates that same snapshot. Frontend and backend must be updated together.
+
+Discovery no longer substitutes an older index reading when the current session is missing. Both views classify current-session records with the same missing-data handling. Entering/fading sort by Flow 5D descending; leaving sorts by 5D return ascending; name breaks ties. Tests cover tab-independent snapshots, stale-row exclusion and Discovery/VaNi record-and-signal parity. Live database values still need local verification.

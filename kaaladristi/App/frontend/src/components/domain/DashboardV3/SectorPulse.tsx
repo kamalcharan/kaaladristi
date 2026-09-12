@@ -1,3 +1,4 @@
+import { sectorSignal } from '@/lib/sectorFlow';
 /**
  * SectorPulse — Workspace · Discovery
  *
@@ -12,7 +13,6 @@ import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSectorPulse } from '@/hooks/useSectorRotation';
 import {
-  flowSignal,
   MicroTrend,
   STRONG_SCORE_CUT_INDEX,
   type FlowSignal,
@@ -87,13 +87,14 @@ export default function SectorPulse() {
     for (const row of data) {
       const latest = row.cells[0];
       if (!latest) continue;
-      const bucket = bucketOf(flowSignal(latest, STRONG_SCORE_CUT_INDEX));
+      const signal = sectorSignal({ score_5d: latest.s5 ?? null, score_22d: latest.s22 ?? null, avg_amt_5d: latest.amt_5d ?? null, avg_amt_22d: latest.amt_22d ?? null, ret_5d: latest.ret_5d ?? null });
+      const bucket = signal ? bucketOf(signal) : null;
       if (bucket) b[bucket].push(row);
     }
     // Entering/fading: conviction first. Leaving: worst 5D return first.
-    b.entering.sort((x, y) => (y.cells[0]?.s5 ?? 0) - (x.cells[0]?.s5 ?? 0));
-    b.fading.sort((x, y) => (y.cells[0]?.s5 ?? 0) - (x.cells[0]?.s5 ?? 0));
-    b.leaving.sort((x, y) => (x.cells[0]?.ret_5d ?? 0) - (y.cells[0]?.ret_5d ?? 0));
+    b.entering.sort((x, y) => (y.cells[0]?.s5 ?? 0) - (x.cells[0]?.s5 ?? 0) || x.name.localeCompare(y.name));
+    b.fading.sort((x, y) => (y.cells[0]?.s5 ?? 0) - (x.cells[0]?.s5 ?? 0) || x.name.localeCompare(y.name));
+    b.leaving.sort((x, y) => (x.cells[0]?.ret_5d ?? 0) - (y.cells[0]?.ret_5d ?? 0) || x.name.localeCompare(y.name));
     return b;
   }, [data]);
 

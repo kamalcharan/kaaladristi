@@ -6,10 +6,10 @@ import path from 'node:path';
 import ts from 'typescript';
 
 const root=process.cwd();
-function load(file, dependencies={}) {
+function load(file, dependencies={}, globals={}) {
   const exports={};
-  const js=ts.transpileModule(readFileSync(path.join(root,file),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText;
-  runInNewContext(js,{exports,require:id=>dependencies[id]||{},console,Date,Map,Set});
+  const js=ts.transpileModule(readFileSync(path.join(root,file),'utf8').replaceAll('import.meta.env', '{}'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText;
+  runInNewContext(js,{exports,require:id=>dependencies[id]||{},console,Date,Map,Set,...globals});
   return exports;
 }
 const flow=load('src/components/domain/FlowIntensityMap.tsx');
@@ -65,3 +65,22 @@ assert.equal(requested.searchParams.getAll('order').length,1);
 assert.equal(requested.searchParams.get('order'),'trade_date.asc,equity_id.asc');
 assert.equal(requested.searchParams.getAll('trade_date').length,2);
 console.log('PASS: shared browser/server flow states, missing data, concentration, 600-constituent pagination, historical bounds, readable dates, five-stock minimum');
+
+// Discovery must project the same snapshot rows and scores used by VaNi.
+const pulseRows=fixtures.map((f,i)=>({...f,index_id:i+1,name:`Basket ${i+1}`,category:i%2?'custom':'sectoral index',trade_date:'2026-09-10'}));
+let pulseRequest;
+const pulseService=load('src/services/sectorRotation.ts',{}, {fetch:async (url,options)=>{
+  pulseRequest=JSON.parse(options.body);
+  return {ok:true,json:async()=>({rows:pulseRows,history:pulseRows,date:'2026-09-10',period:22})};
+}});
+const pulse=await pulseService.fetchSectorPulse();
+assert.equal(pulseRequest.intent_id,'sector.pulse.context');
+assert.equal(pulseRequest.sector_category,undefined);
+assert.equal(pulse.length,pulseRows.length);
+pulse.forEach((row,i)=>{
+  const c=row.cells[0];
+  assert.equal(row.id,pulseRows[i].index_id);
+  assert.equal(c.s5,pulseRows[i].score_5d??undefined);
+  assert.equal(sectorSignal({score_5d:c.s5??null,score_22d:c.s22??null,avg_amt_5d:c.amt_5d??null,avg_amt_22d:c.amt_22d??null,ret_5d:c.ret_5d??null}),sectorSignal(pulseRows[i]));
+});
+console.log('Discovery and VaNi snapshot parity passed.');

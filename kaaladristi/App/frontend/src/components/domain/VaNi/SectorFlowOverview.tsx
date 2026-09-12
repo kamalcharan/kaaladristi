@@ -21,7 +21,7 @@ export default function SectorFlowOverview({ rows, history, date, period, total 
   const unavailable = Math.max(0, total - rows.length) + rows.filter(r => sectorSignal(r) == null).length;
   return <div aria-label="Sector flow snapshot" className="space-y-3">
     {groups.map(group => {
-      const members = rows.filter(r => group.states.includes(sectorSignal(r) ?? '')).sort((a,b)=>(b.score_5d ?? 0)-(a.score_5d ?? 0) || a.name.localeCompare(b.name));
+      const members = rows.filter(r => group.states.includes(sectorSignal(r) ?? '')).sort((a,b)=>(group.label === 'Money Leaving' ? (a.ret_5d ?? 0)-(b.ret_5d ?? 0) : (b.score_5d ?? 0)-(a.score_5d ?? 0)) || a.name.localeCompare(b.name));
       const all = expanded.includes(group.label);
       return <section key={group.label} className="rounded-xl border border-[var(--border)] p-3" style={{borderTop:`2px solid ${group.color}`}}>
         <div className="flex items-center justify-between gap-2"><h4 className="text-xs font-medium" style={{color:group.color}}>{group.label}</h4><span className="text-lg font-semibold font-mono" aria-label={`${members.length} indices ${group.label.toLowerCase()}`}>{members.length}</span></div>
@@ -38,6 +38,6 @@ export default function SectorFlowOverview({ rows, history, date, period, total 
       </section>;
     })}
     <p className="text-xs text-muted">Quiet <strong>{quiet}</strong> · Unavailable <strong>{unavailable}</strong></p>
-    <p className="text-[10px] leading-5 text-muted">Showing up to 3 examples per group, ordered by Flow 5D. Mini-trends: up to {period} sessions, oldest → newest; each uses its own scale.</p>
+    <p className="text-[10px] leading-5 text-muted">Showing up to 3 examples per group, Entering/fading ordered by Flow 5D; leaving by weakest 5D return. Mini-trends: up to {period} sessions, oldest → newest; each uses its own scale.</p>
   </div>;
 }

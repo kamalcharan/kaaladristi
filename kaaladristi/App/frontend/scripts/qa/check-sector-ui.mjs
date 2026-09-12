@@ -39,7 +39,9 @@ try {
       const body=route.request().postDataJSON?.() || {};
       if(url.pathname.endsWith('/api/vani/ask')) {
         vaniCalls.push(body);
-        const data=body.intent_id==='sector.context' ? {snapshot:`${body.date}-${body.sector_period}`,date:body.date,facts:['Synthetic fixture: 5 constituents.'],index_count:2,rows:indices.filter(r=>r.trade_date===body.date),history:indices.filter(r=>r.index_id===97&&r.trade_date<=body.date).slice(-body.sector_period)} : {response:'Near-term flow is above its underlying baseline. Check participation across the constituents.',cached:true,log_id:'qa'};
+        const pulse=body.intent_id==='sector.pulse.context';
+        if(pulse) { body.date='2026-09-11'; body.sector_period=22; }
+        const data=(pulse || body.intent_id==='sector.context') ? {snapshot:`${body.date}-${body.sector_period}`,date:body.date,facts:['Synthetic fixture: 5 constituents.'],period:22,index_count:2,rows:indices.filter(r=>r.trade_date===body.date),history:indices.filter(r=>r.trade_date<=body.date)} : {response:'Near-term flow is above its underlying baseline. Check participation across the constituents.',cached:true,log_id:'qa'};
         return route.fulfill({json:data});
       }
       return route.fulfill({json:{}});
@@ -74,6 +76,10 @@ try {
     await page.locator(width < 768 ? '.sector-mobile-rows article' : '.sector-desktop-table tbody tr').first().waitFor();
     await page.getByRole('heading',{name:/What.*happening here/}).waitFor();
     await page.getByRole('heading',{name:'Money Entering',exact:true}).waitFor();
+    const before=await page.locator('[aria-label="Sector flow snapshot"]').innerText();
+    await page.getByRole('button',{name:'Curated',exact:true}).click();
+    assert.equal(await page.locator('[aria-label="Sector flow snapshot"]').innerText(),before,'Overall flow must survive tab changes');
+    await page.getByRole('button',{name:'Sectoral',exact:true}).click();
     assert.equal(await page.getByText('Inspect the evidence',{exact:true}).count(),0);
     assert(vaniCalls.some(r=>r.intent_id==='sector.overview' && !r.entity_id), 'Listing default should run automatically');
     await page.screenshot({path:path.join(out,`sector-default-${mode}-${width}.png`),fullPage:true});

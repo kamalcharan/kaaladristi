@@ -17,6 +17,8 @@ class Database:
         self.fast = 20
     def execute(self, sql, params=None):
         self.calls.append((sql, params))
+        if 'max(trade_date)' in sql:
+            return [{'d':'2026-09-10'}]
         if 'SELECT id,name,category' in sql:
             return [{'id':97,'name':'Example sector','category':'custom'}]
         if 'row_number()' in sql:
@@ -92,6 +94,36 @@ class SectorContracts(unittest.TestCase):
     def test_invalid_period_rejected(self):
         req=request(); req.sector_period=1000
         self.assertIn('error',sector.answer(req,Database(),None,None,None,None))
+
+    def test_overall_snapshot_ignores_tab_date_and_entity(self):
+        snapshots = []
+        for tab in ('broad', 'sectoral', 'thematic', 'custom'):
+            req = request('sector.pulse.context')
+            req.sector_category = tab
+            req.date = '2020-01-01'
+            req.sector_period = 66
+            db = Database()
+            context = sector.load_context(req, db)
+            snapshots.append(context['snapshot'])
+            self.assertEqual(context['date'], '2026-09-10')
+            self.assertEqual(context['period'], 22)
+            self.assertIsNone(context['index_id'])
+            symbols = next(p for sql,p in db.calls if 'SELECT id,name,category' in sql)
+            self.assertEqual(symbols, (['sectoral index', 'custom'],))
+        self.assertEqual(len(set(snapshots)), 1)
+        req.intent_id = 'sector.overview'
+        self.assertEqual(sector.load_context(req, Database())['snapshot'], snapshots[0])
+
+    def test_overall_missing_session_does_not_use_stale_row(self):
+        class MissingSession(Database):
+            def execute(self, sql, params=None):
+                rows = super().execute(sql, params)
+                if 'row_number()' in sql:
+                    return rows[:1]
+                return rows
+        ctx = sector.load_context(request('sector.pulse.context'), MissingSession())
+        self.assertEqual(ctx['rows'], [])
+        self.assertEqual(ctx['index_count'], 1)
 
     def test_overview_only_supplies_group_balance_to_llm(self):
         db=Database(); req=request('sector.overview'); req.entity_id=None
