@@ -1,3 +1,4 @@
+import LeadershipCompanion from './LeadershipCompanion';
 import { fetchSectorPulseContext, sectorPulseRows, type SectorIndexRow } from '@/services/sectorRotation';
 import { SectorPulseContent } from '@/components/domain/DashboardV3/SectorPulse';
 import { useEffect, useRef, useState } from 'react';
@@ -31,6 +32,11 @@ async function ask(body: object): Promise<Response> {
   return data;
 }
 export default function SectorCompanion() {
+  const mode=useSectorResearchStore(s=>s.mode);
+  const {pathname}=useLocation();
+  return mode==='leadership' && pathname==='/sector-rotation' ? <LeadershipCompanion/> : <CurrentSectorCompanion/>;
+}
+function CurrentSectorCompanion() {
   const { pathname } = useLocation();
   const context = useSectorResearchStore();
   const user = useAuthStore(s => s.profile?.id);

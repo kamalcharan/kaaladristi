@@ -39,6 +39,10 @@ try {
       const body=route.request().postDataJSON?.() || {};
       if(url.pathname.endsWith('/api/vani/ask')) {
         vaniCalls.push(body);
+        if(body.intent_id==='sector.leadership.context') {
+          const history=days.slice(-body.leadership_months*4).map((date,i)=>({date,weekly:true,monthly:i%3===0?null:true,weekly_date:date,monthly_date:date,eligible:5,total:5,leaders:3,watch:1,leaders_pct:60,watch_pct:20}));
+          return route.fulfill({json:{snapshot:`leadership-${body.date}-${body.leadership_months}-${body.sector_category}`,date:body.date,start:history[0].date,months:body.leadership_months,rows:[{index_id:97,name:symbols[0].name,category:body.sector_category,current:history.at(-1),history,aligned_samples:12,known_samples:18,aligned_streak:3}]}});
+        }
         const pulse=body.intent_id==='sector.pulse.context';
         if(pulse) { body.date='2026-09-11'; body.sector_period=22; }
         const data=(pulse || body.intent_id==='sector.context') ? {snapshot:`${body.date}-${body.sector_period}`,date:body.date,facts:['Synthetic fixture: 5 constituents.'],period:22,index_count:2,rows:indices.filter(r=>r.trade_date===body.date),history:indices.filter(r=>r.trade_date<=body.date)} : {response:'Near-term flow is above its underlying baseline. Check participation across the constituents.',cached:true,log_id:'qa'};
@@ -84,6 +88,18 @@ try {
     assert(vaniCalls.some(r=>r.intent_id==='sector.overview' && !r.entity_id), 'Listing default should run automatically');
     await page.screenshot({path:path.join(out,`sector-default-${mode}-${width}.png`),fullPage:true});
     await noOverflow(`list ${width}`);
+    await page.getByRole('button',{name:'Longer-Term Leadership',exact:true}).click();
+    await page.getByRole('heading',{name:'Index structure',exact:true}).waitFor();
+    await page.getByRole('heading',{name:'VaNi · Longer-term picture',exact:true}).waitFor();
+    await page.getByRole('button',{name:'3M',exact:true}).click();
+    await page.getByRole('heading',{name:'Index structure',exact:true}).waitFor();
+    await page.getByRole('button',{name:'12M',exact:true}).click();
+    await page.getByRole('heading',{name:'Index structure',exact:true}).waitFor();
+    await page.getByText('Inspect participation history',{exact:true}).click();
+    await noOverflow(`leadership ${width}`);
+    assert(vaniCalls.some(r=>r.intent_id==='sector.leadership'&&r.leadership_months===12),'VaNi must follow longer-term window');
+    await page.screenshot({path:path.join(out,`sector-leadership-${mode}-${width}.png`),fullPage:true});
+    await page.getByRole('button',{name:'Current Flow',exact:true}).click();
     await page.getByRole('button',{name:'Heat',exact:true}).click();
     await page.getByRole('button',{name:'Older →',exact:true}).waitFor();
     await noOverflow(`heat ${width}`);

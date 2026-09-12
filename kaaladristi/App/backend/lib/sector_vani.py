@@ -12,6 +12,7 @@ CATEGORIES = {
     'thematic': ['thematic market index'], 'custom': ['custom'], 'overall': ['sectoral index', 'custom'],
 }
 QUESTIONS = {
+    'sector.leadership': 'Explain the separate index alignment, constituent Stage 2 support and persistence readings. Name at most two examples; do not invent a master score or predict continuation.',
     'sector.overview': 'Summarize the balance of flow across Sectoral and Curated baskets together without naming individual indices.',
     'sector.read': 'Explain the selected sector flow snapshot.',
     'sector.compare': 'Explain near-term Flow 5D versus underlying Flow 22D.',
@@ -80,6 +81,9 @@ def load_context(req, db):
           row_number() OVER (PARTITION BY index_id ORDER BY trade_date DESC) AS rn
         FROM km_index_eod WHERE index_id = ANY(%s) AND trade_date <= %s
     ) h WHERE rn <= %s ORDER BY index_id, trade_date''', (ids, target, period))
+    rebuilding = db.execute('SELECT index_id FROM km_custom_index_revisions WHERE index_id=ANY(%s) AND revision<>computed_revision', (ids,))
+    dirty_ids = {r['index_id'] for r in rebuilding}
+    history = [r for r in history if r['index_id'] not in dirty_ids]
     names = {r['id']: r['name'] for r in symbols}
     categories = {r['id']: r['category'] for r in symbols}
     for r in history:
@@ -138,14 +142,18 @@ def answer(req, db, complete, post_filter, log_interaction, model):
     intent = req.intent_id
     base = {'intent_id': intent, 'intent_version': VERSION, 'response': None, 'cached': False}
     try:
-        if intent not in {*QUESTIONS, *STATIC, 'sector.context', 'sector.pulse.context'}:
+        if intent not in {*QUESTIONS, *STATIC, 'sector.context', 'sector.pulse.context', 'sector.leadership.context'}:
             return {**base, 'error': 'This sector question is unavailable.'}
         depth = getattr(req, 'explanation_depth', 'brief')
         if depth not in ('brief', 'simple', 'detailed'):
             raise ValueError('Invalid depth')
         static = intent in STATIC
-        ctx = {} if static else load_context(req, db)
-        if intent in ('sector.context', 'sector.pulse.context'):
+        if intent in ('sector.leadership', 'sector.leadership.context'):
+            from .sector_leadership import load_context as leadership_context
+            ctx = leadership_context(req, db)
+        else:
+            ctx = {} if static else load_context(req, db)
+        if intent in ('sector.context', 'sector.pulse.context', 'sector.leadership.context'):
             return {**base, **ctx}
         if not static and getattr(req, 'sector_snapshot', None) != ctx['snapshot']:
             return {**base, 'context_changed': True, 'error': 'The sector data changed. Refresh this reading.'}
@@ -198,6 +206,10 @@ def answer(req, db, complete, post_filter, log_interaction, model):
                 llm_response=text, context_payload={'facts':facts, **context},
                 model_version=None if cached or static else ('qwen-local' if provider=='qwen-local' else model), latency_ms=elapsed)
             return {**meta, 'response':text, 'cached':cached, 'provider':provider, 'log_id':log_id}
+    except ValueError as exc:
+        if intent in ('sector.leadership', 'sector.leadership.context') and str(exc) in ('One or more curated baskets need recalculation', 'Basket membership changed while preparing this reading. Please retry.'):
+            return {**base, 'error':str(exc)}
+        return {**base, 'error':'This sector reading could not be prepared. Please try again.'}
     except ReadingInProgress:
         return {**base, 'pending':True}
     except Exception:

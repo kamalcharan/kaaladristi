@@ -1,3 +1,4 @@
+import SectorLeadership from '@/components/domain/SectorLeadership';
 import { useSectorResearchStore } from '@/stores/sectorResearchStore';
 import '@/styles/sectorResearch.css';
 import React, { useState, useEffect, useMemo } from 'react';
@@ -332,12 +333,14 @@ export default function SectorRotationPage() {
   const fromStructure = search.get('from') === 'market-structure';
   const contextDate = /^\d{4}-\d{2}-\d{2}$/.test(search.get('asof') ?? '') ? search.get('asof') : null;
   const [activeTab, setActiveTab] = useState<SectorTab>('sectoral');
+  const [mode, setMode] = useState<'current'|'leadership'>('current');
+  const [months, setMonths] = useState<3|6|12>(6);
   const [view, setView] = useState<ViewMode>('table');
   const [heatDays, setHeatDays] = useState<5 | 22 | 66>(22);
   const [selectedDate, setSelectedDate] = useState<string>(contextDate ?? '');
   const { latestDate, earliestDate } = useIndexDateRange();
   const setContext = useSectorResearchStore(s => s.setContext);
-  useEffect(() => { setContext({ scope: '/sector-rotation', date: selectedDate || latestDate || undefined, category: activeTab, period: heatDays }); }, [selectedDate, latestDate, activeTab, heatDays, setContext]);
+  useEffect(() => { setContext({ mode, months, scope: '/sector-rotation', date: selectedDate || latestDate || undefined, category: activeTab, period: heatDays }); }, [selectedDate, latestDate, activeTab, heatDays, mode, months, setContext]);
 
   useEffect(() => {
     if (latestDate && !selectedDate) setSelectedDate(latestDate);
@@ -353,6 +356,10 @@ export default function SectorRotationPage() {
       </div>}
 
       <p className="text-xs text-muted px-4 py-3">{activeTab === 'custom' ? 'Curated baskets · maintained by DristiQ administrators' : 'NSE-composed index groups'} · Exchange industry tags are a separate classification.</p>
+      <div className="px-4 flex flex-wrap gap-2" aria-label="Research view">
+        <button className="sector-question" aria-pressed={mode==='current'} onClick={()=>setMode('current')}>Current Flow</button>
+        <button className="sector-question" aria-pressed={mode==='leadership'} onClick={()=>setMode('leadership')}>Longer-Term Leadership</button>
+      </div>
       {/* VIX band */}
       <VixBand />
 
@@ -402,7 +409,7 @@ export default function SectorRotationPage() {
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingBottom: 8, flexWrap: 'wrap' }}>
-          {view === 'heat' && <><span className="text-xs text-muted">History:</span><DayToggle days={heatDays} onChange={setHeatDays} /></>}
+          {mode === 'current' && view === 'heat' && <><span className="text-xs text-muted">History:</span><DayToggle days={heatDays} onChange={setHeatDays} /></>}
           {selectedDate && (
                 <DatePicker
                   value={selectedDate}
@@ -412,16 +419,16 @@ export default function SectorRotationPage() {
                 />
               )
           }
-          <ViewToggle view={view} onChange={setView} />
+          {mode==='current' ? <ViewToggle view={view} onChange={setView} /> : <div className="flex gap-2" aria-label="Leadership window">{([3,6,12] as const).map(m=><button key={m} className="sector-question" aria-pressed={months===m} onClick={()=>setMonths(m)}>{m}M</button>)}</div>}
         </div>
       </div>
 
       {/* Explainer + legend */}
-      <ExplainerStrip view={view} />
+      {mode==='current' && <ExplainerStrip view={view} />}
 
       {/* Tab content */}
       <div style={{ flex: 1, overflowY: 'auto', background: 'var(--bg)' }}>
-        <TabContent tab={activeTab} view={view} forDate={selectedDate || undefined} heatDays={heatDays} />
+        {mode==='current' ? <TabContent tab={activeTab} view={view} forDate={selectedDate || undefined} heatDays={heatDays} /> : <SectorLeadership category={activeTab} date={selectedDate || undefined} months={months} />}
       </div>
     </div>
   );

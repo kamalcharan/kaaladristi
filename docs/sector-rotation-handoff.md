@@ -101,3 +101,7 @@ Discovery no longer substitutes an older index reading when the current session 
 ## Reuse Discovery presentation
 
 VaNi now renders the existing Discovery `SectorPulseContent` from `DashboardV3/SectorPulse.tsx`, using the same row projection, grouping, sorting, formatting, six-row limit and micro-trends. The duplicate `SectorFlowOverview.tsx` is removed. Embedded mode hides the self-link to sector rotation and expands additional rows in place. The shared grid fits narrow containers. Typecheck, production build, flow parity checks and eight browser configurations passed.
+
+## Longer-Term Leadership increment
+
+The main page now has Current Flow and Longer-Term Leadership views. See [sector-leadership-review.md](sector-leadership-review.md) for the exact definitions, migration 207 deployment order and local test matrix. This increment keeps alignment, Stage 2 support and persistence separate; no composite score or new industry basket is introduced. Membership edits and creation trigger full index recalculation.

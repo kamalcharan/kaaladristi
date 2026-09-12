@@ -252,6 +252,7 @@ class VaNiFeedbackRequest(BaseModel):
 
 
 class VaNiAskRequest(BaseModel):
+    leadership_months: int = 6
     sector_period: int = 22
     sector_category: str = "sectoral"
     sector_snapshot: Optional[str] = None
@@ -8182,17 +8183,9 @@ async def custom_index_compute(index_id: int, req: Optional[_CustomComputeReq] =
     until then either. This lets an admin trigger it immediately so the
     index shows up correctly in Sector Rotation -> Custom right away.
 
-    Uses migration 122's p_index_id-scoped compute_custom_index_eod (full
-    history, this index only — cheap, filtered by index_id) then refreshes
-    scores via compute_all_index_scores. The scores RPC has no per-index
-    scoping, but its p_from_date filter only bounds which rows get UPDATEd —
-    every value it reads (avg_amt_5d/22d/66d, ret_5d/22d) is already
-    precomputed elsewhere with no window look-back beyond the filtered rows
-    (migration 116), so scoping to a recent window is exact, not an
-    approximation. A NULL/all-history call recomputes years x every index
-    and blew the statement timeout in production (504 after ~120s) — bound
-    it to the last 100 days (covers the 66-day score window with margin)
-    so this stays fast regardless of how long the index's own history is.
+    Full rebuilds archive prior bars, regenerate all history and use migration
+    207's index-scoped score function. Membership revisions remain pending
+    until prices, scores, breadth and indicators have all completed.
     """
     start = time.time()
     from_date = req.from_date if req else None
@@ -8203,11 +8196,8 @@ async def custom_index_compute(index_id: int, req: Optional[_CustomComputeReq] =
                 date.fromisoformat(_d)
             except ValueError:
                 raise HTTPException(status_code=400, detail=f'invalid date: {_d!r} (want YYYY-MM-DD)')
-    # Scores are only read by the recent Sector-Rotation view; bound them to the
-    # backfill window (or the last 100 days for a full run) so an old/full range
-    # doesn't recompute scores for every index across all history (that blew the
-    # statement timeout in production).
-    scores_from = from_date or (date.today() - timedelta(days=100)).isoformat()
+    if from_date and to_date and from_date > to_date:
+        raise HTTPException(status_code=400, detail='from_date must not exceed to_date')
     ind_from = date.fromisoformat(from_date) if from_date else None
     # Full-history indicator backfill (ema/rsi/magic_rs/flow over all bars) is
     # heavier than the returns/scores recompute — give it headroom.
@@ -8224,6 +8214,21 @@ async def custom_index_compute(index_id: int, req: Optional[_CustomComputeReq] =
                 raise HTTPException(status_code=404, detail=f'custom index {index_id} not found')
 
         with conn.cursor() as cur:
+            cur.execute("SELECT pg_try_advisory_lock(207, %s)", [index_id])
+            if not cur.fetchone()[0]:
+                raise HTTPException(status_code=409, detail='This index is already rebuilding. Retry after it completes.')
+            cur.execute("SELECT revision FROM km_custom_index_revisions WHERE index_id=%s", [index_id])
+            revision_row = cur.fetchone()
+            rebuilding_revision = revision_row[0] if revision_row else 0
+            if from_date is None and to_date is None:
+                cur.execute('''INSERT INTO km_custom_index_history_archive(index_id,revision,bars)
+                    SELECT %s, COALESCE((SELECT computed_revision FROM km_custom_index_revisions WHERE index_id=%s),0),
+                    COALESCE(jsonb_agg(to_jsonb(e) ORDER BY trade_date),'[]'::jsonb)
+                    FROM km_index_eod e WHERE index_id=%s''', [index_id,index_id,index_id])
+                # An UPSERT alone leaves obsolete dates behind when coverage changes.
+                cur.execute("UPDATE km_custom_index_revisions SET computed_revision=-1 WHERE index_id=%s", [index_id])
+                cur.execute("DELETE FROM km_index_eod WHERE index_id=%s", [index_id])
+                cur.execute("DELETE FROM km_index_breadth WHERE index_id=%s", [index_id])
             cur.execute(
                 "SELECT compute_custom_index_eod(%s, %s, %s)",
                 [from_date, to_date, index_id],
@@ -8232,23 +8237,27 @@ async def custom_index_compute(index_id: int, req: Optional[_CustomComputeReq] =
         conn.commit()
 
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            cur.execute("SELECT * FROM compute_all_index_scores(%s)", [scores_from])
+            cur.execute("SELECT * FROM compute_custom_index_scores_scoped(%s,%s)", [index_id,from_date])
             score_rows = cur.fetchall()
         conn.commit()
 
+        breadth_ok = True
         # Per-index breadth for THIS index (migration 203) so Sector Rotation's
         # detail page and the Workspace panel read the table immediately
         # rather than falling back to the browser computation until the next
-        # nightly run. Bounded to the 252-session percentile window (the
-        # frontend reads 404 calendar days). Non-fatal, same as indicators.
+        # nightly run. Full rebuilds refresh its complete available history.
         try:
-            breadth_from = from_date or (date.today() - timedelta(days=404)).isoformat()
+            with conn.cursor() as cur:
+                cur.execute("SELECT min(trade_date) FROM km_index_eod WHERE index_id=%s", [index_id])
+                first_bar = cur.fetchone()[0]
+            breadth_from = from_date or (first_bar.isoformat() if first_bar else date.today().isoformat())
             with conn.cursor() as cur:
                 cur.execute("SELECT compute_index_breadth(%s, %s, %s)",
                             [breadth_from, to_date or date.today().isoformat(), index_id])
             conn.commit()
-        except Exception as _bexc:  # noqa: BLE001 — a missing migration must not fail the Calculate
+        except Exception as _bexc:  # Keep the revision pending if breadth fails.
             conn.rollback()
+            breadth_ok = False
             log.warning("compute_index_breadth skipped for index %s: %s", index_id, _bexc)
 
         # Fill the indicator layer for this index so the detail page's zone/flow/
@@ -8258,6 +8267,17 @@ async def custom_index_compute(index_id: int, req: Optional[_CustomComputeReq] =
         # per-symbol RPCs standard indices use.
         indicator_rows = compute_custom_index_indicators(
             conn, from_date=ind_from, index_ids=[index_id], refresh=True)
+        if not breadth_ok:
+            raise HTTPException(status_code=500, detail='Index prices rebuilt, but breadth refresh failed. Please retry Calculate.')
+        if from_date is None and to_date is None:
+            with conn.cursor() as cur:
+                cur.execute("UPDATE km_custom_index_revisions SET computed_revision=%s,computed_at=now() WHERE index_id=%s AND revision=%s", [rebuilding_revision,index_id,rebuilding_revision])
+                cur.execute("SELECT revision FROM km_custom_index_revisions WHERE index_id=%s", [index_id])
+                current_revision = cur.fetchone()
+                if current_revision and current_revision[0] != rebuilding_revision:
+                    raise HTTPException(status_code=409, detail='Membership changed during rebuild. Retry Calculate for the newest basket.')
+            conn.commit()
+
     except HTTPException:
         conn.rollback()
         raise

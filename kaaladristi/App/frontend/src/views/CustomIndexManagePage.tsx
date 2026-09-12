@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { from } from '@/services/postgrest';
 import { displaySymbol } from '@/lib/symbolUtils';
@@ -98,6 +98,7 @@ function HealthStat({ label, value, tone = 'neutral' }: { label: string; value: 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function CustomIndexManagePage() {
+  const location=useLocation();
   const navigate = useNavigate();
   const { indexId: indexIdParam } = useParams();
   const indexId = Number(indexIdParam);
@@ -105,7 +106,7 @@ export default function CustomIndexManagePage() {
 
   const [query, setQuery] = useState('');
   const [mutating, setMutating] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>((location.state as {computeError?:string}|null)?.computeError ?? null);
   const [suggesting, setSuggesting] = useState(false);
   const [suggestions, setSuggestions] = useState<Suggestion[] | null>(null);
   const [computing, setComputing] = useState(false);
@@ -171,6 +172,7 @@ export default function CustomIndexManagePage() {
         .execute();
       if (err) throw new Error(err.message);
       await refreshConstituents();
+      await calculate();
       setSuggestions((prev) => prev?.filter((s) => bySymbol.get(s.symbol)?.id !== row.id) ?? null);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Add failed');
@@ -190,6 +192,7 @@ export default function CustomIndexManagePage() {
         .execute();
       if (err) throw new Error(err.message);
       await refreshConstituents();
+      await calculate();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Remove failed');
     } finally {
@@ -210,6 +213,7 @@ export default function CustomIndexManagePage() {
         throw new Error(body.detail ?? `HTTP ${res.status}`);
       }
       const data = await res.json();
+      await queryClient.invalidateQueries();
       setComputeMsg(`${data.rows_computed} bars computed in ${(data.elapsed_ms / 1000).toFixed(1)}s — Sector Rotation will now show this index.`);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Calculate failed');
@@ -360,7 +364,7 @@ export default function CustomIndexManagePage() {
                 <EquityLine row={row} />
                 <button
                   onClick={() => removeStock(row)}
-                  disabled={mutating}
+                  disabled={mutating || computing}
                   style={{ fontSize: '11px', padding: '3px 8px', borderRadius: '6px', border: '1px solid var(--risk-red)', background: 'transparent', color: 'var(--risk-red)', cursor: 'pointer', flexShrink: 0 }}
                 >
                   Remove
@@ -392,7 +396,7 @@ export default function CustomIndexManagePage() {
                 <EquityLine row={row} />
                 <button
                   onClick={() => addStock(row)}
-                  disabled={mutating}
+                  disabled={mutating || computing}
                   style={{ fontSize: '11px', padding: '3px 8px', borderRadius: '6px', border: '1px solid var(--risk-green)', background: 'transparent', color: 'var(--risk-green)', cursor: 'pointer', flexShrink: 0 }}
                 >
                   + Add
@@ -440,7 +444,7 @@ export default function CustomIndexManagePage() {
                     {row && !already ? (
                       <button
                         onClick={() => addStock(row)}
-                        disabled={mutating}
+                        disabled={mutating || computing}
                         style={{ fontSize: '11px', padding: '3px 8px', borderRadius: '6px', border: '1px solid var(--risk-green)', background: 'transparent', color: 'var(--risk-green)', cursor: 'pointer', flexShrink: 0 }}
                       >
                         + Add
@@ -467,7 +471,7 @@ export default function CustomIndexManagePage() {
       {/* Footnote */}
       <div style={{ padding: '8px 24px 14px', flexShrink: 0 }}>
         <p style={{ fontSize: '11px', color: 'var(--text-faint)', margin: 0 }}>
-          Adding/removing stocks doesn't update Sector Rotation until a compute runs. Hit "⚡ Calculate" to rebuild this index's synthetic history right now, or wait for the next daily pipeline run — either way, history is rebuilt from the current constituent set.
+          Adding or removing a stock automatically rebuilds the full basket history. If rebuilding fails, use Calculate to retry. Previous observations and membership changes are retained for comparison.
         </p>
       </div>
 

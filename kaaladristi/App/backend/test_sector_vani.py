@@ -17,6 +17,8 @@ class Database:
         self.fast = 20
     def execute(self, sql, params=None):
         self.calls.append((sql, params))
+        if 'km_custom_index_revisions' in sql:
+            return []
         if 'max(trade_date)' in sql:
             return [{'d':'2026-09-10'}]
         if 'SELECT id,name,category' in sql:

@@ -153,6 +153,15 @@ export default function CustomIndexCreatePage() {
         .execute();
       if (constErr) throw new Error(constErr.message);
 
+      try {
+        const api=import.meta.env.VITE_PIPELINE_API_URL?.trim() || '';
+        const response=await fetch(`${api}/api/custom-index/${newIndex.id}/compute`,{method:'POST'});
+        if(!response.ok) throw new Error('Index saved, but calculation failed. Open Manage and retry Calculate.');
+      } catch {
+        createdIndexId=null;
+        navigate(`/custom-index/${newIndex.id}/manage`, {state:{computeError:'Index saved, but its calculation failed. Retry Calculate to finish building its history.'}});
+        return;
+      }
       navigate('/custom-index');
     } catch (err) {
       if (createdIndexId != null) {
