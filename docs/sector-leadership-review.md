@@ -36,6 +36,24 @@ These are explicit research rules, not a composite score, performance ranking or
 
 Basket-name clicks open the existing `/sector-rotation/:id` evidence page with the selected date. The separate MagicRS button expands the existing ChartView canvas component, with Weekly/Monthly controls. No new chart library or synthetic production series is used.
 
+## Main-page VaNi intent menu
+
+Longer-Term Leadership now opens its own automatic default, with an **Open longer-term intents** menu:
+
+| Question | Visible evidence |
+|---|---|
+| Which baskets are holding strength? | Counts for all six longer-term groups |
+| Which baskets are building strength? | Building examples, W/M agreement, run and Leader counts |
+| Where is strength weakening? | Cooling examples and current W/M readings |
+| How long has the strength lasted? | Current completed-week runs, aligned/missing/non-aligned observations in the selected window |
+| Is strength supported across stocks? | Leaders, Watch and classified/total coverage |
+| How does current flow compare? | Running broadly with Fading/Outflow, or Cooling with Strong/Building flow |
+| How do I read these groups? | Fixed educational explanation of rules; no LLM call |
+
+The first six questions use focused snapshot facts through the existing Qwen-first / Haiku-fallback route. Cache keys include the intent and snapshot. The educational question is cached fixed content. All show the Consulting VaNi loader, including repeat cached selections. Examples are capped at five; counts describe the complete selected group. No new database migration or snapshot refresh is required for this menu upgrade. Update the backend and frontend together.
+
+Review each question at the same date/category, repeat a cached question, then switch category/window. Empty Building/Cooling groups should say no matches. Switch back to Current Flow to confirm its original questions return. Individual sector pages still use their existing companion; this increment is limited to the main page. Daily RS has not been added.
+
 ## Calculation and cache contract
 
 The snapshot job computes a canonical 12-month display history with another 60 months of indicator warmup. It produces 3M/6M/12M projections without recalculating current classifications or the completed-week run. Current runs can extend beyond the display window, within available warmup history. Missing alignment breaks the run.
@@ -69,6 +87,6 @@ Publication is transactional across all categories/windows. Membership generatio
 
 ## Local verification
 
-53 backend tests passed, including classification boundaries, small samples, display-window stability, read-only snapshot loading, stale membership, atomic publication failure, rebuild and daily-pipeline publication contracts, and existing VaNi/cache behavior. Browser regression passed at 320/390/768/1440px in both themes using synthetic fixtures, including filters, MagicRS canvas, date-carrying links and current-flow regressions. Frontend typecheck, production build, theme/persona checks and Discovery flow parity checks passed.
+56 backend tests passed, including classification boundaries, small samples, display-window stability, read-only snapshot loading, stale membership, atomic publication failure, rebuild and daily-pipeline publication contracts, and existing VaNi/cache behavior. Browser regression passed at 320/390/768/1440px in both themes using synthetic fixtures, including filters, MagicRS canvas, date-carrying links and current-flow regressions. Frontend typecheck, production build, theme/persona checks and Discovery flow parity checks passed.
 
 PostgreSQL is not available in this workspace: migration execution, live refresh performance, database permissions and deployed Qwen/Haiku behavior require testing in your environment. The build retains pre-existing bundle-size, Browserslist and Tailwind warnings.

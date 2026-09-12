@@ -107,6 +107,18 @@ try {
 
     await noOverflow(`leadership ${width}`);
     assert(vaniCalls.some(r=>r.intent_id==='sector.leadership'&&r.leadership_months===12),'VaNi must follow longer-term window');
+    const companion=page.getByRole('complementary',{name:'VaNi longer-term companion'});
+    await companion.getByText('Open longer-term intents',{exact:true}).click();
+    for(const [label,suffix] of [['Which baskets are building strength?','building'],['Where is strength weakening?','cooling'],['How long has the strength lasted?','persistence'],['Is strength supported across stocks?','support'],['How does current flow compare?','flow'],['How do I read these groups?','learn']]) {
+      await companion.getByRole('button',{name:label,exact:true}).click();
+      await companion.getByRole('heading',{name:label,exact:true}).waitFor();
+      await companion.getByText('Consulting VaNi…',{exact:true}).waitFor();
+      await companion.getByText('Near-term flow is above its underlying baseline.',{exact:false}).waitFor();
+      assert(vaniCalls.some(r=>r.intent_id==='sector.leadership.'+suffix&&r.leadership_months===12),'Intent uses the selected longer-term snapshot');
+    }
+    await companion.getByRole('button',{name:'Which baskets are holding strength?',exact:true}).click();
+    await companion.getByText('Consulting VaNi…',{exact:true}).waitFor();
+    await noOverflow(`leadership intents ${width}`);
     await page.screenshot({path:path.join(out,`sector-leadership-${mode}-${width}.png`),fullPage:true});
     await page.getByRole('button',{name:'Current Flow',exact:true}).click();
     await page.getByRole('button',{name:'Heat',exact:true}).click();
