@@ -1,4 +1,3 @@
-import {ScannerVaNiLauncher} from '@/components/domain/VaNi/ScannerCompanionShell'
 import {useResearchProfile} from '@/hooks/useResearchProfile'
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
@@ -1166,7 +1165,6 @@ function FpbResults({ preset, timeframe, viewMode, onViewModeChange }: {
       {/* The four fpb.* VaNi intents. Built end to end (intent, endpoint,
           hook) but never rendered, so the page had no VaNi at all while
           every Studio preset carried its own card. */}
-      <ScannerVaNiLauncher/>
       <FpbVaNiCard />
 
       {/* Day-2 position layer — recent releases + hold/crack verdict + SL/target.
@@ -1744,9 +1742,12 @@ export default function ScanView() {
 
   return <div className="min-w-0">
     <div className="flex flex-wrap items-center gap-3 mb-4 p-3 rounded-xl border border-[var(--border)] bg-[var(--card)]">
-      <label htmlFor="scanner-category">Scanners</label>
-      <select id="scanner-category" value={activeCategoryId} onChange={e=>{const target=categories.find(c=>c.id===e.target.value)?.defaultPreset;if(target)navigate(`/scanner/${target.id}`)}} className="p-2 rounded-lg bg-[var(--card)] border border-[var(--border)]">
-      {categories.map(c=><option key={c.id} value={c.id}>{c.label} · {c.presets.length} scanners</option>)}</select>
+      <fieldset className="min-w-0"><legend className="text-sm font-semibold mb-2">Scanners</legend>
+        <div className="scanner-category-options">{categories.map(c=><label key={c.id} className="scanner-category-choice">
+          <input type="radio" name="scanner-category" value={c.id} checked={activeCategoryId===c.id} onChange={()=>{if(c.defaultPreset)navigate(`/scanner/${c.defaultPreset.id}`)}}/>
+          <span>{c.label} <span className="text-xs text-muted">· {c.presets.length}</span></span>
+        </label>)}</div>
+      </fieldset>
       <span className="text-xs text-muted">Starting suggestions for {label}. Every scanner is available.</span>
     </div>
     {presetId?<ScannerResults presetId={presetId}/>:<p>Loading scanners…</p>}

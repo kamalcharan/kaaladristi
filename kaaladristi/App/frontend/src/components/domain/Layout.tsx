@@ -148,11 +148,11 @@ export default function Layout() {
             topbar — as a sibling of <main> it split the topbar in two and the
             screen read as two applications stitched together. */}
         <div className={`relative z-10 flex gap-4 p-4 pb-8 ${sectorDocked || scannerDocked ? 'flex-col xl:flex-row' : structureDocked ? 'flex-col lg:flex-row' : ''}`}>
+          {scannerDocked && <div id="scanner-vani-host" className="scanner-vani-host" />}
           {vaniDocked && <VaNiChatPanel docked />}
           <div className="flex-1 min-w-0">
             <Outlet />
           </div>
-          {scannerDocked && <div id="scanner-vani-host" className="scanner-vani-host" />}
         </div>
       </main>
 

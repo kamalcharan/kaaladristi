@@ -2,7 +2,7 @@
 
 The current scanner layout and ICP behaviour are documented in [ICP scanner experience](icp-scanner-experience.md).
 
-VaNi opens on demand from the scanner header in a right-side companion, can be pinned on wide screens, and uses a sheet on phones. Existing scanner questions, evidence builders, readiness gates, matching table-filter callbacks and feedback are retained. Stock-row questions reuse this companion space. No new intent menu or replacement narrative engine is introduced.
+VaNi uses the persistent left-side companion arrangement shared with sector research, stacking above results on smaller screens. Existing scanner questions, evidence builders, readiness gates, matching table-filter callbacks and feedback are retained. Stock-row questions reuse this companion space. No new intent menu or replacement narrative engine is introduced.
 
 All eight Price Action Studios support Concise / Explain simply / Go deeper. Flower Pot Burst keeps its five existing questions and original GET answer format; depth variants for that API remain follow-up work.
 

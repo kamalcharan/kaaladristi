@@ -1,4 +1,3 @@
-import {ScannerVaNiLauncher} from '@/components/domain/VaNi/ScannerCompanionShell'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Loader2 } from 'lucide-react'
@@ -278,7 +277,6 @@ export default function ScannerStudio({ presetId }: { presetId: string }) {
         <div style={{ display: 'flex', gap: 8, flexShrink: 0, alignItems: 'center', flexWrap: 'wrap' }}>
           {/* Same astro-day badge the generic layout shows in its VaNi section
               header (B4) — the Studio had no astro context at all. */}
-          <ScannerVaNiLauncher/>
           <AtmosphericBadge />
           <DownloadXlsButton stocks={filtered} scanName={d.exportName} columns={studioXlsColumns(d)} />
           <TradingViewExportButton stocks={filtered} scanName={d.exportName} />
