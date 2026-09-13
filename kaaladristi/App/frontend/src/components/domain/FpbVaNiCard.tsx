@@ -1,3 +1,4 @@
+import {revealVaniReading} from '@/lib/vaniNavigation'
 import React, { useState } from 'react'
 import ScannerCompanionShell from './VaNi/ScannerCompanionShell'
 import {VaNiConsulting} from './VaNi/VaNiBrand'
@@ -67,24 +68,10 @@ export default function FpbVaNiCard() {
   return (
     <ScannerCompanionShell presetId="flower_pot_burst" activeQuestion={!!intent} subtitle="Flower Pot Burst · Coil research">
       <p className="text-sm text-muted">Explore forming coils and inspect how recent setups performed.</p>
-      <details open><summary>Explore scanner questions</summary>
-        <div className="scanner-questions">
-          {QUESTIONS.map((q) => (
-            <button
-              key={q.key}
-              aria-pressed={intent===q.key}
-              onClick={() => setIntent((p) => (p === q.key ? null : q.key))}
-              style={intent === q.key ? activePillStyle : pillStyle}
-            >
-              {q.question}
-            </button>
-          ))}
-        </div>
-      </details>
         {intent && <h3 className="font-semibold text-sm">{QUESTIONS.find(q=>q.key===intent)?.question}</h3>}
         {!intent && (
           <p style={{ fontSize: 12, color: 'var(--text-faint)', margin: 0 }}>
-            Pick a question above — VaNi answers in a couple of lines.
+            Explore forming coils, participation and outcomes below.
           </p>
         )}
         {intent && (
@@ -96,10 +83,24 @@ export default function FpbVaNiCard() {
             </p>
           ) : (
             <p style={{ fontSize: 11, color: 'var(--text-faint)', margin: 0 }}>
-              VaNi has nothing to report for this question today.
+              VaNi has nothing to report for this intent today.
             </p>
           )
         )}
+      <nav className="vani-followups" onClick={revealVaniReading}><p>Continue your research</p>
+        <div className="scanner-questions">
+          {QUESTIONS.filter(q=>q.key!==intent).map((q) => (
+            <button
+              key={q.key}
+              aria-pressed={intent===q.key}
+              onClick={() => setIntent(q.key)}
+              style={intent === q.key ? activePillStyle : pillStyle}
+            >
+              {q.question}
+            </button>
+          ))}
+        </div>
+      </nav>
     </ScannerCompanionShell>
   )
 }

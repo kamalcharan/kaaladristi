@@ -1,3 +1,4 @@
+import {revealVaniReading} from '@/lib/vaniNavigation'
 import {trackEvent} from '@/lib/analytics'
 import ScannerHighlightStory from '@/components/domain/VaNi/ScannerHighlightStory'
 import {SCANNER_INTRODUCTIONS} from '@/constants/scannerIntroductions'
@@ -23,7 +24,7 @@ import ScanVaNiPublisher from '@/components/domain/ScanVaNiPublisher'
 import ScanStalenessBanner from '@/components/domain/ScanStalenessBanner'
 import AtmosphericBadge from '@/components/domain/AtmosphericBadge'
 import { DristiQLoader } from '@/components/ui'
-import {VaNiConsulting,VaNiDepthSelector} from '@/components/domain/VaNi/VaNiBrand'
+import {VaNiConsulting} from '@/components/domain/VaNi/VaNiBrand'
 import ScannerCompanionShell from '@/components/domain/VaNi/ScannerCompanionShell'
 import ScannerIntentEvidence from '@/components/domain/VaNi/ScannerIntentEvidence'
 import '@/styles/sectorResearch.css'
@@ -130,14 +131,8 @@ export default function ScannerStudio({ presetId }: { presetId: string }) {
   // single source of truth shared between the stat tiles, the card's own
   // pill row, and the filter pipeline. Only one at a time, same as `quick`.
   const [scanIntent, setScanIntent] = useState<ScannerIntentKey | null>(null)
-  // The results table sits well below the VaNi card (past the stat-tile
-  // grid + the card itself). Selecting a VaNi question applies its filter
-  // correctly, but with no visible change anywhere near the click — reads
-  // as "nothing happens" unless the user scrolls down on their own. Scroll
-  // the results section into view on select so the (now-filtered) table is
-  // what they see next.
+  // Results update in place while the companion keeps the reading in view.
   const resultsRef = useRef<HTMLDivElement>(null)
-  const scrollToResults = () => resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 
   const { data: rows, isLoading, error } = useScan(presetId, exchangeFilter)
   const { bookmarkedIds, load: loadBookmarks } = useBookmarkStore()
@@ -195,8 +190,8 @@ export default function ScannerStudio({ presetId }: { presetId: string }) {
   const clearAll = () => { setFilters(DEFAULT_FILTERS); setQuick(DEFAULT_QUICK); setScanIntent(null) }
   const selectScanIntent = (key: ScannerIntentKey) => {
     trackEvent('scanner_intent_selected', {preset_id:presetId, intent:key, exchange:exchangeFilter, data_date:dataDate, highlighted_count:all.filter(isHighlight).length})
-    setScanIntent((p) => (p === key ? null : key))
-    scrollToResults()
+    setScanIntent(key)
+    // Keep the reading in view; the table updates without interrupting it.
   }
 
   // Every hook above runs unconditionally — the guard cannot move earlier
@@ -543,9 +538,8 @@ export function ScannerVaNiCard({
   rsFlipFacts: RsFlipFacts | null
   isUnusualFacts: IsUnusualFacts | null
 }) {
-  const [questionsOpen,setQuestionsOpen]=useState(true)
   const branded=true
-  const [depth,setDepth]=useState<'brief'|'simple'|'detailed'>('brief')
+  const depth='simple' as const
   // One useVaNiAsk() instance per intent so switching pills never refetches
   // or loses a sibling intent's already-fetched answer.
   const momentumGapMutation = useVaNiAsk()
@@ -575,7 +569,7 @@ export function ScannerVaNiCard({
   }
 
   const askIntent = (key: ScannerIntentKey, nextDepth=depth, select=true, force=false) => {
-    if(select) {onSelectIntent(key);setQuestionsOpen(false)}
+    if(select) onSelectIntent(key)
     const mutation = mutationByIntent[key]
     if (!dataDate || (!force && ((mutation.data && (!branded || mutation.variables?.explanation_depth===nextDepth)) || mutation.isPending))) return
     if (key === 'momentum_gap') {
@@ -683,32 +677,18 @@ export function ScannerVaNiCard({
     cursor: 'pointer', fontFamily: 'var(--font-body)', maxWidth: '100%', textAlign: 'left',
   }
   const activePillStyle: React.CSSProperties = { ...pillStyle, background: 'var(--indigo-bg)', fontWeight: 700 }
+  const nextOrder: Partial<Record<ScannerIntentKey, ScannerIntentKey[]>> = {why_flagged:['momentum_gap','sector_leading','leading_industry'],momentum_gap:['why_flagged','rs_flip','sector_leading'],new_since_yesterday:['why_flagged','momentum_gap','sector_leading'],sector_leading:['leading_industry','why_flagged'],leading_industry:['sector_leading','why_flagged'],rs_flip:['momentum_gap','why_flagged'],is_unusual:['new_since_yesterday','why_flagged']}
+  const preferred=scanIntent?nextOrder[scanIntent]??[]:[]
   const visibleIntents = dataDate ? intentsOrdered(descriptor).filter((it) => readyByIntent[it.key]) : []
 
   // Preserve the scanner intent handlers inside the shared companion presentation.
   return (
     <ScannerCompanionShell presetId={presetId} activeQuestion={!!scanIntent} subtitle={<>{descriptor.displayName} · {dataDate} · {exchangeFilter}</>}>
       <p className="text-sm text-muted">Explore this scan, inspect the evidence, then ask about a stock using its row mascot.</p>
-      <details open={questionsOpen} onToggle={e=>setQuestionsOpen(e.currentTarget.open)}>
-        <summary>{scanIntent?'Change question':'Explore scanner questions'}</summary>
-        <div className="scanner-questions">
-          {visibleIntents.map((it) => (
-            <button
-              key={it.key}
-              aria-pressed={scanIntent===it.key}
-              onClick={() => askIntent(it.key)}
-              style={scanIntent === it.key ? activePillStyle : pillStyle}
-            >
-              {it.question}
-            </button>
-          ))}
-        </div>
-      </details>
         {scanIntent && <h3 className="font-semibold text-sm">{visibleIntents.find(it=>it.key===scanIntent)?.question}</h3>}
-        {branded && scanIntent && <div className="my-4 max-w-lg"><VaNiDepthSelector value={depth} onChange={value=>{const next=value as typeof depth;setDepth(next);askIntent(scanIntent,next,false,true)}}/></div>}
         {!scanIntent && (
           <p style={{ fontSize: 12, color: 'var(--text-faint)', margin: 0 }}>
-            Pick a question — VaNi explains the evidence and the table filters to match. Use the row mascot to ask about an individual stock.
+            Explore the evidence below. Use a row mascot for a stock-specific reading.
           </p>
         )}
         {scanIntent && (
@@ -729,6 +709,21 @@ export function ScannerVaNiCard({
             </>
           )
         )}
+      <nav className="vani-followups" onClick={revealVaniReading} aria-label="Continue scanner research">
+        <p>{scanIntent?'Continue your research':'Explore this scan'}</p>
+        <div className="scanner-questions">
+          {visibleIntents.filter(it=>it.key!==scanIntent).sort((a,b)=>(preferred.includes(a.key)?preferred.indexOf(a.key):99)-(preferred.includes(b.key)?preferred.indexOf(b.key):99)).map((it) => (
+            <button
+              key={it.key}
+              aria-pressed={scanIntent===it.key}
+              onClick={() => askIntent(it.key)}
+              style={scanIntent === it.key ? activePillStyle : pillStyle}
+            >
+              {it.question}
+            </button>
+          ))}
+        </div>
+      </nav>
     </ScannerCompanionShell>
   )
 }

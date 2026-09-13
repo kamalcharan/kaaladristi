@@ -1,3 +1,4 @@
+import {revealVaniReading} from '@/lib/vaniNavigation'
 import { useVaniAnalytics } from '@/hooks/useVaniAnalytics';
 import { trackVani } from '@/lib/vaniAnalytics';
 import SectorPersonalConnections from './SectorPersonalConnections';
@@ -60,7 +61,7 @@ export default function LeadershipCompanion() {
  const retry=async()=>{trackVani('retry',analyticsContext);setCycle(v=>v+1);const fresh=await evidence.refetch();if(fresh.data?.snapshot===evidence.data?.snapshot&&!fresh.error)await reading.refetch();};
  return <aside {...analytics} className="ph-no-capture sector-vani p-4 space-y-3 xl:max-h-[calc(100dvh-110px)] xl:overflow-y-auto" aria-label="VaNi longer-term companion">
   <VaNiBrand subtitle={<>{c.months??6} months · {c.category==='custom'?'Curated':c.category} · {c.date?sectorSessionDate(c.date):'Select a session'}</>} />
-  <details data-vani-detail="intents"><summary className="sector-question cursor-pointer">Open longer-term intents</summary><div className="flex flex-col gap-2 pt-2" aria-label="Longer-term questions">{Object.entries(questions).filter(([id])=>ACTIVE_INTENTS.has(id)).map(([id,label])=><button key={id} className="sector-question text-left" aria-pressed={intent===id} onClick={()=>{trackVani('intent_selected',{...analyticsContext,intent_id:id,source:'manual'});setIntent(id as Intent);setCycle(v=>v+1)}}>{label}</button>)}</div></details>
+
   <h3 className="font-medium text-sm">{questions[intent]}</h3>
   {!evidence.isFetching&&!evidence.error&&evidence.data&&<Evidence rows={evidence.data.rows} intent={intent} date={evidence.data.date} months={c.months??6}/>}
   {loading?<VaNiConsulting />:error?<p role="alert">{error.message}</p>:<details data-vani-detail="explanation" key={intent} className="vani-explanation"><summary>VaNi explanation</summary><p className="text-sm leading-6">{reading.data?.response}</p>{reading.data?.log_id&&<VaNiFeedback analyticsContext={analyticsContext} key={`${intent}-${reading.data.log_id}`} logId={reading.data.log_id}/>}</details>}
@@ -68,5 +69,5 @@ export default function LeadershipCompanion() {
   {!loading&&(error||reading.data?.context_changed)&&<button className="sector-question" onClick={retry}>Refresh reading</button>}
   {!evidence.error&&evidence.data&&<SectorPersonalConnections sourceKey={evidence.data.snapshot} date={evidence.data.date} membership={evidence.data.membership} sectors={examples(evidence.data.rows,intent).map(r=>({id:r.index_id,name:r.name,reading:`${r.status}; current flow: ${r.flow?.state??'Unavailable'}`}))}/>}
   <p className="text-xs text-muted">Readings describe the selected category and closing-data session. Alignment is an observation, not a prediction.</p>
- </aside>;
+   <nav className="vani-followups" onClick={revealVaniReading}><p>Continue your research</p><div className="flex flex-col gap-2 pt-2" aria-label="Longer-term research intents">{Object.entries(questions).filter(([id])=>ACTIVE_INTENTS.has(id)&&id!==intent).map(([id,label])=><button key={id} className="sector-question text-left" aria-pressed={intent===id} onClick={()=>{trackVani('intent_selected',{...analyticsContext,intent_id:id,source:'manual'});setIntent(id as Intent);setCycle(v=>v+1)}}>{label}</button>)}</div></nav></aside>;
 }

@@ -33,7 +33,7 @@ export default function VaNiIntentTray({
   intents,
   disabled = false,
   onAsk,
-  heading = 'Go deeper',
+  heading = 'Continue your research',
   collapsedCount = 2,
   footer,
 }: VaNiIntentTrayProps) {

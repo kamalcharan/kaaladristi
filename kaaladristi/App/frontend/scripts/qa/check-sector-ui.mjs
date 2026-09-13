@@ -106,8 +106,7 @@ try {
     await noOverflow(`list ${width}`);
     // Only the three launch follow-ups are visible; deferred implementations stay hidden.
     const currentCompanion=page.getByRole('complementary',{name:'VaNi Sector Rotation companion'});
-    await currentCompanion.getByText('Explore another question',{exact:true}).click();
-    assert.equal(await currentCompanion.locator('[aria-label="Sector questions"] button').count(),4,'Current Flow: default plus three questions');
+    assert.equal(await currentCompanion.locator('[aria-label="Sector research intents"] button').count(),3,'Current Flow: default plus three questions');
     for(const [id,label] of [['entering','Where is flow entering?'],['fading','Where is flow fading?'],['persistence','Has this flow persisted?']]) {
       const surface=width<1280&&await page.getByRole('dialog').isVisible()?page.getByRole('dialog'):currentCompanion;
       const menu=surface.getByText('Questions about current flow',{exact:true});
@@ -155,8 +154,7 @@ try {
     const companion=page.getByRole('complementary',{name:'VaNi longer-term companion'});
     assert.equal(await companion.locator('[aria-label="Longer-term group counts"]').count(),0,'VaNi must not repeat the group statistics grid');
     await companion.getByRole('region',{name:'Longer-term interpretation'}).getByText('What stands out',{exact:true}).waitFor();
-    await companion.getByText('Open longer-term intents',{exact:true}).click();
-    assert.equal(await companion.locator('[aria-label="Longer-term questions"] button').count(),4,'Longer-Term: default plus three questions');
+    assert.equal(await companion.locator('[aria-label="Longer-term research intents"] button').count(),3,'Longer-Term: default plus three questions');
     for(const [label,suffix] of [['Which baskets are building strength?','building'],['Where is strength weakening?','cooling'],['How does current flow compare?','flow']]) {
       await companion.getByRole('button',{name:label,exact:true}).click();
       await companion.getByRole('heading',{name:label,exact:true}).waitFor();
@@ -207,7 +205,7 @@ try {
     await page.screenshot({path:path.join(out,`sector-evidence-${mode}-${width}.png`),fullPage:false});
     await evidenceSurface.getByRole('button',{name:'Do short-term flow and longer-term strength agree?',exact:true}).click();
     await evidenceSurface.getByRole('region',{name:'Horizon comparison'}).getByText('The horizons give a mixed picture:',{exact:false}).waitFor();
-    await evidenceSurface.getByRole('button',{name:'Explain simply',exact:true}).click();
+    assert.equal(await evidenceSurface.getByRole('button',{name:/^(Concise|Explain simply|Go deeper)$/}).count(),0);
     await evidenceSurface.getByText('Flow 22D is a short-term baseline, not the longer-term trend.',{exact:false}).waitFor();
     assert(!vaniCalls.some(r=>r.intent_id==='sector.horizons'),'Horizon comparison uses the published date-bound evidence, not an unsupported LLM intent');
     await evidenceSurface.getByRole('button',{name:'What does short-term activity show?',exact:true}).click();
@@ -216,7 +214,7 @@ try {
     if(width<1280) {
       await page.getByRole('button',{name:'Help me read this page',exact:true}).first().click();
       const sheet=page.getByRole('dialog'); await sheet.waitFor();
-      await sheet.getByRole('button',{name:'What does short-term activity show?',exact:true}).click();
+      await sheet.getByRole('heading',{name:'What does short-term activity show?',exact:true}).waitFor();
       await sheet.getByText('Consulting VaNi…',{exact:true}).waitFor();
       await sheet.getByText('Near-term flow is above its underlying baseline.',{exact:false}).waitFor();
       await sheet.getByRole('button',{name:'Close',exact:true}).click();
@@ -238,10 +236,10 @@ try {
     const sectorRead=page.getByRole('complementary',{name:'VaNi sector detail companion'});
     await sectorRead.getByText('6 months',{exact:false}).waitFor();
     await sectorRead.getByText('Running broadly',{exact:false}).first().waitFor();
-    assert.equal(await sectorRead.locator('[aria-label="Questions about this sector"] button').count(),4,'Sector detail has four focused questions');
+    assert.equal(await sectorRead.locator('[aria-label="Continue sector research"] button').count(),3,'Sector detail has four focused questions');
     await sectorRead.getByRole('button',{name:'Which stocks support the longer-term trend?'}).click();
     await sectorRead.getByText('3 of 5 classified stocks',{exact:false}).waitFor();
-    await sectorRead.getByRole('button',{name:'Explain simply',exact:true}).click();
+    assert.equal(await sectorRead.getByRole('button',{name:/^(Concise|Explain simply|Go deeper)$/}).count(),0);
     await sectorRead.getByText('It is different from stocks rising today',{exact:false}).waitFor();
     await sectorRead.getByRole('button',{name:'Does short-term flow agree with the longer-term view?',exact:true}).click();
     await sectorRead.getByText('The horizons give a mixed picture:',{exact:false}).waitFor();

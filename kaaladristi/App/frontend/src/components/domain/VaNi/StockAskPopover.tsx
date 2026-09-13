@@ -1,3 +1,4 @@
+import '@/styles/sectorResearch.css'
 import {createPortal} from 'react-dom'
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
@@ -8,7 +9,8 @@ import { usePipelineStatus } from '@/hooks/usePipelineStatus'
 import { useScanPresence } from '@/hooks/useScanPresence'
 import { fmtDateLong } from '@/lib/dateUtils'
 import { zoneLabel, flowLabel } from '@/constants/signalScale'
-import VaNiInsight from '@/components/domain/VaNiInsight'
+import {Highlight} from './SectorEvidence'
+import VaNiFeedback from './VaNiFeedback'
 import { PnlChart, PostureChart } from '@/components/domain/StockCockpit/ThesisTab'
 import StructureStrip from '@/components/domain/StockCockpit/StructureStrip'
 import { computeThesis, type ThesisBar, type PositionInput, type ThesisRead } from '@/services/thesis'
@@ -94,10 +96,6 @@ export default function StockAskPopover() {
   const anchorEl = useStockAskStore((s) => s.anchorEl)
   const close = useStockAskStore((s) => s.close)
   const navigate = useNavigate()
-  const [scannerTarget,setScannerTarget]=useState<HTMLElement|null>(null)
-  useEffect(()=>{const update=()=>setScannerTarget(document.getElementById('scanner-vani-stock'));update();const observer=new MutationObserver(update);observer.observe(document.body,{childList:true,subtree:true});return()=>observer.disconnect()},[])
-  const scannerSlot=entity?.currentPresetId?scannerTarget:null
-
   const ref = useRef<HTMLDivElement>(null)
   const { latestDataDate, latestDataDateFormatted } = usePipelineStatus()
 
@@ -189,26 +187,29 @@ export default function StockAskPopover() {
     if (!anchorEl) { setPos(null); return }
     const update = () => {
       const rect = anchorEl.getBoundingClientRect()
-      setPos({ left: rect.left, top: rect.bottom + 6 })
+      setPos({ left: rect.left, top: Math.max(8,Math.min(rect.bottom + 6,window.innerHeight-(ref.current?.offsetHeight ?? Math.min(420,window.innerHeight*0.7))-8)) })
     }
     update()
+    const observer = new ResizeObserver(update)
+    if(ref.current) observer.observe(ref.current)
     // capture: true catches scroll events from any nested scroll container
     // on the page (scroll events don't bubble, but do fire in the capture
     // phase on ancestors, window included), not just window-level scroll.
     window.addEventListener('scroll', update, true)
     window.addEventListener('resize', update)
     return () => {
+      observer.disconnect()
       window.removeEventListener('scroll', update, true)
       window.removeEventListener('resize', update)
     }
-  }, [anchorEl])
+  }, [anchorEl, entity, activeIntent, active?.data, !!pos])
 
   useEffect(() => {
     function handle(e: MouseEvent) {
-      if (!document.getElementById('scanner-vani-stock') && ref.current && !ref.current.contains(e.target as Node)) close()
+      if (ref.current && !ref.current.contains(e.target as Node)) close()
     }
     function handleKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') close()
+      if (e.key === 'Escape') { close(); anchorEl?.focus() }
     }
     // Defer so the click that opened the popover doesn't immediately close it.
     const t = setTimeout(() => document.addEventListener('mousedown', handle), 0)
@@ -218,7 +219,7 @@ export default function StockAskPopover() {
       document.removeEventListener('mousedown', handle)
       document.removeEventListener('keydown', handleKey)
     }
-  }, [close])
+  }, [close, anchorEl])
 
   // Reset which intent pill is active + fire the default question fresh
   // whenever a NEW entity opens. This component is now a single long-lived
@@ -249,15 +250,17 @@ export default function StockAskPopover() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [entity?.type, entity?.id, entity?.asOfDate, entity?.pageContext])
 
+  useEffect(()=>{if(entity && pos)ref.current?.focus()},[entity?.id,!!pos])
+
   if (!entity || !anchorEl || !pos) return null
 
-  const ask = (intentId: EquityIntentKey) => {
+  const ask = (intentId: EquityIntentKey, force=false) => {
     setActiveIntent(intentId)
     // The 3 position/scan-presence pills are computed locally (thesis.ts /
     // useScanPresence) — never an LLM call, nothing to mutate.
     if (isStructuredIntent(intentId)) return
     const mutation = mutationByIntent[intentId]
-    if (mutation.data || mutation.isPending) return
+    if ((!force && mutation.data) || mutation.isPending) return
     const dateIso = entity.asOfDate || latestDataDate || new Date().toISOString().slice(0, 10)
     mutation.mutate({
       intent_id: intentId,
@@ -289,10 +292,13 @@ export default function StockAskPopover() {
   const content = (
     <div
       ref={ref}
+      tabIndex={-1}
+      role="dialog" aria-label={`VaNi · ${entity.symbol}`} aria-modal="false"
+      className="stock-vani-popup"
       onClick={(e) => e.stopPropagation()}
       style={{
-        position: scannerSlot ? 'relative' : 'fixed', left:scannerSlot?undefined:left, top:scannerSlot?undefined:pos.top, zIndex: 500,
-        width: scannerSlot?'100%':POPOVER_WIDTH, maxWidth: 'calc(100vw - 16px)', maxHeight: scannerSlot?undefined:'70vh', overflowY: 'auto',
+        position: 'fixed', left, top:pos.top, zIndex: 500,
+        width: POPOVER_WIDTH, maxWidth: 'calc(100vw - 16px)', maxHeight:'70dvh', overflowY: 'auto',
         background: 'var(--card)',
         border: '1px solid var(--border-indigo)', borderRadius: 12,
         boxShadow: '0 16px 48px color-mix(in srgb, black 45%, transparent)',
@@ -314,7 +320,8 @@ export default function StockAskPopover() {
           {entity.asOfDate ? fmtDateLong(entity.asOfDate) : latestDataDateFormatted || fmtDateLong(latestDataDate || '')}
         </span>
         <button
-          onClick={close}
+          aria-label="Close stock VaNi"
+          onClick={()=>{close();anchorEl.focus()}}
           style={{
             background: 'none', border: 'none', cursor: 'pointer',
             color: 'var(--text-muted)', fontSize: 13, padding: 0, lineHeight: 1,
@@ -322,7 +329,7 @@ export default function StockAskPopover() {
         >✕</button>
       </div>
 
-      {historical && <p className="text-xs text-muted mb-2">Historical market read for {fmtDateLong(entity.asOfDate!)}. Position and entry questions are available on the latest session.</p>}
+      {historical && <p className="text-xs text-muted mb-2">Historical market read for {fmtDateLong(entity.asOfDate!)}. Position and entry intents are available on the latest session.</p>}
       {!historical && <AlsoInScansStrip
         isLoading={scanPresence.isLoading}
         matchedScans={scanPresence.matchedScans}
@@ -394,20 +401,16 @@ export default function StockAskPopover() {
             )}
 
             <div style={{ flex: '2 1 260px', minWidth: 220 }}>
-              {entity.pageContext === 'Scanner / Breakout Surge' && active?.isPending ? <VaNiConsulting/> : <VaNiInsight
-                highlightChips={entity.pageContext === 'Scanner / Breakout Surge'}
-                insight={active?.data?.response}
-                isLoading={active?.isPending ?? false}
-                logId={active?.data?.log_id ?? undefined}
-                className="mt-0"
-              />}
+              {active?.isPending ? <VaNiConsulting/> : active?.error || active?.data?.error ? <div role="alert"><p>VaNi could not prepare this stock reading.</p><button className="sector-question" onClick={()=>ask(activeIntent,true)}>Try again</button></div> : <section className="vani-evidence-sections mt-0"><section aria-label="Stock reading"><h4>VaNi’s reading</h4><p className="text-sm leading-7"><Highlight text={active?.data?.response??''} symbols={[entity.symbol]}/></p>{active?.data?.log_id && <VaNiFeedback logId={active.data.log_id}/>}</section></section>}
+
             </div>
           </>
         )}
       </div>
 
+      <p className="text-xs text-muted mt-3">Continue your research</p>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 10 }}>
-        {intents.map((i) => {
+        {intents.filter(i=>i.intentId!==activeIntent).map((i) => {
           const isActive = activeIntent === i.intentId
           const isPosition = i.group === 'position'
           return (
@@ -440,7 +443,7 @@ export default function StockAskPopover() {
       </div>
     </div>
   )
-  return scannerSlot ? createPortal(content,scannerSlot) : content
+  return createPortal(content,document.body)
 }
 
 function ConfirmPill({ k, v, ok }: { k: string; v: string; ok: boolean }) {

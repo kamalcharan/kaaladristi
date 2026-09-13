@@ -1,3 +1,4 @@
+import {trackEvent} from '@/lib/analytics';
 import { cn } from '@/lib/utils';
 import type { VaNiEntity } from '@/stores/vaniStore';
 import { useStockAskStore } from '@/stores/stockAskStore';
@@ -29,8 +30,11 @@ export default function VaNiTrigger({ entity, className }: VaNiTriggerProps) {
           close();
           return;
         }
+        trackEvent('vani_stock_popup_opened',{equity_id:entity.id,preset_id:entity.currentPresetId,data_date:entity.asOfDate});
         open(entity, e.currentTarget);
       }}
+      aria-haspopup="dialog"
+      aria-expanded={isOpen}
       title={`Ask VaNi about ${entity.symbol}`}
       aria-label={`Ask VaNi about ${entity.symbol}`}
       className={cn(

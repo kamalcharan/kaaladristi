@@ -1,3 +1,4 @@
+import {revealVaniReading} from '@/lib/vaniNavigation'
 import SectorHorizonComparison from './SectorHorizonComparison';
 import SectorEvidence, {type EvidenceSection} from './SectorEvidence';
 import SectorIntentStory, {SectorLearningStory, type SectorIntentView} from './SectorIntentStory';
@@ -16,7 +17,7 @@ import { useSectorResearchStore } from '@/stores/sectorResearchStore';
 import { useAuthStore } from '@/stores/authStore';
 import { sectorSessionDate, sectorSignal, SECTOR_FLOW_LABEL } from '@/lib/sectorFlow';
 import VaNiFeedback from './VaNiFeedback';
-import VaNiBrand, {VaNiConsulting, VaNiDepthSelector} from './VaNiBrand';
+import VaNiBrand, {VaNiConsulting} from './VaNiBrand';
 import '@/styles/sectorResearch.css';
 
 const API = import.meta.env.VITE_PIPELINE_API_URL?.trim() || '';
@@ -59,7 +60,7 @@ function CurrentSectorCompanion() {
   const user = useAuthStore(s => s.profile?.id);
   const indexId = Number(pathname.match(/^\/sector-rotation\/(\d+)/)?.[1]) || undefined;
   const [intent, setIntent] = useState<Intent>(indexId ? 'sector.read' : 'sector.overview');
-  const [depth, setDepth] = useState('brief');
+  const depth = 'simple';
   const [open, setOpen] = useState(false);
   const dialog = useRef<HTMLDialogElement>(null);
   const launcher = useRef<HTMLButtonElement>(null);
@@ -85,7 +86,7 @@ function CurrentSectorCompanion() {
   });
   const key = JSON.stringify([identity, intent, depth, cycle, evidence.data?.snapshot]);
   useEffect(() => { const timer = window.setTimeout(() => setPresented(key), 450); return () => window.clearTimeout(timer); }, [key]);
-  useEffect(() => { setIntent(indexId ? 'sector.read' : 'sector.overview'); setDepth('brief'); }, [pathname, indexId]);
+  useEffect(() => { setIntent(indexId ? 'sector.read' : 'sector.overview'); }, [pathname, indexId]);
   useEffect(() => {
     const el = dialog.current;
     if (open && el && !el.open) el.showModal();
@@ -108,9 +109,6 @@ function CurrentSectorCompanion() {
   const body = <div className="sector-vani-body">
     {!overview && <>
     <p className="text-xs text-muted">{indexId ? "Short term: 5/22-session flow and recent participation. Longer term: completed weekly/monthly strength." : "Discover activity → check persistence → inspect participation → save an observation."}</p>
-    <details open={indexId ? true : undefined} data-vani-detail={indexId ? undefined : "intents"}><summary className="sector-question cursor-pointer">Questions about current flow</summary><div className="flex flex-wrap gap-2 pt-2" aria-label="Sector questions">{Object.entries(intents).filter(([id]) => indexId ? ['sector.read','sector.horizons','sector.persistence','sector.participation'].includes(id) : MAIN_INTENTS.has(id)).map(([id, label]) =>
-      <button key={id} aria-pressed={intent === id} onClick={() => choose(id as Intent)} className="sector-question">{indexId ? detailLabels[id as Intent]??label : label}</button>)}</div></details>
-    {!staticIntent && <VaNiDepthSelector value={depth} onChange={setDepth} />}
     </>}
     <h3 className="text-sm font-medium">{indexId ? detailLabels[intent]??intents[intent] : intents[intent]}</h3>
     {overview && <p className="text-xs text-muted">Overall sector flow · Sectoral + Curated · same coverage as Discovery</p>}
@@ -135,8 +133,8 @@ function CurrentSectorCompanion() {
       <SectorEvidence sections={evidence.data.evidence_sections ?? [{title:"Selected evidence",items:evidence.data.facts ?? []}]} symbols={evidence.data.constituents?.map(r=>r.symbol) ?? []} />
     </details>}
     {(indexId||overview||staticIntent||story)&&evidence.data?.rows && <SectorPersonalConnections sourceKey={evidence.data.snapshot} date={evidence.data.date} sectors={personalRows.map(r=>{const signal=sectorSignal(r);return {id:r.index_id,name:r.name,reading:signal?SECTOR_FLOW_LABEL[signal]:'Unavailable'}})}/>}
-    {overview && <details data-vani-detail="intents"><summary className="text-xs cursor-pointer min-h-11">Explore another question</summary>    <div className="flex flex-wrap gap-2" aria-label="Sector questions">{Object.entries(intents).filter(([id]) => indexId ? ['sector.read','sector.horizons','sector.persistence','sector.participation'].includes(id) : MAIN_INTENTS.has(id)).map(([id, label]) =>
-      <button key={id} aria-pressed={intent === id} onClick={() => choose(id as Intent)} className="sector-question">{indexId ? detailLabels[id as Intent]??label : label}</button>)}</div></details>}
+    <nav className="vani-followups" onClick={revealVaniReading} aria-label="Continue sector research"><p>Continue your research</p>    <div className="flex flex-wrap gap-2" aria-label="Sector research intents">{Object.entries(intents).filter(([id]) => indexId ? ['sector.read','sector.horizons','sector.persistence','sector.participation'].includes(id) : MAIN_INTENTS.has(id)).filter(([id])=>id!==intent).map(([id, label]) =>
+      <button key={id} aria-pressed={intent === id} onClick={() => choose(id as Intent)} className="sector-question">{indexId ? detailLabels[id as Intent]??label : label}</button>)}</div></nav>
   </div>;
   return <aside {...analytics} className="ph-no-capture sector-vani" aria-label="VaNi Sector Rotation companion">
     <header className="p-4 border-b border-[var(--border)]"><VaNiBrand subtitle={<>Sector research · {(overview ? evidence.data?.date : context.date) ? sectorSessionDate((overview ? evidence.data?.date : context.date)!) : 'Select a session'}</>} />

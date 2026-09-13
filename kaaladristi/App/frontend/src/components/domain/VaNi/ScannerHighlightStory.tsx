@@ -1,3 +1,4 @@
+import VaNiTrigger from '@/components/domain/VaNiTrigger'
 import type {ScanStock} from '@/types'
 import {displaySymbol} from '@/lib/symbolUtils'
 import {trackEvent} from '@/lib/analytics'
@@ -34,12 +35,12 @@ export default function ScannerHighlightStory({stocks,date,response}:{stocks:Sca
     <p><Highlight text={r.rsi_available?`${r.high_rsi} of ${r.rsi_available} RSI readings are 70 or higher. A high reading can accompany momentum; it does not predict a reversal.`:'RSI readings are unavailable; momentum context is incomplete.'} symbols={[]}/></p>
     <p><Highlight text={r.score_pair_available?`${r.recent_score_below} of ${r.score_pair_available} stocks have a 5D score below their 22D score. This compares recent and broader readings, not the change since yesterday.`:'Paired 5D and 22D readings are unavailable.'} symbols={[]}/></p>
    </section>
-   <section aria-label="Look closer"><h4>Look closer</h4><p className="vani-highlight-scope">Up to two examples, ordered by relative volume.</p>
-    {examples.map(stock=><a className="vani-highlight-stock" key={stock.equity_id} href={`/chart/equity/${stock.equity_id}?setup=breakout_surge`} onClick={()=>trackEvent('scanner_highlight_stock_opened',{preset_id:'breakout_surge',equity_id:stock.equity_id,data_date:date})}>
-     <strong className="vani-evidence-stock">{displaySymbol(stock)}</strong>
+   <section aria-label="Look closer"><h4>Look closer</h4><p className="vani-highlight-scope">Up to two examples, ordered by relative volume. Open the mascot to inspect a stock here.</p>
+    {examples.map(stock=><div className="vani-highlight-stock" key={stock.equity_id}>
+     <div className="flex items-center justify-between gap-3 w-full"><strong className="vani-evidence-stock">{displaySymbol(stock)}</strong><VaNiTrigger entity={{type:'equity',id:stock.equity_id,symbol:displaySymbol(stock),currentPresetId:'breakout_surge',pageContext:'Scanner / Breakout Surge',asOfDate:date??undefined,signals:{close:stock.close,pctChng:stock.pct_chng,rvol:stock.rvol,flowType:stock.flow_type,magicRsZone:stock.magic_rs_zone,deliveryPct:stock.delivery_pct}}}/></div>
      <span><mark className="vani-evidence-value">{number(stock.rvol??null,'×')}</mark> usual volume · MagicRS <mark className="vani-evidence-value">{number(stock.magic_rs??null)}</mark></span>
-     <span className="vani-highlight-link">Inspect stock →</span>
-    </a>)}
+     <a className="vani-highlight-link" href={`/chart/equity/${stock.equity_id}?setup=breakout_surge`} onClick={()=>trackEvent('scanner_highlight_stock_opened',{preset_id:'breakout_surge',equity_id:stock.equity_id,data_date:date})}>Open chart →</a>
+    </div>)}
    </section>
   </>}
  </div>
