@@ -9,13 +9,12 @@ import { SectorPulseContent } from '@/components/domain/DashboardV3/SectorPulse'
 import { useEffect, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Loader2 } from 'lucide-react';
 import { LineChart, Line, ResponsiveContainer, XAxis, YAxis, Tooltip } from 'recharts';
 import { useSectorResearchStore } from '@/stores/sectorResearchStore';
 import { useAuthStore } from '@/stores/authStore';
 import { sectorSessionDate, sectorSignal, SECTOR_FLOW_LABEL } from '@/lib/sectorFlow';
 import VaNiFeedback from './VaNiFeedback';
-import VaNiBrand from './VaNiBrand';
+import VaNiBrand, {VaNiConsulting, VaNiDepthSelector} from './VaNiBrand';
 import '@/styles/sectorResearch.css';
 
 const API = import.meta.env.VITE_PIPELINE_API_URL?.trim() || '';
@@ -66,12 +65,12 @@ function CurrentSectorCompanion() {
     sector_category: overview ? 'overall' : context.category, sector_period: overview ? 22 : context.period };
   const identity = JSON.stringify([pathname, overview ? 'overall' : [context.date, context.category, context.period]]);
   const evidence = useQuery({
-    queryKey: ['sector-vani-context', 5, identity], enabled: context.scope === pathname && !!context.date,
+    queryKey: ['sector-vani-context', 6, identity], enabled: context.scope === pathname && !!context.date,
     staleTime: 60_000, retry: false,
     queryFn: async () => { const r: Response = overview ? await fetchSectorPulseContext() : await ask({ ...selected, intent_id: 'sector.context' }); if (r.error) throw new Error(r.error); return r; },
   });
   const reading = useQuery({
-    queryKey: ['vani', 'sector', 5, user, intent, depth, staticIntent ? 'static' : evidence.data?.snapshot],
+    queryKey: ['vani', 'sector', 6, user, intent, depth, staticIntent ? 'static' : evidence.data?.snapshot],
     enabled: staticIntent || (!!evidence.data?.snapshot && context.scope === pathname),
     staleTime: 30 * 60_000, retry: false,
     refetchInterval: query => query.state.data?.pending ? 1500 : false,
@@ -102,9 +101,9 @@ function CurrentSectorCompanion() {
   const body = <div className="sector-vani-body">
     {!overview && <>
     <p className="text-xs text-muted">Discover activity → check persistence → inspect participation → save an observation.</p>
-    <details open={indexId ? true : undefined} data-vani-detail={indexId ? undefined : "intents"}><summary className="sector-question cursor-pointer">Open current-flow intents</summary><div className="flex flex-wrap gap-2 pt-2" aria-label="Sector questions">{Object.entries(intents).filter(([id]) => indexId ? ['sector.read','sector.compare','sector.persistence','sector.participation'].includes(id) : MAIN_INTENTS.has(id)).map(([id, label]) =>
+    <details open={indexId ? true : undefined} data-vani-detail={indexId ? undefined : "intents"}><summary className="sector-question cursor-pointer">Questions about current flow</summary><div className="flex flex-wrap gap-2 pt-2" aria-label="Sector questions">{Object.entries(intents).filter(([id]) => indexId ? ['sector.read','sector.compare','sector.persistence','sector.participation'].includes(id) : MAIN_INTENTS.has(id)).map(([id, label]) =>
       <button key={id} aria-pressed={intent === id} onClick={() => choose(id as Intent)} className="sector-question">{label}</button>)}</div></details>
-    {!staticIntent && <div className="flex flex-wrap gap-2">{['brief','simple','detailed'].map(d => <button className="sector-question" key={d} aria-pressed={depth === d} onClick={() => setDepth(d)}>{d === 'brief' ? 'Concise' : d === 'simple' ? 'Explain simply' : 'Go deeper'}</button>)}</div>}
+    {!staticIntent && <VaNiDepthSelector value={depth} onChange={setDepth} />}
     </>}
     <h3 className="text-sm font-medium">{intents[intent]}</h3>
     {overview && <p className="text-xs text-muted">Overall sector flow · Sectoral + Curated · same coverage as Discovery</p>}
@@ -113,7 +112,7 @@ function CurrentSectorCompanion() {
     {listingFollowup&&staticIntent&&<SectorLearningStory taxonomy={intent==='sector.taxonomy'}/>}
     {listingFollowup&&!staticIntent&&!evidence.isFetching&&!evidence.error&&story&&<SectorIntentStory key={`${intent}-${evidence.data?.snapshot}`} view={story} intent={intent}/>}
     {listingFollowup&&!staticIntent&&!evidence.isFetching&&evidence.data&&!story&&<p role="status">This reading is temporarily unavailable. Please refresh and try again.</p>}
-    {loading ? <div role="status" className="flex items-center gap-2 text-sm"><Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" />Consulting VaNi…</div>
+    {loading ? <VaNiConsulting />
       : issue ? <div role="status"><p className="text-sm">{issue}</p><button className="sector-question mt-2" onClick={retry}>Try again</button></div>
       : !staticIntent && !evidence.data ? <p className="text-sm">Select an available session to read its evidence.</p>
       : listingFollowup ? <details key={`${intent}-${depth}`} data-vani-detail="explanation" className="vani-explanation"><summary>VaNi explanation</summary><p className="text-sm leading-7 whitespace-pre-wrap">{reading.data?.response}</p>{reading.data?.log_id&&<VaNiFeedback analyticsContext={analyticsContext} key={reading.data.log_id} logId={reading.data.log_id}/>}</details>

@@ -332,9 +332,9 @@ export default function SectorRotationPage() {
   const [search] = useSearchParams();
   const fromStructure = search.get('from') === 'market-structure';
   const contextDate = /^\d{4}-\d{2}-\d{2}$/.test(search.get('asof') ?? '') ? search.get('asof') : null;
-  const [activeTab, setActiveTab] = useState<SectorTab>('sectoral');
-  const [mode, setMode] = useState<'current'|'leadership'>('current');
-  const [months, setMonths] = useState<3|6|12>(6);
+  const [activeTab, setActiveTab] = useState<SectorTab>(() => {const tab=search.get('category');return tab==='custom'||tab==='broad'||tab==='thematic'?tab:'sectoral';});
+  const [mode, setMode] = useState<'current'|'leadership'>(()=>search.get('research')==='leadership'?'leadership':'current');
+  const [months, setMonths] = useState<3|6|12>(()=>search.get('months')==='3'?3:search.get('months')==='12'?12:6);
   const [view, setView] = useState<ViewMode>('table');
   const [heatDays, setHeatDays] = useState<5 | 22 | 66>(22);
   const [selectedDate, setSelectedDate] = useState<string>(contextDate ?? '');

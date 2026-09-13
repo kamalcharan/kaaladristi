@@ -4,13 +4,12 @@ import SectorPersonalConnections from './SectorPersonalConnections';
 import {useEffect,useState} from 'react';
 import {useQuery} from '@tanstack/react-query';
 import {Link} from 'react-router-dom';
-import {Loader2} from 'lucide-react';
 import {useSectorResearchStore} from '@/stores/sectorResearchStore';
 import {useAuthStore} from '@/stores/authStore';
 import {useLeadership,askLeadership,type LeadershipRow} from '@/services/sectorLeadership';
 import {sectorSessionDate} from '@/lib/sectorFlow';
 import VaNiFeedback from './VaNiFeedback';
-import VaNiBrand from './VaNiBrand';
+import VaNiBrand, {VaNiConsulting} from './VaNiBrand';
 import {leadershipStory} from '@/services/leadershipStory';
 import '@/styles/vaniStories.css';
 
@@ -64,7 +63,7 @@ export default function LeadershipCompanion() {
   <details data-vani-detail="intents"><summary className="sector-question cursor-pointer">Open longer-term intents</summary><div className="flex flex-col gap-2 pt-2" aria-label="Longer-term questions">{Object.entries(questions).filter(([id])=>ACTIVE_INTENTS.has(id)).map(([id,label])=><button key={id} className="sector-question text-left" aria-pressed={intent===id} onClick={()=>{trackVani('intent_selected',{...analyticsContext,intent_id:id,source:'manual'});setIntent(id as Intent);setCycle(v=>v+1)}}>{label}</button>)}</div></details>
   <h3 className="font-medium text-sm">{questions[intent]}</h3>
   {!evidence.isFetching&&!evidence.error&&evidence.data&&<Evidence rows={evidence.data.rows} intent={intent} date={evidence.data.date} months={c.months??6}/>}
-  {loading?<p role="status" className="flex gap-2 items-center"><Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none"/>Consulting VaNi…</p>:error?<p role="alert">{error.message}</p>:<details data-vani-detail="explanation" key={intent} className="vani-explanation"><summary>VaNi explanation</summary><p className="text-sm leading-6">{reading.data?.response}</p>{reading.data?.log_id&&<VaNiFeedback analyticsContext={analyticsContext} key={`${intent}-${reading.data.log_id}`} logId={reading.data.log_id}/>}</details>}
+  {loading?<VaNiConsulting />:error?<p role="alert">{error.message}</p>:<details data-vani-detail="explanation" key={intent} className="vani-explanation"><summary>VaNi explanation</summary><p className="text-sm leading-6">{reading.data?.response}</p>{reading.data?.log_id&&<VaNiFeedback analyticsContext={analyticsContext} key={`${intent}-${reading.data.log_id}`} logId={reading.data.log_id}/>}</details>}
   {!loading&&reading.data?.context_changed&&<p>The data changed. Refresh the reading.</p>}
   {!loading&&(error||reading.data?.context_changed)&&<button className="sector-question" onClick={retry}>Refresh reading</button>}
   {!evidence.error&&evidence.data&&<SectorPersonalConnections sourceKey={evidence.data.snapshot} date={evidence.data.date} membership={evidence.data.membership} sectors={examples(evidence.data.rows,intent).map(r=>({id:r.index_id,name:r.name,reading:`${r.status}; current flow: ${r.flow?.state??'Unavailable'}`}))}/>}

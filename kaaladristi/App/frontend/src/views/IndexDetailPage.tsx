@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useLocation, useSearchParams } from 'react-router-dom';
 import { useSectorResearchStore } from '@/stores/sectorResearchStore';
+import {SelectedSectorLeadership} from '@/components/domain/SectorLeadership';
 import MarketStructureHistory from '@/components/domain/MarketStructureHistory';
 import '@/styles/sectorResearch.css';
 import { sectorSignal as computeSignal, SECTOR_FLOW_LABEL, SECTOR_FLOW_STYLE as SIGNAL_STYLE, SECTOR_FLOW_CONDITIONS as SIGNAL_CONDITIONS, sectorSessionDate } from '@/lib/sectorFlow';
@@ -825,6 +826,7 @@ function OverviewTab({ row, indexId }: { row: SectorIndexRow; indexId: number })
           {/* Side by side on wide screens; auto-stack below ~440px each */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 360px), 1fr))', gap: 16, marginBottom: 24, alignItems: 'start' }}>
             <MarketBreadthChart
+              indexName={row.name}
               researchMode
               data={breadthData?.data}
               isLoading={breadthLoading}
@@ -833,6 +835,9 @@ function OverviewTab({ row, indexId }: { row: SectorIndexRow; indexId: number })
               stockCount={breadthData?.stockCount}
             />
             <BreadthRocChart
+              indexName={row.name}
+              stockCount={breadthData?.stockCount}
+              researchMode
               data={breadthData?.roc}
               isLoading={breadthLoading}
               rocBadge={breadthData?.rocBadge}
@@ -1100,7 +1105,7 @@ export default function IndexDetailPage() {
         }}
       >
         <button
-          onClick={() => navigate('/sector-rotation')}
+          onClick={() => navigate(`/sector-rotation?${new URLSearchParams({research,months:String(months),asof:row.trade_date,category})}`)}
           style={{
             display: 'inline-flex',
             alignItems: 'center',
@@ -1211,6 +1216,14 @@ export default function IndexDetailPage() {
         </div>
       </div>
 
+      <div className="sector-inset" style={{padding:'12px 24px',background:'var(--card)',flexShrink:0}}>
+        <div className="flex flex-wrap gap-2" role="group" aria-label="Research view">
+          {(['current','leadership'] as const).map(mode=><button className="sector-question" key={mode} aria-pressed={research===mode} onClick={()=>{setActiveTab('overview');setSearch(prev=>{const next=new URLSearchParams(prev);next.set('research',mode);return next;});}}>{mode==='current'?'Short-term flow':'Longer-term strength'}</button>)}
+          {research==='leadership'&&<label className="text-xs flex items-center gap-2">History <select aria-label="Longer-term history" value={months} className="sector-question" onChange={e=>setSearch(prev=>{const next=new URLSearchParams(prev);next.set('months',e.target.value);return next;})}>{[3,6,12].map(m=><option key={m} value={m}>{m} months</option>)}</select></label>}
+        </div>
+        <p className="text-xs text-muted mt-2">{research==='current'?'Read recent activity, then check whether stocks are participating. VaNi’s questions follow this view.':'Check weekly/monthly agreement, stock support and persistence. The history window changes what is displayed, not the current classification.'}</p>
+      </div>
+
       {/* ── Tab strip ── */}
       <div
         style={{
@@ -1243,7 +1256,7 @@ export default function IndexDetailPage() {
                 marginBottom: '-1px',
               }}
             >
-              {TAB_LABELS[tab]}
+              {tab==='overview'&&research==='leadership'?'Strength overview':TAB_LABELS[tab]}
             </button>
           );
         })}
@@ -1251,7 +1264,7 @@ export default function IndexDetailPage() {
 
       {/* ── Tab content ── */}
       <div style={{ flex: 1, overflowY: 'auto', background: 'var(--bg)' }}>
-        {activeTab === 'overview' && <OverviewTab row={row} indexId={indexId!} />}
+        {activeTab === 'overview' && (research==='leadership'?<><SelectedSectorLeadership indexId={indexId!} category={category} date={row.trade_date} months={months}/><details className="p-4"><summary className="sector-question cursor-pointer">Inspect current flow and constituents</summary><OverviewTab row={row} indexId={indexId!}/></details></>:<OverviewTab row={row} indexId={indexId!} />)}
         {activeTab === 'chart' && <ChartTab row={row} indexId={indexId!} />}
         {activeTab === 'flowmap' && <FlowMapTab indexId={indexId!} indexName={row.name} date={row.trade_date} days={flowDays} setDays={setFlowDays} />}
       </div>

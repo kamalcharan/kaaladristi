@@ -152,7 +152,7 @@ export default function BreadthRocChart({
   const yMax = allVals.length ? Math.max(0.001, ...allVals.map(Math.abs)) * 1.2 : 0.02;
   const yDomain: [number, number] = [-yMax, yMax];
 
-  const title = indexName ? `Momentum (ROC) · ${indexName}` : 'Breadth Momentum (ROC)';
+  const title = indexName ? 'Index breadth momentum (ROC)' : 'Breadth Momentum (ROC)';
 
   return (
     <div className="glass-card rounded-2xl p-4">
@@ -161,9 +161,10 @@ export default function BreadthRocChart({
       <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
         <div>
           <h3 className="text-[13px] font-bold text-[var(--text-primary)]">{title}</h3>
+          {indexName && <p className="text-xs text-muted mt-1">{indexName}</p>}
           {displayStockCount != null && (
             <p className="text-[10px] text-muted mt-0.5">
-              {displayStockCount.toLocaleString()}+ stocks · GroupAvg ROC oscillator
+              {displayStockCount.toLocaleString()}{indexName ? ' constituents · average ROC' : '+ stocks · GroupAvg ROC oscillator'}
             </p>
           )}
         </div>

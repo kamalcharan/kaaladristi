@@ -18,3 +18,19 @@ export default function VaNiBrand({ subtitle, size = 44, trailing }: { subtitle?
     {trailing}
   </div>;
 }
+
+
+/** Calm progress treatment; animation lives on the halo, never on VaNi's face. */
+export function VaNiConsulting() {
+  return <div role="status" className="vani-consulting">
+    <span className="vani-consulting-avatar"><VaNiAvatar size={48} /></span>
+    <div><p className="text-sm font-medium">Consulting VaNi…</p><p className="text-xs text-muted mt-1">Reading the selected evidence</p></div>
+  </div>;
+}
+
+export function VaNiDepthSelector({value,onChange}:{value:string;onChange:(value:string)=>void}) {
+  const styles=[['brief','Concise','The takeaway'],['simple','Explain simply','What it means'],['detailed','Go deeper','Evidence and limits']];
+  return <fieldset className="vani-depth"><legend>Explanation style</legend>
+    <div>{styles.map(([id,label,hint])=><button type="button" key={id} aria-label={label} aria-pressed={value===id} onClick={()=>onChange(id)}><span>{label}</span><small>{hint}</small></button>)}</div>
+  </fieldset>;
+}

@@ -71,3 +71,18 @@
  .leadership-mobile-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; margin:12px 0; font-size:12px; }
  .leadership-mobile .leadership-evidence { padding:8px; margin-top:12px; }
 }
+
+
+/* Explanation controls are secondary to the gold question buttons. */
+.vani-depth { min-width: 0; border: 0; padding: 0; margin: 4px 0; }
+.vani-depth legend { font-size: 11px; color: var(--text-secondary); margin-bottom: 8px; }
+.vani-depth > div { display: flex; flex-wrap: wrap; gap: 6px; }
+.vani-depth button { flex: 1 1 80px; min-height: 48px; padding: 8px; border-radius: 14px; border: 1px solid var(--border); background: var(--card-soft); color: var(--text-secondary); text-align: left; font: inherit; font-size: 12px; cursor: pointer; }
+.vani-depth button small { display: block; font-size: 10px; margin-top: 3px; }
+.vani-depth button[aria-pressed="true"] { color: var(--text-primary); background: color-mix(in srgb, #818cf8 20%, var(--card)); border-color: #818cf8; box-shadow: inset 0 0 0 1px #818cf8; }
+.vani-depth button:focus-visible { outline: 2px solid var(--text-primary); outline-offset: 3px; }
+.vani-consulting { display: flex; align-items: center; gap: 14px; padding: 16px; border-radius: 16px; background: var(--card-soft); border: 1px solid var(--border); }
+.vani-consulting-avatar { position: relative; display: inline-flex; flex-shrink: 0; }
+.vani-consulting-avatar::after { content: ''; position: absolute; inset: -4px; border: 2px solid var(--gold-soft); border-radius: 50%; animation: vani-halo 1.8s ease-in-out infinite; pointer-events: none; }
+@keyframes vani-halo { 0%,100% { opacity: .25; transform: scale(1); } 50% { opacity: .8; transform: scale(1.08); } }
+@media (prefers-reduced-motion: reduce) { .vani-consulting-avatar::after { animation: none; opacity: .5; } }

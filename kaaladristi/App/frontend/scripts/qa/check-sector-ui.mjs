@@ -110,7 +110,7 @@ try {
     assert.equal(await currentCompanion.locator('[aria-label="Sector questions"] button').count(),4,'Current Flow: default plus three questions');
     for(const [id,label] of [['entering','Where is flow entering?'],['fading','Where is flow fading?'],['persistence','Has this flow persisted?']]) {
       const surface=width<1280&&await page.getByRole('dialog').isVisible()?page.getByRole('dialog'):currentCompanion;
-      const menu=surface.getByText('Open current-flow intents',{exact:true});
+      const menu=surface.getByText('Questions about current flow',{exact:true});
       if(await menu.isVisible()&&!(await menu.locator('..').getAttribute('open')!==null)) await menu.click();
       await surface.getByRole('button',{name:label,exact:true}).click();
       const active=width<1280?page.getByRole('dialog'):currentCompanion;
@@ -194,6 +194,9 @@ try {
     await page.getByRole('heading',{name:'Specialty manufacturing research basket'}).waitFor();
     await page.getByText('Small sample',{exact:false}).waitFor();
     assert.equal(await page.getByText('Insufficient constituents',{exact:false}).count(),0);
+    await page.getByRole('heading',{name:'Index breadth',exact:true}).waitFor();
+    await page.getByRole('heading',{name:'Index breadth momentum (ROC)',exact:true}).waitFor();
+    assert.equal(await page.getByText('5+ stocks analyzed',{exact:true}).count(),0,'Index count must be exact');
     await noOverflow(`detail ${width}`);
     if(width<1280) {
       await page.getByRole('button',{name:'Help me read this page',exact:true}).first().click();
@@ -223,6 +226,16 @@ try {
     assert.equal(await sectorRead.getByRole('button').count(),4,'Sector detail has four focused questions');
     await sectorRead.getByRole('button',{name:'Is strength broad across its stocks?'}).click();
     await sectorRead.getByText('3 of 5 classified stocks',{exact:false}).waitFor();
+    await page.getByRole('region',{name:'Selected index longer-term strength'}).waitFor();
+    await page.getByLabel('Longer-term history',{exact:true}).selectOption('12');
+    await sectorRead.getByText('12 months',{exact:false}).waitFor();
+    await noOverflow(`selected leadership ${width}`);
+    await page.screenshot({path:path.join(out,`sector-detail-leadership-${mode}-${width}.png`),fullPage:true});
+    await page.getByRole('button',{name:'Short-term flow',exact:true}).click();
+    await page.getByRole('heading',{name:'Index breadth',exact:true}).waitFor();
+    assert.equal(await page.locator('input[type=date]').inputValue(),'2026-09-11','Mode switch preserves selected date');
+    await page.getByRole('button',{name:'Longer-term strength',exact:true}).click();
+    await sectorRead.getByText('12 months',{exact:false}).waitFor();
     console.log(`PASS ${mode} ${width}px: table, maps, scroll, date, price, detail leadership, ${width<1280?'VaNi sheet/cache loader':'desktop companion'}`);
   }
   for(const state of ['empty','unmatched','error']) {

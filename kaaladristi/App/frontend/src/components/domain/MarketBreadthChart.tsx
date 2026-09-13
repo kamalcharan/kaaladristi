@@ -218,7 +218,7 @@ export default function MarketBreadthChart({
     ? resolveRegime(latest.breadth_score, zoneMode, percentileRank)
     : null;
 
-  const title = indexName ? `Breadth · ${indexName}` : 'Market Breadth';
+  const title = indexName ? 'Index breadth' : 'Market Breadth';
 
   return (
     <div className="glass-card rounded-2xl p-4">
@@ -227,9 +227,10 @@ export default function MarketBreadthChart({
       <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
         <div>
           <h3 className="text-[13px] font-bold text-[var(--text-primary)]">{title}</h3>
+          {indexName && <p className="text-xs text-muted mt-1">{indexName}</p>}
           {displayStockCount != null && (
             <p className="text-[10px] text-muted mt-0.5">
-              {displayStockCount.toLocaleString()}+ stocks analyzed
+              {displayStockCount.toLocaleString()}{indexName ? ' constituents analysed' : '+ stocks analyzed'}
             </p>
           )}
         </div>

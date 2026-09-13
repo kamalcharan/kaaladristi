@@ -51,6 +51,34 @@ class SectorContracts(unittest.TestCase):
         self.assertIn('80.0% of summed positive constituent',facts)
         self.assertIn('not its contribution to the index price return',facts)
         self.assertIn('negative and ABOVE',facts)
+    def test_detail_history_totals_do_not_claim_a_streak_or_missing_sessions(self):
+        facts=' '.join(sector.load_context(request(), Database())['facts'])
+        self.assertIn('NOT consecutive runs', facts)
+        self.assertIn('Strong on 1 sessions', facts)
+        self.assertIn('Building on 1 sessions', facts)
+        self.assertIn('unavailable on 0 of 2 recorded sessions', facts)
+        self.assertNotIn('1 of 1 indices', facts)
+        self.assertIn('Constituent flow states', facts)
+
+    def test_depths_send_different_story_contracts(self):
+        db=Database()
+        req=request(snapshot=sector.load_context(request(),db)['snapshot'])
+        prompts=[]
+        def complete(**kwargs):
+            prompts.append(kwargs['system'])
+            return ('A factual reading.','qwen-local')
+        with patch.object(sector,'get_cached',return_value=None), patch.object(sector,'set_cached'):
+            for depth in ['brief','simple','detailed']:
+                req.explanation_depth=depth
+                out=sector.answer(req,db,complete,lambda s:(s,False),lambda **kw:'1','haiku')
+                self.assertEqual(out['response'],'A factual reading.')
+        self.assertIn('CONCISE:',prompts[0])
+        self.assertIn('EXPLAIN SIMPLY:',prompts[1])
+        self.assertIn('GO DEEPER:',prompts[2])
+        for prompt in prompts:
+            self.assertIn('never invent a missing-session count',prompt)
+            self.assertIn('not consecutive runs',prompt)
+
     def test_all_reads_bound_to_selected_date(self):
         db=Database(); sector.load_context(request(),db)
         history=next((sql,p) for sql,p in db.calls if 'row_number()' in sql)
