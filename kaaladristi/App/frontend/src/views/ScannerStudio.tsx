@@ -1,3 +1,5 @@
+import {trackEvent} from '@/lib/analytics'
+import ScannerHighlightStory from '@/components/domain/VaNi/ScannerHighlightStory'
 import {SCANNER_INTRODUCTIONS} from '@/constants/scannerIntroductions'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
@@ -192,6 +194,7 @@ export default function ScannerStudio({ presetId }: { presetId: string }) {
   const anyFilterActive = hasActiveFilters(filters) || quickActiveCount > 0 || scanIntent != null
   const clearAll = () => { setFilters(DEFAULT_FILTERS); setQuick(DEFAULT_QUICK); setScanIntent(null) }
   const selectScanIntent = (key: ScannerIntentKey) => {
+    trackEvent('scanner_intent_selected', {preset_id:presetId, intent:key, exchange:exchangeFilter, data_date:dataDate, highlighted_count:all.filter(isHighlight).length})
     setScanIntent((p) => (p === key ? null : key))
     scrollToResults()
   }
@@ -306,7 +309,7 @@ export default function ScannerStudio({ presetId }: { presetId: string }) {
           )}
       {isLoading && <DristiQLoader />}
       {!isLoading && !error && <ScanStalenessBanner stocks={all} />}
-      {error && <p style={{ color: 'var(--bear)' }}>Failed to load: {(error as Error).message}</p>}
+      {error && <p role="alert" style={{ color: 'var(--bear)' }}>Failed to load: {(error as Error).message}</p>}
 
       {!isLoading && !error && (
         <>
@@ -652,8 +655,16 @@ export function ScannerVaNiCard({
     }
   }
 
-  useEffect(()=>{if(branded && scanIntent) askIntent(scanIntent,depth,false)},[])
+  useEffect(()=>{if(branded && scanIntent) askIntent(scanIntent,depth,false)},[scanIntent])
   const active = scanIntent ? mutationByIntent[scanIntent] : null
+  const lastHighlightOutcome = useRef<unknown>(null)
+  useEffect(()=>{
+    if(scanIntent!=='why_flagged' || !active || active.isPending)return
+    const outcome=active.error || active.data
+    if(!outcome || outcome===lastHighlightOutcome.current)return
+    lastHighlightOutcome.current=outcome
+    trackEvent(active.error || active.data?.error ? 'scanner_highlight_explanation_failed':'scanner_highlight_explanation_shown', {preset_id:presetId,data_date:dataDate,exchange:exchangeFilter})
+  },[scanIntent,active?.data,active?.error,active?.isPending,presetId,dataDate,exchangeFilter])
   // Floors the spinner at MIN_VANI_LOADING_MS so a cache hit doesn't pop
   // content in instantly while a live LLM call visibly takes longer — see
   // useMinVaNiLoading's own comment. Content is withheld while holding so
@@ -694,6 +705,7 @@ export function ScannerVaNiCard({
         </div>
       </details>
         {scanIntent && <h3 className="font-semibold text-sm">{visibleIntents.find(it=>it.key===scanIntent)?.question}</h3>}
+        {presetId==='breakout_surge' && scanIntent==='why_flagged' && <ScannerHighlightStory stocks={allStocks} date={dataDate}/> }
         {branded && scanIntent && <div className="my-4 max-w-lg"><VaNiDepthSelector value={depth} onChange={value=>{const next=value as typeof depth;setDepth(next);askIntent(scanIntent,next,false,true)}}/></div>}
         {!scanIntent && (
           <p style={{ fontSize: 12, color: 'var(--text-faint)', margin: 0 }}>
@@ -711,7 +723,7 @@ export function ScannerVaNiCard({
               <p className={branded?"text-sm text-[var(--text-primary)] leading-7 whitespace-pre-line":"text-[11px] text-[var(--text-secondary)] leading-relaxed whitespace-pre-line"}>
                 {active?.data?.response}
               </p>
-              {branded && active?.variables && <details className="mt-4" data-vani-detail="evidence"><summary className="cursor-pointer text-sm">Inspect the evidence</summary><p className="text-xs text-muted mt-2">{dataDate} · full daily cohort for {exchangeFilter}. The table may apply additional filters. Examples are a limited sample.</p><ScannerIntentEvidence request={active.variables}/></details>}
+              {branded && active?.variables && <details className="mt-4" data-vani-detail="evidence" onToggle={e=>{if(e.currentTarget.open)trackEvent('scanner_evidence_opened',{preset_id:presetId,intent:scanIntent,data_date:dataDate})}}><summary className="cursor-pointer text-sm">Inspect the evidence</summary><p className="text-xs text-muted mt-2">{dataDate} · full daily cohort for {exchangeFilter}. The table may apply additional filters. Examples are a limited sample.</p><ScannerIntentEvidence request={active.variables}/></details>}
               {active?.data?.log_id && <VaNiFeedback logId={active.data.log_id} />}
             </>
           )

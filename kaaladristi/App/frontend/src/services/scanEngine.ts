@@ -1,13 +1,13 @@
+import {trackEvent} from '@/lib/analytics';
 /**
  * Scan Engine — dispatcher for the /scan tabs and Workspace VaNi Highlights.
  *
  * The six matview-backed presets (power_buy, power_sell, smart_money,
  * quiet_accumulation, distribution_warning, conviction_flow) read pre-ranked
  * rows from km_scan_results (see fetchFromScanMatview + migration 170). Direct-
- * query presets (Stage 2/3/4 family, Breakout Surge, Volume Drive, Vani Exit
+ * query presets (Stage 2/3/4 family, Volume Drive, Vani Exit
  * Watch) each query PostgREST for their own row set. Flower Pot Burst reads
- * km_scan_results too, with a deeper on-demand fallback path for its own
- * computation when the matview isn't populated.
+ * km_scan_results too. Price Action reads fail explicitly without recomputation.
  *
  * Vocabulary (KaalaDristi):
  *   "Smart Money"            — sniper_inst
@@ -388,573 +388,6 @@ function computeVaniOpportunity(row: VaniRow, vaniRule: string | null | undefine
 // Bundle scans (power_buy .. conviction_flow) were deleted after Phase 3
 // repointed them onto km_scan_results (see fetchFromScanMatview below).
 // The scans below query PostgREST directly and never touched the bundle.
-
-/** Scan 8: Breakout Surge — merged scan (owner decision 2026-07-06: the old
- *  bundle-based Breakout Surge and the standalone Breakout Surge Daily were
- *  near-duplicates; two tabs made no sense).
- *
- *  Definition: close above the 20-day breakout level on a green day, close
- *  >= 50 (penny filter). breakout_level / pct_from_breakout are DB-precomputed
- *  by the indicator pipeline — no history download needed. Full active
- *  universe: the old Daily variant's Rs 10,000 Cr large-cap gate is now just
- *  the MCap filter in the filter bar. Ranked by Score 5D (owner doctrine:
- *  conviction ranks the list). VaNi via vani_rule from the DB preset.
- */
-async function fetchBreakoutSurge(exchangeFilter: ExchangeFilter): Promise<ScanStock[]> {
-  const completedDates = await fetchRecentDates(1);
-  const latestDate: string | null = completedDates[0] ?? null;
-  if (!latestDate) return [];
-
-  const { data: rows } = await from('km_equity_eod')
-    .select([
-      'equity_id', 'trade_date', 'close', 'open', 'high', 'low',
-      'pct_chng', 'magic_rs', 'magic_rs_zone', 'rss_value', 'rss_spread',
-      'rsi_14', 'rvol', 'flow_type', 'supertrend_dir',
-      'sma_50', 'sma_150', 'sma_200', 'ema_20', 'atr_14',
-      'w52_high', 'w52_low', 'lifetime_high',
-      'avg_amt_5d', 'avg_amt_22d', 'avg_amt_66d', 'delivery_surge_x',
-      'sniper_inst', 'sniper_hot', 'accum_distrib',
-      'volume_divergence_flag', 'delivery_pct', 'deliv_value_cr',
-      'dot_svd', 'dot_sbd', 'dot_syd', 'stage',
-      'score_5d', 'score_22d', 'ret_5d', 'ret_22d', 'ret_66d',
-      'breakout_level', 'pct_from_breakout', 'pct_below_52w_high',
-      'is_vani_surge', 'is_vani_breakout',
-      'km_equity_symbols(id,symbol,company_name,exchange,industry,mcap_cr,isin)',
-    ].join(','))
-    .eq('trade_date', latestDate)
-    .gt('pct_chng', 0)
-    .gte('close', 50)
-    .gt('pct_from_breakout', 0)
-    .limit(2000)
-    .execute();
-
-  const eodRows = (rows ?? []) as any[];
-
-  // Zero results is ambiguous: "no breakouts today" vs "pct_from_breakout not
-  // populated" (house lesson: silent NULL columns). Probe one row to tell.
-  if (eodRows.length === 0) {
-    const { data: probe } = await from('km_equity_eod')
-      .select('pct_from_breakout')
-      .eq('trade_date', latestDate)
-      .gt('pct_from_breakout', -100000)
-      .limit(1)
-      .execute();
-    if (!probe || probe.length === 0) {
-      console.warn(`[breakout_surge] pct_from_breakout is NULL for all rows on ${latestDate} — indicator pipeline gap, scan cannot run`);
-    }
-    return [];
-  }
-
-  // Declared universe FIRST, then ISIN-dedup, then the user's exchange filter
-  // — same order fetchBreakdownWatch/fetchPeriodMovers use. This preset was
-  // missing the universe gate entirely: it declares NSE_ONLY
-  // (kd_scan_presets/SCAN_PRESETS) but nothing here enforced it, so the
-  // default 'Combined' exchange tab silently included every BSE-only
-  // breakout too. Confirmed live on 2026-08-28: 386 rows after ISIN-dedup
-  // (275 NSE + 111 BSE) vs. the matview-sourced tab-count badge's correct
-  // 252 — the visible table and the count next to it disagreed by 134 rows.
-  const declaredUniverse = getPresetMeta('breakout_surge')?.universe;
-  const isinMap = new Map<string, any>();
-  for (const row of eodRows) {
-    const sym = row.km_equity_symbols;
-    if (!sym) continue;
-    if (!passesUniverse(sym.exchange, declaredUniverse)) continue;
-    if (exchangeFilter === 'NSE' && sym.exchange !== 'NSE') continue;
-    if (exchangeFilter === 'BSE' && sym.exchange !== 'BSE') continue;
-    const isin = sym.isin;
-    if (!isin) { isinMap.set(`noisin:${row.equity_id}`, row); continue; }
-    const existing = isinMap.get(isin);
-    if (!existing || sym.exchange === 'NSE') isinMap.set(isin, row);
-  }
-
-  const vaniRule = getPresetMeta('breakout_surge')?.vani_rule;
-  const resultLimit = getPresetMeta('breakout_surge')?.limit ?? 500;
-
-  const results = Array.from(isinMap.values()).map((row): ScanStock => {
-    const sym = row.km_equity_symbols;
-    const ema20 = row.ema_20 ?? null;
-    const atr14 = row.atr_14 ?? null;
-    return {
-      equity_id:            row.equity_id,
-      symbol:               sym?.symbol ?? String(row.equity_id),
-      company_name:         sym?.company_name ?? null,
-      industry:             sym?.industry ?? null,
-      exchange:             sym?.exchange ?? null,
-      mcap_cr:              sym?.mcap_cr ?? null,
-      trade_date:           row.trade_date,
-      close:                row.close,
-      open:                 row.open ?? null,
-      high:                 row.high ?? null,
-      low:                  row.low ?? null,
-      pct_chng:             toNum(row.pct_chng),
-      magic_rs:             toNum(row.magic_rs),
-      magic_rs_zone:        row.magic_rs_zone ?? null,
-      rss_value:            toNum(row.rss_value),
-      rss_spread:           toNum(row.rss_spread),
-      rsi_14:               toNum(row.rsi_14),
-      rvol:                 toNum(row.rvol),
-      flow_type:            row.flow_type ?? null,
-      supertrend_dir:       row.supertrend_dir ?? null,
-      sma_50:               toNum(row.sma_50),
-      sma_150:              toNum(row.sma_150),
-      sma_200:              toNum(row.sma_200),
-      ema_20:               ema20,
-      atr_14:               atr14,
-      w52_high:             toNum(row.w52_high),
-      w52_low:              toNum(row.w52_low),
-      lifetime_high:        toNum(row.lifetime_high),
-      avg_amt_5d:           toNum(row.avg_amt_5d),
-      avg_amt_22d:          toNum(row.avg_amt_22d),
-      avg_amt_66d:          toNum(row.avg_amt_66d),
-      delivery_surge_x:     toNum(row.delivery_surge_x),
-      sniper_inst:          toNum(row.sniper_inst),
-      sniper_hot:           toNum(row.sniper_hot),
-      accum_distrib:        row.accum_distrib ?? null,
-      volume_divergence_flag: row.volume_divergence_flag ?? null,
-      delivery_pct:         toNum(row.delivery_pct),
-      deliv_value_cr:       toNum(row.deliv_value_cr),
-      has_recent_svd:       !!row.dot_svd,
-      has_recent_sbd:       !!row.dot_sbd,
-      has_recent_syd:       !!row.dot_syd,
-      pctBelow52wHigh:      row.pct_below_52w_high ?? null,
-      reward:               ema20 && atr14 ? (ema20 + atr14) - row.close : null,
-      rewardPct:            ema20 && atr14 && atr14 > 0 ? ((ema20 + atr14) - row.close) / atr14 : null,
-      magicRsTrend:         [],
-      score_5d:             row.score_5d  != null ? Number(row.score_5d)  : null,
-      score_22d:            row.score_22d != null ? Number(row.score_22d) : null,
-      ret_5d:               row.ret_5d  ?? null,
-      ret_22d:              row.ret_22d ?? null,
-      ret_66d:              row.ret_66d ?? null,
-      xAmt:                 null,
-      rel_5d_n50:           null, rel_22d_n50:  null, rel_66d_n50:  null,
-      rel_5d_n500:          null, rel_22d_n500: null, rel_66d_n500: null,
-      vaniOpportunity:      computeVaniOpportunity(row, vaniRule),
-      stage:                row.stage ?? null,
-      stage_confirmed:      row.stage_confirmed ?? null,
-      stage_since:          row.stage_since ?? null,
-      stage_since_close:    row.stage_since_close != null ? Number(row.stage_since_close) : null,
-      stage_bars:           row.stage_bars != null ? Number(row.stage_bars) : null,
-      pct_from_stage_entry: row.pct_from_stage_entry != null ? Number(row.pct_from_stage_entry) : null,
-      stage_since_censored: row.stage_since_censored === true,
-      d_pct:                row.pct_chng != null ? Math.round(Number(row.pct_chng) * 100) / 100 : null,
-      breakout_level:       row.breakout_level    != null ? Number(row.breakout_level)    : null,
-      pct_from_breakout:    row.pct_from_breakout != null ? Number(row.pct_from_breakout) : null,
-    };
-  });
-
-  // Score 5D DESC, NULLS LAST
-  results.sort((a, b) => {
-    const as5 = a.score_5d ?? null;
-    const bs5 = b.score_5d ?? null;
-    if (as5 == null && bs5 == null) return 0;
-    if (as5 == null) return 1;
-    if (bs5 == null) return -1;
-    return bs5 - as5;
-  });
-  return results.slice(0, resultLimit);
-}
-
-/** Scan: Breakdown Surge — the exact mirror of Breakout Surge.
- *  (preset ID remains breakdown_watch — see migration 189.)
- *
- *  Definition: close BELOW the 20-day breakdown level on a red day, close >= 50.
- *  breakdown_level / pct_from_breakdown are DB-precomputed (migration 187) as
- *  the rolling 20-bar MINIMUM of the prior close — where breakout_level is the
- *  MAXIMUM. Same direct-query family, same precompute trick: PostgREST compares
- *  a column to a LITERAL only, so the filter collapses to `pct_from_breakdown < 0`.
- *
- *  Why this needed its own column rather than reusing pct_from_breakout < 0:
- *  that asks a different and useless question. On 2026-08-25, 2,242 of 2,517
- *  eligible NSE rows (89 percent) sat below their 20-day HIGH — which is true of
- *  nearly the whole market on any day. Below the 20-day LOW returns 248 rows.
- *
- *  Ranked by depth below the level (most broken first), which is this preset's
- *  own metric — the mirror of Breakout Surge ranking by Score 5D is not
- *  meaningful here, since a conviction score does not describe a breakdown.
- */
-async function fetchBreakdownWatch(exchangeFilter: ExchangeFilter): Promise<ScanStock[]> {
-  const completedDates = await fetchRecentDates(1);
-  const latestDate: string | null = completedDates[0] ?? null;
-  if (!latestDate) return [];
-
-  const { data: rows } = await from('km_equity_eod')
-    .select([
-      'equity_id', 'trade_date', 'close', 'open', 'high', 'low',
-      'pct_chng', 'magic_rs', 'magic_rs_zone', 'rss_value', 'rss_spread',
-      'rsi_14', 'rvol', 'flow_type', 'supertrend_dir',
-      'sma_50', 'sma_150', 'sma_200', 'ema_20', 'atr_14',
-      'w52_high', 'w52_low', 'lifetime_high',
-      'avg_amt_5d', 'avg_amt_22d', 'avg_amt_66d', 'delivery_surge_x',
-      'sniper_inst', 'sniper_hot', 'accum_distrib',
-      'volume_divergence_flag', 'delivery_pct', 'deliv_value_cr',
-      'dot_svd', 'dot_sbd', 'dot_syd', 'stage',
-      'score_5d', 'score_22d', 'ret_5d', 'ret_22d', 'ret_66d',
-      'breakout_level', 'pct_from_breakout', 'pct_below_52w_high',
-      'breakdown_level', 'pct_from_breakdown',
-      'prev_week_close', 'pct_wtd', 'prev_month_close', 'pct_mtd',
-      // is_vani_weakness is this preset's OWN vani_rule (kd_scan_presets), and
-      // computeVaniOpportunity below reads it off the row -- selecting only the
-      // two strength flags left it `undefined`, so vaniOpportunity was false for
-      // every row ON THIS PATH.
-      //
-      // Scope, stated precisely because it is easy to overstate: this is the
-      // FALLBACK. executeScan prefers km_scan_results, whose migration-197 arm
-      // selects is_vani_weakness and is correct -- 9 / 10 / 5 flagged rows for
-      // weekly_decliners / monthly_decliners / breakdown_watch on 2026-09-04 --
-      // and scanRowToScanStock takes vaniOpportunity straight from that
-      // vani_flag column. So users on a healthy matview never saw the zero.
-      // The fault surfaced only when the matview was empty or migration 195/197
-      // unapplied, which is precisely when this fallback runs and precisely
-      // when it still has to be right.
-      'is_vani_surge', 'is_vani_breakout', 'is_vani_weakness',
-      'km_equity_symbols(id,symbol,company_name,exchange,industry,mcap_cr,isin)',
-    ].join(','))
-    .eq('trade_date', latestDate)
-    .lt('pct_chng', 0)
-    .gte('close', 50)
-    .lt('pct_from_breakdown', 0)
-    // 448 rows qualify today, well inside the ceiling. The movers' shared
-    // fetcher is the one that can exceed it -- see the note there.
-    .limit(2000)
-    .execute();
-
-  const eodRows = (rows ?? []) as any[];
-
-  // Zero rows is ambiguous: "no breakdowns today" vs "pct_from_breakdown never
-  // populated" (house lesson: silent NULL columns). Probe one row to tell.
-  if (eodRows.length === 0) {
-    const { data: probe } = await from('km_equity_eod')
-      .select('pct_from_breakdown')
-      .eq('trade_date', latestDate)
-      .gt('pct_from_breakdown', -1000000)
-      .limit(1)
-      .execute();
-    if (!probe || probe.length === 0) {
-      console.warn(`[breakdown_watch] pct_from_breakdown is NULL for all rows on ${latestDate} — migration 187 not applied or rolling backfill not re-run`);
-    }
-    return [];
-  }
-
-  const declaredUniverse = getPresetMeta('breakdown_watch')?.universe;
-  const isinMap = new Map<string, any>();
-  for (const row of eodRows) {
-    const sym = row.km_equity_symbols;
-    if (!sym) continue;
-    if (!passesUniverse(sym.exchange, declaredUniverse)) continue;
-    if (exchangeFilter === 'NSE' && sym.exchange !== 'NSE') continue;
-    if (exchangeFilter === 'BSE' && sym.exchange !== 'BSE') continue;
-    const isin = sym.isin;
-    if (!isin) { isinMap.set(`noisin:${row.equity_id}`, row); continue; }
-    const existing = isinMap.get(isin);
-    if (!existing || sym.exchange === 'NSE') isinMap.set(isin, row);
-  }
-
-  const vaniRule = getPresetMeta('breakdown_watch')?.vani_rule;
-  const resultLimit = getPresetMeta('breakdown_watch')?.limit ?? 500;
-
-  const results = Array.from(isinMap.values()).map((row): ScanStock => {
-    const sym = row.km_equity_symbols;
-    const ema20 = row.ema_20 ?? null;
-    const atr14 = row.atr_14 ?? null;
-    return {
-      equity_id: row.equity_id,
-      symbol: sym?.symbol ?? String(row.equity_id),
-      company_name: sym?.company_name ?? null,
-      industry: sym?.industry ?? null,
-      exchange: sym?.exchange ?? null,
-      mcap_cr: sym?.mcap_cr ?? null,
-      trade_date: row.trade_date,
-      close: row.close,
-      open: row.open ?? null,
-      high: row.high ?? null,
-      low: row.low ?? null,
-      pct_chng: toNum(row.pct_chng),
-      magic_rs: toNum(row.magic_rs),
-      magic_rs_zone: row.magic_rs_zone ?? null,
-      rss_value: toNum(row.rss_value),
-      rss_spread: toNum(row.rss_spread),
-      rsi_14: toNum(row.rsi_14),
-      rvol: toNum(row.rvol),
-      flow_type: row.flow_type ?? null,
-      supertrend_dir: row.supertrend_dir ?? null,
-      sma_50: toNum(row.sma_50),
-      sma_150: toNum(row.sma_150),
-      sma_200: toNum(row.sma_200),
-      ema_20: ema20,
-      atr_14: atr14,
-      w52_high: toNum(row.w52_high),
-      w52_low: toNum(row.w52_low),
-      lifetime_high: toNum(row.lifetime_high),
-      avg_amt_5d: toNum(row.avg_amt_5d),
-      avg_amt_22d: toNum(row.avg_amt_22d),
-      avg_amt_66d: toNum(row.avg_amt_66d),
-      delivery_surge_x: toNum(row.delivery_surge_x),
-      sniper_inst: toNum(row.sniper_inst),
-      sniper_hot: toNum(row.sniper_hot),
-      accum_distrib: row.accum_distrib ?? null,
-      volume_divergence_flag: row.volume_divergence_flag ?? null,
-      delivery_pct: toNum(row.delivery_pct),
-      deliv_value_cr: toNum(row.deliv_value_cr),
-      has_recent_svd: !!row.dot_svd,
-      has_recent_sbd: !!row.dot_sbd,
-      has_recent_syd: !!row.dot_syd,
-      pctBelow52wHigh: row.pct_below_52w_high ?? null,
-      reward: ema20 && atr14 ? (ema20 + atr14) - row.close : null,
-      rewardPct: ema20 && atr14 && atr14 > 0 ? ((ema20 + atr14) - row.close) / atr14 : null,
-      magicRsTrend: [],
-      score_5d: row.score_5d != null ? Number(row.score_5d) : null,
-      score_22d: row.score_22d != null ? Number(row.score_22d) : null,
-      ret_5d: row.ret_5d ?? null,
-      ret_22d: row.ret_22d ?? null,
-      ret_66d: row.ret_66d ?? null,
-      xAmt: null,
-      rel_5d_n50: null, rel_22d_n50: null, rel_66d_n50: null,
-      rel_5d_n500: null, rel_22d_n500: null, rel_66d_n500: null,
-      vaniOpportunity: computeVaniOpportunity(row, vaniRule),
-      stage: row.stage ?? null,
-      stage_confirmed: row.stage_confirmed ?? null,
-      stage_since: row.stage_since ?? null,
-      stage_since_close: row.stage_since_close != null ? Number(row.stage_since_close) : null,
-      stage_bars: row.stage_bars != null ? Number(row.stage_bars) : null,
-      pct_from_stage_entry: row.pct_from_stage_entry != null ? Number(row.pct_from_stage_entry) : null,
-      stage_since_censored: row.stage_since_censored === true,
-      d_pct: row.pct_chng != null ? Math.round(Number(row.pct_chng) * 100) / 100 : null,
-      breakout_level: row.breakout_level != null ? Number(row.breakout_level) : null,
-      pct_from_breakout: row.pct_from_breakout != null ? Number(row.pct_from_breakout) : null,
-      breakdown_level: row.breakdown_level != null ? Number(row.breakdown_level) : null,
-      pct_from_breakdown: row.pct_from_breakdown != null ? Number(row.pct_from_breakdown) : null,
-      prev_week_close: row.prev_week_close != null ? Number(row.prev_week_close) : null,
-      pct_wtd: row.pct_wtd != null ? Number(row.pct_wtd) : null,
-      prev_month_close: row.prev_month_close != null ? Number(row.prev_month_close) : null,
-      pct_mtd: row.pct_mtd != null ? Number(row.pct_mtd) : null,
-    };
-  });
-
-  // Deepest break first (most negative), NULLS LAST.
-  results.sort((a, b) => {
-    const ab = a.pct_from_breakdown ?? null;
-    const bb = b.pct_from_breakdown ?? null;
-    if (ab == null && bb == null) return 0;
-    if (ab == null) return 1;
-    if (bb == null) return -1;
-    return ab - bb;
-  });
-  return results.slice(0, resultLimit);
-}
-
-/** Scan: Period Movers — stocks trading above the previous PERIOD'S CLOSE.
- *
- *  Backs BOTH weekly_movers (week-to-date) and monthly_movers (month-to-date).
- *  One implementation, parameterised on the reference/pct column pair, because
- *  the two differ only in which precomputed columns they filter and rank on —
- *  duplicating ~150 lines to change two identifiers is how the two drift.
- *
- *  Both were reverse-engineered from the owner's own exports (2026-08-24) and
- *  verified against them symbol for symbol: the "Breakout" column is the
- *  previous week's / month's CLOSE and "% from Breakout" is a period-to-date
- *  return, NOT a rolling-high breakout. See
- *  docs/claude/price-action-matrix-poa.md sections 3a and 3b.
- *
- *  The reference columns are DB-precomputed (migrations 183 / 185) by
- *  compute_rolling_range(). That is what keeps these DIRECT queries: PostgREST
- *  filters compare a column to a LITERAL only, so `close > prev_week_close`
- *  is unexpressible — precomputing collapses it to `pct_wtd > 0`, exactly as
- *  breakout_surge uses pct_from_breakout.
- *
- *  Universe: full active NSE, close >= 50 (penny filter). The export's
- *  Rs 14,000 Cr large-cap gate is deliberately NOT baked in — same owner
- *  doctrine as Breakout Surge, whose Rs 10,000 Cr gate became the MCap filter
- *  in the filter bar. Ranked by week-to-date gain, the screener's own metric.
- */
-async function fetchPeriodMovers(
-  presetId: 'weekly_movers' | 'monthly_movers' | 'weekly_decliners' | 'monthly_decliners',
-  pctCol: 'pct_wtd' | 'pct_mtd',
-  direction: 'up' | 'down',
-  exchangeFilter: ExchangeFilter,
-): Promise<ScanStock[]> {
-  const completedDates = await fetchRecentDates(1);
-  const latestDate: string | null = completedDates[0] ?? null;
-  if (!latestDate) return [];
-
-  const base = from('km_equity_eod')
-    .select([
-      'equity_id', 'trade_date', 'close', 'open', 'high', 'low',
-      'pct_chng', 'magic_rs', 'magic_rs_zone', 'rss_value', 'rss_spread',
-      'rsi_14', 'rvol', 'flow_type', 'supertrend_dir',
-      'sma_50', 'sma_150', 'sma_200', 'ema_20', 'atr_14',
-      'w52_high', 'w52_low', 'lifetime_high',
-      'avg_amt_5d', 'avg_amt_22d', 'avg_amt_66d', 'delivery_surge_x',
-      'sniper_inst', 'sniper_hot', 'accum_distrib',
-      'volume_divergence_flag', 'delivery_pct', 'deliv_value_cr',
-      'dot_svd', 'dot_sbd', 'dot_syd', 'stage',
-      'score_5d', 'score_22d', 'ret_5d', 'ret_22d', 'ret_66d',
-      'breakout_level', 'pct_from_breakout', 'pct_below_52w_high',
-      'breakdown_level', 'pct_from_breakdown',
-      'prev_week_close', 'pct_wtd', 'prev_month_close', 'pct_mtd',
-      // is_vani_weakness is this preset's OWN vani_rule (kd_scan_presets), and
-      // computeVaniOpportunity below reads it off the row -- selecting only the
-      // two strength flags left it `undefined`, so vaniOpportunity was false for
-      // every row ON THIS PATH.
-      //
-      // Scope, stated precisely because it is easy to overstate: this is the
-      // FALLBACK. executeScan prefers km_scan_results, whose migration-197 arm
-      // selects is_vani_weakness and is correct -- 9 / 10 / 5 flagged rows for
-      // weekly_decliners / monthly_decliners / breakdown_watch on 2026-09-04 --
-      // and scanRowToScanStock takes vaniOpportunity straight from that
-      // vani_flag column. So users on a healthy matview never saw the zero.
-      // The fault surfaced only when the matview was empty or migration 195/197
-      // unapplied, which is precisely when this fallback runs and precisely
-      // when it still has to be right.
-      'is_vani_surge', 'is_vani_breakout', 'is_vani_weakness',
-      'km_equity_symbols(id,symbol,company_name,exchange,industry,mcap_cr,isin)',
-    ].join(','))
-    .eq('trade_date', latestDate)
-    .gte('close', 50);
-  // ORDER BY in the DB, not just in JS afterwards. Without it this asked for
-  // "any 2000 qualifying rows" and then ranked THOSE -- and the qualifying set
-  // is bigger than the ceiling on every one of the four: 2,894 / 2,605 / 2,493
-  // / 2,202 rows on 2026-09-04. The ~900 dropped were arbitrary, so the top 500
-  // it displayed was drawn from an arbitrary sample of the real cohort (a
-  // representative simulation lost 250 of the true top 500). Ordering server-
-  // side makes the truncation take the tail instead of a random slice, which is
-  // what the LIMIT was always meant to do.
-  //
-  // Fallback path only -- executeScan prefers km_scan_results, which ranks
-  // correctly server-side -- but a fallback that silently disagrees with the
-  // matview is worse than no fallback, because nothing surfaces the difference.
-  const ordered = (direction === 'up' ? base.gt(pctCol, 0) : base.lt(pctCol, 0))
-    .order(pctCol, { ascending: direction === 'down' });
-  const { data: rows } = await ordered
-    .limit(2000)
-    .execute();
-
-  const eodRows = (rows ?? []) as any[];
-
-  // Zero results is ambiguous: "nothing up on the week" vs "pct_wtd never
-  // populated" (house lesson: silent NULL columns). Probe one row to tell.
-  if (eodRows.length === 0) {
-    const { data: probe } = await from('km_equity_eod')
-      .select(pctCol)
-      .eq('trade_date', latestDate)
-      .gt(pctCol, -1000000)
-      .limit(1)
-      .execute();
-    if (!probe || probe.length === 0) {
-      console.warn(`[${presetId}] ${pctCol} is NULL for all rows on ${latestDate} — migration not applied or backfill not run`);
-    }
-    return [];
-  }
-
-  // Declared universe FIRST, then ISIN-dedup, then the user's exchange filter.
-  // The universe gate is what keeps a preset honest to kd_scan_presets; without
-  // it NSE_ONLY leaks BSE-only symbols, which have no delivery data.
-  const declaredUniverse = getPresetMeta(presetId)?.universe;
-  const isinMap = new Map<string, any>();
-  for (const row of eodRows) {
-    const sym = row.km_equity_symbols;
-    if (!sym) continue;
-    if (!passesUniverse(sym.exchange, declaredUniverse)) continue;
-    if (exchangeFilter === 'NSE' && sym.exchange !== 'NSE') continue;
-    if (exchangeFilter === 'BSE' && sym.exchange !== 'BSE') continue;
-    const isin = sym.isin;
-    if (!isin) { isinMap.set(`noisin:${row.equity_id}`, row); continue; }
-    const existing = isinMap.get(isin);
-    if (!existing || sym.exchange === 'NSE') isinMap.set(isin, row);
-  }
-
-  const vaniRule = getPresetMeta(presetId)?.vani_rule;
-  const resultLimit = getPresetMeta(presetId)?.limit ?? 500;
-
-  const results = Array.from(isinMap.values()).map((row): ScanStock => {
-    const sym = row.km_equity_symbols;
-    const ema20 = row.ema_20 ?? null;
-    const atr14 = row.atr_14 ?? null;
-    return {
-      equity_id:            row.equity_id,
-      symbol:               sym?.symbol ?? String(row.equity_id),
-      company_name:         sym?.company_name ?? null,
-      industry:             sym?.industry ?? null,
-      exchange:             sym?.exchange ?? null,
-      mcap_cr:              sym?.mcap_cr ?? null,
-      trade_date:           row.trade_date,
-      close:                row.close,
-      open:                 row.open ?? null,
-      high:                 row.high ?? null,
-      low:                  row.low ?? null,
-      pct_chng:             toNum(row.pct_chng),
-      magic_rs:             toNum(row.magic_rs),
-      magic_rs_zone:        row.magic_rs_zone ?? null,
-      rss_value:            toNum(row.rss_value),
-      rss_spread:           toNum(row.rss_spread),
-      rsi_14:               toNum(row.rsi_14),
-      rvol:                 toNum(row.rvol),
-      flow_type:            row.flow_type ?? null,
-      supertrend_dir:       row.supertrend_dir ?? null,
-      sma_50:               toNum(row.sma_50),
-      sma_150:              toNum(row.sma_150),
-      sma_200:              toNum(row.sma_200),
-      ema_20:               ema20,
-      atr_14:               atr14,
-      w52_high:             toNum(row.w52_high),
-      w52_low:              toNum(row.w52_low),
-      lifetime_high:        toNum(row.lifetime_high),
-      avg_amt_5d:           toNum(row.avg_amt_5d),
-      avg_amt_22d:          toNum(row.avg_amt_22d),
-      avg_amt_66d:          toNum(row.avg_amt_66d),
-      delivery_surge_x:     toNum(row.delivery_surge_x),
-      sniper_inst:          toNum(row.sniper_inst),
-      sniper_hot:           toNum(row.sniper_hot),
-      accum_distrib:        row.accum_distrib ?? null,
-      volume_divergence_flag: row.volume_divergence_flag ?? null,
-      delivery_pct:         toNum(row.delivery_pct),
-      deliv_value_cr:       toNum(row.deliv_value_cr),
-      has_recent_svd:       !!row.dot_svd,
-      has_recent_sbd:       !!row.dot_sbd,
-      has_recent_syd:       !!row.dot_syd,
-      pctBelow52wHigh:      row.pct_below_52w_high ?? null,
-      reward:               ema20 && atr14 ? (ema20 + atr14) - row.close : null,
-      rewardPct:            ema20 && atr14 && atr14 > 0 ? ((ema20 + atr14) - row.close) / atr14 : null,
-      magicRsTrend:         [],
-      score_5d:             row.score_5d  != null ? Number(row.score_5d)  : null,
-      score_22d:            row.score_22d != null ? Number(row.score_22d) : null,
-      ret_5d:               row.ret_5d  ?? null,
-      ret_22d:              row.ret_22d ?? null,
-      ret_66d:              row.ret_66d ?? null,
-      xAmt:                 null,
-      rel_5d_n50:           null, rel_22d_n50:  null, rel_66d_n50:  null,
-      rel_5d_n500:          null, rel_22d_n500: null, rel_66d_n500: null,
-      vaniOpportunity:      computeVaniOpportunity(row, vaniRule),
-      stage:                row.stage ?? null,
-      stage_confirmed:      row.stage_confirmed ?? null,
-      stage_since:          row.stage_since ?? null,
-      stage_since_close:    row.stage_since_close != null ? Number(row.stage_since_close) : null,
-      stage_bars:           row.stage_bars != null ? Number(row.stage_bars) : null,
-      pct_from_stage_entry: row.pct_from_stage_entry != null ? Number(row.pct_from_stage_entry) : null,
-      stage_since_censored: row.stage_since_censored === true,
-      d_pct:                row.pct_chng != null ? Math.round(Number(row.pct_chng) * 100) / 100 : null,
-      breakout_level:       row.breakout_level    != null ? Number(row.breakout_level)    : null,
-      pct_from_breakout:    row.pct_from_breakout != null ? Number(row.pct_from_breakout) : null,
-      prev_week_close:      row.prev_week_close  != null ? Number(row.prev_week_close)  : null,
-      pct_wtd:              row.pct_wtd          != null ? Number(row.pct_wtd)          : null,
-      prev_month_close:     row.prev_month_close != null ? Number(row.prev_month_close) : null,
-      pct_mtd:              row.pct_mtd          != null ? Number(row.pct_mtd)          : null,
-      breakdown_level:      row.breakdown_level    != null ? Number(row.breakdown_level)    : null,
-      pct_from_breakdown:   row.pct_from_breakdown != null ? Number(row.pct_from_breakdown) : null,
-    };
-  });
-
-  // Period-to-date move, strongest first in the preset's own direction.
-  // 'up'   -> largest gain first;  'down' -> largest LOSS first (ascending).
-  results.sort((a, b) => {
-    const aw = (pctCol === 'pct_wtd' ? a.pct_wtd : a.pct_mtd) ?? null;
-    const bw = (pctCol === 'pct_wtd' ? b.pct_wtd : b.pct_mtd) ?? null;
-    if (aw == null && bw == null) return 0;
-    if (aw == null) return 1;
-    if (bw == null) return -1;
-    return direction === 'up' ? bw - aw : aw - bw;
-  });
-  return results.slice(0, resultLimit);
-}
 
 /** Scan 9: Stage 2 Leaders — direct PostgREST query on pre-computed stage column.
  *  Returns all stocks where stage = 'S2' on the latest trade date.
@@ -1821,216 +1254,7 @@ function deduplicateByIsin(stocks: ScanStock[], symbols: Map<number, EquitySymbo
 
 export type ExchangeFilter = 'combined' | 'NSE' | 'BSE';
 
-// ── Flower Pot Burst (energy compression → release) ────────────
-//
-// A precision, low-frequency scan. Two phases surface together:
-//   SETUP  — a stock coiling now: ATR contracting, range tightening, volume
-//            dying, relative strength flat (not trending). The watchlist.
-//   BURST  — the rare session (≈2×/month across NSE) when an active coil
-//            releases: volume + range expansion, strong close, breaks the
-//            10-day range on real delivery.
-//
-// Thresholds are CALIBRATED to the live NSE distribution (2026-07-13), not the
-// spec literals — the spec's ATR15/ATR60 < 0.5 fired for 12 of 1,232 stocks and
-// < 0.35 for zero (ATR15 is a subset of ATR60, so the ratio naturally sits ~0.96).
-// Calibrated compression gate → ~4 coiling today / 37 active over 22 sessions.
-// This needs ~60 sessions of history per stock, far deeper than the shared
-// scanner bundle (~30 sessions), so FPB runs its own on-demand fetch — it only
-// loads when its tab is opened and never taxes the other scanners' page load.
-const FPB = {
-  ATR_COMPRESSION_MAX: 0.8,   // ATR15 / ATR60 — recent vol below its 60d norm
-  RANGE_PCT_MAX: 0.08,        // 10-day (high-low) / close — price coiled
-  VOL_DEATH_MAX: 0.6,         // vol5 / vol22 — participation fading
-  RS_FLAT_MAX: 2,             // |MagicRS 5-day delta| — coiled, not trending
-  MIN_CLOSE: 20,              // avoid sub-₹20 illiquids
-  MIN_BARS: 60,               // need a full 60d ATR window
-  SETUP_LOOKBACK: 10,         // "coiling now" = compressed within last N sessions
-  BURST_PRIOR_LOOKBACK: 22,   // burst requires a setup active in the prior N sessions
-  VOL_BURST_MIN: 3.0,         // today volume / 22d avg
-  RANGE_EXP_MIN: 2.0,         // today range / 15d avg range
-  CLOSE_STRENGTH_MIN: 0.70,   // close in top 30% of day's range
-  DELIVERY_MIN: 45,           // real buyers, not intraday churn
-} as const;
-
-function fpbMean(arr: number[], end: number, len: number): number {
-  const start = Math.max(0, end - len + 1);
-  let sum = 0, n = 0;
-  for (let i = start; i <= end; i++) {
-    const v = arr[i];
-    if (v != null && !Number.isNaN(v)) { sum += v; n++; }
-  }
-  return n ? sum / n : NaN;
-}
-function fpbMax(arr: number[], start: number, end: number): number {
-  let m = -Infinity;
-  for (let i = Math.max(0, start); i <= end; i++) if (arr[i] > m) m = arr[i];
-  return m;
-}
-function fpbMin(arr: number[], start: number, end: number): number {
-  let m = Infinity;
-  for (let i = Math.max(0, start); i <= end; i++) if (arr[i] < m) m = arr[i];
-  return m;
-}
-
-/** Build the FPB ScanStock for one equity from its ascending-date history,
- *  or null if it is neither coiling nor bursting. */
-function computeFpbStock(bars: any[], sym: EquitySymbolRow | undefined): ScanStock | null {
-  const n = bars.length;
-  if (n < FPB.MIN_BARS + 1) return null;
-  const L = n - 1;
-
-  const high = bars.map((b) => Number(b.high));
-  const low = bars.map((b) => Number(b.low));
-  const close = bars.map((b) => Number(b.close));
-  const open = bars.map((b) => Number(b.open));
-  const vol = bars.map((b) => Number(b.volume));
-  const mrs = bars.map((b) => (b.magic_rs != null ? Number(b.magic_rs) : NaN));
-  const rangeArr = bars.map((b) => Number(b.high) - Number(b.low));
-  const tr = bars.map((b, i) => {
-    const pc = b.prev_close != null ? Number(b.prev_close) : (i > 0 ? close[i - 1] : close[i]);
-    return Math.max(high[i] - low[i], Math.abs(high[i] - pc), Math.abs(low[i] - pc));
-  });
-
-  // Compression gate evaluated ending at bar `idx` (needs >= MIN_BARS history).
-  const compressedAt = (idx: number): boolean => {
-    if (idx < FPB.MIN_BARS - 1) return false;
-    if (close[idx] <= FPB.MIN_CLOSE) return false;
-    const stg = bars[idx].stage;
-    if (stg === 'S3' || stg === 'S4') return false;
-    const atr15 = fpbMean(tr, idx, 15), atr60 = fpbMean(tr, idx, 60);
-    if (!(atr60 > 0) || atr15 / atr60 >= FPB.ATR_COMPRESSION_MAX) return false;
-    const hi10 = fpbMax(high, idx - 9, idx), lo10 = fpbMin(low, idx - 9, idx);
-    if ((hi10 - lo10) / close[idx] >= FPB.RANGE_PCT_MAX) return false;
-    const vol5 = fpbMean(vol, idx, 5), vol22 = fpbMean(vol, idx, 22);
-    if (!(vol22 > 0) || vol5 / vol22 >= FPB.VOL_DEATH_MAX) return false;
-    const rsNow = mrs[idx], rsPrev = mrs[idx - 5];
-    if (Number.isNaN(rsNow) || Number.isNaN(rsPrev) || Math.abs(rsNow - rsPrev) >= FPB.RS_FLAT_MAX) return false;
-    return true;
-  };
-
-  // Setup activity windows.
-  let setupDaysIn22 = 0;
-  for (let i = Math.max(0, L - FPB.BURST_PRIOR_LOOKBACK + 1); i <= L; i++) if (compressedAt(i)) setupDaysIn22++;
-  let setupActiveRecent = false;
-  for (let i = Math.max(0, L - FPB.SETUP_LOOKBACK + 1); i <= L; i++) { if (compressedAt(i)) { setupActiveRecent = true; break; } }
-  let setupActivePrior = false;
-  for (let i = Math.max(0, L - FPB.BURST_PRIOR_LOOKBACK); i <= L - 1; i++) { if (compressedAt(i)) { setupActivePrior = true; break; } }
-
-  // Burst metrics for today (L), measured against pre-burst (ending yesterday) norms.
-  const vol22Prior = fpbMean(vol, L - 1, 22);
-  const volBurst = vol22Prior > 0 ? vol[L] / vol22Prior : NaN;
-  const avgRange15Prior = fpbMean(rangeArr, L - 1, 15);
-  const rangeExp = avgRange15Prior > 0 ? rangeArr[L] / avgRange15Prior : NaN;
-  const dayRange = high[L] - low[L];
-  const closeStrength = dayRange > 0 ? (close[L] - low[L]) / dayRange : 0;
-  const hi10Prior = fpbMax(high, L - 10, L - 1);
-  const lo10Prior = fpbMin(low, L - 10, L - 1);
-  const delivToday = bars[L].delivery_pct != null ? Number(bars[L].delivery_pct) : null;
-
-  // Burst = coil releases UP: wide/high-volume candle closing near its high,
-  // above the 10-day range. Shatter = the mirror DOWN release: closes near its
-  // low, below the 10-day range. Same energy gate (vol/range/delivery), opposite
-  // resolution. Mutually exclusive (close can't be both >hi10 and <lo10).
-  const releaseEnergy =
-    setupActivePrior &&
-    close[L] > FPB.MIN_CLOSE &&
-    volBurst >= FPB.VOL_BURST_MIN &&
-    rangeExp >= FPB.RANGE_EXP_MIN &&
-    (delivToday ?? 0) > FPB.DELIVERY_MIN;
-  const isBurst =
-    releaseEnergy && closeStrength >= FPB.CLOSE_STRENGTH_MIN && close[L] > hi10Prior;
-  const isShatter =
-    releaseEnergy && closeStrength <= (1 - FPB.CLOSE_STRENGTH_MIN) && close[L] < lo10Prior;
-  const isRelease = isBurst || isShatter;
-
-  const phase: 'BURST' | 'SHATTER' | 'SETUP' | null =
-    isBurst ? 'BURST' : isShatter ? 'SHATTER' : (setupActiveRecent ? 'SETUP' : null);
-  if (!phase) return null;
-
-  // Display-side compression metrics (as of the latest bar) for scoring/UI.
-  const atr15L = fpbMean(tr, L, 15), atr60L = fpbMean(tr, L, 60);
-  const atrComp = atr60L > 0 ? atr15L / atr60L : null;
-  const vol5L = fpbMean(vol, L, 5), vol22L = fpbMean(vol, L, 22);
-  const volDeath = vol22L > 0 ? vol5L / vol22L : null;
-  const hi10L = fpbMax(high, L - 9, L), lo10L = fpbMin(low, L - 9, L);
-  const rangePctL = close[L] > 0 ? (hi10L - lo10L) / close[L] : null;
-  const compressionScore =
-    (atrComp != null ? 1 - atrComp : 0) +
-    (volDeath != null ? 1 - volDeath : 0) +
-    (rangePctL != null ? 1 - rangePctL / FPB.RANGE_PCT_MAX : 0);
-  // Release quality — burst rewards a strong close (near high), shatter rewards a
-  // weak close (near low). Same volume/range/delivery magnitude either way.
-  const fpbQuality = isBurst
-    ? (volBurst / FPB.VOL_BURST_MIN) * (rangeExp / FPB.RANGE_EXP_MIN) * closeStrength * ((delivToday ?? 50) / 50)
-    : isShatter
-    ? (volBurst / FPB.VOL_BURST_MIN) * (rangeExp / FPB.RANGE_EXP_MIN) * (1 - closeStrength) * ((delivToday ?? 50) / 50)
-    : null;
-
-  const b = bars[L];
-  const ema20 = b.ema_20 != null ? Number(b.ema_20) : null;
-  const atr14 = b.atr_14 != null ? Number(b.atr_14) : null;
-  return {
-    equity_id: b.equity_id,
-    symbol: sym?.symbol ?? String(b.equity_id),
-    company_name: sym?.company_name ?? null,
-    industry: sym?.industry ?? null,
-    exchange: sym?.exchange ?? null,
-    mcap_cr: sym?.mcap_cr ?? null,
-    trade_date: b.trade_date,
-    close: close[L],
-    open: open[L] ?? null,
-    high: high[L] ?? null,
-    low: low[L] ?? null,
-    pct_chng: b.pct_chng ?? null,
-    magic_rs: b.magic_rs ?? null,
-    magic_rs_zone: b.magic_rs_zone ?? null,
-    rss_value: null, rss_spread: null,
-    rsi_14: b.rsi_14 ?? null,
-    rvol: b.rvol ?? null,
-    flow_type: b.flow_type ?? null,
-    supertrend_dir: null,
-    sma_50: b.sma_50 ?? null,
-    sma_150: b.sma_150 ?? null,
-    sma_200: b.sma_200 ?? null,
-    ema_20: ema20,
-    atr_14: atr14,
-    w52_high: b.w52_high ?? null,
-    w52_low: b.w52_low ?? null,
-    lifetime_high: null,
-    avg_amt_5d: null, avg_amt_22d: null, avg_amt_66d: null, delivery_surge_x: null,
-    sniper_inst: b.sniper_inst ?? null,
-    sniper_hot: b.sniper_hot ?? null,
-    accum_distrib: b.accum_distrib ?? null,
-    volume_divergence_flag: null,
-    delivery_pct: delivToday,
-    deliv_value_cr: b.deliv_value_cr ?? null,
-    has_recent_svd: false, has_recent_sbd: false, has_recent_syd: false,
-    pctBelow52wHigh: null,
-    reward: ema20 && atr14 ? (ema20 + atr14) - close[L] : null,
-    rewardPct: ema20 && atr14 && atr14 > 0 ? ((ema20 + atr14) - close[L]) / atr14 : null,
-    magicRsTrend: [],
-    score_5d: b.score_5d != null ? Number(b.score_5d) : null,
-    score_22d: null,
-    xAmt: null,
-    rel_5d_n50: null, rel_22d_n50: null, rel_66d_n50: null,
-    rel_5d_n500: null, rel_22d_n500: null, rel_66d_n500: null,
-    // BURST (upward release) is the ✦ highlight for the cross-scan strength board.
-    vaniOpportunity: isBurst,
-    stage: b.stage ?? null,
-    d_pct: b.pct_chng != null ? Math.round(Number(b.pct_chng) * 100) / 100 : null,
-    fpb_phase: phase,
-    fpb_quality: fpbQuality != null ? Math.round(fpbQuality * 100) / 100 : null,
-    fpb_compression_score: Math.round(compressionScore * 100) / 100,
-    // Release-only metrics (burst or shatter) — blank on coiling rows.
-    fpb_vol_burst: isRelease && Number.isFinite(volBurst) ? Math.round(volBurst * 10) / 10 : null,
-    fpb_range_exp: isRelease && Number.isFinite(rangeExp) ? Math.round(rangeExp * 10) / 10 : null,
-    fpb_close_strength: isRelease ? Math.round(closeStrength * 100) / 100 : null,
-    fpb_atr_compression: atrComp != null ? Math.round(atrComp * 100) / 100 : null,
-    fpb_vol_death: volDeath != null ? Math.round(volDeath * 100) / 100 : null,
-    fpb_setup_days: setupDaysIn22,
-  };
-}
-
+// Flower Pot display mapping; all calculations and highlight decisions come from the database.
 /** Map a km_scan_results row (preset_id='flower_pot_burst') to a ScanStock.
  *
  *  Delegates to scanRowToScanStock and overlays the Flower Pot columns.
@@ -2045,10 +1269,6 @@ function fpbRowToScanStock(r: any): ScanStock {
   const num = (v: any) => (v == null ? null : Number(v));
   return {
     ...scanRowToScanStock(r),
-    // The release IS the highlight — flower_pot_burst has no vani_rule, so the
-    // arm sets vani_flag = is_burst and this restates it at the mapper rather
-    // than leaving the meaning only in SQL.
-    vaniOpportunity: r.fpb_phase === 'BURST',
     fpb_phase: r.fpb_phase ?? null,
     fpb_quality: num(r.fpb_quality),
     fpb_compression_score: num(r.fpb_compression_score),
@@ -2106,100 +1326,12 @@ export async function fetchFpbActive(): Promise<FpbActiveRow[]> {
 }
 
 async function fetchFlowerPotBurst(exchangeFilter: ExchangeFilter): Promise<ScanStock[]> {
-  // FPB is an NSE-universe scan; BSE-only returns nothing.
-  if (exchangeFilter === 'BSE') return [];
-
-  // Primary path: read the DB matview km_scan_results (migration 147, preset
-  // 'flower_pot_burst'). The DB does the compression/burst compute and the
-  // pipeline's scan_refresh step keeps it current, so the browser transfers only
-  // the signal rows. Falls back to the client-side compute below ONLY when the
-  // matview isn't deployed yet (transitional — remove once 147 is live).
-  try {
-    const { data, error } = await from('km_scan_results')
-      .select('*')
-      .eq('preset_id', 'flower_pot_burst')
-      .order('rank', { ascending: true })
-      .limit(500)
-      .execute();
-    if (!error && Array.isArray(data)) {
-      return (data as any[]).map(fpbRowToScanStock);
-    }
-    console.warn('[flower_pot_burst] km_scan_results unavailable — using client-side fallback', error);
-  } catch (e) {
-    console.warn('[flower_pot_burst] km_scan_results read failed — using client-side fallback', e);
+  const rows = await fetchFromScanMatview('flower_pot_burst', exchangeFilter);
+  if (rows === null) {
+    trackEvent('scanner_load_failed',{preset_id:'flower_pot_burst',source:'km_scan_results',reason:'database_contract_or_read'});
+    throw new Error('Flower Pot data could not be loaded. Check the scan refresh pipeline and retry.');
   }
-  return fetchFlowerPotBurstClientSide(exchangeFilter);
-}
-
-async function fetchFlowerPotBurstClientSide(exchangeFilter: ExchangeFilter): Promise<ScanStock[]> {
-  // Transitional fallback — only runs if km_scan_results (migration 147) is not
-  // deployed. Fetches ~72 sessions of NSE EOD and computes compression/burst in
-  // the browser. Slower; the matview path above supersedes it.
-  if (exchangeFilter === 'BSE') return [];
-
-  const dates = await fetchRecentDates(FPB.MIN_BARS + 12); // ~72 sessions
-  if (dates.length < FPB.MIN_BARS + 1) return [];
-  const latestDate = dates[0];
-  const cutoff = dates[dates.length - 1];
-
-  const symRes = await from('km_equity_symbols')
-    .select('id,symbol,company_name,industry,exchange,isin,mcap_cr')
-    .is('is_active', 'true')
-    .eq('exchange', 'NSE')
-    // NSE-only is 3,797 rows today, well inside the old 8,000 — but sizing it
-    // off the shared cap means the next expansion cannot make this the bug the
-    // full-universe fetches just were.
-    .limit(ACTIVE_UNIVERSE_CAP)
-    .execute();
-  const syms = (symRes.data ?? []) as EquitySymbolRow[];
-  const symMap = new Map<number, EquitySymbolRow>();
-  const ids: number[] = [];
-  for (const s of syms) { symMap.set(s.id, s); ids.push(s.id); }
-  if (ids.length === 0) return [];
-
-  const COLS = 'equity_id,trade_date,open,high,low,close,prev_close,volume,magic_rs,magic_rs_zone,delivery_pct,rsi_14,rvol,ema_20,atr_14,sma_50,sma_150,sma_200,w52_high,w52_low,stage,score_5d,flow_type,sniper_inst,sniper_hot,pct_chng,accum_distrib,deliv_value_cr';
-  const CHUNK = 400;
-  const idChunks: number[][] = [];
-  for (let i = 0; i < ids.length; i += CHUNK) idChunks.push(ids.slice(i, i + CHUNK));
-
-  const chunkRes = await Promise.all(idChunks.map((chunk) =>
-    from('km_equity_eod')
-      .select(COLS)
-      .in('equity_id', chunk)
-      .gte('trade_date', cutoff)
-      .lte('trade_date', latestDate)
-      .order('trade_date', { ascending: true })
-      .limit(60000)
-      .execute()
-  ));
-  const rows = chunkRes.flatMap((r) => (r.data ?? [])) as any[];
-
-  const hist = new Map<number, any[]>();
-  for (const r of rows) {
-    const arr = hist.get(r.equity_id) ?? [];
-    arr.push(r);
-    hist.set(r.equity_id, arr);
-  }
-
-  const out: ScanStock[] = [];
-  for (const [id, bars] of hist) {
-    bars.sort((a, b) => (a.trade_date < b.trade_date ? -1 : a.trade_date > b.trade_date ? 1 : 0));
-    const stock = computeFpbStock(bars, symMap.get(id));
-    if (stock) out.push(stock);
-  }
-
-  // Releases first (burst/shatter, by quality), then coiling setups (by tightness).
-  const isRel = (s: ScanStock) => s.fpb_phase === 'BURST' || s.fpb_phase === 'SHATTER';
-  out.sort((a, b) => {
-    const pa = isRel(a) ? 0 : 1;
-    const pb = isRel(b) ? 0 : 1;
-    if (pa !== pb) return pa - pb;
-    if (pa === 0) return (b.fpb_quality ?? 0) - (a.fpb_quality ?? 0);
-    return (b.fpb_compression_score ?? 0) - (a.fpb_compression_score ?? 0);
-  });
-
-  const lim = getPresetMeta('flower_pot_burst')?.limit ?? 60;
-  return out.slice(0, lim);
+  return rows;
 }
 
 /** Golden Line events (migration 194). Both presets are one stored-column
@@ -2340,17 +1472,8 @@ const MATVIEW_BUNDLE_PRESETS: ReadonlySet<string> = new Set([
   'conviction_flow',
 ]);
 
-// Price-action presets served by the matview from migration 195. Kept separate
-// from MATVIEW_BUNDLE_PRESETS because these six still have a working direct
-// fetcher behind them: migration 195 is applied by hand, so a frontend deployed
-// first would otherwise blank six tabs until someone ran it. executeScan tries
-// the matview and falls back, and the fallback logs, so a permanently-unapplied
-// migration is noisy rather than invisible.
-// Membership is the descriptor's `source: 'matview'` (config/scannerStudio.ts)
-// so this list and the count query below cannot drift from each other or
-// from the Studio (gap audit §7, rows 8–9). Today: weekly/monthly movers +
-// decliners, breakout_surge, breakdown_watch, and the Golden Line pair
-// (migration 202).
+// Studio descriptors identify materialized-view sources for consistent rows and counts.
+// The seven supported Price Action scanners fail without recomputation; Golden Line is separately scoped.
 const MATVIEW_PRICE_ACTION_PRESETS: ReadonlySet<string> = new Set(studioPresetsBySource('matview'));
 
 // Waking Giants v4 (migration 177) — the three journey-state presets read the
@@ -2737,8 +1860,11 @@ async function fetchFromScanMatview(
       .limit(500)
       .execute();
     if (error || !Array.isArray(data)) {
-      console.warn(`[scan] ${presetId}: matview unavailable, using bundle fallback`, error);
+      console.warn(`[scan] ${presetId}: materialized-view read unavailable`, error);
       return null;
+    }
+    if ((data as any[]).some(r => ![true,false,'t','f','true','false',0,1].includes(r.vani_flag))) {
+      throw new Error('Scanner rows are missing a valid database VaNi flag.');
     }
     let rows = data as any[];
     if (exchangeFilter === 'combined') {
@@ -2746,9 +1872,9 @@ async function fetchFromScanMatview(
     } else {
       rows = rows.filter((r) => r.exchange === exchangeFilter);
     }
-    return rows.map(scanRowToScanStock);
+    return rows.map(presetId === 'flower_pot_burst' ? fpbRowToScanStock : scanRowToScanStock);
   } catch (e) {
-    console.warn(`[scan] ${presetId}: matview read failed, using bundle fallback`, e);
+    console.warn(`[scan] ${presetId}: materialized-view read failed`, e);
     return null;
   }
 }
@@ -2799,15 +1925,10 @@ async function fetchAllScanCountsFromMatview(
     }
     // Journey-tab counts ride along (separate table, graceful zeros pre-177).
     Object.assign(counts, await fetchWgJourneyCounts());
-    // Presets served by their own fetcher rather than the matview, plus any
-    // matview Studio whose arm returned NOTHING — the same "migration not
-    // applied yet" signal executeScan reads, answered the same way (run the
-    // fetcher). On a genuinely empty day the fallback returns the same zero
-    // for one extra query. A failure here must not blank every other badge —
-    // log and show 0.
+    // Only genuinely direct sources need separate counts. Empty matview results stay empty.
     const direct = [
       ...studioPresetsBySource('direct'),
-      ...studioPresetsBySource('matview').filter((id) => counts[id] === 0),
+
     ];
     Object.assign(counts, await fetchDirectPresetCounts(direct, exchangeFilter));
     return { counts, latestDate };
@@ -2846,31 +1967,26 @@ export async function executeScan(
   if (scanId === 'stage_4_leaders')      return fetchStage4Leaders(exchangeFilter);
   if (scanId === 'stage_3_watch')        return fetchStage3Watch(exchangeFilter);
   if (scanId === 'vani_exit_watch')      return fetchVaNiExitWatch(exchangeFilter);
-  // breakout_surge_daily merged into breakout_surge (kept as alias for stale links)
-  // The six price-action presets moved onto km_scan_results in migration 195.
-  // Each hand-written SELECT below is now a FALLBACK, not the path: a fetcher
-  // that names its own columns is exactly what left the Columns picker showing
-  // dashes, because fieldAvailability offers columns per category while each
-  // fetcher chose its own subset. A matview row carries all 81.
+  // The database is authoritative. Empty results are valid; failed reads fail.
+  if (scanId === 'breakout_surge_daily') scanId = 'breakout_surge';
+  const strictPriceAction = ['breakout_surge','breakdown_watch','weekly_movers','monthly_movers','weekly_decliners','monthly_decliners'].includes(scanId);
+  if (strictPriceAction) {
+    try {
+      if (timeframe !== 'daily') throw new Error('This scanner requires the daily closing-data snapshot.');
+      const rows = await fetchFromScanMatview(scanId, exchangeFilter);
+      if (rows === null) throw new Error('Scanner data could not be loaded. Check the scan refresh pipeline and retry.');
+      return rows;
+    } catch (error) {
+      trackEvent('scanner_load_failed', {preset_id:scanId, exchange:exchangeFilter, source:'km_scan_results', reason:'database_contract_or_read'});
+      throw error;
+    }
+  }
+  // Golden Line retains its existing routing until its separate review.
   if (timeframe === 'daily' && MATVIEW_PRICE_ACTION_PRESETS.has(scanId)) {
     const rows = await fetchFromScanMatview(scanId, exchangeFilter);
-    // Empty is the migration-195-not-applied signal: the arm emits no rows at
-    // all until the view is recreated, and these six carry hundreds on a normal
-    // day. On a genuinely empty day the fallback runs and returns the same
-    // empty answer, so the only cost of guessing wrong is one extra query.
     if (rows && rows.length > 0) return rows;
-    // All six are universe='NSE_ONLY', so a BSE filter is legitimately empty —
-    // the fallback would return empty too. Don't run it, and don't blame the
-    // migration for it.
     if (exchangeFilter === 'BSE') return [];
-    console.warn(`[scan] ${scanId}: no km_scan_results rows — apply the latest km_scan_results migration (202 for the Golden Line pair) and REFRESH MATERIALIZED VIEW km_scan_results. Using the direct-query fallback.`);
   }
-  if (scanId === 'breakout_surge' || scanId === 'breakout_surge_daily') return fetchBreakoutSurge(exchangeFilter);
-  if (scanId === 'weekly_movers')        return fetchPeriodMovers('weekly_movers', 'pct_wtd', 'up', exchangeFilter);
-  if (scanId === 'monthly_movers')       return fetchPeriodMovers('monthly_movers', 'pct_mtd', 'up', exchangeFilter);
-  if (scanId === 'weekly_decliners')     return fetchPeriodMovers('weekly_decliners', 'pct_wtd', 'down', exchangeFilter);
-  if (scanId === 'monthly_decliners')    return fetchPeriodMovers('monthly_decliners', 'pct_mtd', 'down', exchangeFilter);
-  if (scanId === 'breakdown_watch')      return fetchBreakdownWatch(exchangeFilter);
   // One `if` per preset, on one line. lib/scan_contract.py's routing()
   // extractor reads this dispatch to learn which fetcher serves which preset,
   // and a combined `a || b` condition reads as no route at all — the audit

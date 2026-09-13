@@ -1967,11 +1967,11 @@ def build_scanner_cache_context(intent_id: str, ctx: dict) -> dict:
     if intent_id == 'scanner.why_highlighted':
         f = ctx.get('highlight_facts') or {}
         return {
-            'v': 1,
+            'v': 2,
             'preset_id': ctx['preset_id'],
             'date': ctx['data_date'],
             'count': f.get('count', 0),
-            'avg_rvol_bucket': round(f['avg_rvol']) if f.get('avg_rvol') is not None else None,
+            'facts': f,
             'avg_pct_52wh_bucket': round(f['avg_pct_of_52w_high']) if f.get('avg_pct_of_52w_high') is not None else None,
             'examples': [e['symbol'] for e in (f.get('examples') or [])],
         }
@@ -2179,7 +2179,7 @@ def format_scanner_user_message(intent_id: str, ctx: dict) -> str:
             f"\n--- Named examples (use ONLY these, at most these 2) ---\n"
             f"{ex_lines}\n"
             f"\nInstructions: Write ONE opening line stating the count and "
-            f"the shared shape (elevated volume near a fresh high), then 2 "
+            f"the observed readings (do not infer the database qualifying rule), then 2 "
             f"bullet points (each starting with '• ', each one short line): "
             f"(1) name the example(s) above with their own RVOL and "
             f"closeness-to-high numbers; (2) state plainly this is a "

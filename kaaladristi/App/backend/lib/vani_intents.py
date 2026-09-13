@@ -905,7 +905,8 @@ INTENTS: dict[str, VaNiIntent] = {
         required_context=["preset", "data_date", "highlight_facts"],
         system_prompt=(
             _VANI_IDENTITY
-            + "The user clicked into today's VaNi-highlighted stocks on a "
+            + "The database vani_flag has already selected these highlights. Describe the supplied observations, not unprovided qualifying rules or thresholds. Do not infer two paths or claim that every stock shares a pattern unless the evidence establishes it. "
+            "The user clicked into today's VaNi-highlighted stocks on a "
             "screener and wants to know WHY they got flagged — grounded in "
             "real numbers for THIS screener today, not a generic "
             "definition. You will receive: how many stocks are highlighted "
@@ -914,7 +915,7 @@ INTENTS: dict[str, VaNiIntent] = {
             "and up to 2 named examples with their own numbers. "
             "\n\n"
             "Write ONE opening line stating the count and the shared shape "
-            "(elevated volume near a fresh high), then 2 bullet points, "
+            "(describe only what the supplied readings support), then 2 bullet points, "
             "each starting with '• ', each ONE short line: (1) name the "
             "1-2 examples given, citing their own RVOL and closeness-to-"
             "high numbers as illustration of the same shared pattern — "
