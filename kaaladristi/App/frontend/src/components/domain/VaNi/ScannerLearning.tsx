@@ -1,12 +1,42 @@
 import {useId} from 'react'
 import './scannerLearning.css'
 
-type Picture = 'discovery-stirring' | 'discovery-waking' | 'discovery-ascent' | 'delivery' | 'confluence' | 'volume-event' | 'breakdown' | 'week-up' | 'week-down' | 'month-up' | 'month-down' | 'scores-down' | 'breakout' | 'coil' | 'scores' | 'activity' | 'relative' | 'rsi' | 'outcomes'
+type Picture = 'market-smart' | 'market-quiet' | 'market-fading' | 'market-weakness' | 'discovery-stirring' | 'discovery-waking' | 'discovery-ascent' | 'delivery' | 'confluence' | 'volume-event' | 'breakdown' | 'week-up' | 'week-down' | 'month-up' | 'month-down' | 'scores-down' | 'breakout' | 'coil' | 'scores' | 'activity' | 'relative' | 'rsi' | 'outcomes'
 /** Schematic teaching diagrams: no live values, proprietary formula or projected path. */
 function Diagram({kind,label}:{kind:Picture;label:string}) {
   const titleId=useId()
   return <svg viewBox={kind==='coil'?'0 0 300 220':'0 0 300 140'} role="img" aria-labelledby={titleId} className="vani-learning-diagram">
     <title id={titleId}>{label}</title>
+    {kind==='market-smart'&&<>
+      <text x="15" y="19">Industry context + stock delivery</text>
+      <rect x="15" y="35" width="113" height="70" rx="9" className="learning-fill"/>
+      <text x="31" y="63">Industry</text><text x="31" y="84">strength</text>
+      <rect x="167" y="35" width="113" height="70" rx="9" className="learning-fill"/>
+      <text x="184" y="63">Delivery</text><text x="184" y="84">activity</text>
+      <path d="M129 70H165" className="learning-guide"/><text x="15" y="129">Trader identity is unknown</text>
+    </>}
+    {kind==='market-quiet'&&<>
+      <text x="15" y="20">Industry participation improves</text>
+      <path d="M15 53H283" className="learning-guide"/><text x="178" y="46">Old ceiling</text>
+      <path d="M16 91L47 86L76 95L106 88L136 87L166 82L196 77L226 67L259 60" className="learning-line"/>
+      <text x="16" y="124">Price ceiling not yet cleared</text>
+    </>}
+    {kind==='market-fading'&&<>
+      <text x="15" y="19">Earlier strength · current reading</text>
+      <rect x="18" y="43" width="105" height="32" rx="7" className="learning-fill"/>
+      <text x="31" y="64">Strong Bull</text><path d="M127 59H170" className="learning-guide"/>
+      <rect x="175" y="43" width="106" height="32" rx="7" className="learning-fill" opacity="0.5"/>
+      <text x="186" y="64">Lower zone</text>
+      <text x="15" y="123">Check activity and the chart</text>
+    </>}
+    {kind==='market-weakness'&&<>
+      <text x="15" y="20">Industry weakness + stock condition</text>
+      <rect x="15" y="37" width="113" height="70" rx="9" className="learning-fill"/>
+      <text x="29" y="65">Lagging</text><text x="29" y="86">industry</text>
+      <rect x="167" y="37" width="113" height="70" rx="9" className="learning-fill"/>
+      <text x="183" y="65">Stock</text><text x="183" y="86">weakness</text>
+      <path d="M129 72H165" className="learning-guide"/><text x="15" y="129">Qualifying paths can differ</text>
+    </>}
     {kind==='discovery-stirring'&&<>
       <text x="16" y="21">Long base · quiet preparation</text>
       <path d="M14 100H284" className="learning-guide"/>
@@ -126,6 +156,10 @@ const coil:Signal={title:'COIL / BURST / SHATTER',subtitle:'Know which phase you
 const outcomes:Signal={title:'Tracked outcomes',subtitle:'Study what happened next',picture:'outcomes',look:'The recorded setup, BURST or SHATTER date, and subsequent observations.',meaning:'Keep forming coils, upside BURST events and downside SHATTER events separate when comparing follow-through.',limit:'Earlier outcomes do not establish what a current coil will do. Check the dates and available observations.'}
 
 const stories:Record<string,{picture:Picture;title:string;label:string;story:string}> = {
+ smart_money:{picture:'market-smart',title:'High delivery in a strong industry',label:'Industry setting and stock delivery reading viewed together; the identity of traders is unavailable.',story:'A strong industry context and a stock delivery signal appear together. The scanner name is a label for the pattern, not an observation of who traded.'},
+ quiet_accumulation:{picture:'market-quiet',title:'Quiet conditions before leadership',label:'Illustrative improving participation while a prior price ceiling remains intact; no later break is forecast.',story:'The industry is improving without yet leading, and the stock has an accumulation reading. Inspect whether the evidence persists.'},
+ distribution_warning:{picture:'market-fading',title:'Earlier strength has faded',label:'Illustrative earlier strong zone and a lower current zone; no investor exit is identified.',story:'The stock’s relative-strength condition has weakened from its earlier reading, with activity calling for review.'},
+ power_sell:{picture:'market-weakness',title:'Industry and stock weakness together',label:'Lagging industry setting and stock weakness conditions considered together; qualifying combinations vary.',story:'The scanner combines broader industry weakness with stock-level caution signs. Check which observations are present on the row.'},
  wg_stirring:{picture:'discovery-stirring',title:'Stirring · preparation within the base',label:'Schematic price still below a multi-year closing ceiling. No breakout or future path is shown.',story:'Quiet building is worth studying, but no wake has occurred. Compare the turn, old ceiling and the observed clocks.'},
  waking_giants:{picture:'discovery-waking',title:'Waking · a recent ceiling break',label:'Schematic close above an old multi-year ceiling. Whether it holds is unknown.',story:'The wake records a change from a long base. Inspect what has happened since the wake before interpreting it as a continuing journey.'},
  wg_ascent:{picture:'discovery-ascent',title:'Ascent · a confirmed journey',label:'Schematic confirmed advance with a pause; neither continuation nor timing is predicted.',story:'The journey has passed its confirmation point. A pause is possible, so read today’s clocks and the distance from the earlier wake.'},
