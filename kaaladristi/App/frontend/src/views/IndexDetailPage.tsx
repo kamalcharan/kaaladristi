@@ -25,6 +25,7 @@ const EMPTY_OVERLAYS: ChartOverlay[] = [];
 import { useIndexConstituents } from '@/hooks/useMasterData';
 import { displaySymbol, isNumericSymbol } from '@/lib/symbolUtils';
 import BookmarkToggle from '@/components/domain/BookmarkToggle';
+import VaNiTrigger from '@/components/domain/VaNiTrigger';
 import { BREADTH_MIN_N, BREADTH_SMALL_N, type SectorIndexRow, type RocBadge } from '@/services/sectorRotation';
 import type { IndexBreadthResult, ConstituentDetail } from '@/services/sectorRotation';
 import FlowIntensityMap from '@/components/domain/FlowIntensityMap';
@@ -135,10 +136,12 @@ function SortIcon({ col, sortKey, sortDir }: { col: SortKey; sortKey: SortKey; s
 function ConstituentTable({
   indexId,
   tradeDate,
+  indexName,
   onRowClick,
 }: {
   indexId: number;
   tradeDate: string;
+  indexName: string;
   onRowClick?: (equityId: number, name: string) => void;
 }) {
   const [sortKey, setSortKey] = useState<SortKey>('score_5d');
@@ -221,7 +224,7 @@ function ConstituentTable({
     <div className="sector-mobile-rows">
       <p className="text-xs text-muted">Constituents · highest Flow 5D first. Flow type describes position activity; it differs from the score-based Flow Map state.</p>
       {sortedRows.map(row => <article key={row.equity_id}>
-        <div className="flex justify-between gap-2"><button className="text-left text-sm font-medium underline" onClick={()=>onRowClick?.(row.equity_id,displaySymbol(row))}>{displaySymbol(row)}</button><BookmarkToggle equityId={row.equity_id} size={18}/></div>
+        <div className="flex justify-between gap-2"><button className="text-left text-sm font-medium underline" onClick={()=>onRowClick?.(row.equity_id,displaySymbol(row))}>{displaySymbol(row)}</button><BookmarkToggle equityId={row.equity_id} size={18}/><VaNiTrigger entity={{type:'equity',id:row.equity_id,symbol:displaySymbol(row),pageContext:`Sector Rotation / ${indexName} constituent`,asOfDate:tradeDate}} /></div>
         <p className="text-xs text-muted">{row.company_name}</p>
         <dl><div><dt>Flow 5D</dt><dd>{fmt(row.score_5d,1)}</dd></div><div><dt>Flow 22D</dt><dd>{fmt(row.score_22d,1)}</dd></div><div><dt>1D%</dt><dd>{fmtPct(row.pct_chng)}</dd></div></dl>
         <details className="text-xs"><summary>More figures</summary><dl><div><dt>5D%</dt><dd>{fmtPct(row.ret_5d)}</dd></div><div><dt>22D%</dt><dd>{fmtPct(row.ret_22d)}</dd></div><div><dt>RSI</dt><dd>{fmt(row.rsi_14,1)}</dd></div></dl><p className="mt-2">Position activity: {row.flow_type ? FLOW_LABELS[row.flow_type]?.label ?? row.flow_type : 'Unavailable'}</p></details>
@@ -231,7 +234,7 @@ function ConstituentTable({
       <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: 'var(--font-mono)', fontSize: 12, minWidth: 980 }}>
         <thead>
           <tr>
-            <th style={{ ...thBase, textAlign: 'center', width: 30 }} />
+            <th style={{ ...thBase, textAlign: 'center', width: 76 }} aria-label="Save or ask VaNi" />
             <th style={{ ...thBase, textAlign: 'left', width: 150 }}>Symbol</th>
             <th style={{ ...thBase, textAlign: 'left' }}>Company</th>
             <th style={{ ...thBase, textAlign: 'right', width: 80 }}>Close</th>
@@ -296,7 +299,7 @@ function ConstituentTable({
                 onMouseLeave={onRowClick ? (e) => { (e.currentTarget as HTMLElement).style.background = isEven ? 'transparent' : 'color-mix(in srgb, var(--text-primary) 2.5%, transparent)'; } : undefined}
               >
                 <td style={{ padding: '9px 6px 9px 12px', textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
-                  <BookmarkToggle equityId={row.equity_id} size={13} />
+                  <div style={{display:'flex',alignItems:'center',gap:4}}><BookmarkToggle equityId={row.equity_id} size={13} /><VaNiTrigger entity={{type:'equity',id:row.equity_id,symbol:displaySymbol(row),pageContext:`Sector Rotation / ${indexName} constituent`,asOfDate:tradeDate}} /></div>
                 </td>
                 <td style={{ padding: '9px 12px', fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
                   {displaySymbol({ symbol: row.symbol, company_name: row.company_name })}
@@ -785,7 +788,7 @@ function OverviewTab({ row, indexId }: { row: SectorIndexRow; indexId: number })
             · click a row to open its chart
           </span>
         </div>
-        <ConstituentTable indexId={indexId} tradeDate={row.trade_date} onRowClick={goToChart} />
+        <ConstituentTable indexId={indexId} indexName={row.name} tradeDate={row.trade_date} onRowClick={goToChart} />
       </div>
 
       {/* 6. Breadth context — needs a population: suppressed under 5
@@ -840,8 +843,8 @@ function OverviewTab({ row, indexId }: { row: SectorIndexRow; indexId: number })
               thin indexes via the heatmap's minMoverUniverse gate. */}
           {!breadthLoading && breadthData != null && breadthData.data.length > 0 && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginBottom: 24 }}>
-              <MarketStructureHistory breadth={breadthData.data} roc={breadthData.roc} mode="breadth" maBasis="index" onSelectDate={d => navigate(`?asof=${d}`)} />
-              <MarketStructureHistory breadth={breadthData.data} roc={breadthData.roc} mode="roc" maBasis="index" onSelectDate={d => navigate(`?asof=${d}`)} />
+              <MarketStructureHistory breadth={breadthData.data} roc={breadthData.roc} mode="breadth" maBasis="index" onSelectDate={d => navigate(`?${new URLSearchParams({...Object.fromEntries(new URLSearchParams(window.location.search)), asof:d})}`)} />
+              <MarketStructureHistory breadth={breadthData.data} roc={breadthData.roc} mode="roc" maBasis="index" onSelectDate={d => navigate(`?${new URLSearchParams({...Object.fromEntries(new URLSearchParams(window.location.search)), asof:d})}`)} />
             </div>
           )}
         </>
@@ -1058,7 +1061,11 @@ export default function IndexDetailPage() {
   const indexId = indexIdStr ? parseInt(indexIdStr, 10) : undefined;
   const { data: row, isLoading, error } = useIndexDetail(indexId, selectedDate ?? undefined);
   const { earliestDate, latestDate } = useIndexDateRange();
-  useEffect(() => { setContext({ scope: pathname, date: row?.trade_date, period: activeTab === 'flowmap' ? flowDays : 66 }); }, [pathname, row?.trade_date, activeTab, flowDays, setContext]);
+  const research = search.get('research') === 'leadership' ? 'leadership' : 'current';
+  const monthsParam = Number(search.get('months'));
+  const months = (monthsParam === 3 || monthsParam === 6 || monthsParam === 12 ? monthsParam : 6) as 3 | 6 | 12;
+  const category = row?.category?.toLowerCase().includes('custom') ? 'custom' : row?.category?.toLowerCase().includes('thematic') ? 'thematic' : row?.category?.toLowerCase().includes('broad') ? 'broad' : 'sectoral';
+  useEffect(() => { setContext({ mode: research, months, scope: pathname, date: row?.trade_date, category, period: activeTab === 'flowmap' ? flowDays : 66 }); }, [pathname, row?.trade_date, category, activeTab, flowDays, research, months, setContext]);
 
   if (isLoading) {
     return (
@@ -1158,7 +1165,7 @@ export default function IndexDetailPage() {
               onChange={(e) => {
                 const v = e.target.value;
                 setSelectedDate(!v || v === latestDate ? null : v);
-                setSearch(!v || v === latestDate ? {} : { asof: v });
+                setSearch(prev => { const next = new URLSearchParams(prev); if (!v || v === latestDate) next.delete('asof'); else next.set('asof', v); return next; });
               }}
               style={{
                 ...MONO,
@@ -1174,7 +1181,7 @@ export default function IndexDetailPage() {
             />
             {selectedDate && (
               <button
-                onClick={() => { setSelectedDate(null); setSearch({}); }}
+                onClick={() => { setSelectedDate(null); setSearch(prev => { const next = new URLSearchParams(prev); next.delete('asof'); return next; }); }}
                 style={{
                   ...MONO, fontSize: 10, color: 'var(--gold-soft)', background: 'none',
                   border: 'none', cursor: 'pointer', padding: 0,

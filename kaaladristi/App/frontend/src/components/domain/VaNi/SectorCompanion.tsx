@@ -3,6 +3,7 @@ import { useVaniAnalytics } from '@/hooks/useVaniAnalytics';
 import { trackVani } from '@/lib/vaniAnalytics';
 import SectorPersonalConnections from './SectorPersonalConnections';
 import LeadershipCompanion from './LeadershipCompanion';
+import SectorDetailLeadershipCompanion from './SectorDetailLeadershipCompanion';
 import { fetchSectorPulseContext, sectorPulseRows, SECTOR_TAB_LABELS, type SectorIndexRow } from '@/services/sectorRotation';
 import { SectorPulseContent } from '@/components/domain/DashboardV3/SectorPulse';
 import { useEffect, useRef, useState } from 'react';
@@ -20,7 +21,7 @@ const API = import.meta.env.VITE_PIPELINE_API_URL?.trim() || '';
 const intents = {
   'sector.overview': 'What’s happening here?',
   'sector.entering': 'Where is flow entering?', 'sector.fading': 'Where is flow fading?', 'sector.leaving': 'Where is flow leaving?',
-  'sector.read': 'Explain this flow', 'sector.compare': 'Why do Flow 5D and Flow 22D differ?',
+  'sector.read': 'What is happening in this sector?', 'sector.compare': 'Why do Flow 5D and Flow 22D differ?',
   'sector.persistence': 'Has this flow persisted?', 'sector.participation': 'Is participation broad or concentrated?',
   'sector.learn': 'Help me read this page', 'sector.taxonomy': 'Indices, curated baskets and industries',
 } as const;
@@ -43,6 +44,7 @@ async function ask(body: object): Promise<Response> {
 export default function SectorCompanion() {
   const mode=useSectorResearchStore(s=>s.mode);
   const {pathname}=useLocation();
+  if (mode === 'leadership' && /^\/sector-rotation\/\d+$/.test(pathname)) return <SectorDetailLeadershipCompanion/>;
   return mode==='leadership' && pathname==='/sector-rotation' ? <LeadershipCompanion/> : <CurrentSectorCompanion/>;
 }
 function CurrentSectorCompanion() {
@@ -50,7 +52,7 @@ function CurrentSectorCompanion() {
   const context = useSectorResearchStore();
   const user = useAuthStore(s => s.profile?.id);
   const indexId = Number(pathname.match(/^\/sector-rotation\/(\d+)/)?.[1]) || undefined;
-  const [intent, setIntent] = useState<Intent>(indexId ? 'sector.learn' : 'sector.overview');
+  const [intent, setIntent] = useState<Intent>(indexId ? 'sector.read' : 'sector.overview');
   const [depth, setDepth] = useState('brief');
   const [open, setOpen] = useState(false);
   const dialog = useRef<HTMLDialogElement>(null);
@@ -76,7 +78,7 @@ function CurrentSectorCompanion() {
   });
   const key = JSON.stringify([identity, intent, depth, cycle, evidence.data?.snapshot]);
   useEffect(() => { const timer = window.setTimeout(() => setPresented(key), 450); return () => window.clearTimeout(timer); }, [key]);
-  useEffect(() => { setIntent(indexId ? 'sector.learn' : 'sector.overview'); setDepth('brief'); }, [pathname, indexId]);
+  useEffect(() => { setIntent(indexId ? 'sector.read' : 'sector.overview'); setDepth('brief'); }, [pathname, indexId]);
   useEffect(() => {
     const el = dialog.current;
     if (open && el && !el.open) el.showModal();
@@ -99,7 +101,7 @@ function CurrentSectorCompanion() {
   const body = <div className="sector-vani-body">
     {!overview && <>
     <p className="text-xs text-muted">Discover activity → check persistence → inspect participation → save an observation.</p>
-    <details open={indexId ? true : undefined} data-vani-detail={indexId ? undefined : "intents"}><summary className="sector-question cursor-pointer">Open current-flow intents</summary><div className="flex flex-wrap gap-2 pt-2" aria-label="Sector questions">{Object.entries(intents).filter(([id]) => indexId ? !['sector.overview','sector.entering','sector.fading','sector.leaving'].includes(id) : MAIN_INTENTS.has(id)).map(([id, label]) =>
+    <details open={indexId ? true : undefined} data-vani-detail={indexId ? undefined : "intents"}><summary className="sector-question cursor-pointer">Open current-flow intents</summary><div className="flex flex-wrap gap-2 pt-2" aria-label="Sector questions">{Object.entries(intents).filter(([id]) => indexId ? ['sector.read','sector.compare','sector.persistence','sector.participation'].includes(id) : MAIN_INTENTS.has(id)).map(([id, label]) =>
       <button key={id} aria-pressed={intent === id} onClick={() => choose(id as Intent)} className="sector-question">{label}</button>)}</div></details>
     {!staticIntent && <div className="flex flex-wrap gap-2">{['brief','simple','detailed'].map(d => <button className="sector-question" key={d} aria-pressed={depth === d} onClick={() => setDepth(d)}>{d === 'brief' ? 'Concise' : d === 'simple' ? 'Explain simply' : 'Go deeper'}</button>)}</div>}
     </>}
@@ -125,7 +127,7 @@ function CurrentSectorCompanion() {
       {evidence.data.facts?.map((fact,i)=><p key={i} className="text-xs leading-6 mt-2 text-muted">{fact}</p>)}
     </details>}
     {(indexId||overview||staticIntent||story)&&evidence.data?.rows && <SectorPersonalConnections sourceKey={evidence.data.snapshot} date={evidence.data.date} sectors={personalRows.map(r=>{const signal=sectorSignal(r);return {id:r.index_id,name:r.name,reading:signal?SECTOR_FLOW_LABEL[signal]:'Unavailable'}})}/>}
-    {overview && <details data-vani-detail="intents"><summary className="text-xs cursor-pointer min-h-11">Explore another question</summary>    <div className="flex flex-wrap gap-2" aria-label="Sector questions">{Object.entries(intents).filter(([id]) => indexId ? !['sector.overview','sector.entering','sector.fading','sector.leaving'].includes(id) : MAIN_INTENTS.has(id)).map(([id, label]) =>
+    {overview && <details data-vani-detail="intents"><summary className="text-xs cursor-pointer min-h-11">Explore another question</summary>    <div className="flex flex-wrap gap-2" aria-label="Sector questions">{Object.entries(intents).filter(([id]) => indexId ? ['sector.read','sector.compare','sector.persistence','sector.participation'].includes(id) : MAIN_INTENTS.has(id)).map(([id, label]) =>
       <button key={id} aria-pressed={intent === id} onClick={() => choose(id as Intent)} className="sector-question">{label}</button>)}</div></details>}
   </div>;
   return <aside {...analytics} className="ph-no-capture sector-vani" aria-label="VaNi Sector Rotation companion">

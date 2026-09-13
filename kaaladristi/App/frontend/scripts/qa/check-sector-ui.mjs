@@ -24,7 +24,8 @@ import {useAuthStore} from './src/stores/authStore';
 useAuthStore.setState({profile:{id:'qa-personal'} as any,session:{access_token:'qa-token'} as any,isLoading:false});
 (window as any).__setPersonalUser=(id:string|null)=>useAuthStore.setState({profile:id?{id} as any:null,session:id?{access_token:'qa-token'} as any:null,isLoading:false});
 const detail = new URLSearchParams(location.search).get('detail') === '1';
-createRoot(document.getElementById('root')!).render(<QueryClientProvider client={new QueryClient({defaultOptions:{queries:{retry:false}}})}><MemoryRouter initialEntries={[detail ? '/sector-rotation/97?asof=2026-09-11' : '/sector-rotation?asof=2026-09-11']}><div style={{padding:12,color:'var(--text-primary)',background:'var(--bg)',minHeight:'100vh'}} className="flex flex-col xl:flex-row gap-4"><SectorCompanion/><div className="min-w-0 flex-1"><Routes><Route path="/bookmarks" element={<MyBookmarksPage/>}/><Route path="/sector-rotation" element={<SectorRotationPage/>}/><Route path="/sector-rotation/:indexId" element={<IndexDetailPage/>}/></Routes></div></div></MemoryRouter></QueryClientProvider>);`);
+const leadershipDetail = new URLSearchParams(location.search).get('detail') === '2';
+createRoot(document.getElementById('root')!).render(<QueryClientProvider client={new QueryClient({defaultOptions:{queries:{retry:false}}})}><MemoryRouter initialEntries={[detail || leadershipDetail ? '/sector-rotation/97?asof=2026-09-11'+(leadershipDetail?'&research=leadership&months=6':'') : '/sector-rotation?asof=2026-09-11']}><div style={{padding:12,color:'var(--text-primary)',background:'var(--bg)',minHeight:'100vh'}} className="flex flex-col xl:flex-row gap-4"><SectorCompanion/><div className="min-w-0 flex-1"><Routes><Route path="/bookmarks" element={<MyBookmarksPage/>}/><Route path="/sector-rotation" element={<SectorRotationPage/>}/><Route path="/sector-rotation/:indexId" element={<IndexDetailPage/>}/></Routes></div></div></MemoryRouter></QueryClientProvider>);`);
 
 const days=[];
 for(let d=new Date('2026-06-01T00:00:00Z'); d<=new Date('2026-09-11T00:00:00Z'); d.setUTCDate(d.getUTCDate()+1)) if(![0,6].includes(d.getUTCDay())) days.push(d.toISOString().slice(0,10));
@@ -197,7 +198,7 @@ try {
     if(width<1280) {
       await page.getByRole('button',{name:'Help me read this page',exact:true}).first().click();
       const sheet=page.getByRole('dialog'); await sheet.waitFor();
-      await sheet.getByRole('button',{name:'Explain this flow',exact:true}).click();
+      await sheet.getByRole('button',{name:'What is happening in this sector?',exact:true}).click();
       await sheet.getByText('Consulting VaNi…',{exact:true}).waitFor();
       await sheet.getByText('Near-term flow is above its underlying baseline.',{exact:false}).waitFor();
       await sheet.getByRole('button',{name:'Close',exact:true}).click();
@@ -215,7 +216,14 @@ try {
     await page.getByText('Closing-data session: 10 September.',{exact:false}).waitFor();
     await noOverflow(`historical ${width}`);
     await page.screenshot({path:path.join(out,`sector-detail-${mode}-${width}.png`),fullPage:true});
-    console.log(`PASS ${mode} ${width}px: table, maps, scroll, date, price, ${width<1280?'VaNi sheet/cache loader':'desktop companion'}`);
+    await page.goto(base+'/__sector_qa.html?detail=2&mode='+mode);
+    const sectorRead=page.getByRole('complementary',{name:'VaNi sector detail companion'});
+    await sectorRead.getByText('6 months',{exact:false}).waitFor();
+    await sectorRead.getByText('Running broadly',{exact:false}).first().waitFor();
+    assert.equal(await sectorRead.getByRole('button').count(),4,'Sector detail has four focused questions');
+    await sectorRead.getByRole('button',{name:'Is strength broad across its stocks?'}).click();
+    await sectorRead.getByText('3 of 5 classified stocks',{exact:false}).waitFor();
+    console.log(`PASS ${mode} ${width}px: table, maps, scroll, date, price, detail leadership, ${width<1280?'VaNi sheet/cache loader':'desktop companion'}`);
   }
   for(const state of ['empty','unmatched','error']) {
     await page.goto(base+'/__sector_qa.html?personal='+state);

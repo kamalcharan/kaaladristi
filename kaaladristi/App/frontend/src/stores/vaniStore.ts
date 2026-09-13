@@ -32,6 +32,8 @@ export interface VaNiEntity {
   id: number;
   symbol: string;
   pageContext?: string;
+  /** Historical session selected by the source page. */
+  asOfDate?: string;
   signals?: VaNiEntitySignals;
   /** The scan preset id this entity was opened from (e.g. 'breakout_surge'),
    *  when known — lets "Also in these scans?" drop the screen the user is

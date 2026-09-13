@@ -1,4 +1,3 @@
-import { Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { VaNiEntity } from '@/stores/vaniStore';
 import { useStockAskStore } from '@/stores/stockAskStore';
@@ -33,15 +32,16 @@ export default function VaNiTrigger({ entity, className }: VaNiTriggerProps) {
         open(entity, e.currentTarget);
       }}
       title={`Ask VaNi about ${entity.symbol}`}
+      aria-label={`Ask VaNi about ${entity.symbol}`}
       className={cn(
-        'w-6 h-6 rounded-md flex items-center justify-center shrink-0 transition-all',
+        'w-10 h-10 rounded-full flex items-center justify-center shrink-0 transition-all focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--vani)]',
         isOpen
           ? 'bg-[var(--accent-indigo)]/30 border border-[var(--accent-indigo)]/50 text-[var(--accent-indigo)]'
           : 'bg-[var(--accent-indigo)]/10 border border-[var(--accent-indigo)]/20 text-[var(--accent-indigo)]/60 hover:bg-[var(--accent-indigo)]/25 hover:border-[var(--accent-indigo)]/40 hover:text-[var(--accent-indigo)]',
         className,
       )}
     >
-      <Sparkles className="w-3 h-3" />
+      <img src="/assets/vani/vani-mascot-transparent.png" alt="" aria-hidden="true" className="w-8 h-8 object-contain" />
     </button>
   );
 }

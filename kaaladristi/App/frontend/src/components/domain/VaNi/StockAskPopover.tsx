@@ -174,7 +174,7 @@ export default function StockAskPopover() {
   // this has to be shown directly into the UI without invoking any intent."
   // Not a pill anymore — an always-visible strip, fetched as soon as the
   // popover opens for this stock (useScanPresence no-ops on a null id).
-  const scanPresence = useScanPresence(entity ? entity.id : null)
+  const scanPresence = useScanPresence(entity && (!entity.asOfDate || entity.asOfDate === latestDataDate) ? entity.id : null)
 
   // Live position — recomputed from the anchor element's current bounding
   // rect, not a one-time snapshot, so the popover tracks the clicked row
@@ -225,7 +225,7 @@ export default function StockAskPopover() {
   const askedForRef = useRef<string | null>(null)
   useEffect(() => {
     if (!entity) return
-    const key = `${entity.type}:${entity.id}`
+    const key = `${entity.type}:${entity.id}:${entity.asOfDate ?? ''}:${entity.pageContext ?? ''}`
     if (askedForRef.current === key) return
     askedForRef.current = key
     setActiveIntent('equity.why_in_context')
@@ -233,7 +233,7 @@ export default function StockAskPopover() {
     riskMutation.reset()
     setHoldQty(''); setHoldPrice(''); setHoldDate('')
     setEnterQty('')
-    const dateIso = latestDataDate || new Date().toISOString().slice(0, 10)
+    const dateIso = entity.asOfDate || latestDataDate || new Date().toISOString().slice(0, 10)
     whyMutation.mutate({
       intent_id: 'equity.why_in_context',
       date: dateIso,
@@ -242,7 +242,7 @@ export default function StockAskPopover() {
       page_context: entity.pageContext,
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [entity?.type, entity?.id])
+  }, [entity?.type, entity?.id, entity?.asOfDate, entity?.pageContext])
 
   if (!entity || !anchorEl || !pos) return null
 
@@ -253,7 +253,7 @@ export default function StockAskPopover() {
     if (isStructuredIntent(intentId)) return
     const mutation = mutationByIntent[intentId]
     if (mutation.data || mutation.isPending) return
-    const dateIso = latestDataDate || new Date().toISOString().slice(0, 10)
+    const dateIso = entity.asOfDate || latestDataDate || new Date().toISOString().slice(0, 10)
     mutation.mutate({
       intent_id: intentId,
       date: dateIso,
@@ -268,7 +268,9 @@ export default function StockAskPopover() {
     navigate(`/chart/equity/${entity.id}?name=${encodeURIComponent(entity.symbol)}&tab=chart`)
   }
 
-  const intents = getEquityIntents(entity.symbol) as Array<{ intentId: EquityIntentKey; label: string; group?: 'position' | 'market' }>
+  const historical = !!entity.asOfDate && entity.asOfDate !== latestDataDate
+  const intents = (getEquityIntents(entity.symbol) as Array<{ intentId: EquityIntentKey; label: string; group?: 'position' | 'market' }>)
+    .filter(i => !historical || i.group !== 'position')
   const POPOVER_WIDTH = 560
   const left = Math.max(8, Math.min(pos.left, window.innerWidth - POPOVER_WIDTH - 16))
   const s = entity.signals
@@ -303,7 +305,7 @@ export default function StockAskPopover() {
           <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>{entity.pageContext}</span>
         )}
         <span style={{ marginLeft: 'auto', fontSize: 10, color: 'var(--text-faint)' }}>
-          {latestDataDateFormatted || fmtDateLong(latestDataDate || '')}
+          {entity.asOfDate ? fmtDateLong(entity.asOfDate) : latestDataDateFormatted || fmtDateLong(latestDataDate || '')}
         </span>
         <button
           onClick={close}
@@ -314,11 +316,12 @@ export default function StockAskPopover() {
         >✕</button>
       </div>
 
-      <AlsoInScansStrip
+      {historical && <p className="text-xs text-muted mb-2">Historical market read for {fmtDateLong(entity.asOfDate!)}. Position and entry questions are available on the latest session.</p>}
+      {!historical && <AlsoInScansStrip
         isLoading={scanPresence.isLoading}
         matchedScans={scanPresence.matchedScans}
         currentPresetId={entity.currentPresetId}
-      />
+      />}
 
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
         {activeIntent === 'equity.i_hold_this' ? (
