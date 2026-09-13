@@ -14,7 +14,7 @@ for(const mode of ['dark','light'])for(const width of [390,1440]){
  const buttons=card.locator('.scanner-questions button');await buttons.first().waitFor();const labels=await buttons.allTextContents();assert.equal(labels.length,7);
  assert(await card.evaluate(el=>el.parentElement.id==='scanner-vani-host'),'Persistent companion belongs beside results');
  assert.equal(await card.getByRole('button',{name:'Pin beside results'}).count(),0);
- for(const name of labels){const question=card.getByRole('button',{name,exact:true});await Promise.all([page.waitForResponse(r=>r.url().includes('/api/vani/ask')),question.click()]);await card.getByText('VaNi test answer:',{exact:false}).waitFor();if(calls.at(-1).intent_id==='scanner.why_highlighted'){
+ for(const name of labels){const question=card.getByRole('button',{name,exact:true});await Promise.all([page.waitForResponse(r=>r.url().includes('/api/vani/ask')),question.click()]);await card.getByText('VaNi test answer:',{exact:false}).waitFor();if(calls.at(-1).intent_id!=='scanner.why_highlighted'){const result=card.locator('[data-scanner-response]');assert.equal(await result.count(),1);assert(await result.locator('.vani-highlight-reading .vani-evidence-value').count()>0);assert(await result.locator('.vani-highlight-reading .vani-evidence-stock').count()>0);}if(calls.at(-1).intent_id==='scanner.why_highlighted'){
   const story=card.locator('[data-highlight-story]');await story.waitFor();
   assert.equal(await story.locator('.vani-highlight-count').textContent(),'1');
   assert.equal(await story.getByRole('region',{name:'VaNi’s reading',exact:true}).count(),1);

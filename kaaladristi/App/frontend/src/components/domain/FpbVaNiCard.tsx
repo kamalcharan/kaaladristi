@@ -1,3 +1,4 @@
+import ScannerResponseCard from './VaNi/ScannerResponseCard'
 import {revealVaniReading} from '@/lib/vaniNavigation'
 import React, { useState } from 'react'
 import ScannerCompanionShell from './VaNi/ScannerCompanionShell'
@@ -36,7 +37,7 @@ const QUESTIONS: { key: FpbIntentKey; question: string }[] = [
   { key: 'confluence_outlook', question: 'Which coils have the strongest setup?' },
 ]
 
-export default function FpbVaNiCard() {
+export default function FpbVaNiCard({symbols=[]}:{symbols?:string[]}) {
   const [intent, setIntent] = useState<FpbIntentKey | null>(null)
 
   // All five run unconditionally (rules of hooks); `enabled` keeps the fetch
@@ -78,9 +79,7 @@ export default function FpbVaNiCard() {
           active?.isPending || active?.isFetching ? (
             <VaNiConsulting/>
           ) : active?.isError ? (<div role="alert">VaNi could not prepare this explanation. <button className="sector-question" onClick={()=>active.refetch()}>Try again</button></div>) : insight ? (
-            <p className="text-sm text-[var(--text-primary)] leading-7 whitespace-pre-line">
-              {insight}
-            </p>
+            <ScannerResponseCard response={insight} symbols={symbols} date={active?.data?.date} title={QUESTIONS.find(q=>q.key===intent)?.question}/>
           ) : (
             <p style={{ fontSize: 11, color: 'var(--text-faint)', margin: 0 }}>
               VaNi has nothing to report for this intent today.

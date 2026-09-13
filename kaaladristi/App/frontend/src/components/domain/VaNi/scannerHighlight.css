@@ -17,3 +17,5 @@
 .vani-highlight-stock:last-child { border-bottom:0; }
 .vani-highlight-link { color:var(--accent); }
 .vani-highlight-stock:focus-visible { outline:2px solid var(--accent); outline-offset:3px; border-radius:6px; }
+
+.vani-response-bullets { margin:10px 0 0; padding-left:18px; font-size:13px; line-height:1.85; color:var(--text-secondary); overflow-wrap:anywhere; }

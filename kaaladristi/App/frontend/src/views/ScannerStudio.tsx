@@ -1,3 +1,4 @@
+import ScannerResponseCard from '@/components/domain/VaNi/ScannerResponseCard'
 import {revealVaniReading} from '@/lib/vaniNavigation'
 import {trackEvent} from '@/lib/analytics'
 import ScannerHighlightStory from '@/components/domain/VaNi/ScannerHighlightStory'
@@ -699,11 +700,7 @@ export function ScannerVaNiCard({
             </div>
           ) : active?.error || active?.data?.error ? <div role="alert"><p>{active?.data?.error || "VaNi could not prepare this explanation."}</p><button className="sector-question" onClick={()=>askIntent(scanIntent,depth,false,true)}>Try again</button></div> : (
             <>
-              {presetId==='breakout_surge' && scanIntent==='why_flagged' ? <ScannerHighlightStory stocks={allStocks} date={dataDate} response={active?.data?.response ?? ''}/> : <>
-              <p className={branded?"text-sm text-[var(--text-primary)] leading-7 whitespace-pre-line":"text-[11px] text-[var(--text-secondary)] leading-relaxed whitespace-pre-line"}>
-                {active?.data?.response}
-              </p>
-              </>}
+              {presetId==='breakout_surge' && scanIntent==='why_flagged' ? <ScannerHighlightStory stocks={allStocks} date={dataDate} response={active?.data?.response ?? ''}/> : <ScannerResponseCard response={active?.data?.response??''} request={active?.variables} symbols={allStocks.map(displaySymbol)} date={dataDate}/>}
               {branded && active?.variables && <details className="mt-4" data-vani-detail="evidence" onToggle={e=>{if(e.currentTarget.open)trackEvent('scanner_evidence_opened',{preset_id:presetId,intent:scanIntent,data_date:dataDate})}}><summary className="cursor-pointer text-sm">Inspect the evidence</summary><p className="text-xs text-muted mt-2">{dataDate} · full daily cohort for {exchangeFilter}. The table may apply additional filters. Examples are a limited sample.</p><ScannerIntentEvidence request={active.variables}/></details>}
               {active?.data?.log_id && <VaNiFeedback logId={active.data.log_id} />}
             </>

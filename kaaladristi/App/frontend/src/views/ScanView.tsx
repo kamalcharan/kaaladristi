@@ -1166,7 +1166,7 @@ function FpbResults({ preset, timeframe, viewMode, onViewModeChange }: {
       {/* The four fpb.* VaNi intents. Built end to end (intent, endpoint,
           hook) but never rendered, so the page had no VaNi at all while
           every Studio preset carried its own card. */}
-      <FpbVaNiCard />
+      <FpbVaNiCard symbols={rawStocks.map(stock=>stock.symbol)} />
 
       {/* Day-2 position layer — recent releases + hold/crack verdict + SL/target.
           Renders only once km_fpb_active (migration 156) is populated. */}
