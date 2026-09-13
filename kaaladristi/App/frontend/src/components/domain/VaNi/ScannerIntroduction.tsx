@@ -1,5 +1,5 @@
 import StageLearning from './StageLearning'
-import {STAGE_SCANNER_IDS} from '@/constants/scannerIntroductions'
+import {STAGE_SCANNER_IDS,FLOW_SCANNER_IDS} from '@/constants/scannerIntroductions'
 import {ScannerStory,ScannerSignalCards} from './ScannerLearning'
 import {useEffect,useState} from 'react'
 import {SCANNER_INTRODUCTIONS,SCANNER_INTRODUCTION_VERSION} from '@/constants/scannerIntroductions'
@@ -10,12 +10,13 @@ export default function ScannerIntroduction({presetId,activeQuestion=false}:{pre
  useEffect(()=>{setOpen(!activeQuestion)},[presetId,activeQuestion])
  if(!copy)return null
  const isStage=(STAGE_SCANNER_IDS as readonly string[]).includes(presetId)
- const illustrated=!isStage
+ const isFlow=(FLOW_SCANNER_IDS as readonly string[]).includes(presetId)
+ const illustrated=!isStage&&!isFlow
  return <details open={open} onToggle={e=>setOpen(e.currentTarget.open)} data-scanner-introduction={presetId} data-content-version={SCANNER_INTRODUCTION_VERSION} className="mb-4">
  <summary className="sector-question font-semibold">Explain {copy.name}</summary>
  {isStage?<StageLearning presetId={presetId}/>:<ScannerStory presetId={presetId}/>}
  <div className="vani-evidence-sections">
- {!illustrated&&!isStage&&<section><h3 className="text-sm font-semibold mb-2">What this scanner finds</h3><p className="text-sm leading-6">{copy.story}</p></section>}
+ {!illustrated&&!isStage&&!isFlow&&<section><h3 className="text-sm font-semibold mb-2">What this scanner finds</h3><p className="text-sm leading-6">{copy.story}</p></section>}
  <section><h3 className="text-sm font-semibold mb-2">How to read the results</h3><p className="text-sm leading-6">{copy.read}</p></section>
  <p className="vani-evidence-caution text-sm leading-6">{copy.caution}</p>
  </div>

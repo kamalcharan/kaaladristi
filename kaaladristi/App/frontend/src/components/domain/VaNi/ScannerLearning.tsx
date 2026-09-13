@@ -1,12 +1,26 @@
 import {useId} from 'react'
 import './scannerLearning.css'
 
-type Picture = 'breakdown' | 'week-up' | 'week-down' | 'month-up' | 'month-down' | 'scores-down' | 'breakout' | 'coil' | 'scores' | 'activity' | 'relative' | 'rsi' | 'outcomes'
+type Picture = 'delivery' | 'confluence' | 'volume-event' | 'breakdown' | 'week-up' | 'week-down' | 'month-up' | 'month-down' | 'scores-down' | 'breakout' | 'coil' | 'scores' | 'activity' | 'relative' | 'rsi' | 'outcomes'
 /** Schematic teaching diagrams: no live values, proprietary formula or projected path. */
 function Diagram({kind,label}:{kind:Picture;label:string}) {
   const titleId=useId()
   return <svg viewBox={kind==='coil'?'0 0 300 220':'0 0 300 140'} role="img" aria-labelledby={titleId} className="vani-learning-diagram">
     <title id={titleId}>{label}</title>
+    {kind==='delivery'&&<>
+      <text x="16" y="20">Recent delivery · 5D</text><rect x="16" y="30" width="226" height="23" rx="6" className="learning-dot"/>
+      <text x="16" y="78">Broader baseline · 22D</text><rect x="16" y="88" width="124" height="23" rx="6" className="learning-muted-fill"/>
+      <text x="16" y="135">Delivery value, not Flow scores</text>
+    </>}
+    {kind==='confluence'&&<>
+      <rect x="12" y="20" width="122" height="76" rx="10" className="learning-fill"/><rect x="166" y="20" width="122" height="76" rx="10" className="learning-fill"/>
+      <text x="28" y="49">Industry</text><text x="28" y="71">context</text><text x="181" y="49">Stock</text><text x="181" y="71">conditions</text>
+      <path d="M136 58H164" className="learning-guide"/><text x="15" y="128">Read both together</text>
+    </>}
+    {kind==='volume-event'&&<>
+      <text x="16" y="20">An unusually active session</text>
+      {[34,47,39,50,104,43].map((h,i)=><rect key={i} x={18+i*45} y={128-h} width="26" height={h} rx="4" className={i===4?'learning-dot':'learning-muted-fill'}/>)}
+    </>}
     {kind==='breakout'&&<>
       <rect x="16" y="54" width="208" height="54" rx="8" className="learning-fill"/>
       <path d="M16 54H282" className="learning-guide"/>
@@ -90,6 +104,9 @@ const coil:Signal={title:'COIL / BURST / SHATTER',subtitle:'Know which phase you
 const outcomes:Signal={title:'Tracked outcomes',subtitle:'Study what happened next',picture:'outcomes',look:'The recorded setup, BURST or SHATTER date, and subsequent observations.',meaning:'Keep forming coils, upside BURST events and downside SHATTER events separate when comparing follow-through.',limit:'Earlier outcomes do not establish what a current coil will do. Check the dates and available observations.'}
 
 const stories:Record<string,{picture:Picture;title:string;label:string;story:string}> = {
+ conviction_flow:{picture:'delivery',title:'Delivery activity · recent versus broader',label:'Illustrative recent delivery activity above its broader baseline. Not live values or research scores.',story:'Delivery participation is elevated across the recent window, while this scanner also checks proximity to the short-term price average. More delivery activity does not determine the next price move.'},
+ power_buy:{picture:'confluence',title:'Stock strength meets industry context',label:'Industry context and stock conditions considered together, not a checklist of guaranteed confirmations.',story:'A stock’s qualifying strength conditions sit within a leading or rotating-in industry. The combination provides context; different stocks can qualify through different combinations.'},
+ volume_drive:{picture:'volume-event',title:'An event worth inspecting',label:'Illustrative activity bars with one elevated session. No forecast is shown.',story:'A recorded volume-drive or accumulation-bar event brings the stock into view. Inspect delivery participation and the price candle to understand that activity.'},
  breakout_surge:{picture:'breakout',title:'Daily breakout · close above the range',label:'Daily closing observation above a recent range boundary. No future path is shown.',story:'The daily close is above the recent range. Inspect activity and relative strength to understand the observation.'},
  breakdown_watch:{picture:'breakdown',title:'Daily breakdown · close below the floor',label:'Daily closing observation below a recent range floor. No future path is shown.',story:'The daily close is below the recent range floor. Inspect activity and relative strength to understand the weakness; continued declines are not established.'},
  flower_pot_burst:{picture:'coil',title:'One coil, two possible directions',label:'A narrowing COIL with separate upside BURST and downside SHATTER examples. Neither outcome is guaranteed.',story:'A COIL is a quiet, tightening setup. An upside expansion is a BURST; a downside expansion is a SHATTER. The coil alone does not tell you which will happen.'},
