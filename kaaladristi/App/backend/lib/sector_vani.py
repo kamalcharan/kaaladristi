@@ -6,7 +6,7 @@ from datetime import date, timedelta
 from .market_structure_vani import number, single_flight, ReadingInProgress
 from .vani_cache import make_cache_key, get_cached, set_cached
 
-VERSION = 7
+VERSION = 8
 CATEGORIES = {
     'broad': ['index', 'broad market index'], 'sectoral': ['sectoral index'],
     'thematic': ['thematic market index'], 'custom': ['custom'], 'overall': ['sectoral index', 'custom'],
@@ -22,10 +22,10 @@ QUESTIONS = {
     'sector.entering': 'Explain the entering-flow pattern in the supplied examples and what participation evidence to inspect.',
     'sector.fading': 'Explain positive near-term flow below baseline. Do not invent a day-over-day deterioration.',
     'sector.leaving': 'Explain the outflow classification, keeping Quiet and missing data separate.',
-    'sector.read': 'Explain the selected sector flow snapshot.',
+    'sector.read': 'Explain the short-term picture from Flow 5D versus its 22-session baseline, the previous-session change, breadth caution and participation. Do not infer longer-term strength from these readings.',
     'sector.compare': 'Explain near-term Flow 5D versus underlying Flow 22D.',
-    'sector.persistence': 'Describe how flow changed over the available sessions.',
-    'sector.participation': 'Explain participation and concentration. Separate session advances from multi-session flow scores.',
+    'sector.persistence': 'Describe persistence of short-term flow over the available sessions. These are daily flow-state observations, not completed weekly/monthly trend agreement.',
+    'sector.participation': 'Explain which stocks support recent activity using participation and concentration. Separate session advances from multi-session flow scores. Do not infer longer-term Stage 2 support.',
 }
 STATIC = {
     'sector.leadership.learn': 'Running broadly means weekly and monthly agreement has lasted at least eight completed weeks, with at least 60% Stage 2 Leaders, five classified stocks and 80% coverage. Building has agreement but lacks some of that persistence or support. Cooling has lost recent agreement. Limited coverage and Unavailable identify missing evidence. Current flow is a separate reading. These groups describe observations, not predictions.',

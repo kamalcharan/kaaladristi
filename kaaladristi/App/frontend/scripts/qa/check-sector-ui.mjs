@@ -205,12 +205,18 @@ try {
     await evidenceSurface.locator('.vani-evidence-caution').waitFor();
     await evidenceSurface.locator('.vani-evidence-sections').scrollIntoViewIfNeeded();
     await page.screenshot({path:path.join(out,`sector-evidence-${mode}-${width}.png`),fullPage:false});
+    await evidenceSurface.getByRole('button',{name:'Do short-term flow and longer-term strength agree?',exact:true}).click();
+    await evidenceSurface.getByRole('region',{name:'Horizon comparison'}).getByText('The horizons give a mixed picture:',{exact:false}).waitFor();
+    await evidenceSurface.getByRole('button',{name:'Explain simply',exact:true}).click();
+    await evidenceSurface.getByText('Flow 22D is a short-term baseline, not the longer-term trend.',{exact:false}).waitFor();
+    assert(!vaniCalls.some(r=>r.intent_id==='sector.horizons'),'Horizon comparison uses the published date-bound evidence, not an unsupported LLM intent');
+    await evidenceSurface.getByRole('button',{name:'What does short-term activity show?',exact:true}).click();
     if(width<1280) await evidenceSurface.getByRole('button',{name:'Close',exact:true}).click();
     await noOverflow(`detail ${width}`);
     if(width<1280) {
       await page.getByRole('button',{name:'Help me read this page',exact:true}).first().click();
       const sheet=page.getByRole('dialog'); await sheet.waitFor();
-      await sheet.getByRole('button',{name:'What is happening in this sector?',exact:true}).click();
+      await sheet.getByRole('button',{name:'What does short-term activity show?',exact:true}).click();
       await sheet.getByText('Consulting VaNi…',{exact:true}).waitFor();
       await sheet.getByText('Near-term flow is above its underlying baseline.',{exact:false}).waitFor();
       await sheet.getByRole('button',{name:'Close',exact:true}).click();
@@ -232,9 +238,13 @@ try {
     const sectorRead=page.getByRole('complementary',{name:'VaNi sector detail companion'});
     await sectorRead.getByText('6 months',{exact:false}).waitFor();
     await sectorRead.getByText('Running broadly',{exact:false}).first().waitFor();
-    assert.equal(await sectorRead.getByRole('button').count(),4,'Sector detail has four focused questions');
-    await sectorRead.getByRole('button',{name:'Is strength broad across its stocks?'}).click();
+    assert.equal(await sectorRead.locator('[aria-label="Questions about this sector"] button').count(),4,'Sector detail has four focused questions');
+    await sectorRead.getByRole('button',{name:'Which stocks support the longer-term trend?'}).click();
     await sectorRead.getByText('3 of 5 classified stocks',{exact:false}).waitFor();
+    await sectorRead.getByRole('button',{name:'Explain simply',exact:true}).click();
+    await sectorRead.getByText('It is different from stocks rising today',{exact:false}).waitFor();
+    await sectorRead.getByRole('button',{name:'Does short-term flow agree with the longer-term view?',exact:true}).click();
+    await sectorRead.getByText('The horizons give a mixed picture:',{exact:false}).waitFor();
     await page.getByRole('region',{name:'Selected index longer-term strength'}).waitFor();
     await page.getByLabel('Longer-term history',{exact:true}).selectOption('12');
     await sectorRead.getByText('12 months',{exact:false}).waitFor();
