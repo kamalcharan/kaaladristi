@@ -17,3 +17,8 @@
 .vani-learning-signal-body {padding:0 12px 12px;}
 .vani-learning-signal dt {font-size:12px;font-weight:600;margin-top:12px;}
 .vani-learning-signal dd {font-size:13px;line-height:1.65;margin:5px 0 0;overflow-wrap:anywhere;}
+
+.learning-burst {stroke:var(--bull);}
+.learning-shatter {stroke:var(--bear);}
+.learning-burst-dot {fill:var(--bull);}
+.learning-shatter-dot {fill:var(--bear);}

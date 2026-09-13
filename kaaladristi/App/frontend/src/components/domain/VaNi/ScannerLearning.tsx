@@ -5,7 +5,7 @@ type Picture = 'breakout' | 'coil' | 'scores' | 'activity' | 'relative' | 'rsi' 
 /** Schematic teaching diagrams: no live values, proprietary formula or projected path. */
 function Diagram({kind,label}:{kind:Picture;label:string}) {
   const titleId=useId()
-  return <svg viewBox="0 0 300 140" role="img" aria-labelledby={titleId} className="vani-learning-diagram">
+  return <svg viewBox={kind==='coil'?'0 0 300 220':'0 0 300 140'} role="img" aria-labelledby={titleId} className="vani-learning-diagram">
     <title id={titleId}>{label}</title>
     {kind==='breakout'&&<>
       <rect x="16" y="54" width="208" height="54" rx="8" className="learning-fill"/>
@@ -16,13 +16,17 @@ function Diagram({kind,label}:{kind:Picture;label:string}) {
       <text x="184" y="16">Close above</text><text x="38" y="128">Inside the range</text>
     </>}
     {kind==='coil'&&<>
-      <text x="15" y="17">Quiet coil</text><text x="194" y="17">A release</text>
-      <path d="M15 36L150 66M15 103L150 73" className="learning-guide"/>
-      <path d="M18 87L35 44L53 94L73 51L89 85L108 61L125 77L145 69" className="learning-line"/>
-      <path d="M174 38V107" className="learning-guide"/>
-      <path d="M199 91L213 85L227 96L244 49L265 31" className="learning-line"/>
-      <circle cx="265" cy="31" r="4" className="learning-dot"/>
-      <text x="15" y="129">Range narrows</text><text x="193" y="129">Range expands</text>
+      <text x="15" y="17">COIL · range tightens</text>
+      <path d="M15 33L278 65M15 99L278 72" className="learning-guide"/>
+      <path d="M20 84L48 39L78 91L111 49L144 82L179 59L212 75L247 65L275 69" className="learning-line"/>
+      <path d="M15 111H285" className="learning-guide"/>
+      <text x="15" y="131">BURST · upside</text>
+      <text x="165" y="131">SHATTER · downside</text>
+      <path d="M20 183L42 174L62 184L85 154L121 143" className="learning-line learning-burst"/>
+      <circle cx="121" cy="143" r="4" className="learning-burst-dot"/>
+      <path d="M173 151L194 159L214 149L239 181L274 193" className="learning-line learning-shatter"/>
+      <circle cx="274" cy="193" r="4" className="learning-shatter-dot"/>
+      <text x="15" y="216">Two possible directions—not a forecast</text>
     </>}
     {(kind==='scores'||kind==='activity')&&<>
       <text x="16" y="24">{kind==='scores'?'Recent · 5D':'Current activity'}</text>
@@ -46,7 +50,7 @@ function Diagram({kind,label}:{kind:Picture;label:string}) {
     {kind==='outcomes'&&<>
       <path d="M30 65H269" className="learning-guide"/>
       {[35,143,260].map(x=><circle key={x} cx={x} cy="65" r="7" className="learning-dot"/>)}
-      <text x="16" y="37">Setup</text><text x="116" y="37">Release</text><text x="211" y="37">Review</text>
+      <text x="16" y="37">Setup</text><text x="116" y="37">Event</text><text x="211" y="37">Review</text>
       <text x="16" y="111">Read what happened after the event</text>
     </>}
   </svg>
@@ -57,16 +61,16 @@ const scores:Signal={title:'5D / 22D',subtitle:'Recent versus broader strength',
 const activity:Signal={title:'Trading activity',subtitle:'Current versus usual participation',picture:'activity',look:'Activity compared with its usual level; use RVOL where it is displayed.',meaning:'A price move accompanied by unusually active trading has different context from a quiet move.',limit:'Activity does not identify buyers or sellers, or guarantee follow-through.'}
 const relative:Signal={title:'MagicRS',subtitle:'Strength relative to NIFTY 500',picture:'relative',look:'The displayed relative-strength reading and zone against NIFTY 500.',meaning:'A rising stock can still lag the benchmark. Relative leadership and the stock’s own price direction answer different questions.',limit:'The lines illustrate comparison only; they are not the MagicRS calculation or a forecast.'}
 const rsi:Signal={title:'RSI',subtitle:'Context for recent price momentum',picture:'rsi',look:'Where the RSI reading sits on its 0–100 scale.',meaning:'Above 70 is a high reading; below 30 is a low reading. Read it alongside the breakout level, activity and relative strength.',limit:'A high reading does not guarantee a reversal or confirm a breakout. RSI is not an admission rule for this scan.'}
-const coil:Signal={title:'Coil / burst',subtitle:'Know which phase you are viewing',picture:'coil',look:'A narrowing trading range versus a recorded expansion in range and activity.',meaning:'The coil describes a forming setup. The burst describes an event that has already happened.',limit:'The two panels show different observations, not an inevitable sequence. A coil may never release this way.'}
-const outcomes:Signal={title:'Tracked outcomes',subtitle:'Study what happened next',picture:'outcomes',look:'The recorded setup, event date and subsequent observations.',meaning:'Keep forming coils separate from released setups when comparing follow-through.',limit:'Earlier outcomes do not establish what a current coil will do. Check the dates and available observations.'}
+const coil:Signal={title:'COIL / BURST / SHATTER',subtitle:'Know which phase you are viewing',picture:'coil',look:'A COIL has a narrowing range. BURST is an upside expansion; SHATTER is a downside expansion.',meaning:'COIL describes a forming setup. BURST and SHATTER describe observed events in opposite directions. Check which phase the stock is in.',limit:'Neither direction is guaranteed. A coil can remain unresolved, and either event can fail to follow through.'}
+const outcomes:Signal={title:'Tracked outcomes',subtitle:'Study what happened next',picture:'outcomes',look:'The recorded setup, BURST or SHATTER date, and subsequent observations.',meaning:'Keep forming coils, upside BURST events and downside SHATTER events separate when comparing follow-through.',limit:'Earlier outcomes do not establish what a current coil will do. Check the dates and available observations.'}
 
 export function ScannerStory({presetId}:{presetId:'breakout_surge'|'flower_pot_burst'}) {
  const breakout=presetId==='breakout_surge'
  return <figure className="vani-learning-story">
-   <div className="vani-learning-eyebrow">{breakout?'A move beyond the range':'Two phases to distinguish'}</div>
-   <Diagram kind={breakout?'breakout':'coil'} label={breakout?'Example price moves within a range and ends at a close above the boundary; no future path is shown.':'Separate examples of a narrowing range and a released setup. The release is not a prediction for the coil.'}/>
+   <div className="vani-learning-eyebrow">{breakout?'A move beyond the range':'One coil, two possible directions'}</div>
+   <Diagram kind={breakout?'breakout':'coil'} label={breakout?'Example price moves within a range and ends at a close above the boundary; no future path is shown.':'A narrowing COIL with separate upside BURST and downside SHATTER examples. Neither outcome is guaranteed.'}/>
    <figcaption>Illustrative example—not live data.</figcaption>
-   <p>{breakout?'Price has moved beyond its recent range. Inspect activity and relative strength to understand the observation.':'A coil is a quiet, tightening setup; a burst is a recorded release. Identify the phase first—a coil does not promise a burst.'}</p>
+   <p>{breakout?'Price has moved beyond its recent range. Inspect activity and relative strength to understand the observation.':'A COIL is a quiet, tightening setup. An upside expansion is a BURST; a downside expansion is a SHATTER. The coil alone does not tell you which will happen.'}</p>
  </figure>
 }
 export function ScannerSignalCards({presetId}:{presetId:'breakout_surge'|'flower_pot_burst'}) {
