@@ -236,14 +236,20 @@ export function useConfluenceTimeline(days: number) {
   });
 }
 
+export type FpbGroup = { key: string; label: string; equity_ids: number[]; releases?: {equity_id:number; symbol:string; release_date:string; status:string}[] };
+export type FpbResponse = {date:string; insight:string|null; ai:boolean; groups?:FpbGroup[]};
+
 export function useFpbRecentOutcomes(enabled = true) {
   const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? '';
   return useQuery({
     queryKey: ['fpb_recent_outcomes'],
-    queryFn: async (): Promise<{ date: string; insight: string | null; ai: boolean }> => {
+    queryFn: async (): Promise<FpbResponse> => {
       const res = await fetch(`${pipelineUrl}/api/ai/fpb-recent-outcomes`);
-      if (!res.ok) return { date: '', insight: null, ai: false };
-      return res.json();
+      if (!res.ok) throw new Error('Flower Pot evidence is unavailable');
+      const data = await res.json();
+      if (!data.insight || !data.ai) throw new Error('VaNi explanation unavailable');
+      if (!data.date || !Array.isArray(data.groups) || data.groups.some((g:FpbGroup)=>!Array.isArray(g.equity_ids))) throw new Error('Flower Pot result membership is unavailable');
+      return data;
     },
     staleTime: 24 * 60 * 60 * 1000,
     enabled,
@@ -255,10 +261,12 @@ export function useFpbWhyWatchCoil(enabled = true) {
   const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? '';
   return useQuery({
     queryKey: ['fpb_why_watch_coil'],
-    queryFn: async (): Promise<{ date: string; insight: string | null; ai: boolean }> => {
+    queryFn: async (): Promise<FpbResponse> => {
       const res = await fetch(`${pipelineUrl}/api/ai/fpb-why-watch-coil`);
-      if (!res.ok) return { date: '', insight: null, ai: false };
-      return res.json();
+      if (!res.ok) throw new Error('Flower Pot evidence is unavailable');
+      const data = await res.json();
+      if (!data.insight || !data.ai) throw new Error('VaNi explanation unavailable');
+      return data;
     },
     staleTime: 7 * 24 * 60 * 60 * 1000, // 7 days — static explanation
     enabled,
@@ -270,10 +278,13 @@ export function useFpbCoilingIndustries(enabled = true) {
   const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? '';
   return useQuery({
     queryKey: ['fpb_coiling_industries'],
-    queryFn: async (): Promise<{ date: string; insight: string | null; ai: boolean }> => {
+    queryFn: async (): Promise<FpbResponse> => {
       const res = await fetch(`${pipelineUrl}/api/ai/fpb-coiling-industries`);
-      if (!res.ok) return { date: '', insight: null, ai: false };
-      return res.json();
+      if (!res.ok) throw new Error('Flower Pot evidence is unavailable');
+      const data = await res.json();
+      if (!data.insight || !data.ai) throw new Error('VaNi explanation unavailable');
+      if (!data.date || !Array.isArray(data.groups) || data.groups.some((g:FpbGroup)=>!Array.isArray(g.equity_ids))) throw new Error('Flower Pot result membership is unavailable');
+      return data;
     },
     staleTime: 6 * 60 * 60 * 1000, // 6 hours — industry composition changes daily
     enabled,
@@ -285,10 +296,13 @@ export function useFpbConfluenceOutlook(enabled = true) {
   const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? '';
   return useQuery({
     queryKey: ['fpb_confluence_outlook'],
-    queryFn: async (): Promise<{ date: string; insight: string | null; ai: boolean }> => {
+    queryFn: async (): Promise<FpbResponse> => {
       const res = await fetch(`${pipelineUrl}/api/ai/fpb-confluence-outlook`);
-      if (!res.ok) return { date: '', insight: null, ai: false };
-      return res.json();
+      if (!res.ok) throw new Error('Flower Pot evidence is unavailable');
+      const data = await res.json();
+      if (!data.insight || !data.ai) throw new Error('VaNi explanation unavailable');
+      if (!data.date || !Array.isArray(data.groups) || data.groups.some((g:FpbGroup)=>!Array.isArray(g.equity_ids))) throw new Error('Flower Pot result membership is unavailable');
+      return data;
     },
     staleTime: 12 * 60 * 60 * 1000, // 12 hours — setup quality changes daily
     enabled,
@@ -300,10 +314,13 @@ export function useFpbNewCoils(enabled = true) {
   const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? '';
   return useQuery({
     queryKey: ['fpb_new_coils'],
-    queryFn: async (): Promise<{ date: string; insight: string | null; ai: boolean }> => {
+    queryFn: async (): Promise<FpbResponse> => {
       const res = await fetch(`${pipelineUrl}/api/ai/fpb-new-coils`);
-      if (!res.ok) return { date: '', insight: null, ai: false };
-      return res.json();
+      if (!res.ok) throw new Error('Flower Pot evidence is unavailable');
+      const data = await res.json();
+      if (!data.insight || !data.ai) throw new Error('VaNi explanation unavailable');
+      if (!data.date || !Array.isArray(data.groups) || data.groups.some((g:FpbGroup)=>!Array.isArray(g.equity_ids))) throw new Error('Flower Pot result membership is unavailable');
+      return data;
     },
     staleTime: 6 * 60 * 60 * 1000, // 6 hours — matches the intent's cache_ttl_hours
     enabled,

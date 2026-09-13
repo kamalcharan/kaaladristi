@@ -1,6 +1,9 @@
 import ScannerResponseCard from './VaNi/ScannerResponseCard'
 import {revealVaniReading} from '@/lib/vaniNavigation'
-import React, { useState } from 'react'
+import React, { useEffect } from 'react'
+import {useSearchParams} from 'react-router-dom'
+import type {FpbGroup} from '@/hooks/useDashboardExtras'
+import {trackEvent} from '@/lib/analytics'
 import ScannerCompanionShell from './VaNi/ScannerCompanionShell'
 import {VaNiConsulting} from './VaNi/VaNiBrand'
 import {
@@ -37,8 +40,14 @@ const QUESTIONS: { key: FpbIntentKey; question: string }[] = [
   { key: 'confluence_outlook', question: 'Which coils have the strongest setup?' },
 ]
 
-export default function FpbVaNiCard({symbols=[]}:{symbols?:string[]}) {
-  const [intent, setIntent] = useState<FpbIntentKey | null>(null)
+export default function FpbVaNiCard({symbols=[], onCohort, sessionDate}:{symbols?:string[]; sessionDate?:string; onCohort?:(group:FpbGroup|null)=>void}) {
+  const [params, setParams] = useSearchParams()
+  const selected = params.get('fpb_intent')
+  const intent = QUESTIONS.some(q=>q.key===selected) ? selected as FpbIntentKey : null
+  const setIntent = (key:FpbIntentKey) => {
+    const next=new URLSearchParams(params); next.set('fpb_intent',key); next.delete('fpb_group'); next.delete('fpb_asof'); setParams(next)
+    trackEvent('scanner_intent_selected',{preset_id:'flower_pot_burst',intent:key})
+  }
 
   // All five run unconditionally (rules of hooks); `enabled` keeps the fetch
   // to the selected question, so opening the page costs no LLM calls.
@@ -58,6 +67,14 @@ export default function FpbVaNiCard({symbols=[]}:{symbols?:string[]}) {
 
   const active = intent ? byIntent[intent] : null
   const insight = active?.data?.insight ?? null
+  const data=active?.data
+  const groupKey=params.get('fpb_group')
+  const group=data?.groups?.find(g=>g.key===groupKey)
+  const stale=!!groupKey && !!data && (params.get('fpb_asof')!==data.date || (!!sessionDate && !group?.releases && data.date!==sessionDate))
+  useEffect(()=>{onCohort?.(!stale && group && !group.releases ? group : null)},[group,stale,onCohort])
+  const linkFor=(key:string)=>{
+    const next=new URLSearchParams(params); next.set('fpb_group',key); next.set('fpb_asof',data?.date??''); return `?${next.toString()}#fpb-results`
+  }
 
   const pillStyle: React.CSSProperties = {
     border: '1px solid var(--border-indigo)', color: 'var(--indigo)', background: 'transparent',
@@ -79,7 +96,13 @@ export default function FpbVaNiCard({symbols=[]}:{symbols?:string[]}) {
           active?.isPending || active?.isFetching ? (
             <VaNiConsulting/>
           ) : active?.isError ? (<div role="alert">VaNi could not prepare this explanation. <button className="sector-question" onClick={()=>active.refetch()}>Try again</button></div>) : insight ? (
-            <ScannerResponseCard response={insight} symbols={symbols} date={active?.data?.date} title={QUESTIONS.find(q=>q.key===intent)?.question}/>
+            <>
+            <ScannerResponseCard response={insight} symbols={symbols} date={data?.date} title={QUESTIONS.find(q=>q.key===intent)?.question}/>
+            <div className="vani-followups">{data?.groups?.map(g=><a className="sector-question" style={{display:'block',marginTop:8}} key={g.key} href={linkFor(g.key)} onClick={e=>{e.preventDefault(); const url=new URL(e.currentTarget.href); setParams(url.searchParams); trackEvent('scanner_results_opened',{preset_id:'flower_pot_burst',intent,group:g.key}); requestAnimationFrame(()=>document.getElementById(g.releases?'fpb-outcomes':'fpb-results')?.scrollIntoView({behavior:'smooth',block:'start'}))}}>{g.label} · <strong>{g.releases?.length??g.equity_ids.length}</strong> →</a>)}</div>
+            {groupKey && data && !group && <p role="alert">This result group is unavailable. Select a current result above.</p>}
+            {stale && <p role="alert">This saved view belongs to a different session. Historical Flower Pot results are unavailable here. Choose a current result above to update the link.</p>}
+            {!stale && group?.releases && <div id="fpb-outcomes" className="vani-followups"><h4>{group.label}</h4><p className="text-xs text-muted">Current recorded statuses for releases in the last 180 days; this is not a historical status snapshot.</p>{group.releases.length===0?<p>No releases in this period.</p>:group.releases.map(r=><a className="sector-question" style={{display:'block',marginTop:8}} key={`${r.equity_id}-${r.release_date}`} href={`/chart/equity/${r.equity_id}`}><strong>{r.symbol}</strong> · {r.release_date} · {r.status.replaceAll('_',' ').toLowerCase()}</a>)}</div>}
+            </>
           ) : (
             <p style={{ fontSize: 11, color: 'var(--text-faint)', margin: 0 }}>
               VaNi has nothing to report for this intent today.

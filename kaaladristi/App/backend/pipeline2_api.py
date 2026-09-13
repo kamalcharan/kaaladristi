@@ -2992,24 +2992,22 @@ def market_pulse_insight(date: str = None):
 def fpb_recent_outcomes(date: str = None):
     """Recent outcomes from Flower Pot Burst active releases."""
     if not _AI_ENABLED or not _AI_OPTIONAL_OK:
-        return {"insight": None, "ai": False}
+        raise HTTPException(503, "Flower Pot evidence or explanation is unavailable")
 
     conn = _db()
     if not conn:
-        return {"insight": None, "ai": False}
+        raise HTTPException(503, "Flower Pot evidence or explanation is unavailable")
 
     cache_key = f"fpb_outcomes:{date or 'latest'}"
-    if cache_key in _insight_cache:
-        return {"insight": _insight_cache[cache_key], "ai": True}
 
     try:
         # Get max date from km_fpb_active if date not specified
         if not date:
-            date_rows = conn.execute("SELECT MAX(release_date)::text as max_date FROM km_fpb_active")
+            date_rows = conn.execute("SELECT CURRENT_DATE::text as max_date")
             if date_rows and date_rows[0].get('max_date'):
                 date = date_rows[0]['max_date']
             else:
-                return {"insight": None, "ai": False}
+                raise HTTPException(503, "Flower Pot evidence or explanation is unavailable")
 
         rows = conn.execute("""
             SELECT
@@ -3023,12 +3021,17 @@ def fpb_recent_outcomes(date: str = None):
             WHERE release_date >= CURRENT_DATE - 180
         """)
         row = rows[0] if rows else None
+        releases = conn.execute("""SELECT a.equity_id, s.symbol, a.release_date::text, a.status
+            FROM km_fpb_active a JOIN km_equity_symbols s ON s.id = a.equity_id
+            WHERE a.release_date >= CURRENT_DATE - 180
+            ORDER BY a.release_date DESC, a.equity_id""")
+        groups = [{"key": "outcomes", "label": "Release outcomes · last 180 days", "equity_ids": [], "releases": releases}]
     except Exception as e:
         logging.error(f"[fpb_recent_outcomes] query error: {e}")
-        return {"insight": None, "ai": False}
+        raise HTTPException(503, "Flower Pot evidence or explanation is unavailable")
 
-    if not row or not row.get('total'):
-        return {"insight": None, "ai": False}
+    if row is None:
+        raise HTTPException(503, "Flower Pot evidence or explanation is unavailable")
 
     user_msg = (
         f"Flower Pot Burst releases since {(datetime.now() - timedelta(days=180)).strftime('%Y-%m-%d')}: "
@@ -3040,7 +3043,7 @@ def fpb_recent_outcomes(date: str = None):
 
     skill = _VANI_INTENTS.get("fpb.recent_outcomes")
     if not skill:
-        return {"insight": None, "ai": False}
+        raise HTTPException(503, "Flower Pot evidence or explanation is unavailable")
 
     # Qwen-first, matching /api/vani/ask. These four intents live in the
     # vani_intents.py registry with complexity='low', but were served
@@ -3048,7 +3051,10 @@ def fpb_recent_outcomes(date: str = None):
     # to False — so every Flower Pot answer came from the cloud provider
     # and never touched the local Qwen server. complete_with_source so a
     # caller can tell which backend actually answered.
-    insight, _provider = _ai_complete_src(
+    import hashlib
+    cache_key += ':' + hashlib.sha256((str(groups) + user_msg).encode()).hexdigest()
+    cached = _insight_cache.get(cache_key)
+    insight, _provider = (cached, 'cache') if cached else _ai_complete_src(
         system=skill.system_prompt,
         user=user_msg,
         max_tokens=skill.max_tokens,
@@ -3075,7 +3081,9 @@ def fpb_recent_outcomes(date: str = None):
             model_version=_AI_MODEL,
             latency_ms=0,
         )
-    return {"insight": insight, "ai": insight is not None}
+    if not insight:
+        raise HTTPException(503, "VaNi could not prepare this explanation")
+    return {"date": date, "insight": insight, "ai": True, "groups": groups}
 
 
 @app.get('/api/ai/fpb-why-watch-coil')
@@ -3130,15 +3138,13 @@ def fpb_why_watch_coil():
 def fpb_coiling_industries(date: str = None):
     """Which industries have tight coils active today."""
     if not _AI_ENABLED or not _AI_OPTIONAL_OK:
-        return {"insight": None, "ai": False}
+        raise HTTPException(503, "Flower Pot evidence or explanation is unavailable")
 
     conn = _db()
     if not conn:
-        return {"insight": None, "ai": False}
+        raise HTTPException(503, "Flower Pot evidence or explanation is unavailable")
 
     cache_key = f"fpb_industries:{date or 'latest'}"
-    if cache_key in _insight_cache:
-        return {"insight": _insight_cache[cache_key], "ai": True}
 
     try:
         # Get max date from km_scan_results if date not specified
@@ -3150,12 +3156,12 @@ def fpb_coiling_industries(date: str = None):
             if date_rows and date_rows[0].get('max_date'):
                 date = date_rows[0]['max_date']
             else:
-                return {"insight": None, "ai": False}
+                raise HTTPException(503, "Flower Pot evidence or explanation is unavailable")
 
         industries = conn.execute("""
             SELECT
                 s.industry,
-                COUNT(*)::int as coil_count
+                COUNT(*)::int as coil_count, array_agg(sr.equity_id ORDER BY sr.equity_id) AS equity_ids
             FROM km_scan_results sr
             JOIN km_equity_symbols s ON s.id = sr.equity_id
             WHERE sr.preset_id = 'flower_pot_burst'
@@ -3178,11 +3184,12 @@ def fpb_coiling_industries(date: str = None):
         total_row = total_rows[0] if total_rows else None
     except Exception as e:
         logging.error(f"[fpb_coiling_industries] query error: {e}")
-        return {"insight": None, "ai": False}
+        raise HTTPException(503, "Flower Pot evidence or explanation is unavailable")
 
-    if not industries or not total_row:
-        return {"insight": None, "ai": False}
+    if total_row is None:
+        raise HTTPException(503, "Flower Pot evidence or explanation is unavailable")
 
+    groups = [{"key": str(i), "label": ind.get("industry") or "Unclassified", "equity_ids": ind["equity_ids"]} for i, ind in enumerate(industries)]
     industry_list = ", ".join([
         f"{ind.get('industry') or 'Unclassified'}: {ind.get('coil_count')}"
         for ind in industries[:3]
@@ -3197,7 +3204,7 @@ def fpb_coiling_industries(date: str = None):
 
     skill = _VANI_INTENTS.get("fpb.coiling_industries")
     if not skill:
-        return {"insight": None, "ai": False}
+        raise HTTPException(503, "Flower Pot evidence or explanation is unavailable")
 
     # Qwen-first, matching /api/vani/ask. These four intents live in the
     # vani_intents.py registry with complexity='low', but were served
@@ -3205,7 +3212,10 @@ def fpb_coiling_industries(date: str = None):
     # to False — so every Flower Pot answer came from the cloud provider
     # and never touched the local Qwen server. complete_with_source so a
     # caller can tell which backend actually answered.
-    insight, _provider = _ai_complete_src(
+    import hashlib
+    cache_key += ':' + hashlib.sha256((str(groups) + user_msg).encode()).hexdigest()
+    cached = _insight_cache.get(cache_key)
+    insight, _provider = (cached, 'cache') if cached else _ai_complete_src(
         system=skill.system_prompt,
         user=user_msg,
         max_tokens=skill.max_tokens,
@@ -3222,7 +3232,9 @@ def fpb_coiling_industries(date: str = None):
             insight = None
     if insight:
         _insight_cache[cache_key] = insight
-    return {"insight": insight, "ai": insight is not None}
+    if not insight:
+        raise HTTPException(503, "VaNi could not prepare this explanation")
+    return {"date": date, "insight": insight, "ai": True, "groups": groups}
 
 
 @app.get('/api/ai/fpb-new-coils')
@@ -3238,15 +3250,13 @@ def fpb_new_coils():
     out.
     """
     if not _AI_ENABLED or not _AI_OPTIONAL_OK:
-        return {"insight": None, "ai": False}
+        raise HTTPException(503, "Flower Pot evidence or explanation is unavailable")
 
     conn = _db()
     if not conn:
-        return {"insight": None, "ai": False}
+        raise HTTPException(503, "Flower Pot evidence or explanation is unavailable")
 
     cache_key = "fpb_new_coils:latest"
-    if cache_key in _insight_cache:
-        return {"insight": _insight_cache[cache_key], "ai": True}
 
     try:
         rows = conn.execute("""
@@ -3295,6 +3305,7 @@ def fpb_new_coils():
                    (SELECT prev FROM bounds)::text AS prior_date,
                    (SELECT COUNT(*) FROM tight WHERE trade_date=(SELECT cur FROM bounds))::int  AS now_count,
                    (SELECT COUNT(*) FROM tight WHERE trade_date=(SELECT prev FROM bounds))::int AS prior_count,
+                   ARRAY(SELECT equity_id FROM tight t WHERE t.trade_date=(SELECT cur FROM bounds) AND t.equity_id NOT IN (SELECT equity_id FROM tight WHERE trade_date=(SELECT prev FROM bounds))) AS new_ids,
                    COALESCE((SELECT string_agg(symbol, ', ' ORDER BY symbol) FROM tight t
                              WHERE t.trade_date=(SELECT cur FROM bounds)
                                AND t.equity_id NOT IN (
@@ -3303,25 +3314,32 @@ def fpb_new_coils():
         row = rows[0] if rows else None
     except Exception as e:
         logging.error(f"[fpb_new_coils] query error: {e}")
-        return {"insight": None, "ai": False}
+        raise HTTPException(503, "Flower Pot evidence or explanation is unavailable")
 
     if not row or not row.get('cur_date'):
-        return {"insight": None, "ai": False}
+        raise HTTPException(503, "Flower Pot evidence or explanation is unavailable")
 
+    date = row["cur_date"]
+    if date == row["prior_date"]:
+        raise HTTPException(503, "A prior session is required")
+    groups = [{"key": "new", "label": "Newly coiling stocks", "equity_ids": row["new_ids"]}]
     new_syms = (row.get('new_symbols') or '').strip()
     user_msg = (
         f"Flower Pot Burst compression on {row['cur_date']} versus the prior session "
         f"{row['prior_date']}: {row.get('now_count') or 0} stocks tight now, "
         f"{row.get('prior_count') or 0} tight on the prior bar. "
         + (f"Newly tight today: {new_syms}."
-           if new_syms else "No stock is newly tight; the set is unchanged from the prior session.")
+           if new_syms else "No stocks newly entered the tight set; some prior coils may have left.")
     )
 
     skill = _VANI_INTENTS.get("fpb.new_coils")
     if not skill:
-        return {"insight": None, "ai": False}
+        raise HTTPException(503, "Flower Pot evidence or explanation is unavailable")
 
-    insight, _provider = _ai_complete_src(
+    import hashlib
+    cache_key += ':' + hashlib.sha256((str(groups) + user_msg).encode()).hexdigest()
+    cached = _insight_cache.get(cache_key)
+    insight, _provider = (cached, 'cache') if cached else _ai_complete_src(
         system=skill.system_prompt,
         user=user_msg,
         max_tokens=skill.max_tokens,
@@ -3346,22 +3364,22 @@ def fpb_new_coils():
             model_version=_AI_MODEL,
             latency_ms=0,
         )
-    return {"insight": insight, "ai": insight is not None}
+    if not insight:
+        raise HTTPException(503, "VaNi could not prepare this explanation")
+    return {"date": date, "insight": insight, "ai": True, "groups": groups}
 
 
 @app.get('/api/ai/fpb-confluence-outlook')
 def fpb_confluence_outlook(date: str = None):
     """Top coils by confluence of tightness and Magic RS momentum."""
     if not _AI_ENABLED or not _AI_OPTIONAL_OK:
-        return {"insight": None, "ai": False}
+        raise HTTPException(503, "Flower Pot evidence or explanation is unavailable")
 
     conn = _db()
     if not conn:
-        return {"insight": None, "ai": False}
+        raise HTTPException(503, "Flower Pot evidence or explanation is unavailable")
 
     cache_key = f"fpb_confluence:{date or 'latest'}"
-    if cache_key in _insight_cache:
-        return {"insight": _insight_cache[cache_key], "ai": True}
 
     try:
         # Get max date from km_scan_results if date not specified
@@ -3373,7 +3391,7 @@ def fpb_confluence_outlook(date: str = None):
             if date_rows and date_rows[0].get('max_date'):
                 date = date_rows[0]['max_date']
             else:
-                return {"insight": None, "ai": False}
+                raise HTTPException(503, "Flower Pot evidence or explanation is unavailable")
 
         # Get today and 5 days ago for Magic RS delta
         today_date = date
@@ -3389,14 +3407,14 @@ def fpb_confluence_outlook(date: str = None):
             five_days_ago_rs AS (
                 SELECT equity_id, magic_rs as rs_5d_ago
                 FROM km_equity_eod
-                WHERE trade_date = %s::date
+                WHERE trade_date = (SELECT trade_date FROM (SELECT DISTINCT trade_date FROM km_equity_eod WHERE trade_date < %s::date ORDER BY trade_date DESC LIMIT 5) sessions ORDER BY trade_date DESC OFFSET 4 LIMIT 1)
             ),
             coils AS (
                 SELECT
                     sr.equity_id,
                     s.symbol,
                     sr.fpb_compression_score,
-                    COALESCE(t.rs_today, 0) - COALESCE(f.rs_5d_ago, 0) as rs_5d_change
+                    t.rs_today - f.rs_5d_ago as rs_5d_change
                 FROM km_scan_results sr
                 JOIN km_equity_symbols s ON s.id = sr.equity_id
                 LEFT JOIN today_rs t ON t.equity_id = sr.equity_id
@@ -3406,10 +3424,10 @@ def fpb_confluence_outlook(date: str = None):
                 AND sr.fpb_tight_today = true
                 AND sr.trade_date = %s::date
             )
-            SELECT * FROM coils
-            ORDER BY rs_5d_change DESC
+            SELECT * FROM coils WHERE rs_5d_change > 0
+            ORDER BY rs_5d_change DESC, equity_id
             LIMIT 3
-        """, (today_date, five_days_ago, today_date))
+        """, (today_date, today_date, today_date))
         top_improving = improving_rows
 
         # Query for degrading RS
@@ -3422,14 +3440,14 @@ def fpb_confluence_outlook(date: str = None):
             five_days_ago_rs AS (
                 SELECT equity_id, magic_rs as rs_5d_ago
                 FROM km_equity_eod
-                WHERE trade_date = %s::date
+                WHERE trade_date = (SELECT trade_date FROM (SELECT DISTINCT trade_date FROM km_equity_eod WHERE trade_date < %s::date ORDER BY trade_date DESC LIMIT 5) sessions ORDER BY trade_date DESC OFFSET 4 LIMIT 1)
             ),
             coils AS (
                 SELECT
                     sr.equity_id,
                     s.symbol,
                     sr.fpb_compression_score,
-                    COALESCE(t.rs_today, 0) - COALESCE(f.rs_5d_ago, 0) as rs_5d_change
+                    t.rs_today - f.rs_5d_ago as rs_5d_change
                 FROM km_scan_results sr
                 JOIN km_equity_symbols s ON s.id = sr.equity_id
                 LEFT JOIN today_rs t ON t.equity_id = sr.equity_id
@@ -3439,37 +3457,36 @@ def fpb_confluence_outlook(date: str = None):
                 AND sr.fpb_tight_today = true
                 AND sr.trade_date = %s::date
             )
-            SELECT * FROM coils
-            ORDER BY rs_5d_change ASC
+            SELECT * FROM coils WHERE rs_5d_change < 0
+            ORDER BY rs_5d_change ASC, equity_id
             LIMIT 3
-        """, (today_date, five_days_ago, today_date))
+        """, (today_date, today_date, today_date))
         top_degrading = degrading_rows
     except Exception as e:
         logging.error(f"[fpb_confluence_outlook] query error: {e}")
-        return {"insight": None, "ai": False}
+        raise HTTPException(503, "Flower Pot evidence or explanation is unavailable")
 
-    if not top_improving and not top_degrading:
-        return {"insight": None, "ai": False}
 
+    groups = [{"key": "improving", "label": "Coils with improving RS", "equity_ids": [r["equity_id"] for r in top_improving]}, {"key": "weakening", "label": "Coils with weakening RS", "equity_ids": [r["equity_id"] for r in top_degrading]}]
     strong_list = ", ".join([
-        f"{c.get('symbol')} (Tightness {c.get('fpb_compression_score', 0):.1f}, RS +{c.get('rs_5d_change', 0):.1f}%)"
+        f"{c.get('symbol')} (RS change +{c['rs_5d_change']:.1f} points)"
         for c in top_improving
     ])
     weak_list = ", ".join([
-        f"{c.get('symbol')} (Tightness {c.get('fpb_compression_score', 0):.1f}, RS {c.get('rs_5d_change', 0):.1f}%)"
+        f"{c.get('symbol')} (RS change {c['rs_5d_change']:.1f} points)"
         for c in top_degrading
     ])
 
     user_msg = (
         f"Flower Pot Burst confluence analysis: "
-        f"Strongest (tight + improving RS): {strong_list}. "
-        f"At risk (tight + degrading RS): {weak_list}. "
+        f"Top three available coils with positive RS change over five trading sessions: {strong_list}. "
+        f"Top three available coils with negative RS change over five trading sessions: {weak_list}. "
         f"Explain the setup quality difference and what confluence means for risk."
     )
 
     skill = _VANI_INTENTS.get("fpb.coil_confluence_outlook")
     if not skill:
-        return {"insight": None, "ai": False}
+        raise HTTPException(503, "Flower Pot evidence or explanation is unavailable")
 
     # Qwen-first, matching /api/vani/ask. These four intents live in the
     # vani_intents.py registry with complexity='low', but were served
@@ -3477,7 +3494,10 @@ def fpb_confluence_outlook(date: str = None):
     # to False — so every Flower Pot answer came from the cloud provider
     # and never touched the local Qwen server. complete_with_source so a
     # caller can tell which backend actually answered.
-    insight, _provider = _ai_complete_src(
+    import hashlib
+    cache_key += ':' + hashlib.sha256((str(groups) + user_msg).encode()).hexdigest()
+    cached = _insight_cache.get(cache_key)
+    insight, _provider = (cached, 'cache') if cached else _ai_complete_src(
         system=skill.system_prompt,
         user=user_msg,
         max_tokens=skill.max_tokens,
@@ -3494,7 +3514,9 @@ def fpb_confluence_outlook(date: str = None):
             insight = None
     if insight:
         _insight_cache[cache_key] = insight
-    return {"insight": insight, "ai": insight is not None}
+    if not insight:
+        raise HTTPException(503, "VaNi could not prepare this explanation")
+    return {"date": date, "insight": insight, "ai": True, "groups": groups}
 
 
 @app.get('/api/pipeline2/ping')

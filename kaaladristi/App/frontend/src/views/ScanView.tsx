@@ -1,3 +1,4 @@
+import type {FpbGroup} from '@/hooks/useDashboardExtras';
 import {SCANNER_INTRODUCTIONS} from '@/constants/scannerIntroductions'
 import {useResearchProfile} from '@/hooks/useResearchProfile'
 import { useState, useMemo, useEffect, useRef } from 'react';
@@ -1058,7 +1059,11 @@ function FpbResults({ preset, timeframe, viewMode, onViewModeChange }: {
   onViewModeChange: (v: ViewMode) => void;
 }) {
   const navigate = useNavigate();
-  const [exchangeFilter, setExchangeFilter] = useState<ExchangeFilter>('combined');
+  const [fpbParams, setFpbParams] = useSearchParams();
+  const [cohort, setCohort] = useState<FpbGroup|null>(null);
+  const cohortRequested=fpbParams.has('fpb_group') && fpbParams.get('fpb_intent')!=='recent_outcomes';
+  const exchangeFilter:ExchangeFilter=fpbParams.get('exchange')==='NSE'?'NSE':fpbParams.get('exchange')==='BSE'?'BSE':'combined';
+  const setExchangeFilter=(value:ExchangeFilter)=>{const next=new URLSearchParams(fpbParams);next.set('exchange',value);setFpbParams(next)};
   const [filters, setFilters] = useState<ScanFilters>(FPB_DEFAULT_FILTERS);
   const [vaniOnly, setVaniOnly] = useState(false);
   const [tightOnly, setTightOnly] = useState(false);
@@ -1067,7 +1072,7 @@ function FpbResults({ preset, timeframe, viewMode, onViewModeChange }: {
   // Two stages on purpose: the stat tiles read `baseFiltered` so the "Tight
   // today" tile keeps showing its own count while it is the active filter —
   // a tile that zeroes itself the moment you click it is unreadable.
-  const baseFiltered = useMemo(() => applyFilters(rawStocks, filters), [rawStocks, filters]);
+  const baseFiltered = useMemo(() => applyFilters(cohortRequested ? rawStocks.filter(s=>cohort?.equity_ids.includes(s.equity_id)) : rawStocks, filters), [rawStocks, filters, cohortRequested, cohort]);
   const filtered = useMemo(
     // Releases are events, not coils — they stay visible under the toggle.
     () => (tightOnly ? baseFiltered.filter((s) => s.fpb_phase !== 'SETUP' || s.fpb_tight_today === true) : baseFiltered),
@@ -1166,7 +1171,14 @@ function FpbResults({ preset, timeframe, viewMode, onViewModeChange }: {
       {/* The four fpb.* VaNi intents. Built end to end (intent, endpoint,
           hook) but never rendered, so the page had no VaNi at all while
           every Studio preset carried its own card. */}
-      <FpbVaNiCard symbols={rawStocks.map(stock=>stock.symbol)} />
+      <FpbVaNiCard symbols={rawStocks.map(stock=>stock.symbol)} sessionDate={rawStocks[0]?.trade_date} onCohort={setCohort} />
+      <div id="fpb-results" style={{scrollMarginTop:24}}>
+        {cohortRequested && <Card className="p-4 mb-4"><strong>{cohort?.label??'Selected Flower Pot stocks'}</strong>
+          {cohort && <p>Showing {bursts.length+shatters.length+setups.length} of {cohort.equity_ids.length} stocks. Exchange and table filters still apply; some stocks may be outside the current scan.</p>}
+          <button className="sector-question" onClick={()=>{setFilters(FPB_DEFAULT_FILTERS);setTightOnly(false);setVaniOnly(false);setExchangeFilter('combined')}}>Show across exchanges and clear table filters</button>
+          <button className="sector-question" onClick={()=>{const next=new URLSearchParams(fpbParams);next.delete('fpb_group');next.delete('fpb_asof');setFpbParams(next)}}>Clear selection ×</button>
+        </Card>}
+      </div>
 
       {/* Day-2 position layer — recent releases + hold/crack verdict + SL/target.
           Renders only once km_fpb_active (migration 156) is populated. */}
