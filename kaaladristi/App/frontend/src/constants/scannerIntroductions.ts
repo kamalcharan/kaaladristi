@@ -1,7 +1,7 @@
 /** Reviewed educational copy. Shipped with the app: no LLM request or time expiry.
  * Increment the version whenever these explanations or their underlying rules change.
  * Golden Line scanners are deliberately excluded from this first release. */
-export const SCANNER_INTRODUCTION_VERSION = 1
+export const SCANNER_INTRODUCTION_VERSION = 2
 export interface ScannerIntroductionCopy {name:string;story:string;read:string;caution:string;signals:{title:string;text:string}[]}
 const score = {title:'5D and 22D scores',text:'Read the recent score alongside the broader baseline. A stronger recent reading can help you spot a difference between the two horizons; it does not prove improvement since yesterday. These are research scores, not measured investor inflows.'}
 const rs = {title:'MagicRS',text:'MagicRS adds relative-strength context against NIFTY 500. A stock can rise yet lag the benchmark, or fall while holding up better than it. Read the displayed zone alongside the price move; relative strength is not a forecast.'}
