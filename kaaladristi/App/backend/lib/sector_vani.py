@@ -2,11 +2,11 @@
 import hashlib
 import json
 import time
-from datetime import date
+from datetime import date, timedelta
 from .market_structure_vani import number, single_flight, ReadingInProgress
 from .vani_cache import make_cache_key, get_cached, set_cached
 
-VERSION = 6
+VERSION = 7
 CATEGORIES = {
     'broad': ['index', 'broad market index'], 'sectoral': ['sectoral index'],
     'thematic': ['thematic market index'], 'custom': ['custom'], 'overall': ['sectoral index', 'custom'],
@@ -61,6 +61,22 @@ def row_facts(row, previous=None):
     return facts
 
 
+def breadth_regime(rows, target):
+    # Match indexBreadth's 404-calendar-day history and strict-below tie rule.
+    cutoff = (date.fromisoformat(target) - timedelta(days=404)).isoformat()
+    rows = sorted([r for r in rows if cutoff <= str(r['trade_date'])[:10] <= target], key=lambda r: str(r['trade_date']))
+    current = next((r for r in reversed(rows) if str(r['trade_date'])[:10] == target), None)
+    score = number(current.get('breadth_score')) if current else None
+    if score is None:
+        return {'zone': 'Unavailable', 'basis': 'unavailable', 'score': None}
+    mode = 'absolute' if len(rows) < 126 else 'provisional' if len(rows) < 252 else 'percentile'
+    scores = [number(r.get('breadth_score')) for r in rows]
+    scores = [s for s in scores if s is not None]
+    rank = sum(s < score for s in scores) / len(scores) if scores else None
+    zone = ('Greed' if score > 55 else 'Fear' if score < 35 else 'Neutral') if mode == 'absolute' else ('Greed' if rank >= .7 else 'Fear' if rank <= .3 else 'Neutral')
+    return {'zone': zone, 'basis': mode, 'score': score, 'rank': rank, 'history_count': len(rows)}
+
+
 def load_context(req, db):
     overall = req.intent_id in ('sector.overview', 'sector.pulse.context')
     category = 'overall' if overall else getattr(req, 'sector_category', 'sectoral')
@@ -108,6 +124,7 @@ def load_context(req, db):
         facts.append(f'Selected index session row: {"available" if current else "unavailable"}. Index history and constituent readings are separate populations.')
     else:
         facts.append(f'{len(current)} of {len(ids)} indices have a row for the selected session. Flow states: {states}.')
+    index_start = len(facts)
     ordered = sorted(current, key=lambda r: number(r.get('score_5d')) or 0, reverse=True)
     for row in ordered[:8]:
         series = [r for r in history if r['index_id'] == row['index_id']]
@@ -117,7 +134,10 @@ def load_context(req, db):
         facts.append(f'Index flow classification unavailable on {sum(flow_state(r)=="Unavailable" for r in series)} of {len(series)} recorded sessions. The requested window may exceed the available history; do not count that difference as missing sessions.')
     if len(ordered) > 8:
         facts.append('Named examples are the eight highest available Flow 5D scores; the counts above cover the full selected category.')
+    index_end = len(facts)
+    participation_end = index_end
     constituents, breadth = [], []
+    zone = None
     if index_id:
         constituents = db.execute('''SELECT s.id, s.symbol, s.company_name, e.pct_chng,
             e.score_5d, e.score_22d, e.avg_amt_5d, e.avg_amt_22d, e.ret_5d, e.flow_type
@@ -130,22 +150,50 @@ def load_context(req, db):
         available = [r for r in constituents if number(r.get('pct_chng')) is not None]
         positive = [r for r in constituents if (number(r.get('score_5d')) or 0) > 0]
         facts.append(f'{len(available)} of {len(constituents)} constituents have session price-change data; {sum(number(r["pct_chng"]) > 0 for r in available)} advanced in that session.')
-        facts.append('Constituent flow states: ' + str({s: sum(flow_state(r,28)==s for r in constituents) for s in states}))
+        facts.append('Constituent flow states: ' + ', '.join(f'{sum(flow_state(r,28)==s for r in constituents)} {s}' for s in states if any(flow_state(r,28)==s for r in constituents)) + '.')
         if positive:
             top = max(positive, key=lambda r: number(r['score_5d']))
             share = number(top['score_5d']) / sum(number(r['score_5d']) for r in positive) * 100
             facts.append(f"{top['symbol']} accounts for {share:.1f}% of summed positive constituent Flow 5D scores. This is score concentration, not its contribution to the index price return. Concentration threshold: 60%; {'MET' if share >= 60 else 'NOT MET'}.")
+        participation_end = len(facts)
         if len(constituents) < 5:
             facts.append('Fewer than five constituents: breadth and ROC are suppressed.')
         elif breadth:
             b = breadth[0]
+            zone_history = db.execute('SELECT trade_date,breadth_score FROM km_index_breadth WHERE index_id=%s AND trade_date >= %s AND trade_date <= %s ORDER BY trade_date', (index_id, (date.fromisoformat(target)-timedelta(days=404)).isoformat(), target))
+            zone = breadth_regime(zone_history, target)
+            if zone['basis'] == 'absolute':
+                facts.append(f"Index breadth score {zone['score']:.2f}: {zone['zone']} under fixed thresholds (Greed above 55, Fear below 35).")
+            elif zone['basis'] != 'unavailable':
+                facts.append(f"Index breadth score {zone['score']:.2f}: {zone['zone']} relative to its own history; {zone['rank']*100:.1f}% of {zone['history_count']} recorded scores were lower. Greed starts at 70%, Fear at or below 30%. Basis: {zone['basis']}.")
+            else:
+                facts.append('Index breadth zone is unavailable for this session.')
+            if zone['zone'] == 'Greed':
+                facts.append('Greed adds caution alongside positive flow. It does not establish a reversal, overvaluation or investor sentiment. Compare recent flow change and momentum before describing strength as reassuring.')
+            facts.append('Breadth zones describe constituent participation, not a direct measurement of investor emotion.')
+            if len(constituents) <= 7:
+                facts.append(f'Small sample: {len(constituents)} constituents. One stock crossing an average can noticeably change breadth.')
             facts.append(f"Breadth on {target}: above 20 EMA={b['pct_above_20']}%, above 50 SMA={b['pct_above_50']}%, above 150 SMA={b['pct_above_150']}%. Recorded sample={b['stock_count']}.")
             fast, signal = number(b['roc_13']), number(b['sma_breadth'])
             if fast is not None and signal is not None:
                 facts.append(f"ROC 13 is {'positive' if fast > 0 else 'negative' if fast < 0 else 'zero'} and {'ABOVE' if fast > signal else 'BELOW' if fast < signal else 'EQUAL TO'} its five-session signal.")
         else:
             facts.append('Precomputed breadth is unavailable for this session. Do not infer a breadth reading.')
-    evidence = {'date': target, 'period': period, 'category': category, 'index_id': index_id,
+    def readable(items):
+        replacements = {
+            'These are totals across the window, NOT consecutive runs.': 'These totals do not describe a continuous streak.',
+            'The requested window may exceed the available history; do not count that difference as missing sessions.': 'Available history can be shorter than the selected window.',
+            'This does not establish acceleration since yesterday.': 'This compares two horizons; the previous-session change is shown separately.',
+            'Greed adds caution alongside positive flow. It does not establish a reversal, overvaluation or investor sentiment. Compare recent flow change and momentum before describing strength as reassuring.': 'Greed adds caution alongside positive flow. It does not establish a reversal. Read it together with the recent flow change and momentum.',
+        }
+        return [next((item.replace(a,z) for a,z in replacements.items() if a in item),item) for item in items]
+    sections = [
+        {'title':'Index flow and history', 'items':readable(facts[index_start:index_end])},
+        {'title':'Stocks participating', 'items':readable(facts[index_end:participation_end])},
+        {'title':'Breadth and momentum', 'items':readable(facts[participation_end:])},
+        {'title':'Coverage and method', 'items':[facts[0], facts[1], facts[2]]},
+    ] if index_id else []
+    evidence = {'evidence_sections':sections, 'breadth_zone':zone, 'date': target, 'period': period, 'category': category, 'index_id': index_id,
                 'history': history, 'constituents': constituents, 'breadth': breadth, 'facts': facts}
     digest = hashlib.sha256(json.dumps(evidence, sort_keys=True, default=str).encode()).hexdigest()
     result = {**evidence, 'snapshot': digest, 'rows': ordered, 'counts': states, 'index_count': len(ids)}
@@ -161,6 +209,7 @@ def detail_style(depth):
               'A positive reading can be weaker than the previous session; preserve both facts. '
               'Only call momentum slowing relative to its signal, not falling since yesterday without that evidence. '
               'Keep the raw figures in the evidence panel; use only figures essential to explain the answer. '
+              'Use the supplied breadth zone and its basis; never infer Greed from the raw score when percentile mode applies. When Greed and positive flow coexist, include that caution even in the concise answer, without predicting a reversal. Fear is not a buy signal. '
               'Never describe Strong on N sessions as Strong for N sessions. Do not invent a current streak. ')
     return shared + {
         'brief': 'CONCISE: Two or three short sentences, at most 60 words. Give the main takeaway and its main qualification. At most two supporting figures. No jargon, tables or lists of indicators.',

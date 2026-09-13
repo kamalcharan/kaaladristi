@@ -86,3 +86,12 @@
 .vani-consulting-avatar::after { content: ''; position: absolute; inset: -4px; border: 2px solid var(--gold-soft); border-radius: 50%; animation: vani-halo 1.8s ease-in-out infinite; pointer-events: none; }
 @keyframes vani-halo { 0%,100% { opacity: .25; transform: scale(1); } 50% { opacity: .8; transform: scale(1.08); } }
 @media (prefers-reduced-motion: reduce) { .vani-consulting-avatar::after { animation: none; opacity: .5; } }
+
+.vani-evidence-sections { display: grid; gap: 12px; margin-top: 16px; }
+.vani-evidence-sections section { padding: 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--card-soft); }
+.vani-evidence-sections h4 { font-size: 12px; font-weight: 600; margin: 0 0 8px; }
+.vani-evidence-sections ul { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; }
+.vani-evidence-sections li { font-size: 12px; line-height: 1.9; color: var(--text-secondary); overflow-wrap: anywhere; }
+.vani-evidence-value { background: color-mix(in srgb, var(--accent) 12%, var(--card)); color: var(--text-primary); border-radius: 4px; padding: 1px 3px; font-variant-numeric: tabular-nums; }
+.vani-evidence-stock { background: color-mix(in srgb, var(--gold-soft) 20%, var(--card)); color: var(--text-primary); border-radius: 4px; padding: 2px 4px; }
+.vani-evidence-caution { border-left: 3px solid var(--risk-amber); padding: 8px 10px; background: color-mix(in srgb, var(--risk-amber) 10%, var(--card)); color: var(--text-primary); border-radius: 4px; }

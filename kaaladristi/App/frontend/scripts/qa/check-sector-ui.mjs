@@ -60,7 +60,7 @@ try {
         }
         const pulse=body.intent_id==='sector.pulse.context';
         if(pulse) { body.date='2026-09-11'; body.sector_period=22; }
-        const data=(pulse || body.intent_id==='sector.context') ? {intent_views:body.entity_id?undefined:currentViews,snapshot:`${body.date}-${body.sector_period}`,date:body.date,facts:['Synthetic fixture: 5 constituents.'],period:22,index_count:2,rows:indices.filter(r=>r.trade_date===body.date),history:indices.filter(r=>r.trade_date<=body.date)} : {response:'Near-term flow is above its underlying baseline. Check participation across the constituents.',cached:true,log_id:'qa'};
+        const data=(pulse || body.intent_id==='sector.context') ? {intent_views:body.entity_id?undefined:currentViews,snapshot:`${body.date}-${body.sector_period}`,date:body.date,facts:['Synthetic fixture: 5 constituents.'],constituents:[{symbol:'STOCK1'}],evidence_sections:[{title:'Stocks participating',items:['STOCK1 accounts for 46.3% of positive flow scores.']},{title:'Breadth and momentum',items:['Greed adds caution alongside positive flow.']}],period:22,index_count:2,rows:indices.filter(r=>r.trade_date===body.date),history:indices.filter(r=>r.trade_date<=body.date)} : {response:'Near-term flow is above its underlying baseline. Check participation across the constituents.',cached:true,log_id:'qa'};
         return route.fulfill({json:data});
       }
       return route.fulfill({json:{}});
@@ -197,6 +197,15 @@ try {
     await page.getByRole('heading',{name:'Index breadth',exact:true}).waitFor();
     await page.getByRole('heading',{name:'Index breadth momentum (ROC)',exact:true}).waitFor();
     assert.equal(await page.getByText('5+ stocks analyzed',{exact:true}).count(),0,'Index count must be exact');
+    const evidenceSurface=width<1280?page.getByRole('dialog'):page.getByRole('complementary').first();
+    if(width<1280) await page.getByRole('button',{name:'Help me read this page',exact:true}).first().click();
+    await evidenceSurface.locator('details[data-vani-detail="evidence"] > summary').click();
+    await evidenceSurface.locator('.vani-evidence-stock').getByText('STOCK1',{exact:true}).waitFor();
+    await evidenceSurface.locator('mark').getByText('46.3%',{exact:true}).waitFor();
+    await evidenceSurface.locator('.vani-evidence-caution').waitFor();
+    await evidenceSurface.locator('.vani-evidence-sections').scrollIntoViewIfNeeded();
+    await page.screenshot({path:path.join(out,`sector-evidence-${mode}-${width}.png`),fullPage:false});
+    if(width<1280) await evidenceSurface.getByRole('button',{name:'Close',exact:true}).click();
     await noOverflow(`detail ${width}`);
     if(width<1280) {
       await page.getByRole('button',{name:'Help me read this page',exact:true}).first().click();

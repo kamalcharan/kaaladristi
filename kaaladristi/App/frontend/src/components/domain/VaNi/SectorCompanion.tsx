@@ -1,3 +1,4 @@
+import SectorEvidence, {type EvidenceSection} from './SectorEvidence';
 import SectorIntentStory, {SectorLearningStory, type SectorIntentView} from './SectorIntentStory';
 import { useVaniAnalytics } from '@/hooks/useVaniAnalytics';
 import { trackVani } from '@/lib/vaniAnalytics';
@@ -31,6 +32,7 @@ const MAIN_INTENTS = new Set(['sector.overview','sector.entering','sector.fading
 type Intent = keyof typeof intents;
 interface Response {
   response?: string; error?: string; pending?: boolean; context_changed?: boolean; log_id?: string;
+  evidence_sections?: EvidenceSection[]; constituents?: {symbol:string}[];
   facts?: string[]; snapshot?: string; date?: string;
   intent_views?: Record<string,SectorIntentView>;
   period?: number; history?: SectorIndexRow[]; rows?: SectorIndexRow[]; index_count?: number;
@@ -65,12 +67,12 @@ function CurrentSectorCompanion() {
     sector_category: overview ? 'overall' : context.category, sector_period: overview ? 22 : context.period };
   const identity = JSON.stringify([pathname, overview ? 'overall' : [context.date, context.category, context.period]]);
   const evidence = useQuery({
-    queryKey: ['sector-vani-context', 6, identity], enabled: context.scope === pathname && !!context.date,
+    queryKey: ['sector-vani-context', 7, identity], enabled: context.scope === pathname && !!context.date,
     staleTime: 60_000, retry: false,
     queryFn: async () => { const r: Response = overview ? await fetchSectorPulseContext() : await ask({ ...selected, intent_id: 'sector.context' }); if (r.error) throw new Error(r.error); return r; },
   });
   const reading = useQuery({
-    queryKey: ['vani', 'sector', 6, user, intent, depth, staticIntent ? 'static' : evidence.data?.snapshot],
+    queryKey: ['vani', 'sector', 7, user, intent, depth, staticIntent ? 'static' : evidence.data?.snapshot],
     enabled: staticIntent || (!!evidence.data?.snapshot && context.scope === pathname),
     staleTime: 30 * 60_000, retry: false,
     refetchInterval: query => query.state.data?.pending ? 1500 : false,
@@ -124,7 +126,7 @@ function CurrentSectorCompanion() {
         <Tooltip labelFormatter={v => sectorSessionDate(String(v))} contentStyle={{ background:'var(--card)',borderColor:'var(--border)' }} />
         <Line dataKey="score_5d" name="Flow 5D" stroke="var(--accent)" dot={false}/><Line dataKey="score_22d" name="Flow 22D" stroke="var(--text-primary)" strokeDasharray="4 3" dot={false}/>
       </LineChart></ResponsiveContainer></div>}
-      {evidence.data.facts?.map((fact,i)=><p key={i} className="text-xs leading-6 mt-2 text-muted">{fact}</p>)}
+      <SectorEvidence sections={evidence.data.evidence_sections ?? [{title:"Selected evidence",items:evidence.data.facts ?? []}]} symbols={evidence.data.constituents?.map(r=>r.symbol) ?? []} />
     </details>}
     {(indexId||overview||staticIntent||story)&&evidence.data?.rows && <SectorPersonalConnections sourceKey={evidence.data.snapshot} date={evidence.data.date} sectors={personalRows.map(r=>{const signal=sectorSignal(r);return {id:r.index_id,name:r.name,reading:signal?SECTOR_FLOW_LABEL[signal]:'Unavailable'}})}/>}
     {overview && <details data-vani-detail="intents"><summary className="text-xs cursor-pointer min-h-11">Explore another question</summary>    <div className="flex flex-wrap gap-2" aria-label="Sector questions">{Object.entries(intents).filter(([id]) => indexId ? ['sector.read','sector.compare','sector.persistence','sector.participation'].includes(id) : MAIN_INTENTS.has(id)).map(([id, label]) =>

@@ -79,13 +79,43 @@ class SectorContracts(unittest.TestCase):
             self.assertIn('never invent a missing-session count',prompt)
             self.assertIn('not consecutive runs',prompt)
 
+    def test_breadth_absolute_boundaries_and_unavailable(self):
+        for score, expected in [(62,'Greed'),(55,'Neutral'),(35,'Neutral'),(34,'Fear'),(None,'Unavailable')]:
+            zone=sector.breadth_regime([{'trade_date':'2026-09-10','breadth_score':score}], '2026-09-10')
+            self.assertEqual(zone['zone'],expected)
+
+    def test_breadth_percentile_can_be_neutral_at_62(self):
+        from datetime import date, timedelta
+        target=date(2026,9,10)
+        rows=[{'trade_date':str(target-timedelta(days=i)), 'breadth_score':62 if i==0 else 50 if i<64 else 80} for i in range(126)]
+        zone=sector.breadth_regime(rows,str(target))
+        self.assertEqual(zone['zone'],'Neutral')
+        self.assertEqual(zone['basis'],'provisional')
+        rows.append({'trade_date':'2026-09-11','breadth_score':0})
+        self.assertEqual(zone,sector.breadth_regime(rows,str(target)), 'Future sessions must not affect historical zones')
+
+    def test_greed_is_passed_to_narrative_and_readable_evidence(self):
+        class GreedDatabase(Database):
+            def execute(self,sql,params=None):
+                rows=super().execute(sql,params)
+                if 'FROM km_index_breadth' in sql:
+                    for row in rows: row['breadth_score']=62
+                return rows
+        ctx=sector.load_context(request(),GreedDatabase())
+        self.assertEqual(ctx['breadth_zone']['zone'],'Greed')
+        self.assertIn('Greed adds caution', ' '.join(ctx['facts']))
+        self.assertEqual(len(ctx['evidence_sections']),4)
+        self.assertIn('Stocks participating',[s['title'] for s in ctx['evidence_sections']])
+        self.assertNotIn("{'Strong':",' '.join(ctx['facts']))
+        self.assertIn('include that caution even in the concise answer', sector.detail_style('brief'))
+
     def test_all_reads_bound_to_selected_date(self):
         db=Database(); sector.load_context(request(),db)
         history=next((sql,p) for sql,p in db.calls if 'row_number()' in sql)
         self.assertIn('trade_date <= %s',history[0]); self.assertEqual(history[1][1],'2026-09-10')
         for sql,p in db.calls:
             if 'JOIN km_equity_symbols' in sql: self.assertEqual(p[0],'2026-09-10')
-            if 'FROM km_index_breadth' in sql: self.assertEqual(p[1],'2026-09-10')
+            if 'FROM km_index_breadth' in sql: self.assertEqual(p[-1],'2026-09-10')
     def test_same_session_correction_invalidates_snapshot(self):
         db=Database(); before=sector.load_context(request(),db)['snapshot']
         db.fast=21

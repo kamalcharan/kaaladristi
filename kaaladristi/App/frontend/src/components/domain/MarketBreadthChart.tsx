@@ -134,7 +134,7 @@ function EmaStat({ label, value, prev }: { label: string; value: number | null; 
 
 // ── Custom tooltip ────────────────────────────────────────────────────────────
 
-function BreadthTooltip({ active, payload, ma, researchMode }: any) {
+function BreadthTooltip({ active, payload, ma, researchMode, relative }: any) {
   if (!active || !payload?.length) return null;
   const d = payload[0]?.payload as MarketBreadthDay;
   if (!d) return null;
@@ -144,7 +144,7 @@ function BreadthTooltip({ active, payload, ma, researchMode }: any) {
       <div className="font-bold text-[var(--text-primary)] mb-2">{fmtDate(d.trade_date)}</div>
       <div className="flex justify-between gap-4 mb-1">
         <span className="text-muted">Score</span>
-        <span className={cn('font-bold mono', researchMode ? 'text-[var(--text-primary)]' : r.color)}>{d.breadth_score?.toFixed(1)} ({r.label})</span>
+        <span className={cn('font-bold mono', researchMode || relative ? 'text-[var(--text-primary)]' : r.color)}>{d.breadth_score?.toFixed(1)} {relative ? '' : `(${r.label})`}</span>
       </div>
       <div className="flex justify-between gap-4 mb-0.5">
         <span className="text-muted">Above {ma.m20}</span>
@@ -218,6 +218,7 @@ export default function MarketBreadthChart({
     ? resolveRegime(latest.breadth_score, zoneMode, percentileRank)
     : null;
 
+  const relative = (zoneMode === 'percentile' || zoneMode === 'provisional') && percentileRank != null;
   const title = indexName ? 'Index breadth' : 'Market Breadth';
 
   return (
@@ -325,11 +326,13 @@ export default function MarketBreadthChart({
               </linearGradient>
             </defs>
 
-            {/* Regime background zones */}
+            {/* Fixed score zones apply only to absolute classification. */}
+            {!relative && <>
             <ReferenceArea y1={GREED_THRESHOLD} y2={100} fill={researchMode ? 'var(--text-muted)' : 'var(--bear)'} fillOpacity={0.06} />
             <ReferenceArea y1={FEAR_THRESHOLD}  y2={GREED_THRESHOLD} fill={researchMode ? 'var(--text-muted)' : 'var(--caution)'} fillOpacity={0.06} />
             <ReferenceArea y1={0}               y2={FEAR_THRESHOLD}  fill={researchMode ? 'var(--text-muted)' : 'var(--bull)'} fillOpacity={0.06} />
 
+            </>}
             <XAxis
               dataKey="trade_date"
               tickFormatter={fmtDate}
@@ -346,6 +349,7 @@ export default function MarketBreadthChart({
             />
 
             {/* Threshold reference lines */}
+            {!relative && <>
             <ReferenceLine
               y={GREED_THRESHOLD}
               stroke={researchMode ? 'var(--text-muted)' : 'var(--bear)'}
@@ -361,7 +365,8 @@ export default function MarketBreadthChart({
               label={{ value: `Fear ${FEAR_THRESHOLD}`, position: 'right', fontSize: 9, fill: researchMode ? 'var(--text-muted)' : 'var(--bull)' }}
             />
 
-            <Tooltip content={<BreadthTooltip ma={ma} researchMode={researchMode} />} />
+            </>}
+            <Tooltip content={<BreadthTooltip ma={ma} researchMode={researchMode} relative={relative} />} />
 
             <Area
               dataKey="breadth_score"
@@ -376,7 +381,9 @@ export default function MarketBreadthChart({
       )}
 
       {/* ── Legend ── */}
-      {!tooSmall && (
+      {!tooSmall && <p className="text-xs text-muted mt-3">{relative ? `Zone uses this index’s own history: ${(percentileRank! * 100).toFixed(0)}% of recorded scores were lower. Greed ≥70%; Fear ≤30%.${zoneMode==='provisional'?' Provisional: fewer than 252 readings.':''}` : 'Zone uses fixed breadth-score thresholds: Greed >55; Fear <35.'}</p>}
+      {!tooSmall && r?.label.startsWith('Greed') && <p className="vani-evidence-caution text-xs mt-2">Greed is a caution context alongside flow strength, not a reversal signal.</p>}
+      {!tooSmall && !relative && (
         <div className="flex items-center justify-center gap-5 mt-2">
           {[
             { color: 'bg-risk-red',   label: `Greed (>${GREED_THRESHOLD})` },
