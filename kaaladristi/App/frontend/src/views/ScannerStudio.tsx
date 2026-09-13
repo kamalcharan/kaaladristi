@@ -20,6 +20,9 @@ import ScanVaNiPublisher from '@/components/domain/ScanVaNiPublisher'
 import ScanStalenessBanner from '@/components/domain/ScanStalenessBanner'
 import AtmosphericBadge from '@/components/domain/AtmosphericBadge'
 import { DristiQLoader } from '@/components/ui'
+import VaNiBrand,{VaNiConsulting,VaNiDepthSelector} from '@/components/domain/VaNi/VaNiBrand'
+import ScannerIntentEvidence from '@/components/domain/VaNi/ScannerIntentEvidence'
+import '@/styles/sectorResearch.css'
 import VaNiFeedback from '@/components/domain/VaNi/VaNiFeedback'
 import { useVaNiAsk } from '@/hooks/useVaNiChat'
 import { useIndustryLeadershipMap } from '@/hooks/useIndustryRotation'
@@ -355,6 +358,7 @@ export default function ScannerStudio({ presetId }: { presetId: string }) {
               question row). ── */}
           {meta && (
             <ScannerVaNiCard
+              key={presetId==='breakout_surge'?JSON.stringify([presetId,dataDate,exchangeFilter,all,sectorLeading?.facts,newSinceYesterday?.facts,rsFlip?.facts,isUnusual]):undefined}
               presetId={presetId}
               descriptor={d}
               meta={meta}
@@ -504,7 +508,7 @@ function intentsOrdered(d: StudioDescriptor): { key: ScannerIntentKey; question:
   return all.filter((i): i is { key: ScannerIntentKey; question: string } => i.question != null)
 }
 
-function ScannerVaNiCard({
+export function ScannerVaNiCard({
   presetId, descriptor, meta, allStocks, dataDate, exchangeFilter, scanIntent, onSelectIntent,
   sectorLeadingReady, sectorLeadingFacts, newSinceYesterdayFacts, rsFlipFacts, isUnusualFacts,
 }: {
@@ -533,6 +537,8 @@ function ScannerVaNiCard({
   rsFlipFacts: RsFlipFacts | null
   isUnusualFacts: IsUnusualFacts | null
 }) {
+  const branded=presetId==='breakout_surge'
+  const [depth,setDepth]=useState<'brief'|'simple'|'detailed'>('brief')
   // One useVaNiAsk() instance per intent so switching pills never refetches
   // or loses a sibling intent's already-fetched answer.
   const momentumGapMutation = useVaNiAsk()
@@ -561,15 +567,16 @@ function ScannerVaNiCard({
     is_unusual: !!isUnusualFacts,
   }
 
-  const askIntent = (key: ScannerIntentKey) => {
-    onSelectIntent(key)
+  const askIntent = (key: ScannerIntentKey, nextDepth=depth, select=true, force=false) => {
+    if(select) onSelectIntent(key)
     const mutation = mutationByIntent[key]
-    if (!dataDate || mutation.data || mutation.isPending) return
+    if (!dataDate || (!force && ((mutation.data && (!branded || mutation.variables?.explanation_depth===nextDepth)) || mutation.isPending))) return
     if (key === 'momentum_gap') {
       const facts = computeMomentumGapFacts(allStocks, descriptor.pace, descriptor.gapOf)
       mutation.mutate({
         intent_id: 'scanner.momentum_gap', preset_id: presetId, data_date: dataDate,
         timeframe: 'daily', exchange: exchangeFilter,
+        ...(branded?{date:dataDate,explanation_depth:nextDepth}:{}),
         momentum_gap_facts: {
           count: facts.count, avg_gap: facts.avgGap,
           examples: facts.examples.map((e) => ({ symbol: e.symbol, gap: e.gap, score_5d: e.score5d, score_22d: e.score22d })),
@@ -580,6 +587,7 @@ function ScannerVaNiCard({
       mutation.mutate({
         intent_id: 'scanner.leading_industry', preset_id: presetId, data_date: dataDate,
         timeframe: 'daily', exchange: exchangeFilter,
+        ...(branded?{date:dataDate,explanation_depth:nextDepth}:{}),
         leading_industry_facts: facts ? {
           name: facts.name, count: facts.count, total_count: facts.totalCount,
           runner_up: facts.runnerUp ? { name: facts.runnerUp.name, count: facts.runnerUp.count } : null,
@@ -591,12 +599,14 @@ function ScannerVaNiCard({
       mutation.mutate({
         intent_id: descriptor.highlight.intentId, preset_id: presetId, data_date: dataDate,
         timeframe: 'daily', exchange: exchangeFilter,
+        ...(branded?{date:dataDate,explanation_depth:nextDepth}:{}),
         ...descriptor.highlight.payload(allStocks),
       })
     } else if (key === 'sector_leading' && sectorLeadingFacts) {
       mutation.mutate({
         intent_id: 'scanner.sector_leading', preset_id: presetId, data_date: dataDate,
         timeframe: 'daily', exchange: exchangeFilter,
+        ...(branded?{date:dataDate,explanation_depth:nextDepth}:{}),
         sector_leading_facts: {
           count: sectorLeadingFacts.count,
           industries: sectorLeadingFacts.industries.map((i) => ({ name: i.name, count: i.count })),
@@ -606,6 +616,7 @@ function ScannerVaNiCard({
       mutation.mutate({
         intent_id: 'scanner.new_since_yesterday', preset_id: presetId, data_date: dataDate,
         timeframe: 'daily', exchange: exchangeFilter,
+        ...(branded?{date:dataDate,explanation_depth:nextDepth}:{}),
         new_since_yesterday_facts: {
           count: newSinceYesterdayFacts.count,
           prior_date: newSinceYesterdayFacts.priorDate,
@@ -616,6 +627,7 @@ function ScannerVaNiCard({
       mutation.mutate({
         intent_id: 'scanner.rs_flip', preset_id: presetId, data_date: dataDate,
         timeframe: 'daily', exchange: exchangeFilter,
+        ...(branded?{date:dataDate,explanation_depth:nextDepth}:{}),
         rs_flip_facts: {
           count: rsFlipFacts.count,
           prior_date: rsFlipFacts.priorDate,
@@ -626,6 +638,7 @@ function ScannerVaNiCard({
       mutation.mutate({
         intent_id: 'scanner.is_unusual', preset_id: presetId, data_date: dataDate,
         timeframe: 'daily', exchange: exchangeFilter,
+        ...(branded?{date:dataDate,explanation_depth:nextDepth}:{}),
         is_unusual_facts: {
           today_count: isUnusualFacts.todayCount,
           avg_count: isUnusualFacts.avgCount,
@@ -635,6 +648,7 @@ function ScannerVaNiCard({
     }
   }
 
+  useEffect(()=>{if(branded && scanIntent) askIntent(scanIntent,depth,false)},[])
   const active = scanIntent ? mutationByIntent[scanIntent] : null
   // Floors the spinner at MIN_VANI_LOADING_MS so a cache hit doesn't pop
   // content in instantly while a live LLM call visibly takes longer — see
@@ -670,20 +684,22 @@ function ScannerVaNiCard({
   return (
     <div
       className="rounded-lg overflow-hidden border border-accent-indigo/20 bg-[var(--kd-card)]"
+      role="region" aria-label="Scanner VaNi"
       style={{ marginBottom: 18 }}
     >
-      <div className="flex items-center gap-1.5 px-3 py-1.5 bg-accent-indigo/[0.13] border-b border-accent-indigo/25">
+      {branded?<div className="p-4 border-b border-[var(--border)]"><VaNiBrand size={48} subtitle={<>Breakout Surge · {dataDate} · daily · {exchangeFilter}</>}/></div>:<div className="flex items-center gap-1.5 px-3 py-1.5 bg-accent-indigo/[0.13] border-b border-accent-indigo/25">
         <span className="w-[15px] h-[15px] rounded-[4px] bg-accent-indigo flex items-center justify-center shrink-0">
           <span className="text-white text-[8px] leading-none select-none">✦</span>
         </span>
         <span className="text-[9px] font-black uppercase tracking-[0.16em] text-accent-indigo">VaNi</span>
         <span className="text-[8px] text-accent-indigo/60 tracking-wide">वाणी</span>
-      </div>
+      </div>}
       <div className="px-3 py-2.5">
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: scanIntent ? 10 : 0 }}>
           {visibleIntents.map((it) => (
             <button
               key={it.key}
+              aria-pressed={scanIntent===it.key}
               onClick={() => askIntent(it.key)}
               style={scanIntent === it.key ? activePillStyle : pillStyle}
             >
@@ -691,22 +707,24 @@ function ScannerVaNiCard({
             </button>
           ))}
         </div>
+        {branded && scanIntent && <div className="my-4 max-w-lg"><VaNiDepthSelector value={depth} onChange={value=>{const next=value as typeof depth;setDepth(next);askIntent(scanIntent,next,false,true)}}/></div>}
         {!scanIntent && (
           <p style={{ fontSize: 12, color: 'var(--text-faint)', margin: 0 }}>
-            Pick a question above — VaNi answers in a couple of lines, then the table below filters to match.
+            Pick a question — VaNi explains the evidence and the table filters to match. Use the row mascot to ask about an individual stock.
           </p>
         )}
         {scanIntent && (
-          showLoading ? (
+          showLoading ? (branded ? <VaNiConsulting/> :
             <div className="flex items-center gap-1.5 text-muted">
               <Loader2 className="w-3 h-3 animate-spin" />
               <span className="text-[10px]">Consulting VaNi…</span>
             </div>
-          ) : (
+          ) : active?.error || active?.data?.error ? <div role="alert"><p>{active?.data?.error || "VaNi could not prepare this explanation."}</p><button className="sector-question" onClick={()=>askIntent(scanIntent,depth,false,true)}>Try again</button></div> : (
             <>
-              <p className="text-[11px] text-[var(--text-secondary)] leading-relaxed whitespace-pre-line">
+              <p className={branded?"text-sm text-[var(--text-primary)] leading-7 whitespace-pre-line":"text-[11px] text-[var(--text-secondary)] leading-relaxed whitespace-pre-line"}>
                 {active?.data?.response}
               </p>
+              {branded && active?.variables && <details className="mt-4" data-vani-detail="evidence"><summary className="cursor-pointer text-sm">Inspect the evidence</summary><p className="text-xs text-muted mt-2">{dataDate} · full daily cohort for {exchangeFilter}. The table may apply additional filters. Examples are a limited sample.</p><ScannerIntentEvidence request={active.variables}/></details>}
               {active?.data?.log_id && <VaNiFeedback logId={active.data.log_id} />}
             </>
           )

@@ -5587,7 +5587,8 @@ def vani_ask(req: VaNiAskRequest):
                 }
             # Persistent cache (km_vani_cache): explain_preset's hash derives
             # from the preset copy alone — no change of state, no LLM invoke.
-            _pcache_key = _vani_pcache_key(intent_id, build_scanner_cache_context(intent_id, ctx))
+            from lib.scanner_explanation import with_depth
+            _pcache_key = _vani_pcache_key(intent_id, with_depth(build_scanner_cache_context(intent_id, ctx), req.preset_id, req.explanation_depth))
             _cached_text = _vani_pcache_get(db, _pcache_key) if _pcache_key else None
             if _cached_text:
                 # See the equity-intent cache hit above — same fix: log a
@@ -5629,6 +5630,10 @@ def vani_ask(req: VaNiAskRequest):
         }
 
     _ask_system = vani_ask_system(intent)
+    _breakout_style = _is_scanner and req.preset_id == 'breakout_surge'
+    if _breakout_style:
+        from lib.scanner_explanation import style
+        _ask_system += style(req.explanation_depth)
     _wrapped_msg = _wrap_vani_user_msg(user_msg)
 
     # Up to 2 attempts: a compliance reject or empty generation retries once
@@ -5642,7 +5647,7 @@ def vani_ask(req: VaNiAskRequest):
         raw, _resolved_provider = _ai_complete_src(
             system=_ask_system,
             user=_wrapped_msg,
-            max_tokens=intent.max_tokens,
+            max_tokens=max(intent.max_tokens, 650) if _breakout_style else intent.max_tokens,
             temperature=0.4 if _attempt == 0 else 0.6,
             no_think=True,
             # Found live (2026-09-03): intent.complexity has said 'low' =

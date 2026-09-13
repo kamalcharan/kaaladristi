@@ -1,10 +1,9 @@
 import { useVaniAnalytics } from '@/hooks/useVaniAnalytics';
 import { trackVani } from '@/lib/vaniAnalytics';
-import BreakoutBetaCompanion from './VaNi/BreakoutBetaCompanion';
 import SectorCompanion from './VaNi/SectorCompanion';
 import MarketStructureCompanion from './VaNi/MarketStructureCompanion';
 import { useState, useRef, useEffect } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { X, Sparkles, ChevronRight, MessageCircle, RotateCcw, Search, ArrowRight } from 'lucide-react';
 import VaNiMessage, { VaNiThinking } from './VaNi/VaNiMessage';
 import { VaNiAvatar } from './VaNi/VaNiBrand';
@@ -72,16 +71,10 @@ async function resolveEquity(q: string): Promise<{ id: number; symbol: string } 
 
 export default function VaNiChatPanel(props: { docked?: boolean } = {}) {
   const { page } = usePageContext();
-  const {pathname}=useLocation();
-  const pending=useVaNiStore(s=>s.pendingIntentId);
-  const [existingQuestion,setExistingQuestion]=useState(false);
-  useEffect(()=>{if(pending)setExistingQuestion(true)},[pending]);
-  useEffect(()=>setExistingQuestion(false),[pathname]);
-  if(pathname==='/scanner/breakout_surge') return existingQuestion||pending ? <ExistingVaNiChatPanel {...props} onBetaBack={()=>{useVaNiStore.getState().consumePendingIntent();setExistingQuestion(false)}}/> : <BreakoutBetaCompanion {...props}/>;
   return page === 'sector_rotation' ? <SectorCompanion /> : page === 'market_structure' ? <MarketStructureCompanion /> : <ExistingVaNiChatPanel {...props} />;
 }
 
-function ExistingVaNiChatPanel({ docked = false, onBetaBack }: { docked?: boolean; onBetaBack?:()=>void } = {}) {
+function ExistingVaNiChatPanel({ docked = false }: { docked?: boolean } = {}) {
   const {
     open, entity: storeEntity, close, clearEntity,
     scanContext, pendingIntentId, consumePendingIntent,
@@ -464,7 +457,6 @@ function ExistingVaNiChatPanel({ docked = false, onBetaBack }: { docked?: boolea
               {headerSubtext}
             </div>
           </div>
-          {onBetaBack && <button className="sector-question text-xs" onClick={onBetaBack}>Back to guided read</button>}
           {(messages.length > 0 || entity) && (
             <button
               onClick={() => { setMessages([]); clearEntity(); }}

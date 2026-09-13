@@ -14,6 +14,7 @@ const pipelineUrl =
 
 export interface VaNiAskRequest {
   intent_id: string;
+  explanation_depth?: 'brief' | 'simple' | 'detailed';
   date?: string;
   entity_type?: 'equity' | 'index';
   entity_id?: number;
@@ -123,6 +124,7 @@ export interface VaNiAskRequest {
 
 export interface VaNiAskResponse {
   intent_id: string;
+  explanation_depth?: 'brief' | 'simple' | 'detailed';
   date?: string;
   response: string | null;
   ai: boolean;
