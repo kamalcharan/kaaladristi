@@ -10,6 +10,7 @@
  * the client toward the LLM.
  */
 
+import { breakoutEvidence } from '@/lib/breakoutBeta';
 import { useEffect } from 'react';
 import { useVaNiStore, type VaNiScanRow, type VaNiScanCohortStats } from '@/stores/vaniStore';
 import { zoneLabel, flowLabel } from '@/constants/signalScale';
@@ -64,6 +65,7 @@ export default function ScanVaNiPublisher({
     }
     const hideVani = preset.vani_rule === 'always_true';
     setScanContext({
+      ...(preset.id==='breakout_surge'?{breakoutBeta:breakoutEvidence(stocks)}:{}),
       presetId: preset.id,
       presetName: preset.name,
       timeframe,

@@ -313,7 +313,7 @@ export function StudioCard({ stock, descriptor, onClick, stacked = false }: { st
   const ledgerRef = useRef<HTMLDivElement>(null);
   const narrow = useNarrow(ledgerRef, 420);
   const isVani = stock.vaniOpportunity;
-  const vaniEntity = { type: 'equity' as const, id: stock.equity_id, symbol: displaySymbol(stock), pageContext: `Scanner / ${descriptor.displayName}` };
+  const vaniEntity = { type: 'equity' as const, id: stock.equity_id, symbol: displaySymbol(stock), pageContext: `Scanner / ${descriptor.displayName}`, currentPresetId: descriptor.presetId, asOfDate: stock.trade_date };
 
   const hero = descriptor.cardHero;
   const heroV = levelValue(hero, stock);

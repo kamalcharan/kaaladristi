@@ -466,6 +466,7 @@ export default function ScanTable({ stocks, presetId, onRowClick }: ScanTablePro
                               symbol: sym,
                               pageContext: `Scanner / ${preset?.name ?? presetId}`,
                               currentPresetId: presetId,
+                              ...(presetId==='breakout_surge'?{asOfDate:stock.trade_date}:{}),
                               signals: {
                                 close: stock.close,
                                 pctChng: stock.pct_chng,

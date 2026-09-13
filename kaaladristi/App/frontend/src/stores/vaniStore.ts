@@ -74,6 +74,7 @@ export interface VaNiScanCohortStats {
 }
 
 export interface VaNiScanContext {
+  breakoutBeta?: import('@/lib/breakoutBeta').BreakoutEvidence;
   presetId: string;
   presetName: string;
   timeframe: string;

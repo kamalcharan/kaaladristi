@@ -13,7 +13,7 @@ import StructureStrip from '@/components/domain/StockCockpit/StructureStrip'
 import { computeThesis, type ThesisBar, type PositionInput, type ThesisRead } from '@/services/thesis'
 import { fetchEquityEodById } from '@/services/indicatorData'
 import { useStockAskStore } from '@/stores/stockAskStore'
-import { VaNiAvatar } from './VaNiBrand'
+import { VaNiAvatar, VaNiConsulting } from './VaNiBrand'
 import { useBookmarkStore } from '@/stores/bookmarkStore'
 import { useAuthStore } from '@/stores/authStore'
 
@@ -390,12 +390,13 @@ export default function StockAskPopover() {
             )}
 
             <div style={{ flex: '2 1 260px', minWidth: 220 }}>
-              <VaNiInsight
+              {entity.pageContext === 'Scanner / Breakout Surge' && active?.isPending ? <VaNiConsulting/> : <VaNiInsight
+                highlightChips={entity.pageContext === 'Scanner / Breakout Surge'}
                 insight={active?.data?.response}
                 isLoading={active?.isPending ?? false}
                 logId={active?.data?.log_id ?? undefined}
                 className="mt-0"
-              />
+              />}
             </div>
           </>
         )}
