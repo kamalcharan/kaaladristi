@@ -12,6 +12,8 @@ export default defineConfig(({ mode }) => {
       server: {
         port: 3000,
         host: '0.0.0.0',
+        // Static mascot PNGs are served normally; watching them can fail with EBUSY on Windows.
+        watch: { ignored: ['**/public/assets/vani/**'] },
         proxy: {
           // PostgREST — /db/km_equity_eod → <postgrestTarget>/km_equity_eod
           '/db': {
