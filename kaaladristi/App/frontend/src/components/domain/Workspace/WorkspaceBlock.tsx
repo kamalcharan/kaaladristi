@@ -14,7 +14,7 @@ import BreadthRocChart from '@/components/domain/BreadthRocChart'
 import SixDayOutlookCompact from '@/components/domain/DashboardV3/SixDayOutlookCompact'
 import PlanetRegimeStrip from '@/components/domain/DashboardV3/PlanetRegimeStrip'
 import WorkspaceChart from '@/components/workspace/WorkspaceChart'
-import { executeScan } from '@/services/scanEngine'
+import { executeScan, getPresetMeta } from '@/services/scanEngine'
 import { from } from '@/services/postgrest'
 import { ZONE_LABELS } from '@/constants/signalScale'
 import { usePipelineStatus } from '@/hooks/usePipelineStatus'
@@ -533,7 +533,7 @@ export default function WorkspaceBlock({ block, editMode, isDraggable, effective
           const fmt = (id: string) => id.replace('astro_rule:', '').replace(/_/g, ' ').toUpperCase()
           return `${fmt(a)} ∩ ${fmt(b)}`
         })()
-      : (catalog?.display_name ?? block.catalog_item_id)
+      : (catalog?.display_name ?? (block.type==='scanner'?getPresetMeta(block.catalog_item_id)?.name:undefined) ?? block.catalog_item_id)
 
   const badge = PLACEMENT_BADGE[block.placement] ?? PLACEMENT_BADGE.panel_block
 

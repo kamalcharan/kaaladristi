@@ -41,22 +41,22 @@ export const DEFAULT_PERSONA: Persona = 'investor'
 // ── Labels ──────────────────────────────────────────────────────────────────
 
 export const PERSONAS: Record<Persona, { label: string; voice: string; short: string }> = {
-  investor:  { label: 'Investor',            short: 'Investor',   voice: 'Acts on confirmed strength, holds for months, concedes at structure.' },
-  swing:     { label: 'Swing trader',        short: 'Swing',      voice: 'Acts on fresh strength, holds for weeks, concedes at the swing low.' },
-  intensity: { label: 'High-intensity trader', short: 'Intensity', voice: 'Acts on extremes, holds for days, concedes tight.' },
+  investor:  { label: 'Investor',            short: 'Investor',   voice: 'A starting selection for longer-term trends.' },
+  swing:     { label: 'Swing trader',        short: 'Swing',      voice: 'A starting selection for moves developing over a few weeks.' },
+  intensity: { label: 'High-intensity trader', short: 'Intensity', voice: 'A starting selection for short-term moves.' },
 }
 
 /** "Which of these would you act on?" — one live Studio card per option. */
 export const ACTS_ON_OPTIONS: Record<ActsOn, { label: string; hint: string; phrase: string }> = {
-  confirmed: { label: 'Confirmed strength', hint: 'Trend already established, moving average stack in place', phrase: 'confirmed strength' },
-  early:     { label: 'Early signs',        hint: 'Quiet building before the move is visible',                phrase: 'early signs' },
-  extreme:   { label: 'The extreme move',   hint: 'Breakouts, range expansion, the loudest bar of the day',   phrase: 'the extreme move' },
+  confirmed: { label: 'An established upward trend', hint: 'Find stocks that have already been rising steadily.', phrase: 'confirmed strength' },
+  early:     { label: 'Early signs of improvement',        hint: 'Explore stocks beginning to improve before a clear trend has formed.',                phrase: 'early signs' },
+  extreme:   { label: 'A sharp move happening now',   hint: 'Explore stocks making a large move in the current session.',   phrase: 'the extreme move' },
 }
 
 export const HOLD_HORIZON_OPTIONS: Record<HoldHorizon, { label: string; phrase: string }> = {
-  days:   { label: 'Days',   phrase: 'for days' },
-  weeks:  { label: 'Weeks',  phrase: 'for weeks' },
-  months: { label: 'Months', phrase: 'for months' },
+  days:   { label: 'A few days',   phrase: 'for days' },
+  weeks:  { label: 'A few weeks',  phrase: 'for weeks' },
+  months: { label: 'Several months or longer', phrase: 'for months' },
 }
 
 /**
@@ -72,18 +72,9 @@ export const CONCEDE_LEVEL_OPTIONS: Record<ConcedeLevel, { label: string; line: 
 
 // ── Derivation ──────────────────────────────────────────────────────────────
 
-/**
- * Deterministic persona table.
- *
- * Hold horizon carries the most weight (2). Acts-on and concede-level each
- * carry 1.5, so when BOTH point away from the stated horizon they win: a user
- * who says "months" but acts on extremes and concedes tight is not an
- * investor. One dissenting answer never overrides the horizon.
- *
- * Missing answers contribute nothing; with no answers at all the result is
- * DEFAULT_PERSONA. Ties (only possible with missing answers) resolve to the
- * horizon's persona, then to DEFAULT_PERSONA.
- */
+/** Holding period sets the starting persona; discovery preference is used when
+ * the user is still exploring their horizon. Optional exit settings are retained
+ * but do not change the recommendation profile. Explicit persona choice wins in callers. */
 const HORIZON_PERSONA: Record<HoldHorizon, Persona>   = { days: 'intensity', weeks: 'swing', months: 'investor' }
 const ACTS_ON_PERSONA: Record<ActsOn, Persona>         = { confirmed: 'investor', early: 'swing', extreme: 'intensity' }
 const CONCEDE_PERSONA: Record<ConcedeLevel, Persona>   = { tight: 'intensity', swing_low: 'swing', structure: 'investor' }
@@ -95,7 +86,7 @@ export function derivePersona(a: PersonaAnswers): Persona {
   const score: Record<Persona, number> = { investor: 0, swing: 0, intensity: 0 }
   if (a.hold_horizon)  score[HORIZON_PERSONA[a.hold_horizon]]  += W_HORIZON
   if (a.acts_on)       score[ACTS_ON_PERSONA[a.acts_on]]       += W_MODULATOR
-  if (a.concede_level) score[CONCEDE_PERSONA[a.concede_level]] += W_MODULATOR
+  // Exit preferences are optional research settings, not a persona classifier.
 
   const best = Math.max(score.investor, score.swing, score.intensity)
   if (best === 0) return DEFAULT_PERSONA
@@ -115,23 +106,10 @@ export function derivePersona(a: PersonaAnswers): Persona {
  * the chip (the strip then says "you chose").
  */
 export function readingLine(a: PersonaAnswers, persona?: Persona | null): string {
-  const clauses: string[] = []
-  if (a.acts_on)       clauses.push(`act on ${ACTS_ON_OPTIONS[a.acts_on].phrase}`)
-  if (a.hold_horizon)  clauses.push(`hold ${HOLD_HORIZON_OPTIONS[a.hold_horizon].phrase}`)
-  if (a.concede_level) clauses.push(`concede ${CONCEDE_LEVEL_OPTIONS[a.concede_level].phrase}`)
-
-  if (clauses.length === 0) {
-    return persona
-      ? `You chose ${PERSONAS[persona].label.toLowerCase()}.`
-      : 'Tell VaNi how you act, and it will assemble your workbench.'
-  }
-  const you = 'You ' + (clauses.length === 1 ? clauses[0]
-    : clauses.length === 2 ? `${clauses[0]} and ${clauses[1]}`
-    : `${clauses[0]}, ${clauses[1]}, and ${clauses[2]}`)
-  const derived = derivePersona(a)
-  const chosen = persona ?? derived
-  const verb = persona && persona !== derived ? 'you chose' : 'that reads as'
-  return `${you}. ${verb[0].toUpperCase()}${verb.slice(1)} ${PERSONAS[chosen].label.toLowerCase()}.`
+  if (!a.acts_on && !a.hold_horizon && !persona) return 'Explore at your own pace. You can use every scanner and change these preferences anytime.'
+  const chosen = persona ?? derivePersona(a)
+  const focus = { investor: 'longer-term trends', swing: 'moves developing over a few weeks', intensity: 'short-term moves' }[chosen]
+  return `We’ll start you with scanners for ${focus}. You can explore every scanner and change this anytime.`
 }
 
 // ── Persona → scanners (what the workbench assembles) ───────────────────────
@@ -180,5 +158,13 @@ export const CONTINUITY_DAYS = 14
 
 /** Hard gate for the reading strip: how many answers make a persona "set". */
 export function isPersonaComplete(a: PersonaAnswers): boolean {
-  return Boolean(a.acts_on && a.hold_horizon && a.concede_level)
+  return Boolean(a.acts_on && a.hold_horizon)
 }
+
+/** Category-specific starting points; direct scanner links always take precedence. */
+export const PERSONA_CATEGORY_DEFAULTS: Record<Persona,Record<string,string>> = {
+ investor:{price_action:'gl_retest',stage_analysis:'stage_2_leaders',flow:'conviction_flow',market:'quiet_accumulation',discovery:'waking_giants'},
+ swing:{price_action:'breakout_surge',stage_analysis:'stage_2_leaders',flow:'power_buy',market:'smart_money',discovery:'waking_giants'},
+ intensity:{price_action:'flower_pot_burst',stage_analysis:'stage_2_leaders',flow:'volume_drive',market:'smart_money',discovery:'waking_giants'},
+}
+export function recommendedScanners(persona:Persona):string[]{return [...new Set([...PERSONA_SCANNERS[persona],...Object.values(PERSONA_CATEGORY_DEFAULTS[persona])])]}

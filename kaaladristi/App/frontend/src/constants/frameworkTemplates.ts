@@ -1,3 +1,4 @@
+import {PERSONA_SCANNERS,type Persona} from './personaConfig'
 import type { FrameworkBlock, ChartOverlay, InstrumentRef } from '@/types/framework'
 
 export interface FrameworkTemplate {
@@ -248,4 +249,10 @@ export function getTemplateForICP(
   if (icp === 'trader') return TRADER
   // 'both'
   return (blend ?? 50) >= 70 ? HYBRID_WEIGHTED : HYBRID_BALANCED
+}
+
+export function templateForPersona(template:FrameworkTemplate,persona:Persona):FrameworkTemplate {
+ const blocks=template.blocks.filter(b=>b.type!=='scanner')
+ const start=Math.max(1,...blocks.map(b=>b.grid_position.row_end))
+ return {...template,blocks:[...blocks,...PERSONA_SCANNERS[persona].map((id,i)=>({type:'scanner' as const,catalog_item_id:id,placement:'output_panel' as const,grid_position:{col_start:1,col_end:25,row_start:start+i*6,row_end:start+(i+1)*6},config:{},added_by:'vani' as const}))]}
 }

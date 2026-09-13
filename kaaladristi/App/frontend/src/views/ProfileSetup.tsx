@@ -1,3 +1,4 @@
+import {templateForPersona} from '@/constants/frameworkTemplates'
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore, isAuthError } from '@/stores/authStore'
@@ -543,6 +544,8 @@ export default function ProfileSetup() {
     const n = Number(new URLSearchParams(window.location.search).get('step'))
     return n >= 1 && n <= 6 ? (n as Step) : 1
   })
+  const [preferenceSaving,setPreferenceSaving]=useState(false)
+  const [preferenceError,setPreferenceError]=useState<string|null>(null)
   const [personality, setPersonality] = useState<PersonalityState>({ answers: {}, override: null, stock: null })
   const [displayName, setDisplayName] = useState(profile?.display_name ?? '')
   const [phone,       setPhone]       = useState(profile?.phone ?? '')
@@ -553,7 +556,7 @@ export default function ProfileSetup() {
   // Persona is derived from the three answers (or the user's override chip);
   // the template follows the persona — no new templates, see personaConfig.
   const persona: Persona = personality.override ?? derivePersona(personality.answers)
-  const template: FrameworkTemplate = TEMPLATE_MAP[PERSONA_TEMPLATE[persona]]
+  const template: FrameworkTemplate = templateForPersona(TEMPLATE_MAP[PERSONA_TEMPLATE[persona]],persona)
 
   // Guard: an ONBOARDED user must never sit in this wizard. Users used to
   // land here via the transiently-null-profile bounce in ProtectedRoute and
@@ -619,7 +622,10 @@ export default function ProfileSetup() {
     if (!profile) return
     if (profile.onboarded) return
     if (!isValidIndianMobile(profile.phone ?? '')) return
-    if (profile.persona_set_at && step < 3) setStep(3)
+    if (profile.persona_set_at && step < 3) {
+      setPersonality({answers:{acts_on:profile.acts_on,hold_horizon:profile.hold_horizon,concede_level:profile.concede_level},override:profile.persona??null,stock:null})
+      setStep(3)
+    }
   }, [profile, step])
 
   // Funnel visibility — which onboarding step a user actually reaches.
@@ -648,30 +654,16 @@ export default function ProfileSetup() {
 
   // Step 2 exit — persist the persona NOW, not at the end, so abandoning the
   // wizard still leaves one (Account → How you invest can change it later).
-  // persona_set_at is stamped by the RPC. Non-blocking: a failed save is
-  // recoverable from Account and must not strand the user here.
-  function persistPersona(p: Persona, answers: PersonaAnswers, skipped: boolean) {
-    updateProfile({
-      persona: p,
-      acts_on: answers.acts_on ?? null,
-      hold_horizon: answers.hold_horizon ?? null,
-      concede_level: answers.concede_level ?? null,
-    })
-      .then(() => refreshProfile().catch(() => {}))
-      .catch(() => {/* non-critical */})
-    trackEvent('onboarding_persona', { persona: p, skipped, overridden: personality.override != null, ...answers })
+  // The server response updates shared context; errors keep this step available for retry.
+  async function persistPersona(p:Persona, answers:PersonaAnswers, skipped:boolean) {
+    await updateProfile({persona:p,acts_on:answers.acts_on??null,hold_horizon:answers.hold_horizon??null,concede_level:answers.concede_level??null})
+    trackEvent('onboarding_persona',{persona:p,skipped,...answers})
   }
-
-  function handlePersonalityContinue() {
-    persistPersona(persona, personality.answers, false)
-    setStep(3)
-  }
-
-  function handlePersonalitySkip() {
-    const blank: PersonalityState = { answers: {}, override: null, stock: null }
-    setPersonality(blank)
-    persistPersona(derivePersona(blank.answers), blank.answers, true)
-    setStep(3)
+  async function handlePersonalityContinue() {
+    setPreferenceSaving(true);setPreferenceError(null)
+    try {await persistPersona(persona,personality.answers,false);setStep(3)}
+    catch(e){setPreferenceError(e instanceof Error?e.message:'Could not save preferences. Please retry.')}
+    finally{setPreferenceSaving(false)}
   }
 
   const setupErrMessage = (e: unknown) => sharedErrMessage(e, {
@@ -824,10 +816,11 @@ export default function ProfileSetup() {
       )}
       {step === 2 && (
         <PersonalityScreen
+          saving={preferenceSaving}
+          error={preferenceError}
           state={personality}
           onChange={setPersonality}
           onContinue={handlePersonalityContinue}
-          onSkip={handlePersonalitySkip}
         />
       )}
       {step === 3 && (

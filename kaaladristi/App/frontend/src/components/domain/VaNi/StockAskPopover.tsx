@@ -1,3 +1,4 @@
+import {createPortal} from 'react-dom'
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
@@ -93,6 +94,9 @@ export default function StockAskPopover() {
   const anchorEl = useStockAskStore((s) => s.anchorEl)
   const close = useStockAskStore((s) => s.close)
   const navigate = useNavigate()
+  const [scannerTarget,setScannerTarget]=useState<HTMLElement|null>(null)
+  useEffect(()=>{const update=()=>setScannerTarget(document.getElementById('scanner-vani-stock'));update();const observer=new MutationObserver(update);observer.observe(document.body,{childList:true,subtree:true});return()=>observer.disconnect()},[])
+  const scannerSlot=entity?.currentPresetId?scannerTarget:null
 
   const ref = useRef<HTMLDivElement>(null)
   const { latestDataDate, latestDataDateFormatted } = usePipelineStatus()
@@ -201,7 +205,7 @@ export default function StockAskPopover() {
 
   useEffect(() => {
     function handle(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) close()
+      if (!document.getElementById('scanner-vani-stock') && ref.current && !ref.current.contains(e.target as Node)) close()
     }
     function handleKey(e: KeyboardEvent) {
       if (e.key === 'Escape') close()
@@ -282,13 +286,13 @@ export default function StockAskPopover() {
   const delivOk = s?.deliveryPct != null && s.deliveryPct >= DELIVERY_CONFIRM_MIN
   const confirmCount = s ? [volOk, flowOk, rsOk, delivOk].filter(Boolean).length : null
 
-  return (
+  const content = (
     <div
       ref={ref}
       onClick={(e) => e.stopPropagation()}
       style={{
-        position: 'fixed', left, top: pos.top, zIndex: 500,
-        width: POPOVER_WIDTH, maxWidth: 'calc(100vw - 16px)', maxHeight: '70vh', overflowY: 'auto',
+        position: scannerSlot ? 'relative' : 'fixed', left:scannerSlot?undefined:left, top:scannerSlot?undefined:pos.top, zIndex: 500,
+        width: scannerSlot?'100%':POPOVER_WIDTH, maxWidth: 'calc(100vw - 16px)', maxHeight: scannerSlot?undefined:'70vh', overflowY: 'auto',
         background: 'var(--card)',
         border: '1px solid var(--border-indigo)', borderRadius: 12,
         boxShadow: '0 16px 48px color-mix(in srgb, black 45%, transparent)',
@@ -436,6 +440,7 @@ export default function StockAskPopover() {
       </div>
     </div>
   )
+  return scannerSlot ? createPortal(content,scannerSlot) : content
 }
 
 function ConfirmPill({ k, v, ok }: { k: string; v: string; ok: boolean }) {

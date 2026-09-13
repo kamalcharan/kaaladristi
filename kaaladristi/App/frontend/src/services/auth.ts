@@ -224,7 +224,12 @@ export async function updateProfile(
   const { data, error } = await rpc('kd_update_profile', { p_updates: updates });
 
   if (error) throw new Error(error.message);
-  return data as KmProfile;
+  const saved = data as KmProfile;
+  if (saved?.id !== user.id || (['persona','acts_on','hold_horizon','concede_level'] as const).some(key=>key in updates && saved[key] !== updates[key])) throw new Error('Your profile could not be verified. Please try saving again.');
+  const { useAuthStore } = await import('@/stores/authStore');
+  const current = useAuthStore.getState().profile;
+  useAuthStore.getState().setProfile(current?.id === saved.id ? {...current,...saved} : saved);
+  return saved;
 }
 
 // ── Auth state change listeners ──────────────────────────────────────────────

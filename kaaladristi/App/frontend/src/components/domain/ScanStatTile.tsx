@@ -36,7 +36,7 @@ export default function ScanStatTile({ label, value, sub, accent, active, onClic
         {label}
         {active && <span style={{ color: 'var(--accent)' }}>●</span>}
       </div>
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+      <div style={{ display: 'flex', flexWrap:'wrap', overflowWrap:'anywhere', minWidth:0, alignItems: 'baseline', gap: 6 }}>
         <span style={{ fontFamily: 'var(--font-display)', fontSize: 20, fontWeight: 500, color: 'var(--text-primary)' }}>{value}</span>
         {sub && <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, color: 'var(--text-faint)' }}>{sub}</span>}
       </div>

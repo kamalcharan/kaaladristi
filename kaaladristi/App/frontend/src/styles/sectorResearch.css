@@ -106,3 +106,10 @@
  .scanner-vani-host { width:360px; flex-shrink:0; align-self:flex-start; position:sticky; top:90px; }
  .scanner-vani-host .scanner-companion { max-height:calc(100dvh - 110px); overflow-y:auto; }
 }
+
+.scanner-vani-host { display:none; }
+.scanner-vani-host.scanner-vani-host-open {display:block;}
+.scanner-vani-dialog {padding:0;border:0;background:var(--card);color:var(--text-primary);margin:0 0 0 auto;width:min(440px,100vw);max-width:100vw;height:100dvh;max-height:100dvh;}
+.scanner-vani-dialog::backdrop {background:color-mix(in srgb,var(--bg) 55%,transparent);}
+.scanner-vani-dialog .scanner-companion {min-height:100%;border-radius:16px 0 0 16px;}
+@media(max-width:639px){.scanner-vani-dialog{margin:auto 0 0;width:100%;height:85dvh;}.scanner-vani-dialog .scanner-companion{border-radius:16px 16px 0 0;}}

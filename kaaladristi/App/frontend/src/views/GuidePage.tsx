@@ -47,12 +47,12 @@ export default function GuidePage() {
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 14, color: 'var(--text-primary)', lineHeight: 1.5 }}>
               {profile?.persona
-                ? <>You read as <strong>{PERSONAS[persona].label.toLowerCase()}</strong> — {PERSONAS[persona].voice}</>
+                ? <>Your starting profile is <strong>{PERSONAS[persona].label.toLowerCase()}</strong> — {PERSONAS[persona].voice}</>
                 : <>VaNi has not read how you invest yet, so this guide uses the {PERSONAS[persona].label.toLowerCase()} set.</>}
             </div>
             <div style={{ display: 'flex', gap: 14, marginTop: 8, flexWrap: 'wrap' }}>
               <button type="button" onClick={() => navigate('/account?tab=invest')} style={linkStyle}>Change how you invest →</button>
-              <button type="button" onClick={() => navigate('/account?tab=invest&rerun=1')} style={linkStyle}>Re-run the three picks →</button>
+              <button type="button" onClick={() => navigate('/account?tab=invest&rerun=1')} style={linkStyle}>See setup examples →</button>
             </div>
           </div>
         </div>

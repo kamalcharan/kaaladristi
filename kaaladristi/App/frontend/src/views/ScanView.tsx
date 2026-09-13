@@ -1,3 +1,5 @@
+import {ScannerVaNiLauncher} from '@/components/domain/VaNi/ScannerCompanionShell'
+import {useResearchProfile} from '@/hooks/useResearchProfile'
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { Loader2, ChevronLeft, ChevronRight, Download, Copy, Check } from 'lucide-react';
@@ -1164,6 +1166,7 @@ function FpbResults({ preset, timeframe, viewMode, onViewModeChange }: {
       {/* The four fpb.* VaNi intents. Built end to end (intent, endpoint,
           hook) but never rendered, so the page had no VaNi at all while
           every Studio preset carried its own card. */}
+      <ScannerVaNiLauncher/>
       <FpbVaNiCard />
 
       {/* Day-2 position layer — recent releases + hold/crack verdict + SL/target.
@@ -1272,6 +1275,7 @@ function FpbResults({ preset, timeframe, viewMode, onViewModeChange }: {
 // ── Screen 2: Results ──────────────────────────────────────────
 
 function ScannerResults({ presetId }: { presetId: string }) {
+  const researchProfile=useResearchProfile();
   const navigate = useNavigate();
   const phone = useIsPhone();
   const [searchParams] = useSearchParams();
@@ -1353,36 +1357,40 @@ function ScannerResults({ presetId }: { presetId: string }) {
   // Price Action chips wrapped into a five-line stack at 358px, pushing the
   // title below the fold before the user had read a thing.
   const categoryTabStrip = categoryPresets.length > 1 && (
-    <div className={phone ? 'no-scrollbar' : undefined} style={{
+    <div aria-label={`${preset.category_label} scanners`} className={phone ? 'no-scrollbar' : undefined} style={{
+      background:'var(--indigo-bg)',padding:'12px',borderRadius:12,border:'1px solid var(--border-indigo)',
       display: 'flex', alignItems: 'center', gap: '4px',
       marginBottom: '20px',
       ...(phone
         ? { flexWrap: 'nowrap' as const, overflowX: 'auto' as const, paddingBottom: '4px', WebkitOverflowScrolling: 'touch' as const }
         : { flexWrap: 'wrap' as const }),
     }}>
+      <span className="text-xs font-semibold">{preset.category_label} · {categoryPresets.length} scanners</span>
       {categoryPresets.map((p) => {
         const isActive = p.id === presetId;
         const count = allCounts?.[p.id] ?? null;
         return (
           <button
             key={p.id}
+            aria-pressed={isActive}
             onClick={() => navigate(`/scanner/${p.id}`)}
             style={{
               display: 'inline-flex', alignItems: 'center', gap: '6px', flexShrink: 0,
               padding: '5px 12px', borderRadius: '8px',
               border: `1px solid ${isActive ? preset.category_color : 'var(--border)'}`,
-              background: isActive ? `${preset.category_color}18` : 'transparent',
-              color: isActive ? preset.category_color : 'var(--text-muted)',
+              background: isActive ? 'color-mix(in srgb, var(--accent) 25%, var(--text-primary))' : 'var(--card)',
+              color: isActive ? 'var(--card)' : 'var(--text-primary)',
               fontSize: '12px', fontWeight: isActive ? 600 : 400,
               cursor: 'pointer', fontFamily: 'var(--font-body)',
               transition: 'all 0.15s', whiteSpace: 'nowrap',
             }}
           >
             {p.name}
+            {researchProfile.recommended.includes(p.id)&&<span className="text-[10px]" title={`Recommended for ${researchProfile.label}`}>★ Recommended</span>}
             {count != null && (
               <span style={{
                 fontFamily: 'var(--font-mono)', fontSize: '10px',
-                color: isActive ? preset.category_color : 'var(--text-faint)',
+                color: isActive ? 'inherit' : 'var(--text-secondary)',
                 opacity: 0.8,
               }}>
                 {count}
@@ -1696,13 +1704,7 @@ export default function ScanView() {
   const { data: allCountsData } = useAllScanCounts('combined');
   const allCounts = allCountsData?.counts;
 
-  // Scanner category rail — collapsible on click (preference remembered).
-  const [railOpen, setRailOpen] = useState(() => localStorage.getItem('kd_scanner_rail_open') !== '0');
-  const toggleRail = () => setRailOpen((o) => {
-    const next = !o;
-    localStorage.setItem('kd_scanner_rail_open', next ? '1' : '0');
-    return next;
-  });
+  const {defaults,label}=useResearchProfile();
 
   // Build category groups
   const categories = useMemo(() => {
@@ -1723,9 +1725,9 @@ export default function ScanView() {
         id,
         ...val,
         // Explicit find — never relies on iteration order or mutable accumulation
-        defaultPreset: val.presets.find(p => p.is_default_tab) ?? val.presets[0],
+        defaultPreset: val.presets.find(p=>p.id===defaults[id]) ?? val.presets.find(p => p.is_default_tab) ?? val.presets[0],
       }));
-  }, [presets]);
+  }, [presets, defaults]);
 
   // Auto-navigate to first category default tab when URL has no presetId
   useEffect(() => {
@@ -1740,172 +1742,14 @@ export default function ScanView() {
   const activePreset = presets.find((p) => p.id === presetId);
   const activeCategoryId = activePreset?.category ?? '';
 
-  // Phone: a horizontal category strip above the results, in normal document
-  // flow. The 220px side rail left a 170px results column at 390px — every tab
-  // stacked, the title wrapped, the filter bar and the VaNi button were
-  // clipped off the right edge — and a page-within-a-page scroll region is
-  // the wrong shape for a thumb anyway.
-  if (phone) {
-    return (
-      <div style={{ margin: '-16px', display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-        <div className="no-scrollbar" style={{
-          display: 'flex', alignItems: 'center', gap: '4px',
-          overflowX: 'auto', WebkitOverflowScrolling: 'touch',
-          padding: '10px 12px',
-          background: 'var(--card)', borderBottom: '1px solid var(--border)',
-          position: 'sticky', top: topbarH, zIndex: 30,
-        }}>
-          {categories.map((cat) => {
-            const defaultPreset = cat.defaultPreset ?? cat.presets[0];
-            const isActive = cat.id === activeCategoryId;
-            return (
-              <button
-                key={cat.id}
-                onClick={() => defaultPreset && navigate(`/scanner/${defaultPreset.id}`)}
-                style={{
-                  display: 'inline-flex', alignItems: 'center', gap: '7px', flexShrink: 0,
-                  padding: '6px 12px', borderRadius: '100px', cursor: 'pointer',
-                  border: `1px solid ${isActive ? cat.color : 'var(--border)'}`,
-                  background: isActive ? `color-mix(in srgb, ${cat.color} 10%, transparent)` : 'transparent',
-                  fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: '11px',
-                  letterSpacing: '0.8px', textTransform: 'uppercase',
-                  color: isActive ? cat.color : 'var(--text-muted)',
-                }}
-              >
-                <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: cat.color, flexShrink: 0 }} />
-                {cat.label}
-              </button>
-            );
-          })}
-        </div>
-        <div style={{ padding: '16px', minWidth: 0 }}>
-          {presetId ? (
-            <ScannerResults presetId={presetId} />
-          ) : (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '48px 0' }}>
-              <Loader2 style={{ width: '20px', height: '20px', color: 'var(--text-faint)', animation: 'spin 1s linear infinite' }} />
-            </div>
-          )}
-        </div>
-        <div style={{
-          padding: '10px 16px 12px',
-          borderTop: '1px solid var(--border)',
-          background: 'var(--card)',
-          fontSize: '10.5px', lineHeight: 1.5, color: 'var(--text-faint)',
-          textAlign: 'center',
-        }}>
-          {SCAN_DISCLAIMER}
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div style={{
-      display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden',
-      // Cancels Layout.tsx's `p-4` (16px) exactly. This was -24px — an 8px
-      // overhang on every side: the rail started under the sidebar and the
-      // right edge ran past the viewport (measured: shell right = 1608 at
-      // 1600). And the height subtracted a topbar of 46px that is really 75,
-      // so the "never scrolls away" footer sat 21px below the fold.
-      margin: '-16px', height: `calc(100vh - ${topbarH}px)`,
-    }}>
-      {/* Left category rail — collapsible on click */}
-      <div style={{
-        width: railOpen ? '220px' : '44px',
-        minWidth: railOpen ? '220px' : '44px',
-        background: 'var(--card)',
-        borderRight: '1px solid var(--border)',
-        overflowY: 'auto', overflowX: 'hidden', padding: '14px 0', flexShrink: 0,
-        transition: 'width 0.18s ease, min-width 0.18s ease',
-      }}>
-        {/* Header: label + collapse/expand toggle */}
-        <div style={{
-          display: 'flex', alignItems: 'center',
-          justifyContent: railOpen ? 'space-between' : 'center',
-          padding: railOpen ? '0 10px 10px 14px' : '0 0 10px',
-        }}>
-          {railOpen && (
-            <span style={{
-              fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: '10px',
-              letterSpacing: '1.5px', textTransform: 'uppercase', color: 'var(--text-faint)',
-            }}>
-              Scanner
-            </span>
-          )}
-          <button
-            onClick={toggleRail}
-            title={railOpen ? 'Collapse' : 'Expand scanner list'}
-            style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              width: 24, height: 24, borderRadius: 6, cursor: 'pointer',
-              border: '1px solid var(--border)', background: 'transparent',
-              color: 'var(--text-faint)',
-            }}
-            onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--text-secondary)')}
-            onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-faint)')}
-          >
-            {railOpen ? <ChevronLeft size={14} /> : <ChevronRight size={14} />}
-          </button>
-        </div>
-        {categories.map((cat) => {
-          const defaultPreset = cat.defaultPreset ?? cat.presets[0];
-          const isActive = cat.id === activeCategoryId;
-          return (
-            <div
-              key={cat.id}
-              onClick={() => defaultPreset && navigate(`/scanner/${defaultPreset.id}`)}
-              title={!railOpen ? cat.label : undefined}
-              style={{
-                display: 'flex', alignItems: 'center', gap: '8px',
-                padding: railOpen ? '8px 14px' : '9px 0',
-                justifyContent: railOpen ? 'flex-start' : 'center',
-                cursor: 'pointer',
-                background: isActive ? 'rgba(240,165,0,0.06)' : 'transparent',
-                transition: 'background 0.15s',
-              }}
-            >
-              <span style={{
-                width: '7px', height: '7px', borderRadius: '50%',
-                background: cat.color, flexShrink: 0,
-                boxShadow: isActive ? `0 0 0 3px color-mix(in srgb, ${cat.color} 25%, transparent)` : 'none',
-              }} />
-              {railOpen && (
-                <span style={{
-                  fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: '11px',
-                  letterSpacing: '0.8px', textTransform: 'uppercase', flex: 1,
-                  color: isActive ? 'var(--gold)' : 'var(--text-muted)',
-                }}>
-                  {cat.label}
-                </span>
-              )}
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Right panel — scrollable content area + standing disclaimer */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-        <div style={{ flex: 1, overflowY: 'auto', padding: '24px' }}>
-          {presetId ? (
-            <ScannerResults presetId={presetId} />
-          ) : (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
-              <Loader2 style={{ width: '20px', height: '20px', color: 'var(--text-faint)', animation: 'spin 1s linear infinite' }} />
-            </div>
-          )}
-        </div>
-        {/* Standing disclaimer — always visible, never scrolls away */}
-        <div style={{
-          flexShrink: 0, padding: '7px 24px',
-          borderTop: '1px solid var(--border)',
-          background: 'var(--card)',
-          fontSize: '10.5px', lineHeight: 1.5, color: 'var(--text-faint)',
-          textAlign: 'center',
-        }}>
-          {SCAN_DISCLAIMER}
-        </div>
-      </div>
+  return <div className="min-w-0">
+    <div className="flex flex-wrap items-center gap-3 mb-4 p-3 rounded-xl border border-[var(--border)] bg-[var(--card)]">
+      <label htmlFor="scanner-category">Scanners</label>
+      <select id="scanner-category" value={activeCategoryId} onChange={e=>{const target=categories.find(c=>c.id===e.target.value)?.defaultPreset;if(target)navigate(`/scanner/${target.id}`)}} className="p-2 rounded-lg bg-[var(--card)] border border-[var(--border)]">
+      {categories.map(c=><option key={c.id} value={c.id}>{c.label} · {c.presets.length} scanners</option>)}</select>
+      <span className="text-xs text-muted">Starting suggestions for {label}. Every scanner is available.</span>
     </div>
-  );
+    {presetId?<ScannerResults presetId={presetId}/>:<p>Loading scanners…</p>}
+    <p className="text-xs text-muted text-center p-4">{SCAN_DISCLAIMER}</p>
+  </div>
 }

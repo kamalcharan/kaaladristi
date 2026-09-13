@@ -1,3 +1,4 @@
+import {ScannerVaNiLauncher} from '@/components/domain/VaNi/ScannerCompanionShell'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Loader2 } from 'lucide-react'
@@ -277,6 +278,7 @@ export default function ScannerStudio({ presetId }: { presetId: string }) {
         <div style={{ display: 'flex', gap: 8, flexShrink: 0, alignItems: 'center', flexWrap: 'wrap' }}>
           {/* Same astro-day badge the generic layout shows in its VaNi section
               header (B4) — the Studio had no astro context at all. */}
+          <ScannerVaNiLauncher/>
           <AtmosphericBadge />
           <DownloadXlsButton stocks={filtered} scanName={d.exportName} columns={studioXlsColumns(d)} />
           <TradingViewExportButton stocks={filtered} scanName={d.exportName} />
@@ -538,6 +540,7 @@ export function ScannerVaNiCard({
   rsFlipFacts: RsFlipFacts | null
   isUnusualFacts: IsUnusualFacts | null
 }) {
+  const [questionsOpen,setQuestionsOpen]=useState(true)
   const branded=true
   const [depth,setDepth]=useState<'brief'|'simple'|'detailed'>('brief')
   // One useVaNiAsk() instance per intent so switching pills never refetches
@@ -569,7 +572,7 @@ export function ScannerVaNiCard({
   }
 
   const askIntent = (key: ScannerIntentKey, nextDepth=depth, select=true, force=false) => {
-    if(select) onSelectIntent(key)
+    if(select) {onSelectIntent(key);setQuestionsOpen(false)}
     const mutation = mutationByIntent[key]
     if (!dataDate || (!force && ((mutation.data && (!branded || mutation.variables?.explanation_depth===nextDepth)) || mutation.isPending))) return
     if (key === 'momentum_gap') {
@@ -673,8 +676,8 @@ export function ScannerVaNiCard({
   return (
     <ScannerCompanionShell subtitle={<>{descriptor.displayName} · {dataDate} · {exchangeFilter}</>}>
       <p className="text-sm text-muted">Explore this scan, inspect the evidence, then ask about a stock using its row mascot.</p>
-      <details open>
-        <summary>Explore scanner questions</summary>
+      <details open={questionsOpen} onToggle={e=>setQuestionsOpen(e.currentTarget.open)}>
+        <summary>{scanIntent?'Change question':'Explore scanner questions'}</summary>
         <div className="scanner-questions">
           {visibleIntents.map((it) => (
             <button

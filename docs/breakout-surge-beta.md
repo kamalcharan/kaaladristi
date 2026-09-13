@@ -1,9 +1,9 @@
-# Price Action VaNi companion beta
+# Price Action VaNi beta
 
-All eight Price Action Studio screeners now place their existing VaNi intents in a companion beside the results on desktop and above them on smaller screens. The original questions, readiness gates, evidence builders, feedback and table-filter callbacks remain in use. No replacement intents are added.
+The current scanner layout and ICP behaviour are documented in [ICP scanner experience](icp-scanner-experience.md).
 
-The companion uses the approved mascot header and loader, vertically grouped questions, Concise / Explain simply / Go deeper controls, highlighted evidence and retry. Changing depth does not reapply table filters. Backend cache keys separate explanation depths for all eight Studio presets.
+VaNi opens on demand from the scanner header in a right-side companion, can be pinned on wide screens, and uses a sheet on phones. Existing scanner questions, evidence builders, readiness gates, matching table-filter callbacks and feedback are retained. Stock-row questions reuse this companion space. No new intent menu or replacement narrative engine is introduced.
 
-Flower Pot Burst uses the same companion shell and branded loader with its five existing questions. Its existing GET endpoints retain their answer format; explanation-depth variants are a follow-up for that separate API.
+All eight Price Action Studios support Concise / Explain simply / Go deeper. Flower Pot Burst keeps its five existing questions and original GET answer format; depth variants for that API remain follow-up work.
 
-Rollout requires frontend deployment and backend restart/deployment. Validate real model wording and live data after deployment. Automated browser checks use mocked answers and cover the original seven Breakout Surge intent requests, filters, depths, evidence, side-panel placement, and light/dark mobile/desktop layouts. Backend tests cover depth support for all eight Studio presets. Beta feedback should also cover row VaNi and changed dates/exchanges.
+Deploy the frontend. The earlier scanner depth backend update is still required if not already deployed. Automated tests use mocked answers; review real model wording, selected dates, exchange changes and stock interactions during beta.
