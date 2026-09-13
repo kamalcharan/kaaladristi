@@ -65,7 +65,7 @@ export default function FpbVaNiCard() {
   const activePillStyle: React.CSSProperties = { ...pillStyle, background: 'var(--indigo-bg)', fontWeight: 700 }
 
   return (
-    <ScannerCompanionShell subtitle="Flower Pot Burst · Coil research">
+    <ScannerCompanionShell presetId="flower_pot_burst" activeQuestion={!!intent} subtitle="Flower Pot Burst · Coil research">
       <p className="text-sm text-muted">Explore forming coils and inspect how recent setups performed.</p>
       <details open><summary>Explore scanner questions</summary>
         <div className="scanner-questions">

@@ -1,3 +1,4 @@
+import {SCANNER_INTRODUCTIONS} from '@/constants/scannerIntroductions'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Loader2 } from 'lucide-react'
@@ -285,6 +286,24 @@ export default function ScannerStudio({ presetId }: { presetId: string }) {
 
       {/* The same branded loader every other scanner layout uses; the Studio
           predated its adoption and showed a plain line of text. */}
+          {meta && (SCANNER_INTRODUCTIONS[presetId] || (!isLoading && !error)) && (
+            <ScannerVaNiCard
+              key={JSON.stringify([presetId,dataDate,exchangeFilter,all,sectorLeading?.facts,newSinceYesterday?.facts,rsFlip?.facts,isUnusual])}
+              presetId={presetId}
+              descriptor={d}
+              meta={meta}
+              allStocks={all}
+              dataDate={dataDate}
+              exchangeFilter={exchangeFilter}
+              scanIntent={scanIntent}
+              onSelectIntent={selectScanIntent}
+              sectorLeadingReady={!!sectorLeading}
+              sectorLeadingFacts={sectorLeading?.facts ?? null}
+              newSinceYesterdayFacts={newSinceYesterday?.facts ?? null}
+              rsFlipFacts={rsFlip?.facts ?? null}
+              isUnusualFacts={isUnusual}
+            />
+          )}
       {isLoading && <DristiQLoader />}
       {!isLoading && !error && <ScanStalenessBanner stocks={all} />}
       {error && <p style={{ color: 'var(--bear)' }}>Failed to load: {(error as Error).message}</p>}
@@ -357,24 +376,7 @@ export default function ScannerStudio({ presetId }: { presetId: string }) {
               ScannerVaNiCard's own comment — VaNiInsight isn't reused here,
               its masthead-per-answer shape doesn't fit a persistent
               question row). ── */}
-          {meta && (
-            <ScannerVaNiCard
-              key={JSON.stringify([presetId,dataDate,exchangeFilter,all,sectorLeading?.facts,newSinceYesterday?.facts,rsFlip?.facts,isUnusual])}
-              presetId={presetId}
-              descriptor={d}
-              meta={meta}
-              allStocks={all}
-              dataDate={dataDate}
-              exchangeFilter={exchangeFilter}
-              scanIntent={scanIntent}
-              onSelectIntent={selectScanIntent}
-              sectorLeadingReady={!!sectorLeading}
-              sectorLeadingFacts={sectorLeading?.facts ?? null}
-              newSinceYesterdayFacts={newSinceYesterday?.facts ?? null}
-              rsFlipFacts={rsFlip?.facts ?? null}
-              isUnusualFacts={isUnusual}
-            />
-          )}
+
 
           {/* ── Exchange + quick toggles (no ScanFilterBar equivalent) + real filter bar + view toggle ── */}
           {/* scrollMarginTop clears Layout.tsx's sticky topbar (~76px tall)
@@ -660,7 +662,9 @@ export function ScannerVaNiCard({
   // component on the render where `active` briefly changes shape).
   const showLoading = useMinVaNiLoading(active?.isPending ?? false)
 
-  if (!dataDate) return null
+
+
+  if (!dataDate && !SCANNER_INTRODUCTIONS[presetId]) return null
 
   const pillStyle: React.CSSProperties = {
     border: '1px solid var(--border-indigo)', color: 'var(--indigo)', background: 'transparent',
@@ -668,11 +672,11 @@ export function ScannerVaNiCard({
     cursor: 'pointer', fontFamily: 'var(--font-body)', maxWidth: '100%', textAlign: 'left',
   }
   const activePillStyle: React.CSSProperties = { ...pillStyle, background: 'var(--indigo-bg)', fontWeight: 700 }
-  const visibleIntents = intentsOrdered(descriptor).filter((it) => readyByIntent[it.key])
+  const visibleIntents = dataDate ? intentsOrdered(descriptor).filter((it) => readyByIntent[it.key]) : []
 
   // Preserve the scanner intent handlers inside the shared companion presentation.
   return (
-    <ScannerCompanionShell subtitle={<>{descriptor.displayName} · {dataDate} · {exchangeFilter}</>}>
+    <ScannerCompanionShell presetId={presetId} activeQuestion={!!scanIntent} subtitle={<>{descriptor.displayName} · {dataDate} · {exchangeFilter}</>}>
       <p className="text-sm text-muted">Explore this scan, inspect the evidence, then ask about a stock using its row mascot.</p>
       <details open={questionsOpen} onToggle={e=>setQuestionsOpen(e.currentTarget.open)}>
         <summary>{scanIntent?'Change question':'Explore scanner questions'}</summary>

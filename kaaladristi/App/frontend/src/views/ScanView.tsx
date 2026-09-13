@@ -1,3 +1,4 @@
+import {SCANNER_INTRODUCTIONS} from '@/constants/scannerIntroductions'
 import {useResearchProfile} from '@/hooks/useResearchProfile'
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
@@ -1499,7 +1500,7 @@ function ScannerResults({ presetId }: { presetId: string }) {
     return (
       <div style={{ paddingBottom: '100px' }}>
         {categoryTabStrip}
-        <ScannerStudio presetId={presetId} />
+        <ScannerStudio key={SCANNER_INTRODUCTIONS[presetId]?presetId:undefined} presetId={presetId} />
       </div>
     );
   }
