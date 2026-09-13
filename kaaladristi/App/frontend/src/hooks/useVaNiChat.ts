@@ -53,6 +53,7 @@ export interface VaNiAskRequest {
   // scanner.why_highlighted only — real facts over the full day's
   // VaNi-highlighted cohort (computeHighlightExplainFacts, breakoutSurgeInsights.ts).
   highlight_facts?: {
+    readings?: Record<string, number | null>;
     count: number;
     avg_rvol: number | null;
     avg_pct_of_52w_high: number | null;

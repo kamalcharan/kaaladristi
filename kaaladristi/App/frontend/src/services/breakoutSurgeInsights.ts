@@ -106,13 +106,14 @@ export interface HighlightExplainFacts {
    *  to their own 52-week high the highlighted stocks sit, on average. */
   avgPctOf52wHigh: number | null
   avgMagicRs: number | null
+  readings: Record<string, number | null>
   /** Up to 2 highlighted stocks, ranked by RVOL — real named examples for
    *  VaNi to cite, never a curated "pick". */
   examples: { symbol: string; rvol: number | null; pctOf52wHigh: number | null; magicRs: number | null }[]
 }
 
 function _avg(vals: (number | null | undefined)[]): number | null {
-  const nums = vals.filter((v): v is number => v != null)
+  const nums = vals.filter((v): v is number => v != null && Number.isFinite(v))
   return nums.length ? nums.reduce((a, b) => a + b, 0) / nums.length : null
 }
 
@@ -147,6 +148,17 @@ export function computeHighlightExplainFacts(rows: ScanStock[]): HighlightExplai
     avgRvol: _avg(hl.map((r) => r.rvol)),
     avgPctOf52wHigh: _avg(hl.map(_pctOf52wHigh)),
     avgMagicRs: _avg(hl.map((r) => r.magic_rs)),
+    readings: {
+      rvol_available: hl.filter(r=>r.rvol!=null && Number.isFinite(r.rvol)).length,
+      above_usual_volume: hl.filter(r=>r.rvol!=null && r.rvol>1).length,
+      high_available: hl.filter(r=>r.w52_high!=null && r.w52_high>0 && Number.isFinite(r.close)).length,
+      rs_available: hl.filter(r=>r.magic_rs!=null && Number.isFinite(r.magic_rs)).length,
+      positive_rs: hl.filter(r=>r.magic_rs!=null && r.magic_rs>0).length,
+      rsi_available: hl.filter(r=>r.rsi_14!=null && Number.isFinite(r.rsi_14)).length,
+      high_rsi: hl.filter(r=>r.rsi_14!=null && r.rsi_14>=70).length,
+      score_pair_available: hl.filter(r=>r.score_5d!=null && r.score_22d!=null && Number.isFinite(r.score_5d) && Number.isFinite(r.score_22d)).length,
+      recent_score_below: hl.filter(r=>r.score_5d!=null && r.score_22d!=null && r.score_5d<r.score_22d).length,
+    },
     examples,
   }
 }

@@ -1865,6 +1865,11 @@ def _clean_highlight_facts(facts: dict | None) -> dict | None:
         'avg_pct_of_52w_high': _safe_float(facts.get('avg_pct_of_52w_high')),
         'avg_magic_rs': _safe_float(facts.get('avg_magic_rs')),
         'examples': examples,
+        'readings': {key: _safe_float((facts.get('readings') or {}).get(key))
+                     for key in ('rvol_available', 'above_usual_volume', 'high_available',
+                                 'rs_available', 'positive_rs', 'rsi_available', 'high_rsi',
+                                 'score_pair_available', 'recent_score_below')}
+                    if isinstance(facts.get('readings'), dict) else {},
     }
 
 
@@ -1967,7 +1972,7 @@ def build_scanner_cache_context(intent_id: str, ctx: dict) -> dict:
     if intent_id == 'scanner.why_highlighted':
         f = ctx.get('highlight_facts') or {}
         return {
-            'v': 2,
+            'v': 3,
             'preset_id': ctx['preset_id'],
             'date': ctx['data_date'],
             'count': f.get('count', 0),
@@ -2171,6 +2176,7 @@ def format_scanner_user_message(intent_id: str, ctx: dict) -> str:
         return (
             f"Screener: {p['name']}\n"
             f"Highlighted today: {count} stocks\n"
+            f"Coverage and observed counts: {f.get('readings', {})}\n"
             f"Average RVOL among them: "
             f"{f'{avg_rvol:.1f}x normal' if avg_rvol is not None else 'not available'}\n"
             f"Average closeness to their own 52-week high: "
@@ -2178,13 +2184,13 @@ def format_scanner_user_message(intent_id: str, ctx: dict) -> str:
             f"Average Magic RS: {f'{avg_rs:.0f}' if avg_rs is not None else 'not available'}\n"
             f"\n--- Named examples (use ONLY these, at most these 2) ---\n"
             f"{ex_lines}\n"
-            f"\nInstructions: Write ONE opening line stating the count and "
-            f"the observed readings (do not infer the database qualifying rule), then 2 "
-            f"bullet points (each starting with '• ', each one short line): "
-            f"(1) name the example(s) above with their own RVOL and "
-            f"closeness-to-high numbers; (2) state plainly this is a "
-            f"measurement of unusual participation, not a signal to buy. "
-            f"Never name a stock not listed above."
+            "\nInstructions: Explain the session evidence in two short paragraphs. "
+            "First connect activity, distance from yearly highs and relative strength, using the supplied coverage counts. "
+            "Then explain mixed evidence: high_rsi is the count at RSI >=70, and recent_score_below compares 5D with 22D, not yesterday. "
+            "Use at most two supplied stock examples if they help. Describe missing coverage as unavailable. "
+            "Express distance as percent below the yearly high (100 minus percent of high); if above, say above the recorded high. "
+            "Do not repeat interface instructions, a generic highlight definition or invent qualifying criteria. "
+            "Do not call an average a reading shared by every stock. Zero caution counts do not establish safety."
         )
 
     if intent_id == 'scanner.your_view':

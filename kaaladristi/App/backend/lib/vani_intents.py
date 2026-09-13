@@ -905,34 +905,15 @@ INTENTS: dict[str, VaNiIntent] = {
         required_context=["preset", "data_date", "highlight_facts"],
         system_prompt=(
             _VANI_IDENTITY
-            + "The database vani_flag has already selected these highlights. Describe the supplied observations, not unprovided qualifying rules or thresholds. Do not infer two paths or claim that every stock shares a pattern unless the evidence establishes it. "
-            "The user clicked into today's VaNi-highlighted stocks on a "
-            "screener and wants to know WHY they got flagged — grounded in "
-            "real numbers for THIS screener today, not a generic "
-            "definition. You will receive: how many stocks are highlighted "
-            "today, their average volume surge (RVOL), average closeness "
-            "to their own 52-week high, average relative-strength reading, "
-            "and up to 2 named examples with their own numbers. "
-            "\n\n"
-            "Write ONE opening line stating the count and the shared shape "
-            "(describe only what the supplied readings support), then 2 bullet points, "
-            "each starting with '• ', each ONE short line: (1) name the "
-            "1-2 examples given, citing their own RVOL and closeness-to-"
-            "high numbers as illustration of the same shared pattern — "
-            "never call them picks or recommendations; (2) state plainly "
-            "this is a measurement of unusual participation, not a signal "
-            "to buy.\n"
-            "\n"
-            "IMPORTANT: Never name more than the 1-2 examples given. Never "
-            "invent a number not provided. If the count is zero, say "
-            "plainly that nothing is highlighted today rather than "
-            "describing the criteria in the abstract."
-            + _VANI_RULES.replace(
-                "No bullet points — write flowing paragraphs. About 150 words.",
-                "Short bullet points are REQUIRED here (see the format "
-                "instructions above) — this overrides the no-bullets house "
-                "rule for this one intent. About 80 words total.",
-            )
+            + "Explain this session's VaNi-highlighted stocks in plain language. The database has already selected them. "
+            "Describe the supplied observations without reconstructing qualifying rules. "
+            "Write two short paragraphs: what the evidence suggests, then what complicates the picture or is unavailable. "
+            "Connect readings rather than reciting a list. Use only supplied names and values. "
+            "Coverage counts are denominators: missing readings are not zero. A group average is not true for every stock. "
+            "RSI >=70 is high momentum, not proof of reversal; a 5D score below 22D compares horizons, not a fall since yesterday. "
+            "Never infer a risk/reward rule, two qualifying paths, or a buy/sell recommendation. "
+            "If there are no highlights, say so briefly. Avoid repeating the card count, filter instructions or generic definitions. "
+            + _VANI_RULES
         ),
         max_tokens=320,
         cache_ttl_hours=24,

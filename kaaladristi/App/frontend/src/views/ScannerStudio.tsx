@@ -705,7 +705,6 @@ export function ScannerVaNiCard({
         </div>
       </details>
         {scanIntent && <h3 className="font-semibold text-sm">{visibleIntents.find(it=>it.key===scanIntent)?.question}</h3>}
-        {presetId==='breakout_surge' && scanIntent==='why_flagged' && <ScannerHighlightStory stocks={allStocks} date={dataDate}/> }
         {branded && scanIntent && <div className="my-4 max-w-lg"><VaNiDepthSelector value={depth} onChange={value=>{const next=value as typeof depth;setDepth(next);askIntent(scanIntent,next,false,true)}}/></div>}
         {!scanIntent && (
           <p style={{ fontSize: 12, color: 'var(--text-faint)', margin: 0 }}>
@@ -720,9 +719,11 @@ export function ScannerVaNiCard({
             </div>
           ) : active?.error || active?.data?.error ? <div role="alert"><p>{active?.data?.error || "VaNi could not prepare this explanation."}</p><button className="sector-question" onClick={()=>askIntent(scanIntent,depth,false,true)}>Try again</button></div> : (
             <>
+              {presetId==='breakout_surge' && scanIntent==='why_flagged' ? <ScannerHighlightStory stocks={allStocks} date={dataDate} response={active?.data?.response ?? ''}/> : <>
               <p className={branded?"text-sm text-[var(--text-primary)] leading-7 whitespace-pre-line":"text-[11px] text-[var(--text-secondary)] leading-relaxed whitespace-pre-line"}>
                 {active?.data?.response}
               </p>
+              </>}
               {branded && active?.variables && <details className="mt-4" data-vani-detail="evidence" onToggle={e=>{if(e.currentTarget.open)trackEvent('scanner_evidence_opened',{preset_id:presetId,intent:scanIntent,data_date:dataDate})}}><summary className="cursor-pointer text-sm">Inspect the evidence</summary><p className="text-xs text-muted mt-2">{dataDate} · full daily cohort for {exchangeFilter}. The table may apply additional filters. Examples are a limited sample.</p><ScannerIntentEvidence request={active.variables}/></details>}
               {active?.data?.log_id && <VaNiFeedback logId={active.data.log_id} />}
             </>

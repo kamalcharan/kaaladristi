@@ -202,6 +202,7 @@ const STRENGTH_HIGHLIGHT = {
         avg_rvol: f.avgRvol,
         avg_pct_of_52w_high: f.avgPctOf52wHigh,
         avg_magic_rs: f.avgMagicRs,
+        readings: f.readings,
         examples: f.examples.map((e) => ({
           symbol: e.symbol, rvol: e.rvol, pct_of_52w_high: e.pctOf52wHigh, magic_rs: e.magicRs,
         })),

@@ -1,0 +1,19 @@
+.vani-highlight-story { display:grid; gap:12px; margin-top:12px; min-width:0; }
+.vani-highlight-story > section { padding:16px; border:1px solid var(--border); border-radius:14px; background:var(--card-soft); min-width:0; }
+.vani-highlight-story h4 { margin:0 0 10px; font-size:14px; font-weight:600; color:var(--text-primary); }
+.vani-highlight-story p { margin:8px 0 0; font-size:13px; line-height:1.85; color:var(--text-secondary); overflow-wrap:anywhere; }
+.vani-highlight-story .vani-highlight-overview { background:color-mix(in srgb,var(--accent) 9%,var(--card)); border-color:var(--accent); }
+.vani-highlight-eyebrow { display:flex; flex-wrap:wrap; justify-content:space-between; gap:8px; font-size:12px; color:var(--text-secondary); }
+.vani-highlight-overview h3 { display:flex; align-items:center; gap:12px; margin:14px 0 10px; font-size:15px; font-weight:500; }
+.vani-highlight-count { display:inline-flex; align-items:center; justify-content:center; min-width:60px; min-height:60px; padding:8px 12px; border-radius:12px; font-size:32px; font-weight:700; background:var(--accent); color:var(--bg); font-variant-numeric:tabular-nums; }
+.vani-highlight-story .vani-highlight-scope { font-size:11px; line-height:1.6; color:var(--text-secondary); }
+.vani-highlight-metrics { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
+.vani-highlight-metrics > div { display:flex; flex-direction:column; align-items:flex-start; gap:8px; padding:12px; background:var(--card); border:1px solid var(--border); border-radius:10px; }
+.vani-highlight-metrics span { font-size:12px; line-height:1.5; color:var(--text-secondary); }
+.vani-highlight-metrics mark { font-size:22px; font-weight:600; padding:3px 8px; border-radius:6px; }
+.vani-highlight-metrics small { font-size:10px; color:var(--text-secondary); line-height:1.6; }
+.vani-highlight-story .vani-highlight-caution { border-left:3px solid var(--risk-amber); background:color-mix(in srgb,var(--risk-amber) 7%,var(--card)); }
+.vani-highlight-stock { display:flex; flex-direction:column; align-items:flex-start; gap:8px; padding:12px 0; border-bottom:1px solid var(--border); font-size:12px; color:var(--text-primary); overflow-wrap:anywhere; }
+.vani-highlight-stock:last-child { border-bottom:0; }
+.vani-highlight-link { color:var(--accent); }
+.vani-highlight-stock:focus-visible { outline:2px solid var(--accent); outline-offset:3px; border-radius:6px; }

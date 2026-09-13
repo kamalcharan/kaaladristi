@@ -1,7 +1,7 @@
 export interface EvidenceSection {title:string;items:string[]}
 
 /** Highlight plain text only; stock names and model evidence never become HTML. */
-function Highlight({text,symbols}:{text:string;symbols:string[]}) {
+export function Highlight({text,symbols}:{text:string;symbols:string[]}) {
   const names=new Set(symbols.filter(Boolean));
   const escape=(s:string)=>s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
   const alternatives=[...names].sort((a,b)=>b.length-a.length).map(escape);
