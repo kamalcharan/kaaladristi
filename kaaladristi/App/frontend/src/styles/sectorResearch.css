@@ -95,3 +95,14 @@
 .vani-evidence-value { background: color-mix(in srgb, var(--accent) 12%, var(--card)); color: var(--text-primary); border-radius: 4px; padding: 1px 3px; font-variant-numeric: tabular-nums; }
 .vani-evidence-stock { background: color-mix(in srgb, var(--gold-soft) 20%, var(--card)); color: var(--text-primary); border-radius: 4px; padding: 2px 4px; }
 .vani-evidence-caution { border-left: 3px solid var(--risk-amber); padding: 8px 10px; background: color-mix(in srgb, var(--risk-amber) 10%, var(--card)); color: var(--text-primary); border-radius: 4px; }
+
+/* Price Action uses the companion layout while retaining its own intent handlers. */
+.scanner-companion { width:100%; min-width:0; border:1px solid var(--border); border-radius:16px; background:var(--card); color:var(--text-primary); overflow:hidden; }
+.scanner-companion .scanner-questions { display:flex; flex-direction:column; gap:8px; margin-top:12px; }
+.scanner-companion .scanner-questions button { width:100%; border-radius:10px; padding:11px 12px; font-size:13px; line-height:1.5; }
+.scanner-companion summary { cursor:pointer; font-size:13px; color:var(--text-secondary); }
+.scanner-vani-host { min-width:0; width:100%; }
+@media(min-width:1280px) {
+ .scanner-vani-host { width:360px; flex-shrink:0; align-self:flex-start; position:sticky; top:90px; }
+ .scanner-vani-host .scanner-companion { max-height:calc(100dvh - 110px); overflow-y:auto; }
+}

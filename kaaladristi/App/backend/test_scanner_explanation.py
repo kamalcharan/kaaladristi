@@ -1,5 +1,5 @@
 import unittest
-from lib.scanner_explanation import with_depth, style
+from lib.scanner_explanation import with_depth, style, PRICE_ACTION_PRESETS
 from lib.vani_cache import make_cache_key
 class ScannerExplanation(unittest.TestCase):
  def test_each_depth_has_its_own_versioned_cache(self):
@@ -7,7 +7,11 @@ class ScannerExplanation(unittest.TestCase):
   self.assertEqual(len(set(keys)),3)
   self.assertNotIn(make_cache_key('scanner.momentum_gap',{'v':2,'date':'2026-09-11'}),keys)
  def test_other_scanners_keep_existing_context(self):
-  ctx={'v':2};self.assertIs(with_depth(ctx,'weekly_movers','brief'),ctx)
+  ctx={'v':2};self.assertIs(with_depth(ctx,'unrelated_scanner','brief'),ctx)
+ def test_all_price_action_presets_support_depth(self):
+  self.assertEqual(len(PRICE_ACTION_PRESETS),8)
+  for preset in PRICE_ACTION_PRESETS:
+   self.assertEqual(with_depth({},preset,'simple')['explanation_depth'],'simple')
  def test_invalid_depth_is_rejected(self):
   with self.assertRaises(ValueError):with_depth({},'breakout_surge','unknown')
  def test_styles_change_meaning_not_just_length(self):

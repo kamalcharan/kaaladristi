@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
-import { Loader2 } from 'lucide-react'
+import ScannerCompanionShell from './VaNi/ScannerCompanionShell'
+import {VaNiConsulting} from './VaNi/VaNiBrand'
 import {
   useFpbRecentOutcomes,
   useFpbWhyWatchCoil,
@@ -14,7 +15,7 @@ import {
  * Flower Pot is deliberately NOT a Studio preset (gap audit §5: its
  * three-phase layout is not to be unified), and ScannerStudio's
  * ScannerVaNiCard is the Studio's own — it posts a facts payload through
- * useVaNiAsk for the seven `scanner.*` intents. The four `fpb.*` intents are
+ * useVaNiAsk for the seven `scanner.*` intents. The five `fpb.*` intents are
  * plain GET endpoints returning {insight, ai}, so this renders the same card
  * against that simpler contract rather than widening the Studio card to
  * serve two transports.
@@ -37,7 +38,7 @@ const QUESTIONS: { key: FpbIntentKey; question: string }[] = [
 export default function FpbVaNiCard() {
   const [intent, setIntent] = useState<FpbIntentKey | null>(null)
 
-  // All four run unconditionally (rules of hooks); `enabled` keeps the fetch
+  // All five run unconditionally (rules of hooks); `enabled` keeps the fetch
   // to the selected question, so opening the page costs no LLM calls.
   const newCoils = useFpbNewCoils(intent === 'new_coils')
   const outcomes = useFpbRecentOutcomes(intent === 'recent_outcomes')
@@ -58,28 +59,20 @@ export default function FpbVaNiCard() {
 
   const pillStyle: React.CSSProperties = {
     border: '1px solid var(--border-indigo)', color: 'var(--indigo)', background: 'transparent',
-    borderRadius: 100, padding: '8px 14px', fontSize: 12.5, fontWeight: 500,
+    borderRadius: 10, padding: '11px 12px', fontSize: 12.5, fontWeight: 500,
     cursor: 'pointer', fontFamily: 'var(--font-body)', maxWidth: '100%', textAlign: 'left',
   }
   const activePillStyle: React.CSSProperties = { ...pillStyle, background: 'var(--indigo-bg)', fontWeight: 700 }
 
   return (
-    <div
-      className="rounded-lg overflow-hidden border border-accent-indigo/20 bg-[var(--kd-card)]"
-      style={{ marginBottom: 18 }}
-    >
-      <div className="flex items-center gap-1.5 px-3 py-1.5 bg-accent-indigo/[0.13] border-b border-accent-indigo/25">
-        <span className="w-[15px] h-[15px] rounded-[4px] bg-accent-indigo flex items-center justify-center shrink-0">
-          <span className="text-white text-[8px] leading-none select-none">✦</span>
-        </span>
-        <span className="text-[9px] font-black uppercase tracking-[0.16em] text-accent-indigo">VaNi</span>
-        <span className="text-[8px] text-accent-indigo/60 tracking-wide">वाणी</span>
-      </div>
-      <div className="px-3 py-2.5">
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: intent ? 10 : 0 }}>
+    <ScannerCompanionShell subtitle="Flower Pot Burst · Coil research">
+      <p className="text-sm text-muted">Explore forming coils and inspect how recent setups performed.</p>
+      <details open><summary>Explore scanner questions</summary>
+        <div className="scanner-questions">
           {QUESTIONS.map((q) => (
             <button
               key={q.key}
+              aria-pressed={intent===q.key}
               onClick={() => setIntent((p) => (p === q.key ? null : q.key))}
               style={intent === q.key ? activePillStyle : pillStyle}
             >
@@ -87,6 +80,8 @@ export default function FpbVaNiCard() {
             </button>
           ))}
         </div>
+      </details>
+        {intent && <h3 className="font-semibold text-sm">{QUESTIONS.find(q=>q.key===intent)?.question}</h3>}
         {!intent && (
           <p style={{ fontSize: 12, color: 'var(--text-faint)', margin: 0 }}>
             Pick a question above — VaNi answers in a couple of lines.
@@ -94,12 +89,9 @@ export default function FpbVaNiCard() {
         )}
         {intent && (
           active?.isPending || active?.isFetching ? (
-            <div className="flex items-center gap-1.5 text-muted">
-              <Loader2 className="w-3 h-3 animate-spin" />
-              <span className="text-[10px]">Consulting VaNi…</span>
-            </div>
-          ) : insight ? (
-            <p className="text-[11px] text-[var(--text-secondary)] leading-relaxed whitespace-pre-line">
+            <VaNiConsulting/>
+          ) : active?.isError ? (<div role="alert">VaNi could not prepare this explanation. <button className="sector-question" onClick={()=>active.refetch()}>Try again</button></div>) : insight ? (
+            <p className="text-sm text-[var(--text-primary)] leading-7 whitespace-pre-line">
               {insight}
             </p>
           ) : (
@@ -108,7 +100,6 @@ export default function FpbVaNiCard() {
             </p>
           )
         )}
-      </div>
-    </div>
+    </ScannerCompanionShell>
   )
 }

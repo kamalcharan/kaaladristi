@@ -38,9 +38,10 @@ export default function Layout() {
   // again on every other route.
   const pathname = useLocation().pathname;
   const structureDocked = pathname.startsWith('/market-structure');
+  const scannerDocked = /^\/scanner\/(breakout_surge|weekly_movers|monthly_movers|weekly_decliners|monthly_decliners|breakdown_watch|gl_breakout|gl_retest|flower_pot_burst)\/?$/.test(pathname);
   const sectorDocked = pathname.startsWith('/sector-rotation');
   const vaniDocked = pathname.startsWith('/workspace') || structureDocked || sectorDocked;
-  const railCollapsed = collapsed || vaniDocked;
+  const railCollapsed = collapsed || vaniDocked || scannerDocked;
 
   return (
     <div
@@ -146,7 +147,8 @@ export default function Layout() {
         {/* Page content. The docked pane lives INSIDE this row, below the
             topbar — as a sibling of <main> it split the topbar in two and the
             screen read as two applications stitched together. */}
-        <div className={`relative z-10 flex gap-4 p-4 pb-8 ${sectorDocked ? 'flex-col xl:flex-row' : structureDocked ? 'flex-col lg:flex-row' : ''}`}>
+        <div className={`relative z-10 flex gap-4 p-4 pb-8 ${sectorDocked || scannerDocked ? 'flex-col xl:flex-row' : structureDocked ? 'flex-col lg:flex-row' : ''}`}>
+          {scannerDocked && <div id="scanner-vani-host" className="scanner-vani-host" />}
           {vaniDocked && <VaNiChatPanel docked />}
           <div className="flex-1 min-w-0">
             <Outlet />

@@ -1,6 +1,8 @@
-"""Presentation variants for existing Breakout Surge intents; no new intents."""
+"""Presentation variants for existing Price Action intents; no new intents."""
+PRICE_ACTION_PRESETS = {'breakout_surge', 'weekly_movers', 'monthly_movers', 'weekly_decliners', 'monthly_decliners', 'breakdown_watch', 'gl_breakout', 'gl_retest'}
+
 def with_depth(context, preset_id, depth):
-    if preset_id != 'breakout_surge':
+    if preset_id not in PRICE_ACTION_PRESETS:
         return context
     if depth not in ('brief', 'simple', 'detailed'):
         raise ValueError('Invalid explanation depth')
@@ -8,7 +10,7 @@ def with_depth(context, preset_id, depth):
 
 
 def style(depth):
-    common = (' For this Breakout Surge explanation, the following presentation instructions replace earlier length/format requirements. '
+    common = (' For this Price Action scanner explanation, the following presentation instructions replace earlier length/format requirements. '
               'Answer the existing question using only supplied facts. Lead with its meaning, then evidence and a useful qualification. '
               'Do not invent data, price causes, investor activity or recommendations. A Flow 5D versus Flow 22D gap is a baseline comparison, '
               'not change since yesterday and not weekly/monthly trend confirmation. A daily RS-zone change does not establish longer-term alignment. '

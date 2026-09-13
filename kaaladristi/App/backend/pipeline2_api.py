@@ -5587,7 +5587,7 @@ def vani_ask(req: VaNiAskRequest):
                 }
             # Persistent cache (km_vani_cache): explain_preset's hash derives
             # from the preset copy alone — no change of state, no LLM invoke.
-            from lib.scanner_explanation import with_depth
+            from lib.scanner_explanation import with_depth, PRICE_ACTION_PRESETS
             _pcache_key = _vani_pcache_key(intent_id, with_depth(build_scanner_cache_context(intent_id, ctx), req.preset_id, req.explanation_depth))
             _cached_text = _vani_pcache_get(db, _pcache_key) if _pcache_key else None
             if _cached_text:
@@ -5630,7 +5630,7 @@ def vani_ask(req: VaNiAskRequest):
         }
 
     _ask_system = vani_ask_system(intent)
-    _breakout_style = _is_scanner and req.preset_id == 'breakout_surge'
+    _breakout_style = _is_scanner and req.preset_id in PRICE_ACTION_PRESETS
     if _breakout_style:
         from lib.scanner_explanation import style
         _ask_system += style(req.explanation_depth)

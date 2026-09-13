@@ -20,7 +20,8 @@ import ScanVaNiPublisher from '@/components/domain/ScanVaNiPublisher'
 import ScanStalenessBanner from '@/components/domain/ScanStalenessBanner'
 import AtmosphericBadge from '@/components/domain/AtmosphericBadge'
 import { DristiQLoader } from '@/components/ui'
-import VaNiBrand,{VaNiConsulting,VaNiDepthSelector} from '@/components/domain/VaNi/VaNiBrand'
+import {VaNiConsulting,VaNiDepthSelector} from '@/components/domain/VaNi/VaNiBrand'
+import ScannerCompanionShell from '@/components/domain/VaNi/ScannerCompanionShell'
 import ScannerIntentEvidence from '@/components/domain/VaNi/ScannerIntentEvidence'
 import '@/styles/sectorResearch.css'
 import VaNiFeedback from '@/components/domain/VaNi/VaNiFeedback'
@@ -358,7 +359,7 @@ export default function ScannerStudio({ presetId }: { presetId: string }) {
               question row). ── */}
           {meta && (
             <ScannerVaNiCard
-              key={presetId==='breakout_surge'?JSON.stringify([presetId,dataDate,exchangeFilter,all,sectorLeading?.facts,newSinceYesterday?.facts,rsFlip?.facts,isUnusual]):undefined}
+              key={JSON.stringify([presetId,dataDate,exchangeFilter,all,sectorLeading?.facts,newSinceYesterday?.facts,rsFlip?.facts,isUnusual])}
               presetId={presetId}
               descriptor={d}
               meta={meta}
@@ -537,7 +538,7 @@ export function ScannerVaNiCard({
   rsFlipFacts: RsFlipFacts | null
   isUnusualFacts: IsUnusualFacts | null
 }) {
-  const branded=presetId==='breakout_surge'
+  const branded=true
   const [depth,setDepth]=useState<'brief'|'simple'|'detailed'>('brief')
   // One useVaNiAsk() instance per intent so switching pills never refetches
   // or loses a sibling intent's already-fetched answer.
@@ -662,40 +663,19 @@ export function ScannerVaNiCard({
 
   const pillStyle: React.CSSProperties = {
     border: '1px solid var(--border-indigo)', color: 'var(--indigo)', background: 'transparent',
-    borderRadius: 100, padding: '8px 14px', fontSize: 12.5, fontWeight: 500,
+    borderRadius: 10, padding: '11px 12px', fontSize: 12.5, fontWeight: 500,
     cursor: 'pointer', fontFamily: 'var(--font-body)', maxWidth: '100%', textAlign: 'left',
   }
   const activePillStyle: React.CSSProperties = { ...pillStyle, background: 'var(--indigo-bg)', fontWeight: 700 }
   const visibleIntents = intentsOrdered(descriptor).filter((it) => readyByIntent[it.key])
 
-  // Owner (2026-09-03): "intents should be part of VaNi interaction" — the
-  // mockup's own .vani-main wraps ONE badge header around BOTH the
-  // question row and the answer (intent-row + vani-answer share one card
-  // body); this component used to render the pills as a bare row above a
-  // separate <VaNiInsight> card that only appeared once a question was
-  // clicked, reading as two disconnected pieces rather than one companion
-  // interaction. Rebuilt as a single card, matching VaNiInsight's own
-  // masthead markup (same badge/tokens) rather than reusing the component
-  // itself — VaNiInsight returns null with no insight yet and has no slot
-  // for content above the answer body, and these answers are all
-  // deliberately short (45-90 words, capped at build time — see each
-  // intent's system_prompt in vani_intents.py) so the `collapsible`
-  // truncation VaNiInsight offers isn't needed here either.
+  // Preserve the scanner intent handlers inside the shared companion presentation.
   return (
-    <div
-      className="rounded-lg overflow-hidden border border-accent-indigo/20 bg-[var(--kd-card)]"
-      role="region" aria-label="Scanner VaNi"
-      style={{ marginBottom: 18 }}
-    >
-      {branded?<div className="p-4 border-b border-[var(--border)]"><VaNiBrand size={48} subtitle={<>Breakout Surge · {dataDate} · daily · {exchangeFilter}</>}/></div>:<div className="flex items-center gap-1.5 px-3 py-1.5 bg-accent-indigo/[0.13] border-b border-accent-indigo/25">
-        <span className="w-[15px] h-[15px] rounded-[4px] bg-accent-indigo flex items-center justify-center shrink-0">
-          <span className="text-white text-[8px] leading-none select-none">✦</span>
-        </span>
-        <span className="text-[9px] font-black uppercase tracking-[0.16em] text-accent-indigo">VaNi</span>
-        <span className="text-[8px] text-accent-indigo/60 tracking-wide">वाणी</span>
-      </div>}
-      <div className="px-3 py-2.5">
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: scanIntent ? 10 : 0 }}>
+    <ScannerCompanionShell subtitle={<>{descriptor.displayName} · {dataDate} · {exchangeFilter}</>}>
+      <p className="text-sm text-muted">Explore this scan, inspect the evidence, then ask about a stock using its row mascot.</p>
+      <details open>
+        <summary>Explore scanner questions</summary>
+        <div className="scanner-questions">
           {visibleIntents.map((it) => (
             <button
               key={it.key}
@@ -707,6 +687,8 @@ export function ScannerVaNiCard({
             </button>
           ))}
         </div>
+      </details>
+        {scanIntent && <h3 className="font-semibold text-sm">{visibleIntents.find(it=>it.key===scanIntent)?.question}</h3>}
         {branded && scanIntent && <div className="my-4 max-w-lg"><VaNiDepthSelector value={depth} onChange={value=>{const next=value as typeof depth;setDepth(next);askIntent(scanIntent,next,false,true)}}/></div>}
         {!scanIntent && (
           <p style={{ fontSize: 12, color: 'var(--text-faint)', margin: 0 }}>
@@ -729,8 +711,7 @@ export function ScannerVaNiCard({
             </>
           )
         )}
-      </div>
-    </div>
+    </ScannerCompanionShell>
   )
 }
 
