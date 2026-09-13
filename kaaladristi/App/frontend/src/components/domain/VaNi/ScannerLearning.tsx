@@ -1,7 +1,7 @@
 import {useId} from 'react'
 import './scannerLearning.css'
 
-type Picture = 'breakout' | 'coil' | 'scores' | 'activity' | 'relative' | 'rsi' | 'outcomes'
+type Picture = 'breakdown' | 'week-up' | 'week-down' | 'month-up' | 'month-down' | 'scores-down' | 'breakout' | 'coil' | 'scores' | 'activity' | 'relative' | 'rsi' | 'outcomes'
 /** Schematic teaching diagrams: no live values, proprietary formula or projected path. */
 function Diagram({kind,label}:{kind:Picture;label:string}) {
   const titleId=useId()
@@ -14,6 +14,31 @@ function Diagram({kind,label}:{kind:Picture;label:string}) {
       <path d="M22 91L46 72L68 96L91 67L115 89L142 70L166 95L191 77L214 87L249 30" className="learning-line"/>
       <circle cx="249" cy="30" r="5" className="learning-dot"/>
       <text x="184" y="16">Close above</text><text x="38" y="128">Inside the range</text>
+    </>}
+    {kind==='breakdown'&&<>
+      <rect x="16" y="28" width="208" height="54" rx="8" className="learning-fill"/>
+      <path d="M16 82H282" className="learning-guide"/>
+      <text x="18" y="18">Inside the range</text>
+      <path d="M22 47L46 68L68 42L91 73L115 49L142 68L166 43L191 64L214 51L249 111" className="learning-line learning-shatter"/>
+      <circle cx="249" cy="111" r="5" className="learning-shatter-dot"/>
+      <text x="18" y="103">Range floor</text><text x="184" y="135">Close below</text>
+    </>}
+    {(kind.startsWith('week-')||kind.startsWith('month-'))&&<>
+      <text x="16" y="18">{kind.startsWith('week-')?'Previous week’s close':'Previous month’s close'}</text>
+      <path d="M16 72H284" className="learning-guide"/>
+      <circle cx="24" cy="72" r="4" className="learning-dot"/>
+      <path d={kind.endsWith('-up')?'M24 72L63 89L104 65L146 76L191 48L258 35':'M24 72L63 49L104 78L146 63L191 91L258 108'} className={kind.endsWith('-up')?'learning-line learning-burst':'learning-line learning-shatter'}/>
+      <circle cx="258" cy={kind.endsWith('-up')?35:108} r="5" className={kind.endsWith('-up')?'learning-burst-dot':'learning-shatter-dot'}/>
+      <text x="153" y={kind.endsWith('-up')?57:132}>{kind.endsWith('-up')?'Latest close above':'Latest close below'}</text>
+      <text x="16" y="132">Reference close</text>
+    </>}
+    {kind==='scores-down'&&<>
+      <text x="16" y="24">Recent · 5D</text><text x="261" y="24">0</text>
+      <path d="M278 30V122" className="learning-guide"/>
+      <rect x="54" y="34" width="224" height="22" rx="6" className="learning-shatter-dot"/>
+      <text x="16" y="85">Broader · 22D</text>
+      <rect x="145" y="95" width="133" height="22" rx="6" className="learning-muted-fill"/>
+      <text x="16" y="137">Example: recent score is more negative</text>
     </>}
     {kind==='coil'&&<>
       <text x="15" y="17">COIL · range tightens</text>
@@ -64,17 +89,32 @@ const rsi:Signal={title:'RSI',subtitle:'Context for recent price momentum',pictu
 const coil:Signal={title:'COIL / BURST / SHATTER',subtitle:'Know which phase you are viewing',picture:'coil',look:'A COIL has a narrowing range. BURST is an upside expansion; SHATTER is a downside expansion.',meaning:'COIL describes a forming setup. BURST and SHATTER describe observed events in opposite directions. Check which phase the stock is in.',limit:'Neither direction is guaranteed. A coil can remain unresolved, and either event can fail to follow through.'}
 const outcomes:Signal={title:'Tracked outcomes',subtitle:'Study what happened next',picture:'outcomes',look:'The recorded setup, BURST or SHATTER date, and subsequent observations.',meaning:'Keep forming coils, upside BURST events and downside SHATTER events separate when comparing follow-through.',limit:'Earlier outcomes do not establish what a current coil will do. Check the dates and available observations.'}
 
-export function ScannerStory({presetId}:{presetId:'breakout_surge'|'flower_pot_burst'}) {
- const breakout=presetId==='breakout_surge'
+const stories:Record<string,{picture:Picture;title:string;label:string;story:string}> = {
+ breakout_surge:{picture:'breakout',title:'Daily breakout · close above the range',label:'Daily closing observation above a recent range boundary. No future path is shown.',story:'The daily close is above the recent range. Inspect activity and relative strength to understand the observation.'},
+ breakdown_watch:{picture:'breakdown',title:'Daily breakdown · close below the floor',label:'Daily closing observation below a recent range floor. No future path is shown.',story:'The daily close is below the recent range floor. Inspect activity and relative strength to understand the weakness; continued declines are not established.'},
+ flower_pot_burst:{picture:'coil',title:'One coil, two possible directions',label:'A narrowing COIL with separate upside BURST and downside SHATTER examples. Neither outcome is guaranteed.',story:'A COIL is a quiet, tightening setup. An upside expansion is a BURST; a downside expansion is a SHATTER. The coil alone does not tell you which will happen.'},
+}
+for(const period of ['week','month'] as const)for(const up of [true,false]){
+ const id=`${period==='week'?'weekly':'monthly'}_${up?'movers':'decliners'}`
+ stories[id]={picture:`${period}-${up?'up':'down'}`,title:`${period==='week'?'Weekly':'Monthly'} comparison · previous closing level`,label:`Latest close ${up?'above':'below'} the previous ${period}’s close. This is a closing-price comparison, not a break of the period’s high or low.`,story:`The latest close is ${up?'above':'below'} the previous ${period}’s closing price. The path can include rises and falls; this comparison does not require a breakout or breakdown of that ${period}’s range.`}
+}
+export function ScannerStory({presetId}:{presetId:string}) {
+ const copy=stories[presetId]
+ if(!copy)return null
  return <figure className="vani-learning-story">
-   <div className="vani-learning-eyebrow">{breakout?'A move beyond the range':'One coil, two possible directions'}</div>
-   <Diagram kind={breakout?'breakout':'coil'} label={breakout?'Example price moves within a range and ends at a close above the boundary; no future path is shown.':'A narrowing COIL with separate upside BURST and downside SHATTER examples. Neither outcome is guaranteed.'}/>
+   <div className="vani-learning-eyebrow">{copy.title}</div>
+   <Diagram kind={copy.picture} label={copy.label}/>
    <figcaption>Illustrative example—not live data.</figcaption>
-   <p>{breakout?'Price has moved beyond its recent range. Inspect activity and relative strength to understand the observation.':'A COIL is a quiet, tightening setup. An upside expansion is a BURST; a downside expansion is a SHATTER. The coil alone does not tell you which will happen.'}</p>
+   <p>{copy.story}</p>
  </figure>
 }
-export function ScannerSignalCards({presetId}:{presetId:'breakout_surge'|'flower_pot_burst'}) {
- const signals=presetId==='breakout_surge'?[scores,activity,relative,rsi]:[coil,activity,relative,outcomes]
+export function ScannerSignalCards({presetId}:{presetId:string}) {
+ const down=presetId==='breakdown_watch'||presetId.endsWith('_decliners')
+ const period=presetId.startsWith('weekly_')?'week':presetId.startsWith('monthly_')?'month':null
+ const scoreCard=down?{...scores,picture:'scores-down' as Picture,meaning:'A more negative recent score can show greater weakness in the recent reading than in the broader baseline. Check the actual values; appearing in this scan does not require this score relationship.'}:scores
+ const rsiCard={...rsi,meaning:'Above 70 is a high reading; below 30 is a low reading. Compare it with the reference level, trading activity and relative strength.',limit:'A high reading does not guarantee a reversal; a low reading does not establish a bottom. RSI is supporting context, not an admission rule for this scan.'}
+ const reference:Signal|null=period?{title:period==='week'?'WTD / previous week’s close':'MTD / previous month’s close',subtitle:'The reference behind this scan',picture:`${period}-${down?'down':'up'}` as Picture,look:`The latest close compared with the previous ${period}’s closing price.`,meaning:`${down?'Below':'Above'} that closing reference is what this scan identifies. The path within the current ${period} may include both rises and falls.`,limit:`This is not a comparison with the previous ${period}’s high or low, and does not mean every day moved in the same direction.`}:null
+ const signals=presetId==='flower_pot_burst'?[coil,activity,relative,outcomes]:reference?[reference,scoreCard,relative,rsiCard]:[scoreCard,activity,relative,rsiCard]
  return <div className="vani-learning-signals"><p className="text-xs text-muted">Open a signal to connect the table reading with its meaning. Examples are illustrative, not live readings.</p>{signals.map(signal=><details key={signal.title} className="vani-learning-signal">
    <summary><span className="vani-evidence-value">{signal.title}</span><span className="vani-learning-subtitle">{signal.subtitle}</span></summary>
    <div className="vani-learning-signal-body"><Diagram kind={signal.picture} label={`Illustrative example: ${signal.subtitle}`}/>
