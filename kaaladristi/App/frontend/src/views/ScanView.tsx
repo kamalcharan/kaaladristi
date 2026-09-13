@@ -1,5 +1,3 @@
-import ScannerCompanionShell from '@/components/domain/VaNi/ScannerCompanionShell';
-import {STAGE_SCANNER_IDS,FLOW_SCANNER_IDS} from '@/constants/scannerIntroductions';
 import type {FpbGroup} from '@/hooks/useDashboardExtras';
 import {SCANNER_INTRODUCTIONS} from '@/constants/scannerIntroductions'
 import {useResearchProfile} from '@/hooks/useResearchProfile'
@@ -1474,7 +1472,6 @@ function ScannerResults({ presetId }: { presetId: string }) {
     return (
       <div style={{ paddingBottom: '100px' }}>
         {header}
-        <ScannerCompanionShell key={presetId} presetId={presetId} subtitle="Stage research">{null}</ScannerCompanionShell>
         <Stage2Results preset={preset} timeframe={timeframe} viewMode={viewMode} onViewModeChange={setViewMode} />
       </div>
     );
@@ -1485,7 +1482,6 @@ function ScannerResults({ presetId }: { presetId: string }) {
     return (
       <div style={{ paddingBottom: '100px' }}>
         {header}
-        <ScannerCompanionShell key={presetId} presetId={presetId} subtitle="Flow research">{null}</ScannerCompanionShell>
         <ConvictionFlowResults preset={preset} timeframe={timeframe} viewMode={viewMode} onViewModeChange={setViewMode} />
       </div>
     );
@@ -1524,8 +1520,6 @@ function ScannerResults({ presetId }: { presetId: string }) {
   return (
     <div style={{ paddingBottom: '100px' }}>
       {header}
-      {(STAGE_SCANNER_IDS as readonly string[]).includes(presetId) && <ScannerCompanionShell key={presetId} presetId={presetId} subtitle="Stage research">{null}</ScannerCompanionShell>}
-      {(FLOW_SCANNER_IDS as readonly string[]).includes(presetId) && <ScannerCompanionShell key={presetId} presetId={presetId} subtitle="Flow research">{null}</ScannerCompanionShell>}
       <ScanVaNiPublisher preset={preset} timeframe={timeframe} exchange={exchangeFilter} stocks={sorted} isLoading={isLoading} />
       <ScanStalenessBanner stocks={sorted} />
 

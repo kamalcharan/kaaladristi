@@ -7,15 +7,15 @@ import {useStockAskStore} from '@/stores/stockAskStore'
 import '@/styles/sectorResearch.css'
 
 /** The same persistent companion arrangement used by sector research. */
-export default function ScannerCompanionShell({subtitle,children,presetId,activeQuestion=false}:{subtitle:ReactNode;children:ReactNode;presetId?:string;activeQuestion?:boolean}) {
+export default function ScannerCompanionShell({subtitle,children,presetId,activeQuestion=false,portal=true}:{portal?:boolean;subtitle:ReactNode;children:ReactNode;presetId?:string;activeQuestion?:boolean}) {
   const [host,setHost]=useState<HTMLElement|null>(null)
   useEffect(()=>{if(presetId && SCANNER_INTRODUCTIONS[presetId])useStockAskStore.getState().close()},[presetId])
-  useEffect(()=>{setHost(document.getElementById('scanner-vani-host'))},[])
+  useEffect(()=>{setHost(portal?document.getElementById('scanner-vani-host'):null)},[portal,presetId])
   const body=<aside className="scanner-companion" role="region" aria-label="Scanner VaNi">
     <header className="p-4 border-b border-[var(--border)]"><VaNiBrand size={48} subtitle={subtitle}/></header>
     <div className="sector-vani-body">
       <div>{presetId&&<ScannerIntroduction key={presetId} presetId={presetId} activeQuestion={activeQuestion}/>} {children}</div>
     </div>
   </aside>
-  return host?createPortal(body,host):body
+  return portal&&host?createPortal(body,host):body
 }
