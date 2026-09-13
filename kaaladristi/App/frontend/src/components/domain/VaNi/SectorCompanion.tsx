@@ -15,6 +15,7 @@ import { useSectorResearchStore } from '@/stores/sectorResearchStore';
 import { useAuthStore } from '@/stores/authStore';
 import { sectorSessionDate, sectorSignal, SECTOR_FLOW_LABEL } from '@/lib/sectorFlow';
 import VaNiFeedback from './VaNiFeedback';
+import VaNiBrand from './VaNiBrand';
 import '@/styles/sectorResearch.css';
 
 const API = import.meta.env.VITE_PIPELINE_API_URL?.trim() || '';
@@ -131,11 +132,11 @@ function CurrentSectorCompanion() {
       <button key={id} aria-pressed={intent === id} onClick={() => choose(id as Intent)} className="sector-question">{label}</button>)}</div></details>}
   </div>;
   return <aside {...analytics} className="ph-no-capture sector-vani" aria-label="VaNi Sector Rotation companion">
-    <header className="p-4 border-b border-[var(--border)]"><h2 className="text-lg font-serif">VaNi · वाणी</h2><p className="text-xs text-muted">Sector research · {(overview ? evidence.data?.date : context.date) ? sectorSessionDate((overview ? evidence.data?.date : context.date)!) : 'Select a session'}</p>
+    <header className="p-4 border-b border-[var(--border)]"><VaNiBrand subtitle={<>Sector research · {(overview ? evidence.data?.date : context.date) ? sectorSessionDate((overview ? evidence.data?.date : context.date)!) : 'Select a session'}</>} />
       <button ref={launcher} className={`${overview ? 'hidden' : 'sector-vani-launch'} sector-question mt-3`} onClick={() => { setOpen(true); setCycle(c=>c+1); }}>Help me read this page</button></header>
     <div className={overview ? "sector-vani-overview" : "sector-vani-desktop"}>{body}</div>
     <dialog ref={dialog} className="sector-vani-dialog" onCancel={() => setOpen(false)} onClose={() => { setOpen(false); launcher.current?.focus(); }}>
-      <header className="flex items-center justify-between p-4 border-b border-[var(--border)]"><h2 className="font-medium">VaNi · Sector research</h2><button autoFocus className="sector-question" onClick={() => setOpen(false)}>Close</button></header>{open && body}
+      <header className="flex items-center justify-between p-4 border-b border-[var(--border)]"><VaNiBrand size={36} subtitle="Sector research" /><button autoFocus className="sector-question" onClick={() => setOpen(false)}>Close</button></header>{open && body}
     </dialog>
   </aside>;
 }

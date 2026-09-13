@@ -13,6 +13,7 @@ import StructureStrip from '@/components/domain/StockCockpit/StructureStrip'
 import { computeThesis, type ThesisBar, type PositionInput, type ThesisRead } from '@/services/thesis'
 import { fetchEquityEodById } from '@/services/indicatorData'
 import { useStockAskStore } from '@/stores/stockAskStore'
+import { VaNiAvatar } from './VaNiBrand'
 import { useBookmarkStore } from '@/stores/bookmarkStore'
 import { useAuthStore } from '@/stores/authStore'
 
@@ -295,6 +296,7 @@ export default function StockAskPopover() {
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+        <VaNiAvatar size={32} />
         <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{entity.symbol}</span>
         {s && (
           <span style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: s.pctChng != null && s.pctChng >= 0 ? 'var(--bull)' : 'var(--bear)' }}>

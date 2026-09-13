@@ -134,7 +134,7 @@ try {
     if(width<1280) await page.getByRole('dialog').getByRole('button',{name:'Close',exact:true}).click();
     await page.getByRole('button',{name:'Longer-Term Leadership',exact:true}).click();
     await page.getByRole('heading',{name:'Which baskets are holding their strength?',exact:true}).waitFor();
-    await page.getByRole('heading',{name:'VaNi · Longer-term picture',exact:true}).waitFor();
+    await page.getByRole('complementary',{name:'VaNi longer-term companion'}).getByRole('heading',{name:'VaNi · वाणी',exact:true}).waitFor();
     await page.getByRole('button',{name:'3M',exact:true}).click();
     await page.getByRole('heading',{name:'Which baskets are holding their strength?',exact:true}).waitFor();
     await page.getByRole('button',{name:'12M',exact:true}).click();

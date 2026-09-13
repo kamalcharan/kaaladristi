@@ -1,6 +1,6 @@
 # VaNi main-page intent scope
 
-Agreed launch menu: one automatic default and three follow-ups per mode on `/sector-rotation`. Deferred questions are hidden, not displayed as disabled or coming-soon items. Their frontend definitions, backend handlers and evidence calculations remain in place. Individual-sector detail menus are unchanged.
+Agreed launch menu: one automatic default and three follow-ups per mode on `/sector-rotation`. Deferred questions are hidden, not displayed as disabled or coming-soon items. Their frontend definitions, backend handlers and evidence calculations remain in place. Individual-sector detail questions are scoped separately to the selected sector, date, and research mode.
 
 ## Required now
 

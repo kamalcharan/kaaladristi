@@ -4,6 +4,7 @@ import { useSectorResearchStore } from '@/stores/sectorResearchStore';
 import { useLeadership, type LeadershipRow } from '@/services/sectorLeadership';
 import { sectorSessionDate } from '@/lib/sectorFlow';
 import { trackVani } from '@/lib/vaniAnalytics';
+import VaNiBrand from './VaNiBrand';
 
 type Question = 'why' | 'breadth' | 'persistence' | 'flow';
 const questions: Record<Question, string> = {
@@ -28,8 +29,7 @@ export default function SectorDetailLeadershipCompanion() {
   const evidence = useLeadership(c.category, c.date, c.months ?? 6);
   const row = useMemo(() => evidence.data?.rows.find(r => r.index_id === indexId), [evidence.data, indexId]);
   return <aside className="ph-no-capture sector-vani p-4 space-y-3 xl:max-h-[calc(100dvh-110px)] xl:overflow-y-auto" aria-label="VaNi sector detail companion">
-    <h2 className="text-lg font-serif">VaNi · {row?.name ?? 'Sector research'}</h2>
-    <p className="text-xs text-muted">{c.months ?? 6} months · {c.date ? sectorSessionDate(c.date) : 'Select a session'}</p>
+    <VaNiBrand subtitle={<>{row?.name ?? 'Sector research'} · {c.months ?? 6} months · {c.date ? sectorSessionDate(c.date) : 'Select a session'}</>} />
     <div className="flex flex-col gap-2" aria-label="Questions about this sector">
       {(Object.entries(questions) as [Question,string][]).map(([id,label]) => <button key={id} className="sector-question text-left" aria-pressed={question === id} onClick={() => { setQuestion(id); trackVani('intent_selected', {page:'sector_detail',mode:'longer_term',intent_id:`sector.detail.${id}`,months:c.months ?? 6,source:'manual'}); }}>{label}</button>)}
     </div>

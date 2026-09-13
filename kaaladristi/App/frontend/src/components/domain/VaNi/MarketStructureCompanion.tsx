@@ -12,6 +12,7 @@ import { useAuthStore } from '@/stores/authStore';
 import { trackEvent } from '@/lib/analytics';
 import { markGuideWalked } from '@/services/guideProgress';
 import VaNiFeedback from './VaNiFeedback';
+import VaNiBrand from './VaNiBrand';
 
 interface ReadingResponse {
   response: string | null; error?: string; facts?: string[]; log_id?: string;
@@ -84,8 +85,7 @@ export default function MarketStructureCompanion() {
   const loader = <div role="status" aria-live="polite" className="flex items-center gap-2 py-3 text-xs text-muted"><Loader2 aria-hidden="true" className="h-4 w-4 animate-spin motion-reduce:animate-none text-accent-indigo" /><span>Consulting VaNi…</span></div>;
 
   return <aside {...analytics} aria-label="VaNi Market Structure companion" className="ph-no-capture w-full lg:w-[var(--vani-w)] shrink-0 self-start lg:sticky rounded-2xl border border-[var(--border)] bg-[var(--card)] overflow-hidden" style={{ top: 'calc(var(--topbar-h) + 1rem)' }}>
-    <div className="p-4 border-b border-[var(--border)]"><h2 className="text-lg font-serif text-[var(--text-primary)]">VaNi · वाणी</h2>
-      <p className="text-xs text-[var(--text-secondary)]">Market Structure · All NSE · {data.period}-session window</p>
+    <div className="p-4 border-b border-[var(--border)]"><VaNiBrand subtitle={<>Market Structure · All NSE · {data.period}-session window</>} />
       <p className="text-[11px] text-muted mt-1">Breadth: {data.breadthDate ?? 'unavailable'} · ROC: {data.rocDate ?? 'unavailable'}</p>
       <p className="text-[11px] text-muted mt-1">Dates identify the source market sessions. Readings use closing data, not live prices.</p>
       <button className="lg:hidden text-sm text-accent-indigo mt-3" aria-expanded={mobileExpanded} onClick={() => { if (!mobileExpanded) setPresentationCycle(n => n + 1); setMobileExpanded(!mobileExpanded); }}>{mobileExpanded ? 'Close explanation' : 'Help me read this page'}</button>

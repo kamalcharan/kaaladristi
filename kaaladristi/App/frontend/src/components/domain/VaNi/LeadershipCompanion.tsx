@@ -10,6 +10,7 @@ import {useAuthStore} from '@/stores/authStore';
 import {useLeadership,askLeadership,type LeadershipRow} from '@/services/sectorLeadership';
 import {sectorSessionDate} from '@/lib/sectorFlow';
 import VaNiFeedback from './VaNiFeedback';
+import VaNiBrand from './VaNiBrand';
 import {leadershipStory} from '@/services/leadershipStory';
 import '@/styles/vaniStories.css';
 
@@ -59,8 +60,7 @@ export default function LeadershipCompanion() {
  const analytics=useVaniAnalytics(analyticsContext,{key:JSON.stringify([intent,cycle,c.category,c.date,c.months,user]),ready:!loading&&!!reading.data?.response&&!reading.data?.context_changed,failed:!loading&&!!(error||reading.data?.context_changed)},true);
  const retry=async()=>{trackVani('retry',analyticsContext);setCycle(v=>v+1);const fresh=await evidence.refetch();if(fresh.data?.snapshot===evidence.data?.snapshot&&!fresh.error)await reading.refetch();};
  return <aside {...analytics} className="ph-no-capture sector-vani p-4 space-y-3 xl:max-h-[calc(100dvh-110px)] xl:overflow-y-auto" aria-label="VaNi longer-term companion">
-  <h2 className="text-lg font-serif">VaNi · Longer-term picture</h2>
-  <p className="text-xs text-muted">{c.months??6} months · {c.category==='custom'?'Curated':c.category} · {c.date?sectorSessionDate(c.date):'Select a session'}</p>
+  <VaNiBrand subtitle={<>{c.months??6} months · {c.category==='custom'?'Curated':c.category} · {c.date?sectorSessionDate(c.date):'Select a session'}</>} />
   <details data-vani-detail="intents"><summary className="sector-question cursor-pointer">Open longer-term intents</summary><div className="flex flex-col gap-2 pt-2" aria-label="Longer-term questions">{Object.entries(questions).filter(([id])=>ACTIVE_INTENTS.has(id)).map(([id,label])=><button key={id} className="sector-question text-left" aria-pressed={intent===id} onClick={()=>{trackVani('intent_selected',{...analyticsContext,intent_id:id,source:'manual'});setIntent(id as Intent);setCycle(v=>v+1)}}>{label}</button>)}</div></details>
   <h3 className="font-medium text-sm">{questions[intent]}</h3>
   {!evidence.isFetching&&!evidence.error&&evidence.data&&<Evidence rows={evidence.data.rows} intent={intent} date={evidence.data.date} months={c.months??6}/>}

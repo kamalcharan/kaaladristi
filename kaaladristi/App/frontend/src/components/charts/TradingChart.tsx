@@ -1359,7 +1359,7 @@ export default function TradingChart({ data, height = 900, compact = false, work
                 fontSize: 16, color: 'var(--vani)',
               }}
             >
-              ✦
+              <img src="/assets/vani/vani-mascot-transparent.png" alt="" aria-hidden="true" style={{ width: 28, height: 28, objectFit: 'contain' }} />
             </div>
           </div>
         )}

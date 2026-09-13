@@ -6,6 +6,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { X, Sparkles, ChevronRight, MessageCircle, RotateCcw, Search, ArrowRight } from 'lucide-react';
 import VaNiMessage, { VaNiThinking } from './VaNi/VaNiMessage';
+import { VaNiAvatar } from './VaNi/VaNiBrand';
 import VaNiAutorunBrief from './VaNi/VaNiAutorunBrief';
 import VaNiIntentButton from './VaNi/VaNiIntentButton';
 import VaNiIntentTray from './VaNi/VaNiIntentTray';
@@ -447,14 +448,12 @@ function ExistingVaNiChatPanel({ docked = false }: { docked?: boolean } = {}) {
       >
         {/* Header */}
         <div className="flex items-center gap-3 px-5 py-4 border-b border-[var(--accent-indigo)]/20 shrink-0 bg-[var(--bg)]">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[var(--accent-indigo)] to-[var(--accent-violet)] flex items-center justify-center shrink-0 shadow-lg shadow-indigo-500/20">
-            <span className="text-white text-sm font-serif font-bold">V</span>
-          </div>
+          <VaNiAvatar size={40} />
           <div className="flex-1 min-w-0">
-            <div className="text-base font-serif font-bold text-white leading-tight">
-              VaNi <span className="font-normal text-[var(--accent-indigo)]/70">&middot; वाणी</span>
+            <div className="text-base font-serif font-bold text-[var(--text-primary)] leading-tight">
+              VaNi <span className="font-normal text-[var(--text-secondary)]">&middot; वाणी</span>
             </div>
-            <div className="text-[10px] font-mono text-[var(--accent-indigo)]/50 tracking-wide uppercase mt-0.5">
+            <div className="text-[10px] font-mono text-[var(--text-secondary)] tracking-wide uppercase mt-0.5">
               {headerSubtext}
             </div>
           </div>
