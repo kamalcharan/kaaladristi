@@ -1,12 +1,34 @@
 import {useId} from 'react'
 import './scannerLearning.css'
 
-type Picture = 'delivery' | 'confluence' | 'volume-event' | 'breakdown' | 'week-up' | 'week-down' | 'month-up' | 'month-down' | 'scores-down' | 'breakout' | 'coil' | 'scores' | 'activity' | 'relative' | 'rsi' | 'outcomes'
+type Picture = 'discovery-stirring' | 'discovery-waking' | 'discovery-ascent' | 'delivery' | 'confluence' | 'volume-event' | 'breakdown' | 'week-up' | 'week-down' | 'month-up' | 'month-down' | 'scores-down' | 'breakout' | 'coil' | 'scores' | 'activity' | 'relative' | 'rsi' | 'outcomes'
 /** Schematic teaching diagrams: no live values, proprietary formula or projected path. */
 function Diagram({kind,label}:{kind:Picture;label:string}) {
   const titleId=useId()
   return <svg viewBox={kind==='coil'?'0 0 300 220':'0 0 300 140'} role="img" aria-labelledby={titleId} className="vani-learning-diagram">
     <title id={titleId}>{label}</title>
+    {kind==='discovery-stirring'&&<>
+      <text x="16" y="21">Long base · quiet preparation</text>
+      <path d="M14 100H284" className="learning-guide"/>
+      <path d="M15 94L38 105L60 88L82 103L104 91L126 101L148 84L170 95L192 79L214 91L236 75L260 83" className="learning-line"/>
+      <path d="M14 51H284" className="learning-guide"/><text x="154" y="44">Old ceiling intact</text>
+      <text x="17" y="130">No wake recorded</text>
+    </>}
+    {kind==='discovery-waking'&&<>
+      <text x="16" y="19">Recent wake · ceiling crossed</text>
+      <path d="M14 78H284" className="learning-guide"/>
+      <text x="17" y="70">Old ceiling</text>
+      <path d="M16 109L39 91L62 103L85 87L108 102L132 92L157 101L180 85L205 94L229 54L258 42" className="learning-line"/>
+      <circle cx="258" cy="42" r="5" className="learning-dot"/>
+      <text x="18" y="132">Inspect whether it holds</text>
+    </>}
+    {kind==='discovery-ascent'&&<>
+      <text x="16" y="19">Journey after confirmation</text>
+      <path d="M14 100H284" className="learning-guide"/>
+      <path d="M16 116L45 102L74 109L102 88L129 70L155 77L181 48L205 61L231 52L259 37" className="learning-line"/>
+      <circle cx="102" cy="88" r="4" className="learning-dot"/>
+      <text x="72" y="131">Wake</text><text x="186" y="89">Rest can occur</text>
+    </>}
     {kind==='delivery'&&<>
       <text x="16" y="20">Recent delivery · 5D</text><rect x="16" y="30" width="226" height="23" rx="6" className="learning-dot"/>
       <text x="16" y="78">Broader baseline · 22D</text><rect x="16" y="88" width="124" height="23" rx="6" className="learning-muted-fill"/>
@@ -104,6 +126,9 @@ const coil:Signal={title:'COIL / BURST / SHATTER',subtitle:'Know which phase you
 const outcomes:Signal={title:'Tracked outcomes',subtitle:'Study what happened next',picture:'outcomes',look:'The recorded setup, BURST or SHATTER date, and subsequent observations.',meaning:'Keep forming coils, upside BURST events and downside SHATTER events separate when comparing follow-through.',limit:'Earlier outcomes do not establish what a current coil will do. Check the dates and available observations.'}
 
 const stories:Record<string,{picture:Picture;title:string;label:string;story:string}> = {
+ wg_stirring:{picture:'discovery-stirring',title:'Stirring · preparation within the base',label:'Schematic price still below a multi-year closing ceiling. No breakout or future path is shown.',story:'Quiet building is worth studying, but no wake has occurred. Compare the turn, old ceiling and the observed clocks.'},
+ waking_giants:{picture:'discovery-waking',title:'Waking · a recent ceiling break',label:'Schematic close above an old multi-year ceiling. Whether it holds is unknown.',story:'The wake records a change from a long base. Inspect what has happened since the wake before interpreting it as a continuing journey.'},
+ wg_ascent:{picture:'discovery-ascent',title:'Ascent · a confirmed journey',label:'Schematic confirmed advance with a pause; neither continuation nor timing is predicted.',story:'The journey has passed its confirmation point. A pause is possible, so read today’s clocks and the distance from the earlier wake.'},
  conviction_flow:{picture:'delivery',title:'Delivery activity · recent versus broader',label:'Illustrative recent delivery activity above its broader baseline. Not live values or research scores.',story:'Delivery participation is elevated across the recent window, while this scanner also checks proximity to the short-term price average. More delivery activity does not determine the next price move.'},
  power_buy:{picture:'confluence',title:'Stock strength meets industry context',label:'Industry context and stock conditions considered together, not a checklist of guaranteed confirmations.',story:'A stock’s qualifying strength conditions sit within a leading or rotating-in industry. The combination provides context; different stocks can qualify through different combinations.'},
  volume_drive:{picture:'volume-event',title:'An event worth inspecting',label:'Illustrative activity bars with one elevated session. No forecast is shown.',story:'A recorded volume-drive or accumulation-bar event brings the stock into view. Inspect delivery participation and the price candle to understand that activity.'},
