@@ -1,3 +1,5 @@
+import ScannerCompanionShell from '@/components/domain/VaNi/ScannerCompanionShell';
+import {STAGE_SCANNER_IDS} from '@/constants/scannerIntroductions';
 import type {FpbGroup} from '@/hooks/useDashboardExtras';
 import {SCANNER_INTRODUCTIONS} from '@/constants/scannerIntroductions'
 import {useResearchProfile} from '@/hooks/useResearchProfile'
@@ -1438,7 +1440,7 @@ function ScannerResults({ presetId }: { presetId: string }) {
           }}>
             {preset.name}
           </h1>
-          {presetId !== 'flower_pot_burst' && (
+          {!SCANNER_INTRODUCTIONS[presetId] && (
             <button
               onClick={() => openVaNiWithIntent('scanner.explain_preset')}
               style={{
@@ -1472,6 +1474,7 @@ function ScannerResults({ presetId }: { presetId: string }) {
     return (
       <div style={{ paddingBottom: '100px' }}>
         {header}
+        <ScannerCompanionShell key={presetId} presetId={presetId} subtitle="Stage research">{null}</ScannerCompanionShell>
         <Stage2Results preset={preset} timeframe={timeframe} viewMode={viewMode} onViewModeChange={setViewMode} />
       </div>
     );
@@ -1520,6 +1523,7 @@ function ScannerResults({ presetId }: { presetId: string }) {
   return (
     <div style={{ paddingBottom: '100px' }}>
       {header}
+      {(STAGE_SCANNER_IDS as readonly string[]).includes(presetId) && <ScannerCompanionShell key={presetId} presetId={presetId} subtitle="Stage research">{null}</ScannerCompanionShell>}
       <ScanVaNiPublisher preset={preset} timeframe={timeframe} exchange={exchangeFilter} stocks={sorted} isLoading={isLoading} />
       <ScanStalenessBanner stocks={sorted} />
 
