@@ -413,6 +413,71 @@ volume") and the QA check fails if the scanner's name is put back on them.
 
 ---
 
+## Phase 3 precondition — the per-dimension watermark ✅ BUILT
+
+Phase 3 stores derived values on `km_equity_eod`. That is only safe if a stored
+value can be shown to be CURRENT, and until now nothing could show it.
+
+**The gap was wider than "no watermark".** `run_daily` builds a `StepOutcome`
+for each of its 22 dimensions and the worker stores **none of them
+individually** — they are folded into one aggregate `km_jobs` row (dimension
+NULL) plus a `progress_text` string. `fix` jobs do carry `(dimension,
+trade_date)`; `km_pipeline_runs` carries the LEGACY step names, which pipeline2
+mostly skips (`indicators`, `magic_rs` etc. hold one row since 2026-08-01). So
+no existing table could answer *"when was `nse_magic_rs` last computed for
+2026-09-11"*.
+
+**What shipped**
+
+- **Migration 210** — `km_dimension_watermarks` (dimension, trade_date,
+  computed_at, status, source, job_id, rows_affected). ~7,500 rows a year.
+- `pipeline2/watermarks.py` — `stamp()`, `parents_of()` (inverts
+  `DIMENSION_DEPENDENTS`, so one declaration serves both directions),
+  `stale_derivations()`, and `validate_parents()` at import.
+- Stamping wired into `run_daily` (every non-failing step) and `_run_fix`
+  (before the cascade enqueues, and recording whether the job was itself a
+  cascade — that flag is the evidence the chain fired).
+- `check_derivation_staleness` in `lib/integrity_checks.py` — **a fifth check
+  class**. Every other check asks whether a value is present, plausible or
+  moving; none could ask whether it is *current*. A dimension recomputed from
+  stale inputs has every column populated, every invariant satisfied and a
+  healthy fill rate. It is simply wrong, invisibly.
+- `test_dimension_watermarks.py` — 22 tests, verified to fail against all
+  seven properties plus both wiring guards.
+
+**Three calibration decisions, each one the difference between a check that
+gets read and a check that gets muted**
+
+1. **Absent is UNKNOWN, never stale.** The table starts empty and fills
+   forward; `stale_derivations` INNER JOINs both watermarks. A LEFT JOIN would
+   report every un-stamped dimension on the first night — thousands of findings,
+   ignored by the second.
+2. **`partial` stamps; `failed` never does.** A partial compute ran against the
+   inputs as they stood, which is the only question a watermark answers. There
+   are **2,184 partial fix jobs on record** — refusing them would make most
+   dimensions read permanently stale within a week.
+3. **Warning, not critical, with a 60-second floor.** Parents finish seconds
+   before children inside one run; measured real staleness is **1–6 days**. A
+   finding that persists across runs is the signal; one that appears after a
+   mid-day fix is the system working. Same reasoning that calibrated
+   `CASH_EQUITY_SERIES`.
+
+**What it catches that the cascade cannot**: a fix applied while
+`PIPELINE2_CASCADE` was off, a cascade job enqueued and then failed, and a
+backfill script run straight against the database.
+
+**Fixed while in the file** — the five dead references CLAUDE.md has listed as
+"still unfixed". `db_meta` was *read* at C1b and only *assigned* fifteen lines
+later, so `check_scanner_contract` raised `NameError` on its first statement
+**every run since the commit that removed `MIN_AVG_AMT_22D_CR`**. `run_all`
+converted that crash into a bland `checker_error_*` warning, so the guard looked
+present while being blind — on exactly the contract drift it exists to catch.
+`unmeasured_n` was the orphan of the deleted liquidity floor and is removed with
+it, for the reason the file already records: remove the dead floor rather than
+invent a constant for it.
+
+---
+
 ## Phase 3 — New columns · narrow, and the only migration
 
 Four things genuinely need storing. Everything else is already on the row.

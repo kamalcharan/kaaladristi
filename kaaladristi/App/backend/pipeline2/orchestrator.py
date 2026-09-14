@@ -297,7 +297,8 @@ ProgressFn = Callable[[str, int], None]
 def run_daily(conn: 'psycopg2.extensions.connection',
               trade_date: date,
               on_progress: ProgressFn,
-              force: bool = False) -> RunOutcome:
+              force: bool = False,
+              job_id: int | None = None) -> RunOutcome:
     """Run the full daily pipeline for `trade_date`: download then compute.
 
     Steps 1-3 fetch NSE index bhav, NSE equity bhav, and BSE equity bhav.
@@ -307,6 +308,14 @@ def run_daily(conn: 'psycopg2.extensions.connection',
     matviews. A failed download step does not abort compute — downstream steps
     run against whatever rows are already present.
     """
+    # Imported here rather than at module scope: watermarks reads
+    # DIMENSION_DEPENDENTS and DAILY_STEPS from THIS module, so a top-level
+    # import is circular. ABSOLUTE, not `from . import` — test_leadership_pipeline
+    # compiles run_daily on its own via ast/exec, where a relative import has no
+    # __package__ to resolve against and raises
+    # KeyError: "'__name__' not in globals". One lookup per run, not per step.
+    from pipeline2 import watermarks
+
     outcome = RunOutcome(trade_date=str(trade_date))
     total_steps = len(DAILY_STEPS)
 
@@ -339,6 +348,18 @@ def run_daily(conn: 'psycopg2.extensions.connection',
             rows_affected=result.rows_affected,
             error_msg=result.error_msg,
         ))
+
+        # Watermark (migration 210). These 22 StepOutcomes were built and then
+        # discarded — the worker folds them into ONE aggregate km_jobs row, so
+        # nothing in the database could say when a given dimension was last
+        # computed for a date. Without that, the Phase-0 cascade can recompute a
+        # dependent and no one can prove it happened; a row derived from
+        # superseded inputs is indistinguishable from a current one, and
+        # fill-rate checks cannot see the difference by construction.
+        # Best-effort: instrumentation must never fail a compute that worked.
+        watermarks.stamp(conn, dim, trade_date, result.status,
+                         source='daily_run', job_id=job_id,
+                         rows_affected=result.rows_affected)
 
     # Publish only after the full source refresh succeeds; retain old dated
     # snapshots if any enrichment failed instead of presenting partial evidence.

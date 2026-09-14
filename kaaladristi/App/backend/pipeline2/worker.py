@@ -36,6 +36,7 @@ from lib.config import DATABASE_URL  # noqa: E402
 
 from . import handlers  # noqa: E402
 from . import orchestrator  # noqa: E402
+from . import watermarks  # noqa: E402
 
 
 logging.basicConfig(
@@ -312,6 +313,19 @@ def _run_fix(conn, job: dict) -> None:
         f'[{result.status}]'
     )
 
+    # Watermark (migration 210), BEFORE the cascade enqueues anything. This is
+    # the fix path's whole point: a fix rewrites a column, so every dimension
+    # derived from it is now older than its own input — and that is only
+    # provable if the repair itself is dated. Source reflects who asked:
+    # a cascade job is still a fix, but it matters which, because a cascade
+    # that fired is the evidence the chain worked.
+    if result.status != 'failed':
+        watermarks.stamp(
+            conn, dim, trade_date_obj, result.status,
+            source='cascade' if job.get('created_by') == 'cascade' else 'fix',
+            job_id=job_id, rows_affected=result.rows_affected,
+        )
+
     # Step no longer erroring → clear it from the parent daily_run so the
     # admin health bar updates (see _reconcile_daily_run_after_fix).
     if result.status != 'failed' and not result.error_msg:
@@ -344,7 +358,8 @@ def _run_daily(conn, job: dict) -> None:
         _update_job(conn, job_id, progress_text=text[:500], progress_pct=min(max(pct, 0), 99))
 
     try:
-        outcome = orchestrator.run_daily(conn, trade_date_obj, _progress, force=force)
+        outcome = orchestrator.run_daily(conn, trade_date_obj, _progress, force=force,
+                                         job_id=job_id)
     except RuntimeError as e:
         if str(e) == 'cancelled':
             log.info(f'Job #{job_id}: cancelled mid-run')
