@@ -126,13 +126,15 @@ assert.deepEqual(titles(buildStoryEvents(noSince).filter((e) => e.kind === 'stag
 // km_wg_journeys, which changes nightly, so a typed-in number goes stale
 // silently. migration 209 computes them; the component must cite what it is
 // given and say LESS when given nothing.
-const stripSrc = fs.readFileSync(new URL('../../src/components/domain/StockCockpit/JourneyStrip.tsx', import.meta.url), 'utf8');
-const stripJs = ts.transpileModule(stripSrc, { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.React } }).outputText;
-const stripExports = {};
-// The component imports React types only; a stub require keeps the module
-// loadable without pulling React into this check.
-new Function('exports', 'require', stripJs)(stripExports, () => ({}));
-const { baseRateLine } = stripExports;
+//
+// The sentence moved to services/journeyFacts.ts when VaNi began narrating the
+// same arc: one phrasing of one comparison, or the strip and the narration
+// drift apart on the same screen.
+const factsSrc = fs.readFileSync(new URL('../../src/services/journeyFacts.ts', import.meta.url), 'utf8');
+const factsJs = ts.transpileModule(factsSrc, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
+const factsExports = {};
+new Function('exports', factsJs)(factsExports);
+const { baseRateLine, journeyFacts } = factsExports;
 
 const RATES = {
   as_of: '2026-09-14', closed_total: 595, confirmed_total: 348, confirmed_pct: 58.5,
@@ -171,15 +173,71 @@ assert.match(baseRateLine({}, RATES, 103.25), /A close above the base ceiling/);
 assert.ok(!/595/.test(baseRateLine({}, RATES, 103.25)),
   'an arc that never woke must cite no wake frequency');
 
-// No figure may be hardcoded in the component any more. Strip EVERY block and
+// No figure may be hardcoded in either file any more. Strip EVERY block and
 // line comment first — prose may cite an example ("348 of 595"); executable
 // code may not.
-const stripCode = stripSrc
+const stripComments = (src) => src
   .replace(/\/\*[\s\S]*?\*\//g, '')
   .replace(/^\s*\/\/.*$/gm, '');
-assert.ok(!/\b595\b|\b58\.5\b|\b494\b|\b348\b/.test(stripCode),
-  'base-rate figures must not appear in JourneyStrip executable code');
+for (const [label, src] of [
+  ['JourneyStrip', fs.readFileSync(new URL('../../src/components/domain/StockCockpit/JourneyStrip.tsx', import.meta.url), 'utf8')],
+  ['journeyFacts', factsSrc],
+]) {
+  assert.ok(!/\b595\b|\b58\.5\b|\b494\b|\b348\b/.test(stripComments(src)),
+    `base-rate figures must not appear in ${label} executable code`);
+}
+
+// ── 6. What VaNi is given ──────────────────────────────────────────────────
+// The fact block is the only thing the model sees. Two properties are
+// load-bearing and neither is visible in a type: every comparison is already
+// resolved into a WORD, and the population frequency is fenced off from being
+// read as a per-stock chance.
+const SOLARA = {
+  state: 'STIRRING', is_current: true, base_years: 5.3, base_start: '2021-03-12',
+  turn_date: '2026-08-21', turn_close: 616.9, stir_days: 24, align_score: 6,
+  base_high: 852.4, pct_from_turn: 21.4,
+};
+let f = journeyFacts(SOLARA, 749.15, RATES, '2026-09-11').join('\n');
+
+// The model must never be handed a subtraction to perform.
+assert.match(f, /BELOW the base ceiling of Rs 852\.4/, 'the side of the ceiling is stated, not implied');
+assert.match(f, /Rs 103\.25 \(13\.8%\)/, 'the gap is computed here, not in the prompt');
+assert.match(f, /A close clearing that ceiling is what records a wake/);
+assert.match(f, /Price is UP 21\.4% since the turn/, 'direction is a word — a signed number is what got misread');
+assert.match(f, /NO wake recorded/, 'the absence of a wake must be stated, not left to inference');
+assert.doesNotMatch(f, /NOT yet confirmed/, 'an arc that never woke cannot be "not yet confirmed"');
+assert.match(f, /not a probability for this stock/,
+  'the frequency must carry its own fence — this is the sentence that stops a base rate becoming a forecast');
+assert.match(f, /21 days before the latest bar/, 'milestone age is precomputed against the latest bar');
+
+// The other side of the ceiling, and a negative move: both words must flip.
+f = journeyFacts({ ...SOLARA, pct_from_turn: -8.5, base_high: 700 }, 749.15, RATES, '2026-09-11').join('\n');
+assert.match(f, /ABOVE the base ceiling/);
+assert.match(f, /Price is DOWN 8\.5% since the turn/);
+assert.doesNotMatch(f, /records a wake/, 'the wake hint belongs only below the ceiling');
+
+// A woken, unconfirmed arc says so in words, and cites the two lifespans.
+f = journeyFacts({ wake_date: '2026-07-09', state: 'WAKING' }, null, RATES, '2026-09-11').join('\n');
+assert.match(f, /NOT yet confirmed/);
+assert.match(f, /confirmed ran 494 days and arcs that never confirmed ran 38 days/,
+  'the asymmetry between a confirmed and an unconfirmed arc is the whole decision value');
+
+// A closed arc states its life, in days, already subtracted.
+f = journeyFacts({ wake_date: '2026-07-09', sleep_date: '2026-08-31', state: 'WAKING' }, null, RATES, '2026-09-11').join('\n');
+assert.match(f, /CLOSED on 31 Aug 26, 53 days after its wake/);
+assert.doesNotMatch(f, /Arc is RUNNING/, 'a slept arc is not running');
+
+// No journey → nothing at all, so the caller appends no empty header.
+assert.deepEqual(journeyFacts(null, 100, RATES, '2026-09-11'), []);
+assert.deepEqual(journeyFacts(undefined, null, null, null), []);
+
+// No reading → the fence sentence has nothing to fence, and must not appear.
+f = journeyFacts(SOLARA, 749.15, null, '2026-09-11').join('\n');
+assert.doesNotMatch(f, /not a probability/);
+assert.doesNotMatch(f, /\b595\b|\b58\.5\b/, 'no remembered frequency may appear without a reading');
+assert.match(f, /BELOW the base ceiling/, 'the arc itself is still fully described');
 
 console.log('PASS: archived arcs emit wake/confirm/close, multiple journeys per stock, '
   + 'out-of-window silence, stage_since transitions incl. first-bar and UNKNOWN suppression, '
-  + 'base rates read from the nightly table and dropped when absent');
+  + 'base rates read from the nightly table and dropped when absent, '
+  + 'VaNi fact block states every comparison as a word and fences the frequency');

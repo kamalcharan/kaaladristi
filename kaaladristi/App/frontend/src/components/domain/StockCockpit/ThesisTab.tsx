@@ -12,7 +12,8 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { fetchJourneyBaseRates } from '@/services/indicatorData'
+import { fetchJourneyBaseRates, type JourneyBaseRates } from '@/services/indicatorData'
+import { journeyFacts } from '@/services/journeyFacts'
 import { useAuthStore } from '@/stores/authStore'
 import { useBookmarkStore } from '@/stores/bookmarkStore'
 import { computeThesis, type Relationship, type ThesisBar, type ThesisRead } from '@/services/thesis'
@@ -23,8 +24,23 @@ import { narrateVani } from '@/services/vaniNarrate'
 import type { Pillar } from './VerdictHero'
 import StructureStrip from './StructureStrip'
 
-/** Assemble the deterministic facts VaNi will narrate — nothing derived here. */
-function buildThesisFacts(name: string, t: ThesisRead): string {
+/** Assemble the deterministic facts VaNi will narrate — nothing derived here.
+ *
+ *  The journey block is appended last and matters more than its size suggests:
+ *  without it VaNi could see "Journey woke" as a bare timeline entry and knew
+ *  nothing about the arc it belongs to, how far the close sits from the base
+ *  ceiling, or how often a wake has historically gone on to confirm — which is
+ *  the one genuinely measurable thing on this page. Every comparison in that
+ *  block is resolved into words before VaNi sees it (services/journeyFacts.ts).
+ */
+function buildThesisFacts(
+  name: string,
+  t: ThesisRead,
+  journey?: StoryJourney | null,
+  close?: number | null,
+  rates?: JourneyBaseRates | null,
+  asOf?: string | null,
+): string {
   const lines: string[] = [`Instrument: ${name}`, `Relationship: ${t.relationship}`]
   if (t.relationship === 'position' && t.positionRisk) {
     const r = t.positionRisk
@@ -42,8 +58,18 @@ function buildThesisFacts(name: string, t: ThesisRead): string {
   if (t.signals.length) {
     lines.push('Recent signals: ' + t.signals.slice(0, 4).map((e) => `${e.title} [${e.tone}] (${e.date})`).join('; '))
   }
+  lines.push(...journeyFacts(journey, close, rates, asOf))
   return lines.join('\n')
 }
+
+/** The base-rate chip's question. Fixed text, so the answer is cacheable and
+ *  the phrasing can be reviewed once rather than typed differently each time.
+ *  It asks where the arc IS and what the population recorded — never what comes
+ *  next, which is the line between a recorded frequency and a forecast. */
+const JOURNEY_QUESTION =
+  'Where is this stock in its Waking Giants journey, and what have the recorded '
+  + 'journeys done from this point? State the frequency with its denominator, and '
+  + 'do not turn it into an expectation for this stock.'
 
 const MONO: React.CSSProperties = { fontFamily: 'var(--font-mono)' }
 const TONE: Record<'bull' | 'bear' | 'neutral', string> = {
@@ -95,6 +121,14 @@ export default function ThesisTab({
   })
 
   const lastDate = bars[bars.length - 1]?.trade_date ?? ''
+
+  // Assembled once. The narrate button, the free-form question and the
+  // base-rate chip must all be grounded in the SAME facts, or VaNi can answer
+  // two questions about one stock from two different pictures of it.
+  const facts = useMemo(
+    () => (thesis ? buildThesisFacts(name, thesis, journey, currentClose, baseRates, lastDate) : ''),
+    [name, thesis, journey, currentClose, baseRates, lastDate],
+  )
   const [showForm, setShowForm] = useState(false)
   const [entryPrice, setEntryPrice] = useState('')
   const [entryDate, setEntryDate] = useState('')
@@ -187,7 +221,7 @@ export default function ThesisTab({
               <button
                 onClick={async () => {
                   setVaniLoading(true)
-                  const text = await narrateVani(name, buildThesisFacts(name, thesis))
+                  const text = await narrateVani(name, facts)
                   setVaniText(text); setVaniTried(true); setVaniLoading(false)
                 }}
                 disabled={vaniLoading}
@@ -203,6 +237,25 @@ export default function ThesisTab({
             >
               {askOpen ? '▴ Ask a question' : '▾ Ask a question'}
             </button>
+            {/* The one question on this page with a measured answer. Offered
+                only when there IS an arc and a nightly reading to cite — with
+                no reading VaNi would have nothing but the arc itself, which
+                JourneyStrip already states in full. */}
+            {journey && baseRates && (
+              <button
+                onClick={async () => {
+                  if (asking) return
+                  setAskOpen(true); setQuestion(JOURNEY_QUESTION); setAsking(true)
+                  const a = await narrateVani(name, facts, JOURNEY_QUESTION)
+                  setAnswer(a); setAsking(false)
+                }}
+                disabled={asking}
+                style={{ ...MONO, fontSize: 10, fontWeight: 600, color: 'var(--vani)', background: 'none',
+                  border: 'none', cursor: asking ? 'default' : 'pointer', padding: 0, marginLeft: 12, opacity: asking ? 0.6 : 1 }}
+              >
+                ✦ Where is this in its journey?
+              </button>
+            )}
           </div>
 
           {askOpen && (
@@ -214,7 +267,7 @@ export default function ThesisTab({
                   onKeyDown={async (e) => {
                     if (e.key === 'Enter' && question.trim() && !asking) {
                       setAsking(true)
-                      const a = await narrateVani(name, buildThesisFacts(name, thesis), question.trim())
+                      const a = await narrateVani(name, facts, question.trim())
                       setAnswer(a); setAsking(false)
                     }
                   }}
@@ -225,7 +278,7 @@ export default function ThesisTab({
                   onClick={async () => {
                     if (!question.trim() || asking) return
                     setAsking(true)
-                    const a = await narrateVani(name, buildThesisFacts(name, thesis), question.trim())
+                    const a = await narrateVani(name, facts, question.trim())
                     setAnswer(a); setAsking(false)
                   }}
                   disabled={asking || !question.trim()}

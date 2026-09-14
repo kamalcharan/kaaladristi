@@ -357,9 +357,34 @@ bare percentage; and with no reading the frequency clause is **dropped**, never
 replaced by a remembered number — a confidently wrong base rate is worse than
 none. The figures may not appear in the component's executable code at all.
 
+**VaNi narrates the arc, not just the marker.** The fact block VaNi is given
+(`buildThesisFacts` in `ThesisTab.tsx`) carried the story events and nothing
+about the arc they belong to. `services/journeyFacts.ts` is now the **only**
+place a journey sentence is written — `baseRateLine` moved there out of
+`JourneyStrip.tsx`, because the strip's footnote and VaNi's narration are one
+comparison and two phrasings of one comparison drift apart on the same screen.
+The Thesis tab assembles the facts **once** and shares them across the narrate
+button, the question box, and a "✦ Where is this in its journey?" chip (shown
+only when there is both an arc and a nightly reading).
+
+Two properties in that block are load-bearing, neither visible in a type:
+
+1. **Every comparison is a WORD before the model sees it** — ABOVE / BELOW,
+   UP / DOWN, "53 days after its wake". The model never receives `base_high`
+   and `close` to subtract, nor a signed percentage to read the sign of. Same
+   failure class as the first live autorun, which read `-0.0361` and wrote
+   "the fast reading is slightly above the slow reading".
+2. **The frequency is fenced.** "58.5% of 595 confirmed" is one sentence from
+   "this stock has a 58.5% chance", a forecast about a specific security. The
+   facts carry an explicit line saying it is not that, `_VANI_NARRATE_SYSTEM`
+   forbids the restatement however the facts are worded, and
+   `/api/ai/vani-narrate` now applies `_sebi_post_filter` (it had been skipping
+   it). No reading → no fence sentence, because there is nothing to fence.
+
 Guarded by `scripts/qa/check-journey-events.mjs` (manual, like the rest of
 `scripts/qa/`), verified to fail against a dropped confirm/close emission, a
-reverted stage diff, and a hardcoded base-rate fallback.
+reverted stage diff, a hardcoded base-rate fallback, a flipped ceiling side, a
+raw signed number handed to the model, and a dropped frequency fence.
 
 ### `fix` jobs cascade to their dependents (2026-09-14)
 

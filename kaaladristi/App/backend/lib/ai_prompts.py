@@ -473,6 +473,16 @@ _VANI_NARRATE_SYSTEM = (
     "strengthening, say that. Name the specific weak/strong pillars when given.\n"
     "- Observational, never advice. Never say buy / sell / hold / exit / target / "
     "book / add. Speak about the situation, not what the reader should do.\n"
+    "- Some facts are RECORDED FREQUENCIES across a population of past journeys "
+    "(e.g. 'of 595 recorded journeys, 348 (58.5%) went on to confirm'). State "
+    "such a figure only WITH its denominator, and only as what has already "
+    "happened across that population. Never restate it as a chance, a "
+    "likelihood, odds, or an expectation for this stock — 'this stock has a "
+    "58.5% chance' is a forecast about a specific security and is forbidden "
+    "however the facts are worded.\n"
+    "- Comparisons in the facts are already resolved into words (ABOVE / BELOW, "
+    "UP / DOWN, 'N days after'). Repeat the stated relationship; never work one "
+    "out yourself from two numbers.\n"
     + _RULES
 )
 

@@ -197,8 +197,48 @@ Two rules the check enforces, both more important than the storage choice:
 a rate carries its **denominator**, and a missing reading **drops the clause**
 rather than defaulting to a remembered number.
 
-Remaining in 1c: the VaNi base-rate intent, which now reads the same table
-rather than recomputing.
+**1c (rest) — VaNi is given the arc, not just a marker.** ✅ Built.
+
+The gap was not that VaNi lacked an intent. It was that the fact block VaNi
+narrates (`buildThesisFacts`) carried the arc's *story events* — "Journey woke"
+as a bare timeline entry — and nothing about the arc those events belong to:
+no state, no base, no distance to the ceiling, and none of the recorded
+frequencies. VaNi could name the milestone and say nothing about what it meant.
+
+- `services/journeyFacts.ts` — **new, and the only place a journey sentence is
+  written.** `baseRateLine` moved here out of `JourneyStrip.tsx`: the strip's
+  footnote and VaNi's narration are one comparison, and two phrasings of one
+  comparison on the same screen drift apart. `journeyFacts()` emits the block
+  VaNi receives.
+- `ThesisTab.tsx` — assembles the facts **once** and shares them across the
+  narrate button, the free-form question box and the new chip. Three separate
+  assemblies would let VaNi answer two questions about one stock from two
+  different pictures of it.
+- **"✦ Where is this in its journey?"** — a chip on the Thesis VaNi row, shown
+  only when there is both an arc and a nightly reading to cite. Its question is
+  a fixed constant, so the phrasing is reviewed once and the answer is
+  cacheable.
+- `_VANI_NARRATE_SYSTEM` gained two rules; `/api/ai/vani-narrate` gained
+  `_sebi_post_filter`, which it had been skipping.
+
+**The two properties that are actually load-bearing**, neither visible in a
+type, both sabotage-tested:
+
+1. **Every comparison is resolved into a WORD before the model sees it** —
+   ABOVE / BELOW, UP / DOWN, "53 days after its wake". The model is never handed
+   `base_high 852.40` and `close 749.15` to subtract, nor a signed percentage to
+   read the sign of. That is not hypothetical caution: it is the same failure as
+   the first live autorun, which read `-0.0361` and wrote "the fast reading is
+   slightly above the slow reading".
+2. **The frequency is fenced.** "58.5% of 595 confirmed" is one sentence away
+   from "this stock has a 58.5% chance", which is a forecast about a specific
+   security. The fact block carries an explicit line saying it is not that, the
+   prompt forbids the restatement however the facts are worded, and
+   `_sebi_post_filter` is the backstop. With no reading, the fence sentence has
+   nothing to fence and does not appear.
+
+`check-journey-events.mjs` covers both, verified to fail against a flipped
+ceiling side, a raw signed number, a dropped fence, and a remembered base rate.
 
 **The `is_current` trap.** `sleep_date` only ever exists on an archived row, so
 filtering to `is_current` structurally hid the end of every completed arc.
@@ -249,6 +289,19 @@ The 595-journey numbers above are one query. They convert a marker ("this
 happened") into a decision aid ("this happened 595 times, 58.5% confirmed,
 confirmation lands around day 29"). This is the single highest-leverage VaNi
 content change available and it needs no new data.
+
+⚠ **Open — `km_journey_base_rates` grants are unverified.** Migration 209
+contains `GRANT SELECT … TO authenticated, anon, kd_app`, but
+`information_schema.role_table_grants` returned only `kd_readonly` when read
+over the read-only MCP connection. That view shows only grants where the
+current role is grantor or grantee, so this may be a visibility artefact of
+that connection rather than a real gap — the definitive read is `pg_class.relacl`
+or `has_table_privilege('authenticated', …)`, and the DB has been timing out
+since. It matters because logged-in browser users run PostgREST as
+`authenticated`: if the grant genuinely did not apply, `fetchJourneyBaseRates`
+returns null for everyone and the frequency clause silently disappears — which
+is the designed degraded state, so **nothing would look broken**. That is the
+migration-142 failure mode precisely. Re-check before treating 1c as closed.
 
 ---
 

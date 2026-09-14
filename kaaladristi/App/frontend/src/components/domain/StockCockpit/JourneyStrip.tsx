@@ -21,12 +21,16 @@
  * With no reading available the frequency clause is dropped, never replaced by
  * a remembered number. A confidently wrong base rate is worse than none.
  *
+ * The sentence itself lives in services/journeyFacts.ts, because VaNi narrates
+ * the same arc and two phrasings of one comparison drift apart.
+ *
  * SEBI / D39: describes structure and recorded state. The stage names say what
  * the arc IS, not where price goes next; no instruction, no expectation.
  */
 
 import type { StoryJourney } from '@/services/storyEvents'
 import type { JourneyBaseRates } from '@/services/indicatorData'
+import { baseRateLine } from '@/services/journeyFacts'
 
 const MONO = { fontFamily: 'var(--font-mono)' } as const
 
@@ -64,50 +68,6 @@ function reachedIndex(j: StoryJourney): number {
   if ((j.stir_days ?? 0) > 0 || j.state === 'STIRRING') return 2
   if (j.turn_date) return 1
   return 0
-}
-
-/** The closing sentence: what this arc is, and what the recorded population
- *  says about arcs at that point.
- *
- *  Every figure comes from `rates`, computed nightly (migration 209). None is
- *  typed in. When there is no reading — before the migration runs, or if the
- *  fetch fails — the frequency clause is DROPPED rather than replaced by a
- *  remembered number: a confidently wrong base rate is worse than none, and
- *  the arc's own state is still worth stating.
- *
- *  Rates always carry their denominator ("348 of 595"), so the sample size is
- *  visible rather than hidden behind a percentage. */
-export function baseRateLine(
-  j: StoryJourney,
-  rates: JourneyBaseRates | null | undefined,
-  gap: number | null,
-): string {
-  const n = rates?.closed_total ?? null
-  const confirmed = rates?.confirmed_total ?? null
-  const pct = rates?.confirmed_pct ?? null
-  const toConfirm = rates?.avg_days_to_confirm ?? null
-  const lifeOk = rates?.avg_life_confirmed ?? null
-
-  if (j.confirm_date) {
-    const head = `Confirmed ${fmtDate(j.confirm_date)}.`
-    if (n && lifeOk != null) {
-      return `${head} Across ${n} recorded journeys, confirmed arcs ran ${lifeOk} days on average.`
-    }
-    return head
-  }
-
-  if (j.wake_date) {
-    const head = 'Woken, not yet confirmed.'
-    if (n && confirmed != null && pct != null) {
-      const when = toConfirm != null ? `, on average ${toConfirm} days after the wake` : ''
-      return `${head} Of ${n} recorded journeys, ${confirmed} (${pct}%) went on to confirm${when}.`
-    }
-    return head
-  }
-
-  return gap != null && gap > 0
-    ? 'No wake recorded on this journey. A close above the base ceiling is what records one.'
-    : 'No wake recorded on this journey.'
 }
 
 export default function JourneyStrip({
