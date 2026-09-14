@@ -85,6 +85,7 @@ python -m unittest test_sector_vani test_market_structure_vani \
   test_scanner_explanation test_sector_flow_intents test_fpb_actions \
   test_highlight_story test_custom_index_rebuild test_pipeline_cascade
 # 98 tests — last green 2026-09-14
+python -m unittest test_dimension_watermarks   # +22, migration 210
 ```
 
 These run on synthetic fixtures: no PostgreSQL, no model call, no network.
@@ -472,11 +473,57 @@ longest real chain, from `nse_eod_download`, is 21), `PIPELINE2_CASCADE_DEBOUNCE
 unforced enqueue and a re-expanding cascade. Plan + rollout watch:
 `docs/claude/thesis-events-poa.md`.
 
-⚠ **Still no per-dimension watermark.** `indicators_computed_at` is written
-under `WHERE indicators_computed_at IS NULL`, so re-runs skip stamped rows, and
-`backfill_vani_flags.py` touches no timestamp at all. The cascade makes the
-recompute happen; nothing yet records which version of the inputs a row was
-derived from. That gap must close before stored event columns land (POA Phase 3).
+### Per-dimension watermarks — the cascade is now provable (2026-09-14)
+
+The cascade above makes the recompute happen. **Nothing recorded that it did.**
+A row derived from superseded inputs has every column populated, every invariant
+satisfied and a healthy fill rate — it is simply wrong, invisibly. Presence, not
+correctness, one more time.
+
+The gap was wider than "no watermark". `run_daily` builds a `StepOutcome` for
+each of its 22 dimensions and the worker stores **none of them individually** —
+they fold into one aggregate `km_jobs` row (dimension NULL) plus a
+`progress_text` string. `fix` jobs do carry `(dimension, trade_date)`;
+`km_pipeline_runs` carries the LEGACY step names, which pipeline2 mostly skips.
+So nothing could answer *"when was `nse_magic_rs` last computed for
+2026-09-11"*.
+
+`km_dimension_watermarks` (migration 210) answers it. `pipeline2/watermarks.py`
+stamps from `run_daily` and `_run_fix`, and **inverts `DIMENSION_DEPENDENTS`** —
+one declaration, two directions: the cascade walks it down to decide what to
+recompute, `check_derivation_staleness` walks it up to find what should have
+been recomputed and was not. That check is a **fifth check class**: every other
+check asks whether a value is present, plausible or moving; none could ask
+whether it is *current*. It catches the three cases the cascade structurally
+cannot — a fix applied while `PIPELINE2_CASCADE` was off, a cascade job enqueued
+then failed, and a backfill run straight against the DB.
+
+Three calibration decisions, each the difference between a check that gets read
+and one that gets muted — **do not "tidy" any of them**:
+
+1. **Absent is UNKNOWN, never stale.** The table starts empty and fills forward;
+   `stale_derivations` INNER JOINs both watermarks. A LEFT JOIN would report
+   every un-stamped dimension on night one — thousands of findings, muted by
+   night two.
+2. **`partial` stamps; `failed` never does.** A partial compute ran against the
+   inputs as they stood, which is the only question a watermark answers.
+   **2,184 partial fix jobs are on record** — refusing them would make most
+   dimensions read permanently stale within a week.
+3. **Warning with a 60-second floor, not critical.** Parents finish seconds
+   before children inside one run; measured real staleness is **1–6 days**.
+   Same calibration reasoning as `CASH_EQUITY_SERIES`.
+
+Guarded by `test_dimension_watermarks.py` (22 tests), verified to fail against
+all seven properties plus both wiring guards (the stamp being removed, and the
+lazy import reverting to relative — which breaks `test_leadership_pipeline`,
+since it compiles `run_daily` on its own via `ast`/`exec` where a relative
+import has no `__package__`).
+
+⚠ `indicators_computed_at` is unchanged and still not a watermark: written under
+`WHERE indicators_computed_at IS NULL`, so re-runs skip stamped rows, and
+`backfill_vani_flags.py` touches no timestamp at all. It measures a different
+thing (did the legacy RPC visit this row) and `pipeline2/health.py` already
+refuses to trust it.
 
 ### `leadership_snapshot` — publication is gated on a fully clean run
 
@@ -807,7 +854,7 @@ selections are deliberate usage.
 
 New migrations go in `App/DBscripts/km_migration_NNN_description.sql`.
 Run them directly in pgAdmin, DBeaver, or `psql` — **no Python wrapper scripts**.
-Next migration number: **210** (disk is at 209). **209** = `km_migration_209_journey_base_rates.sql` — `km_journey_base_rates`, the nightly recorded outcome of the Waking Giants arc (closed/confirmed counts, confirm %, days to confirm, confirmed vs unconfirmed lifespan), keyed by `as_of` so the series is inspectable. Written by `scripts/compute_wg_journeys.py` **inside the same transaction** as the `km_wg_journeys` DELETE+INSERT it summarises, so a `fix` on the `wg_journeys` dimension recomputes it for free and the summary can never describe a different population than the rows on screen. Grants SELECT to `authenticated`/anon/kd_app (the migration-142 lesson) and seeds the current reading, so the UI has a row before the next nightly run. No RLS. Owner runs it in pgAdmin; nothing else required. **208** = `km_migration_208_leadership_snapshots.sql` — published sector-leadership snapshots: `km_sector_leadership_snapshots` (PK trade_date+category+months, months IN (3,6,12)) + `km_leadership_generation` + statement-level triggers on `km_index_constituents` and `km_index_symbols` that bump the generation, so any membership or catalog edit invalidates every published snapshot across all dates at once. Apply AFTER 207, then run `python scripts/refresh_sector_leadership.py`. **207** = `km_migration_207_sector_leadership.sql` — `km_custom_index_revisions` (revision vs computed_revision, so a stale calculation is detectable), `km_custom_index_membership_log` (seeded with a `baseline` row per custom index before later add/remove actions), `km_leadership_observations` (previous published payloads) and `km_custom_index_history_archive`. Neither migration deletes existing data or rewrites index prices, and neither recreates `km_scan_results`. Prior: 206 — `km_migration_206_onboarding_version.sql`, version-stamped re-onboarding: `km_profiles.onboarding_version INT DEFAULT 0` + the key added to `kd_update_profile`'s whitelist + a TARGETED stamp of `1` for everyone who already carries `persona_set_at` (2 of 17 on 2026-09-12). Replaces migration 165's blanket `onboarded = false`. Sending a cohort back through setup is now: bump `ONBOARDING_VERSION` in `src/constants/onboarding.ts`, then stamp whoever is exempt. Owner runs it in pgAdmin; no REFRESH needed; 205 — `km_migration_205_fpb_card_columns.sql`, Flower Pot card columns + ETFs out of the whole matview: mutual-fund units (`isin LIKE 'INF%'`) leave `active`/`wg_pool`/the exclusion-count universe, `km_equity_symbols.is_etf` is set from the same rule (it had been FALSE on all 16,938 rows since the column existed), the `flower_pot_burst` arm LEFT JOINs `stock` so it carries the shared card's columns instead of typed NULLs, three new columns `fpb_hi10`/`fpb_lo10`/`fpb_tight_today`, and `d_pct` stops being NULL on sixteen of the seventeen arms; **owner runs it then `REFRESH MATERIALIZED VIEW km_scan_results;` and `REFRESH MATERIALIZED VIEW km_scan_exclusion_counts;`**; measured effect on the 2026-09-07 bar: flower_pot_burst 106→68 rows with 67 of 68 carrying an industry, breakdown_watch 441→364, breakout_surge 295→277, conviction_flow stays at its cap of 50 with 12 real stocks replacing fund units; 204 = `km_migration_204_profile_persona.sql`, onboarding persona persistence: `km_profiles.persona/acts_on/hold_horizon/concede_level/persona_set_at/guide_progress`, `kd_update_profile` whitelist, `km_ux_events`; vocabulary mirrored in `src/constants/personaConfig.ts` and gated by `npm run check:persona` inside `npm run build`; plan: `docs/claude/onboarding-poa.md`; 203 = `km_migration_203_index_breadth.sql`, per-index breadth table + `compute_index_breadth()`; owner runs it then `python scripts/backfill_index_breadth.py`; 202 = `km_migration_202_gl_matview_arms.sql`, Golden Line arms + GL/Big Money bar columns on `km_scan_results`; 195/197/200/202/205 recreate the `km_scan_results` matview `WITH NO DATA`. **Convention as of 205 (gap audit C3): a migration that recreates it ENDS with the two `REFRESH` statements as executable SQL, after `COMMIT`** — a comment asking the next person to remember failed twice (200 on 2026-09-06, 205 on 2026-09-07), and each time every matview-served preset answered PostgREST with "materialized view has not been populated", which the UI shows as "Failed to run scan." on eleven scanners at once. Order matters: `km_scan_results` first, `km_scan_exclusion_counts` second (it SELECTs from the first); 200b is a suffixed duplicate). Older history: (166 = `km_migration_166_golarambh_almanac.sql` — Golārambha family: 4 generator-fed `planet_state` Sun rules (Uttara/Dakshina Gola halves + equinox ±1d turn windows, tag 'Gola'), windows from `scripts/generate_golarambh_windows.py` (TROPICAL equinox crossings — deliberately not the sidereal sankranti), almanac body in AlmanacPage + `astro_group:Gola` overlay; 165 = force-reonboard theme; 164 = forgot-password token leak; 163 = pricing GST beta default; NOTE 161/162 have DUPLICATE numbers (rule_evidence + scan_presets at 161, rule_evidence_transitions + user_bookmarks at 162); 160 = Mercury-slice launch catalog scope; see `docs/claude/astro-story.md`. ⚠ Numbering drifted: duplicates also at 152/153 and no 155 — always `ls App/DBscripts/ | sort` before picking a number, don't trust this line alone.)
+Next migration number: **211** (disk is at 210). **210** = `km_migration_210_dimension_watermarks.sql` — `km_dimension_watermarks` (dimension, trade_date, computed_at, status, source, job_id, rows_affected), ~7,500 rows a year: WHEN each pipeline2 dimension was last computed for a date. Compared against a dimension's PARENTS (`DIMENSION_DEPENDENTS` inverted) it detects a row derived from superseded inputs — which no fill-rate check can see. Starts EMPTY on purpose (absent is unknown, never stale) and fills from the next daily run; `'partial'` stamps, `'failed'` never does. Grants SELECT to `authenticated`/anon/kd_app/kd_readonly. Owner runs it in pgAdmin; no REFRESH, no backfill. **209** = `km_migration_209_journey_base_rates.sql` — `km_journey_base_rates`, the nightly recorded outcome of the Waking Giants arc (closed/confirmed counts, confirm %, days to confirm, confirmed vs unconfirmed lifespan), keyed by `as_of` so the series is inspectable. Written by `scripts/compute_wg_journeys.py` **inside the same transaction** as the `km_wg_journeys` DELETE+INSERT it summarises, so a `fix` on the `wg_journeys` dimension recomputes it for free and the summary can never describe a different population than the rows on screen. Grants SELECT to `authenticated`/anon/kd_app (the migration-142 lesson) and seeds the current reading, so the UI has a row before the next nightly run. No RLS. Owner runs it in pgAdmin; nothing else required. **208** = `km_migration_208_leadership_snapshots.sql` — published sector-leadership snapshots: `km_sector_leadership_snapshots` (PK trade_date+category+months, months IN (3,6,12)) + `km_leadership_generation` + statement-level triggers on `km_index_constituents` and `km_index_symbols` that bump the generation, so any membership or catalog edit invalidates every published snapshot across all dates at once. Apply AFTER 207, then run `python scripts/refresh_sector_leadership.py`. **207** = `km_migration_207_sector_leadership.sql` — `km_custom_index_revisions` (revision vs computed_revision, so a stale calculation is detectable), `km_custom_index_membership_log` (seeded with a `baseline` row per custom index before later add/remove actions), `km_leadership_observations` (previous published payloads) and `km_custom_index_history_archive`. Neither migration deletes existing data or rewrites index prices, and neither recreates `km_scan_results`. Prior: 206 — `km_migration_206_onboarding_version.sql`, version-stamped re-onboarding: `km_profiles.onboarding_version INT DEFAULT 0` + the key added to `kd_update_profile`'s whitelist + a TARGETED stamp of `1` for everyone who already carries `persona_set_at` (2 of 17 on 2026-09-12). Replaces migration 165's blanket `onboarded = false`. Sending a cohort back through setup is now: bump `ONBOARDING_VERSION` in `src/constants/onboarding.ts`, then stamp whoever is exempt. Owner runs it in pgAdmin; no REFRESH needed; 205 — `km_migration_205_fpb_card_columns.sql`, Flower Pot card columns + ETFs out of the whole matview: mutual-fund units (`isin LIKE 'INF%'`) leave `active`/`wg_pool`/the exclusion-count universe, `km_equity_symbols.is_etf` is set from the same rule (it had been FALSE on all 16,938 rows since the column existed), the `flower_pot_burst` arm LEFT JOINs `stock` so it carries the shared card's columns instead of typed NULLs, three new columns `fpb_hi10`/`fpb_lo10`/`fpb_tight_today`, and `d_pct` stops being NULL on sixteen of the seventeen arms; **owner runs it then `REFRESH MATERIALIZED VIEW km_scan_results;` and `REFRESH MATERIALIZED VIEW km_scan_exclusion_counts;`**; measured effect on the 2026-09-07 bar: flower_pot_burst 106→68 rows with 67 of 68 carrying an industry, breakdown_watch 441→364, breakout_surge 295→277, conviction_flow stays at its cap of 50 with 12 real stocks replacing fund units; 204 = `km_migration_204_profile_persona.sql`, onboarding persona persistence: `km_profiles.persona/acts_on/hold_horizon/concede_level/persona_set_at/guide_progress`, `kd_update_profile` whitelist, `km_ux_events`; vocabulary mirrored in `src/constants/personaConfig.ts` and gated by `npm run check:persona` inside `npm run build`; plan: `docs/claude/onboarding-poa.md`; 203 = `km_migration_203_index_breadth.sql`, per-index breadth table + `compute_index_breadth()`; owner runs it then `python scripts/backfill_index_breadth.py`; 202 = `km_migration_202_gl_matview_arms.sql`, Golden Line arms + GL/Big Money bar columns on `km_scan_results`; 195/197/200/202/205 recreate the `km_scan_results` matview `WITH NO DATA`. **Convention as of 205 (gap audit C3): a migration that recreates it ENDS with the two `REFRESH` statements as executable SQL, after `COMMIT`** — a comment asking the next person to remember failed twice (200 on 2026-09-06, 205 on 2026-09-07), and each time every matview-served preset answered PostgREST with "materialized view has not been populated", which the UI shows as "Failed to run scan." on eleven scanners at once. Order matters: `km_scan_results` first, `km_scan_exclusion_counts` second (it SELECTs from the first); 200b is a suffixed duplicate). Older history: (166 = `km_migration_166_golarambh_almanac.sql` — Golārambha family: 4 generator-fed `planet_state` Sun rules (Uttara/Dakshina Gola halves + equinox ±1d turn windows, tag 'Gola'), windows from `scripts/generate_golarambh_windows.py` (TROPICAL equinox crossings — deliberately not the sidereal sankranti), almanac body in AlmanacPage + `astro_group:Gola` overlay; 165 = force-reonboard theme; 164 = forgot-password token leak; 163 = pricing GST beta default; NOTE 161/162 have DUPLICATE numbers (rule_evidence + scan_presets at 161, rule_evidence_transitions + user_bookmarks at 162); 160 = Mercury-slice launch catalog scope; see `docs/claude/astro-story.md`. ⚠ Numbering drifted: duplicates also at 152/153 and no 155 — always `ls App/DBscripts/ | sort` before picking a number, don't trust this line alone.)
 
 **Target database**: most migrations target `kaala_dristi_db`. Migrations that target `vani_db` must say so explicitly in the file header (example: migration 092).
 
@@ -1587,8 +1634,13 @@ validated against the matview (both return 8 tight coils for 2026-09-08).
    today", the same string it shows for genuinely empty data. `pyflakes` finds
    this in one second. **Run `python -m pyflakes` on the backend before
    believing any "no data" symptom** — it also flags five live undefined names
-   in `lib/integrity_checks.py` (`db_meta` 512, `unmeasured_n` 590-596) that
-   are still unfixed.
+   in `lib/integrity_checks.py` — **fixed 2026-09-14**. `db_meta` was READ at
+   C1b and only ASSIGNED fifteen lines later, so `check_scanner_contract`
+   raised NameError on its first statement **every run** since the commit that
+   removed `MIN_AVG_AMT_22D_CR`; `run_all` converted the crash into a bland
+   `checker_error_*` warning, so the guard looked present while being blind on
+   exactly the contract drift it exists to catch. `unmeasured_n` was the orphan
+   of the deleted liquidity floor and is removed with it.
 2. **`fpb.recent_outcomes` queried columns that do not exist.**
    `km_fpb_active` has `status` and `release_date`; the query used
    `fpb_outcome` and `released_at`, and tested `'REACHED_TARGET'` where the
