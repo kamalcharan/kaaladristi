@@ -143,6 +143,111 @@ def _reconcile_daily_run_after_fix(conn, dim: str, trade_date_obj: date) -> None
         log.warning(f'reconcile daily_run after fixing {dim} {trade_date_obj} failed: {e}')
 
 
+# Cascade knobs. The cascade is the correctness fix, so it is on by default;
+# the kill switch exists because it runs against a live nightly pipeline and an
+# operator needs a way to stop it without a deploy.
+CASCADE_ENABLED = os.getenv('PIPELINE2_CASCADE', 'on').strip().lower() not in ('0', 'off', 'false', 'no')
+# Upper bound on jobs written for one parent fix. The full closure from
+# nse_equity_indicators is ~20; anything beyond this means the graph grew a
+# branch nobody reviewed, and a cap is cheaper than an incident.
+CASCADE_MAX = int(os.getenv('PIPELINE2_CASCADE_MAX', '25'))
+# A burst of gap_sweep fixes for one date would otherwise each re-enqueue the
+# same downstream dimension the moment the previous one finished. Queued/running
+# de-dupe catches the overlap; this catches the just-finished case.
+CASCADE_DEBOUNCE_MIN = int(os.getenv('PIPELINE2_CASCADE_DEBOUNCE_MIN', '30'))
+
+
+def _cascade_dependents(conn, dim: str, trade_date_obj: date, parent_job: dict) -> None:
+    """Enqueue a forced fix for every dimension derived from `dim`.
+
+    Why this exists: a fix job repairs one column and stops, leaving everything
+    computed from it holding a value derived from the superseded data. See the
+    note above DIMENSION_DEPENDENTS in orchestrator.py for the measurements.
+
+    Three things this deliberately does NOT do:
+
+      * It does not cascade from a cascade. The closure is transitive and
+        computed in one pass, so the full set is enqueued here and those jobs
+        carry created_by='cascade', which this function refuses to expand. One
+        repaired column can never start a self-feeding chain.
+      * It does not enqueue unforced. `_handle_script` only nullifies a
+        dimension's columns when force is set; without it a derived handler can
+        look at its own populated column and skip precisely the rows that went
+        stale. force=True is the whole point of the re-run.
+      * It never fails the parent. A cascade problem is logged and swallowed —
+        the fix that just succeeded stays succeeded.
+    """
+    if not CASCADE_ENABLED:
+        return
+    if (parent_job.get('created_by') or '') == 'cascade':
+        return
+
+    try:
+        deps = orchestrator.dependents_closure(dim)
+    except Exception as e:                      # pragma: no cover - graph is validated at import
+        log.warning(f'cascade: could not resolve dependents of {dim}: {e}')
+        return
+    if not deps:
+        return
+
+    if len(deps) > CASCADE_MAX:
+        log.warning(
+            f'cascade {dim} {trade_date_obj}: closure is {len(deps)} dimensions, '
+            f'capped at {CASCADE_MAX} — review DIMENSION_DEPENDENTS')
+        deps = deps[:CASCADE_MAX]
+
+    written, skipped = [], []
+    try:
+        with conn.cursor() as cur:
+            for dep in deps:
+                # Already claimed for this date — the pending job will pick up
+                # the repaired input when it runs.
+                cur.execute(
+                    "SELECT 1 FROM km_jobs "
+                    "WHERE job_type = 'fix' AND dimension = %s AND trade_date = %s "
+                    "  AND status IN ('queued', 'running') LIMIT 1",
+                    [dep, str(trade_date_obj)],
+                )
+                if cur.fetchone():
+                    skipped.append(dep)
+                    continue
+
+                # Just ran as part of this same burst of repairs.
+                cur.execute(
+                    "SELECT 1 FROM km_jobs "
+                    "WHERE job_type = 'fix' AND dimension = %s AND trade_date = %s "
+                    "  AND created_by = 'cascade' AND completed_at IS NOT NULL "
+                    "  AND completed_at > now() - (%s || ' minutes')::interval LIMIT 1",
+                    [dep, str(trade_date_obj), str(CASCADE_DEBOUNCE_MIN)],
+                )
+                if cur.fetchone():
+                    skipped.append(dep)
+                    continue
+
+                cur.execute(
+                    "INSERT INTO km_jobs "
+                    "  (job_type, dimension, trade_date, force, created_by) "
+                    "VALUES ('fix', %s, %s, TRUE, 'cascade')",
+                    [dep, str(trade_date_obj)],
+                )
+                written.append(dep)
+        conn.commit()
+    except Exception as e:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        log.warning(f'cascade {dim} {trade_date_obj} failed: {e}')
+        return
+
+    if written or skipped:
+        log.info(
+            f'cascade {dim} {trade_date_obj}: enqueued {len(written)} '
+            f'({", ".join(written) or "none"})'
+            + (f'; {len(skipped)} already pending/recent' if skipped else '')
+        )
+
+
 def _run_fix(conn, job: dict) -> None:
     """Execute a fix:<dimension> job."""
     job_id = job['id']
@@ -211,6 +316,12 @@ def _run_fix(conn, job: dict) -> None:
     # admin health bar updates (see _reconcile_daily_run_after_fix).
     if result.status != 'failed' and not result.error_msg:
         _reconcile_daily_run_after_fix(conn, dim, trade_date_obj)
+        # …and recompute whatever was derived from the column we just rewrote.
+        # 'partial' cascades too: a partially repaired input still changed the
+        # rows it did repair, and the dimensions reading them are stale either
+        # way. Only an outright failure (handled above, we never reach here)
+        # leaves the downstream set alone.
+        _cascade_dependents(conn, dim, trade_date_obj, job)
 
 
 def _run_daily(conn, job: dict) -> None:

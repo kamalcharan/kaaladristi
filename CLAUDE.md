@@ -83,8 +83,8 @@ cd App/backend
 python -m unittest test_sector_vani test_market_structure_vani \
   test_sector_leadership test_leadership_intents test_leadership_pipeline \
   test_scanner_explanation test_sector_flow_intents test_fpb_actions \
-  test_highlight_story test_custom_index_rebuild
-# 84 tests — last green 2026-09-14
+  test_highlight_story test_custom_index_rebuild test_pipeline_cascade
+# 98 tests — last green 2026-09-14
 ```
 
 These run on synthetic fixtures: no PostgreSQL, no model call, no network.
@@ -323,6 +323,50 @@ Steps run sequentially for a trade date:
 6e. Weekly aggregate (Fridays only)
 6f. Monthly aggregate (last calendar day only)
 **6g. `compute_rolling_metrics_for_date(db, trade_date)`** — populates `d30_pct_chng`, `d365_pct_chng`, `avg_amt_5d`, `avg_amt_22d`, `delivery_surge_x`, `w52_high`, `w52_low`, `lifetime_high`. This step exists because the PostgreSQL RPC (step 6) sets `indicators_computed_at` but never computes these rolling columns.
+
+### `fix` jobs cascade to their dependents (2026-09-14)
+
+`DAILY_STEPS` gets the order right nightly. The **`fix` path did not**: a fix
+job repaired one dimension and stopped, so every dimension derived from it kept
+a value computed from the superseded data. Measured over six weeks:
+`vani_flags` 162 fix jobs, `nse_magic_rs` 160, `nse_equity_indicators` 128 —
+against **zero** for `gl_events`, `big_money`, `dots`, `wg_journeys` and
+`scan_refresh`. Fixes land 1–6 days after the bar.
+
+A fill-rate check cannot see this — `gl_events` and `big_money` are in
+`health.DIMENSIONS` and report `ok` because their columns are *populated*, just
+not *current*. Presence, not correctness, again.
+
+`orchestrator.DIMENSION_DEPENDENTS` now declares the recompute graph
+(evidence-backed edges only), `dependents_closure()` walks it transitively in
+DAILY_STEPS order, and `validate_dependents()` runs **at import** so a bad name
+or a cycle is a startup error. `worker._cascade_dependents()` enqueues the
+closure after any non-failing fix.
+
+Three properties that are load-bearing — do not "simplify" them away:
+
+1. **Forced.** `_handle_script` nullifies a dimension's columns only when
+   `force` is set; unforced, a derived handler can skip exactly the rows that
+   went stale. The cost is that a failed recompute leaves NULL rather than
+   stale — deliberately the better failure, because NULL drops the fill rate
+   and the gap sweep retries, while stale-but-populated is invisible forever.
+2. **A cascade never cascades.** The closure is computed in one pass and its
+   jobs carry `created_by='cascade'`, which the function refuses to expand.
+   Without this, one repaired column starts a self-feeding chain.
+3. **`integrity_checks` is not a dependent** — a nightly whole-day sweep, not a
+   per-dimension derivative.
+
+Knobs (env): `PIPELINE2_CASCADE` (`on`), `PIPELINE2_CASCADE_MAX` (`25`; the
+longest real chain, from `nse_eod_download`, is 21), `PIPELINE2_CASCADE_DEBOUNCE_MIN`
+(`30`). Guarded by `test_pipeline_cascade.py`, verified to fail against both an
+unforced enqueue and a re-expanding cascade. Plan + rollout watch:
+`docs/claude/thesis-events-poa.md`.
+
+⚠ **Still no per-dimension watermark.** `indicators_computed_at` is written
+under `WHERE indicators_computed_at IS NULL`, so re-runs skip stamped rows, and
+`backfill_vani_flags.py` touches no timestamp at all. The cascade makes the
+recompute happen; nothing yet records which version of the inputs a row was
+derived from. That gap must close before stored event columns land (POA Phase 3).
 
 ### `leadership_snapshot` — publication is gated on a fully clean run
 

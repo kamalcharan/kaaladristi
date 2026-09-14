@@ -38,7 +38,90 @@ control. Directional enough to rank families; not a validated edge.
 
 ---
 
-## Phase 0 — Make the fix path cascade · BLOCKING
+## Phase 0 — Make the fix path cascade · ✅ BUILT 2026-09-14
+
+Shipped on `claude/tender-euler-2j7ab5`. 98 backend tests green
+(84 existing + 14 new).
+
+**What landed**
+
+- `pipeline2/orchestrator.py` — `DIMENSION_DEPENDENTS` (the recompute graph,
+  one evidence-backed edge per entry), `dependents_closure()` (transitive, one
+  pass, returned in DAILY_STEPS order) and `validate_dependents()`, which runs
+  **at import** so an unknown dimension name or a cycle is a startup error
+  rather than a fix job that dies at 2am half-way through a cascade.
+- `pipeline2/worker.py` — `_cascade_dependents()`, called from `_run_fix` after
+  a non-failing fix, alongside the existing `_reconcile_daily_run_after_fix`.
+- `test_pipeline_cascade.py` — 14 tests, no DB, no network.
+
+**Measured closures**
+
+| Repaired dimension | Cascade |
+|---|---|
+| `vani_flags` | 2 — `scan_refresh`, `scan_membership_snapshot` |
+| `stage_classification` | 4 |
+| `dots` | 4 — reaches `gl_events`, `wg_journeys` |
+| `nse_magic_rs` | 8 — reaches `gl_events`, `scan_refresh`, `wg_journeys` |
+| `nse_eod_download` | 21 — the whole compute chain |
+| `scan_refresh` | 0 (leaf — membership reads `km_equity_eod` directly) |
+
+**Three decisions worth knowing**
+
+1. **The cascade is forced.** `_handle_script` only nullifies a dimension's
+   columns when `force` is set; an unforced re-run can look at its own
+   populated column and skip exactly the rows that went stale — the original
+   bug wearing a different hat. Accepted cost: if a forced recompute then
+   fails, the column is left NULL rather than stale. That is the better
+   failure — a NULL drops the fill rate and the gap sweep enqueues another
+   fix, whereas stale-but-populated is invisible forever.
+2. **A cascade never cascades.** The closure is transitive and computed in one
+   pass, so the full set is written at once and those rows carry
+   `created_by='cascade'`, which `_cascade_dependents` refuses to expand. One
+   repaired column cannot start a self-feeding chain.
+3. **`integrity_checks` is deliberately not a dependent.** It is a nightly
+   whole-day sweep, not a per-dimension derivative.
+
+**Operational knobs** (env, no deploy needed to change)
+
+| Var | Default | Purpose |
+|---|---|---|
+| `PIPELINE2_CASCADE` | `on` | kill switch (`off`/`0`/`false`/`no`) |
+| `PIPELINE2_CASCADE_MAX` | `25` | cap per parent fix; full chain is 21 |
+| `PIPELINE2_CASCADE_DEBOUNCE_MIN` | `30` | suppress a re-enqueue that just ran |
+
+De-duplication is two-layer: skip a dependent already `queued`/`running` for
+that date (the `gap_sweep` pattern), then skip one whose cascade job completed
+inside the debounce window — which collapses the burst when several inputs are
+repaired for the same date.
+
+**Watch on first deploy.** `gap_sweep` wrote 1,353 fix jobs in six weeks
+(~32/day). Expect job volume to rise; the queued/running de-dupe should absorb
+most of it, because gap-sweep fixes for one date arrive as a batch and the
+worker is serial. If it does not, lower `PIPELINE2_CASCADE_MAX` or set
+`PIPELINE2_CASCADE=off` and reopen this phase.
+
+```sql
+-- after a day of running
+SELECT created_by, dimension, count(*) FROM km_jobs
+WHERE job_type='fix' AND created_at > now() - interval '1 day'
+GROUP BY 1,2 ORDER BY 3 DESC;
+```
+
+`gl_events`, `big_money`, `dots`, `wg_journeys` and `scan_refresh` appearing
+with `created_by='cascade'` is the pass condition — those five had **zero** fix
+jobs in the six weeks before this.
+
+**Still open in this phase.** No per-dimension watermark was added.
+`indicators_computed_at` remains unusable (written under
+`WHERE indicators_computed_at IS NULL`, so re-runs skip stamped rows) and
+`backfill_vani_flags.py` still touches no timestamp. The cascade makes the
+recompute happen; it does not yet let a reader ask "what version of the inputs
+is this row derived from". Phase 3 needs that answer — revisit before adding
+stored event columns.
+
+---
+
+### Original analysis (kept for context)
 
 Do not add a single derived column before this is done.
 
