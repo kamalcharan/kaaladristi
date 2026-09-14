@@ -386,6 +386,54 @@ Guarded by `scripts/qa/check-journey-events.mjs` (manual, like the rest of
 reverted stage diff, a hardcoded base-rate fallback, a flipped ceiling side, a
 raw signed number handed to the model, and a dropped frequency fence.
 
+### The six Price Action scanners are derived on read (2026-09-14)
+
+Breakout Surge, Breakdown Surge and the Weekly/Monthly Movers and Decliners each
+qualify on **one predicate over columns already stored on the bar row** — the
+`km_scan_results` arms verbatim. `services/priceActionEvents.ts` turns that into
+dated events; no column, no migration, no nightly job.
+
+The columns reach each stock's **first bar** — RELIANCE 1996-01-02, TCS
+2002-08-13 — so these events carry 26 years of history where `ema_20` carries
+2025 onward. Validated against the DB bar for bar: the same derivation as SQL
+and as TypeScript over live SOLARA bars returns 22 events, identical dates,
+types and order.
+
+⚠ **The reference-reset guard is mandatory.** `pct_wtd` is measured against
+`prev_week_close`, which changes every Monday; `pct_mtd` likewise every month. A
+naive sign-change test fires a **phantom** crossing on the first bar of each
+period, where the two sides were measured against different reference prices and
+nothing happened. On SOLARA's last 123 bars: 17 of 35 weekly and 3 of 17 monthly
+are phantom — twenty fabricated events out of fifty-two. Never drop
+`prev_week_close` / `prev_month_close` from a fetch; they are not decoration,
+they are the only way to tell a crossing from a rollover. Two further rules: one
+crossing per period per direction (6 of 14 monthly), and **NULL is never zero**.
+
+**A cooldown was drafted and rejected, on measurement.** Re-entries cluster —
+SOLARA cleared its 20-day high five times in fifteen days — so "suppress within
+N bars" is the obvious fix. The gap distribution across a 1-in-37 NSE sample
+(566 entries) is 12.5% / 9.2% / 20.8% / 40.8%: **no cliff anywhere**, so any N
+would be taste wearing the costume of a rule. The edge is emitted faithfully and
+density is paid for by priority — `price_action` sits at the BOTTOM of the story
+priority table and can never displace a journey milestone or a Big Money day.
+
+**Density broke a list that had no priority rule.** `thesis.ts` picked "Recent
+signals" with `slice(-8)`, safe only while every kind was rare. At 22 Price
+Action events per 74 bars against 4 of everything else, all eight rows would
+have filled with "above last week's close" — and the tab's headline sentence
+reads `signals[0]`. It now ranks by priority, cuts, then restores recency for
+display. The chart never had this bug because `eventAtBar` already resolved a
+shared bar by priority; the list simply had no equivalent.
+
+⚠ **`is_vani_surge` is NOT the Breakout Surge scanner.** The flag is
+`rvol > 5 AND close >= w52_high * 0.95 …` — 52-WEEK-high proximity plus volume;
+the scanner is 20-day-high geometry. On 2026-09-11 the scanner held 200 stocks
+and the flag fired on 8. The chart titled it "Breakout surge" — the scanner's
+name on a different rule. Both flags are now titled for what they measure, and
+what they actually DO is decide the scanner's HIGHLIGHT (`vani_flag`), not its
+membership. Guarded by `scripts/qa/check-price-action-events.mjs`, verified to
+fail against all eight regressions above.
+
 ### `fix` jobs cascade to their dependents (2026-09-14)
 
 `DAILY_STEPS` gets the order right nightly. The **`fix` path did not**: a fix
@@ -1009,6 +1057,8 @@ These are in `LESSONS_LEARNED.md` in full; summary for quick reference:
 - **The live `kd_auth_login` issues JWT `role`=`authenticated` for everyone** (found 2026-07-09 by decoding a live user token: `role`=`authenticated` for a profile-role=`user` account). Despite migrations 096/140 in the repo (which would embed the profile role `admin`/`user`), the RUNNING function is the migration-003 behavior — so in practice logged-in browser users are the `authenticated` DB role, NOT `user`/`admin`. Consequence: the "grant new PostgREST-read tables to `admin`/`user`" advice above describes intended-but-not-live behavior; what actually matters on this deployment is that **`authenticated` has SELECT**. There is no `user` DB role (`has_table_privilege('user',…)` errors) and the app does not need one. Verify the live `kd_auth_login` before trusting the profile-role-as-DB-role model.
 - **Diagnostic hygiene — don't read grant/permission state AFTER applying a candidate fix and then conclude from it.** The 2026-07-09 Constituents/Flow Map bug was fixed correctly on the first try (migration 142: `km_index_constituents` was missing its `authenticated` SELECT grant — migration 022 shipped RLS + policies but zero table GRANTs, and the blanket grant script missed this one table). It was then MIS-re-diagnosed for several rounds because the grant dumps analyzed were taken after 142 had already added `authenticated`, making it look like `authenticated` always had access — spawning throwaway "missing `user` role" migrations 143/144 (since deleted). Snapshot the broken state first, or reason from the fix that worked.
 - **`information_schema.role_table_grants` is BLIND over a restricted connection — read `pg_class.relacl`** (2026-09-14). Checking migration 209's grants through the read-only `kaala-postgres` MCP returned only `kd_readonly` for `km_journey_base_rates`, which looks exactly like the migration-142 failure (table shipped with zero `authenticated` grant). It was wrong: that view exposes only grants where the **current role** is grantor or grantee, so a `kd_readonly` connection can never see anyone else's. `relacl` told the truth in one query — `{vikuna_admin=arwdDxtm, anon=r, kd_app=arwd, kd_readonly=r, authenticated=r}`, every grant present. Use `pg_class.relacl` or `has_table_privilege('<role>', …)`; both are role-independent. This matters most for exactly the tables where it is tempting to skip the check, because a missing SELECT on a read-optional table fails **silently** by design.
+- **Measure before inventing a threshold — and accept the answer when the data refuses to supply one** (2026-09-14). Price Action breakout re-entries cluster (SOLARA cleared its 20-day high five times in fifteen days), so a "suppress a repeat within N bars" cooldown looked obviously right. The gap distribution across a 1-in-37 NSE sample, 566 entries, came back 12.5% / 9.2% / 20.8% / 40.8% — smooth, no cliff, no natural break. The correct outcome of checking the distribution is sometimes **no threshold at all**: any N would have been taste wearing the costume of a rule, silently dropping real events. Density got solved structurally instead (bottom priority in the story table). The house rule is "check the distribution first"; this is the case where checking it says *don't*.
+- **A rare-event assumption is load-bearing even where nothing states it** (2026-09-14). `thesis.ts` picked its "Recent signals" with `slice(-8)` — correct for years, because every event kind was rare. Phase 2 added a kind that fires 22 times in 74 bars and the list would have filled with it, evicting the Big Money day and the journey confirmation, and degrading the tab's headline sentence (which reads `signals[0]`). Nothing in the type or the call site said "this assumes events are rare". When adding a high-frequency member to a shared stream, audit every CONSUMER that trims it, not just the producer — the chart was already immune because `eventAtBar` resolved by priority; the list had no equivalent rule.
 - **RLS on pipeline-computed tables**: don't add RLS to aggregate tables (`km_industry_eod`, etc.) — they contain no user data and RLS creates silent access bugs when `kd_app` role differs from `authenticated`.
 - **`auth.*` is Supabase-only — this deployment shimmed it in migration 149 (2026-07-14)**: RLS policies and `public.is_admin()` call `auth.uid()`/`auth.role()`/`auth.jwt()`, which exist on Supabase but NOT on self-hosted PostgREST. For a long time no migration DEFINED them (8 referenced, 0 defined), so every `auth.*`-based policy *errored at evaluation* — hidden because most tables have RLS OFF and admin writes go via FastAPI (`kd_app`). It surfaced as "permission denied"→then a silent `is_admin()` error on `km_index_constituents` (the one RLS-ON table with an `is_admin()` write policy) when custom-index saves (direct PostgREST) broke. Migration 149 defines `auth.uid/role/email/jwt` over `current_setting('request.jwt.claims', true)` — the same idiom `kd_update_profile` uses. If you add a new RLS policy, `auth.uid()`/`is_admin()` now work; if `is_admin()` ever "does nothing," first check the `auth` schema still exists. Also: two DB roles matter — logged-in users are `authenticated` (migration 144 reverted `kd_auth_login` to issue that for everyone, admins included), so any RLS-ON table needing admin writes must grant the verb to `authenticated` AND rely on `is_admin()` for authorization (e.g. migration 148).
 - **Warm-up windows sized in CALENDAR DAYS are cadence-blind** (migration 169, 2026-08-06). `compute_indicators_batch` (`300 days`) and `compute_magic_rs_batch` (`350 days`) are also called on `km_equity_weekly`/`km_equity_monthly` by `pipeline/compute/_indicator_chain.py`. The same window loads ~43 weekly bars and ~10 monthly bars, below every indicator's minimum (`IF i >= 50`, `IF i >= 20`, Wilder-14) — so they wrote NULL **while still stamping `indicators_computed_at = NOW()`**, making the row look computed. After the 2026-08-06 backfill: monthly `rsi_14`/`ema_20`/`sma_50` were 0/3,257 for May–Jul even for RELIANCE and TCS, which hold all 80 monthly bars. magic_rs failed harder — long MagicRS sits inside `IF n >= 145` (weekly never reached it) and monthly tripped `IF n < 22 THEN RETURN 0` before writing anything, which is why monthly `magic_rs` had been NULL *since the table existed*. Two consequences worth remembering: (1) a resume marker written unconditionally is worse than none — `... AND indicators_computed_at IS NULL` in the UPDATE means a re-run **skips** the rows it corrupted, so any fix must clear the stamp first; (2) **monthly long MagicRS is structurally impossible** — 145 monthly bars is ~12 years and the deepest symbol has 80, so monthly carries `magic_rs_short` only. When a function is shared across timeframes, size every lookback by bar count, not by date arithmetic.
