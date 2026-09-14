@@ -437,10 +437,17 @@ theme + persona gates, `check-sector-contracts.mjs`.
 ⚠ **Deployment is not a frontend-only push.** Frontend and backend must be
 pulled and deployed **together** for every one of these increments (intent
 versions, evidence loaders and cache keys are matched pairs), and the API must
-be restarted. Migrations **207 then 208** must be applied before the leadership
-backend, followed by `python scripts/refresh_sector_leadership.py`. The sector
-evidence loader requires the **direct PostgreSQL client** — a PostgREST-only
-backend does not support it.
+be restarted. The sector evidence loader requires the **direct PostgreSQL
+client** — a PostgREST-only backend does not support it.
+
+**DB side is done** (verified live 2026-09-14): migrations 207 and 208 are
+applied, both invalidation triggers are enabled, and
+`refresh_sector_leadership.py` has published 15 snapshots (5 scopes × 3
+windows) for `2026-09-11` — which is the latest bar in `km_index_eod` and
+`km_equity_eod`, so leadership is in step. Only that one date is prepared; use
+`--from/--to` for historical sessions. Details and the one real finding this
+turned up — **there is no Haiku fallback in the deployed config, both paths are
+Qwen** — are under Known Issues.
 
 Parked sprint: **Astro Layer — Mercury slice** (2026-07-21 →). Narrative contract, launch decisions, yardstick design (VIX as one of several), and the combust-method finding + calibration subtask: **`docs/claude/astro-story.md`**. Companion: `MERCURY_SLICE_PLAN.md` (repo root). Launch catalog scope shipped as migration 160 (Variant B: 13 Mercury + 6 slow-planet almanac rules) — owner runs it in pgAdmin (kaala-postgres MCP is read-only).
 
@@ -925,30 +932,90 @@ These are in `LESSONS_LEARNED.md` in full; summary for quick reference:
 
 ## Known Issues
 
-### ⏳ Research companions: what is NOT yet verified (2026-09-14)
+### ✅ Research companions: DB state verified live (2026-09-14)
 
-Everything under **VaNi Research Companions** passes its automated suites, but
-those suites deliberately run on **synthetic fixtures with all external
-requests blocked**. Green tests here do not mean the feature was seen working
-against production. Still open, per the handoff docs:
+Migrations **207 and 208 are applied and working** — checked against the live
+DB, not assumed:
 
-- **No live VPS model invocation or production data audit was performed for any
-  increment.** Deployed Qwen/Haiku behaviour, actual prose quality, the
-  configured fallback provider, live record values and user permissions all
-  need checking in the real environment.
+- All six tables exist (`km_custom_index_revisions`,
+  `km_custom_index_membership_log`, `km_leadership_observations`,
+  `km_custom_index_history_archive`, `km_leadership_generation`,
+  `km_sector_leadership_snapshots`).
+- Both migration-208 invalidation triggers are installed and **enabled**
+  (`km_leadership_membership_changed` on `km_index_constituents`,
+  `km_leadership_catalog_changed` on `km_index_symbols`).
+- `km_leadership_generation.generation = 0` — no membership or catalog edit has
+  invalidated a snapshot since the migration landed.
+- **15 published snapshots = 5 category scopes × 3 windows**, exactly as the
+  publication contract requires, all for `2026-09-11`.
+- That date **is** the latest bar in both `km_index_eod` and `km_equity_eod`,
+  so leadership is fully in step with the pipeline — no gap, nothing to
+  re-prepare. 38 custom-index revision rows, **0 stale**
+  (`revision <> computed_revision`).
+- Only one date is prepared. Historical date selection still needs
+  `refresh_sector_leadership.py --from … --to …` for whichever earlier
+  sessions you want to inspect.
+
+The companions have also been **exercised live**: `km_vani_cache` holds 35
+`sector.*` and 17 `structure.*` entries with real `hit_count`s, newest
+2026-09-13. So the earlier "no live model invocation" caveat is retired — but
+see the routing finding immediately below, which that live data exposed.
+
+Still genuinely open (fixtures only, unchanged):
+
 - **Live model answers not yet reviewed** for the four index-detail questions
   at each explanation depth, including the unavailable-data and small-sample
   paths (`docs/vani-intent-todo.md`).
 - **Contrast/spacing not confirmed on every product theme** — automated
   coverage is dark/light at mobile and desktop widths only.
-- **Cross-worker PostgreSQL advisory locking, phone interaction and
-  authenticated live-data behaviour** were never exercised outside fixtures.
-- **Migration 207/208 execution, live refresh duration and DB permissions**
-  are untested: PostgreSQL was not available in the workspace that built this.
-- `scripts/refresh_sector_leadership.py` live run time is unmeasured.
+- **Cross-worker advisory locking and phone interaction** were never exercised
+  outside fixtures.
+- `scripts/refresh_sector_leadership.py` live run duration is unmeasured.
 
 Pre-existing build warnings (bundle size, Browserslist age, one ambiguous
 Tailwind class) are unchanged and were not introduced here.
+
+### ⚠ There is no Haiku fallback in the deployed config — both paths are Qwen
+
+Found 2026-09-14 by reading `km_vani_cache` on the live DB. The companions
+were built to be **Qwen-first with a configured cloud fallback**, and
+`docs/market-structure-vani-handoff.md` states the precondition plainly:
+*"Your configured cloud provider/model must point to Haiku."* On this
+deployment it does not.
+
+`llm_model` is written from `_AI_MODEL` (the `AI_MODEL` env var) whenever the
+answer did not come from the dedicated local path, so the cache records the
+configured cloud model directly. Recent rows say:
+
+| `llm_provider` | `llm_model` | entries (30d) | what it really is |
+|---|---|---|---|
+| `openai` | `Qwen3-4B-Q4_K_M.gguf` | 43 | `_primary_complete` → **local Qwen**, via its OpenAI-compatible API |
+| `qwen-local` | `qwen-local` | 3 | `_fallback_complete` → local Qwen |
+| `qwen-local` | `claude-haiku-4-5` | 33 | older `scanner.*`/`fpb.*` writers (they stamp the config constant, not the served model) |
+| `anthropic` | `claude-haiku-4-5` | 36 | **last one 2026-09-04** — before the provider was switched |
+
+So `AI_PROVIDER` is an OpenAI-compatible endpoint serving `Qwen3-4B-Q4_K_M.gguf`.
+`allow_cloud_fallback=True` therefore falls back **to the same Qwen server** —
+it is redundancy, not a second opinion, and no answer has been served by
+Anthropic since 2026-09-04.
+
+Two consequences worth acting on:
+
+1. **`_fallback_complete` is failing most of the time.** `prefer_local=True`
+   tries it first, yet only 3 of 30 recent sector answers carry
+   `provider='qwen-local'`; the other 27 (and all 13 `structure.*`) were
+   rescued by the fallback branch. The feature looks healthy precisely because
+   the fallback works — the primary local path quietly is not. `scanner.*`
+   does reach `qwen-local` normally, so this is specific to the companion
+   path (its prompts are far larger — snapshot plus precomputed comparisons).
+2. **`llm_provider` and `llm_model` cannot be read as a pair.** Two writers
+   populate them with different conventions, which is how the "qwen-local +
+   claude-haiku-4-5" combination exists at all — a combination the companion
+   modules' own conditional makes impossible. Trust `llm_provider` for the
+   branch and treat `llm_model` as "the configured model at write time".
+
+Neither is fixed here — both are deployment/instrumentation issues, not code
+this session changed.
 
 ### ⚠ `prefer_local` still does not reach the legacy `/api/ai/*` family
 
