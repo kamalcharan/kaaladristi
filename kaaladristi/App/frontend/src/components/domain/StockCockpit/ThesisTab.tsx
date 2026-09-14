@@ -11,6 +11,8 @@
  */
 
 import { useEffect, useMemo, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { fetchJourneyBaseRates } from '@/services/indicatorData'
 import { useAuthStore } from '@/stores/authStore'
 import { useBookmarkStore } from '@/stores/bookmarkStore'
 import { computeThesis, type Relationship, type ThesisBar, type ThesisRead } from '@/services/thesis'
@@ -80,6 +82,17 @@ export default function ThesisTab({
     () => computeThesis(bars, relationship, position, journey),
     [bars, relationship, position, journey],
   )
+
+  // Recorded outcome across ALL journeys — a universe-level constant, computed
+  // nightly (migration 209), so it is one shared fetch rather than per stock.
+  // Long staleTime because the value moves once a day at most; a null answer
+  // makes JourneyStrip say less, never fall back to a remembered number.
+  const { data: baseRates } = useQuery({
+    queryKey: ['journey-base-rates'],
+    queryFn: fetchJourneyBaseRates,
+    enabled: !!journey,
+    staleTime: 3_600_000,
+  })
 
   const lastDate = bars[bars.length - 1]?.trade_date ?? ''
   const [showForm, setShowForm] = useState(false)
@@ -239,7 +252,7 @@ export default function ThesisTab({
       {/* ── The Waking Giants arc. Stored in km_wg_journeys all along and shown
           nowhere: confirm_date (the Ascent moment) and sleep_date had never
           reached a user. Renders only for a stock actually on a journey. ── */}
-      <JourneyStrip journey={journey} close={currentClose} />
+      <JourneyStrip journey={journey} close={currentClose} rates={baseRates} />
 
       {/* ── Add-position form ── */}
       {showForm && relationship !== 'position' && (

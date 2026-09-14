@@ -445,3 +445,54 @@ export async function fetchStockJourneys(
 export function currentJourney(js: StoryJourney[] | null | undefined): StoryJourney | null {
   return (js ?? []).find((j) => j.is_current) ?? null;
 }
+
+/** Recorded outcome of the Waking Giants arc, computed nightly.
+ *
+ *  A UNIVERSE-LEVEL constant — one reading for every stock, every user, every
+ *  chart — so it is fetched once and shared, never per stock. Written by
+ *  scripts/compute_wg_journeys.py inside the same transaction as the journeys
+ *  it summarises (migration 209), so the rates can never describe a different
+ *  population than the arcs on screen. */
+export interface JourneyBaseRates {
+  as_of: string;
+  closed_total: number;
+  confirmed_total: number;
+  confirmed_pct: number | null;
+  avg_days_to_confirm: number | null;
+  avg_life_confirmed: number | null;
+  avg_life_unconfirmed: number | null;
+  oldest_wake: string | null;
+  newest_close: string | null;
+}
+
+/** Latest reading, or null.
+ *
+ *  Null is a real answer and callers must handle it by saying LESS, never by
+ *  falling back to a remembered figure: before migration 209 runs there is no
+ *  row, and a confidently wrong frequency is worse than an absent one. */
+export async function fetchJourneyBaseRates(): Promise<JourneyBaseRates | null> {
+  const { data, error } = await from('km_journey_base_rates')
+    .select('as_of,closed_total,confirmed_total,confirmed_pct,avg_days_to_confirm,'
+      + 'avg_life_confirmed,avg_life_unconfirmed,oldest_wake,newest_close')
+    .order('as_of', { ascending: false })
+    .limit(1)
+    .execute();
+  if (error || !Array.isArray(data) || data.length === 0) return null;
+  const r = data[0] as Record<string, unknown>;
+  const num = (v: unknown) => (v == null ? null : Number(v));
+  const closed = Number(r.closed_total ?? 0);
+  // A denominator of zero is not a base rate. Treat it as no reading rather
+  // than rendering "0 of 0".
+  if (!closed) return null;
+  return {
+    as_of: String(r.as_of),
+    closed_total: closed,
+    confirmed_total: Number(r.confirmed_total ?? 0),
+    confirmed_pct: num(r.confirmed_pct),
+    avg_days_to_confirm: num(r.avg_days_to_confirm),
+    avg_life_confirmed: num(r.avg_life_confirmed),
+    avg_life_unconfirmed: num(r.avg_life_unconfirmed),
+    oldest_wake: (r.oldest_wake as string) ?? null,
+    newest_close: (r.newest_close as string) ?? null,
+  };
+}

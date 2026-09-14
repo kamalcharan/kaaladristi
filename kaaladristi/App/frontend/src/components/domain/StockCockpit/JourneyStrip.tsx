@@ -10,16 +10,23 @@
  * Computes nothing of its own beyond formatting and the distance to the
  * ceiling, which is arithmetic on two stored numbers.
  *
- * What makes this worth showing at all is that the outcome is measurable: of
- * 595 closed journeys, 348 (58.5%) reached Ascent, and those ran 494 days on
- * average against 38 for the ones that never confirmed. That is the base rate
- * the strip's footnote cites — a recorded frequency, never a forecast.
+ * What makes this worth showing at all is that the outcome is MEASURABLE, so
+ * the footnote cites the recorded frequency of arcs at this point. Those
+ * figures are NOT typed in here: they come from km_journey_base_rates, which
+ * scripts/compute_wg_journeys.py recomputes nightly inside the same
+ * transaction as the journeys it summarises (migration 209). They were
+ * hardcoded once and would have gone stale silently — the numbers move every
+ * night as arcs close and confirm.
+ *
+ * With no reading available the frequency clause is dropped, never replaced by
+ * a remembered number. A confidently wrong base rate is worse than none.
  *
  * SEBI / D39: describes structure and recorded state. The stage names say what
  * the arc IS, not where price goes next; no instruction, no expectation.
  */
 
 import type { StoryJourney } from '@/services/storyEvents'
+import type { JourneyBaseRates } from '@/services/indicatorData'
 
 const MONO = { fontFamily: 'var(--font-mono)' } as const
 
@@ -59,12 +66,58 @@ function reachedIndex(j: StoryJourney): number {
   return 0
 }
 
+/** The closing sentence: what this arc is, and what the recorded population
+ *  says about arcs at that point.
+ *
+ *  Every figure comes from `rates`, computed nightly (migration 209). None is
+ *  typed in. When there is no reading — before the migration runs, or if the
+ *  fetch fails — the frequency clause is DROPPED rather than replaced by a
+ *  remembered number: a confidently wrong base rate is worse than none, and
+ *  the arc's own state is still worth stating.
+ *
+ *  Rates always carry their denominator ("348 of 595"), so the sample size is
+ *  visible rather than hidden behind a percentage. */
+export function baseRateLine(
+  j: StoryJourney,
+  rates: JourneyBaseRates | null | undefined,
+  gap: number | null,
+): string {
+  const n = rates?.closed_total ?? null
+  const confirmed = rates?.confirmed_total ?? null
+  const pct = rates?.confirmed_pct ?? null
+  const toConfirm = rates?.avg_days_to_confirm ?? null
+  const lifeOk = rates?.avg_life_confirmed ?? null
+
+  if (j.confirm_date) {
+    const head = `Confirmed ${fmtDate(j.confirm_date)}.`
+    if (n && lifeOk != null) {
+      return `${head} Across ${n} recorded journeys, confirmed arcs ran ${lifeOk} days on average.`
+    }
+    return head
+  }
+
+  if (j.wake_date) {
+    const head = 'Woken, not yet confirmed.'
+    if (n && confirmed != null && pct != null) {
+      const when = toConfirm != null ? `, on average ${toConfirm} days after the wake` : ''
+      return `${head} Of ${n} recorded journeys, ${confirmed} (${pct}%) went on to confirm${when}.`
+    }
+    return head
+  }
+
+  return gap != null && gap > 0
+    ? 'No wake recorded on this journey. A close above the base ceiling is what records one.'
+    : 'No wake recorded on this journey.'
+}
+
 export default function JourneyStrip({
-  journey, close,
+  journey, close, rates,
 }: {
   journey?: StoryJourney | null
   /** Latest close — turns the stored base ceiling into a live distance. */
   close?: number | null
+  /** Nightly recorded outcome across all journeys. Null = say less. */
+  rates?: JourneyBaseRates | null
 }) {
   if (!journey) return null
 
@@ -166,13 +219,7 @@ export default function JourneyStrip({
       </div>
 
       <p style={{ fontSize: 11.5, lineHeight: 1.55, color: 'var(--text-muted)', margin: 0 }}>
-        {j.confirm_date
-          ? `Confirmed ${fmtDate(j.confirm_date)}. Of 595 recorded journeys that reached this point, confirmed ones ran 494 days on average.`
-          : j.wake_date
-            ? 'Woken, not yet confirmed. Across 595 recorded journeys, 348 (58.5%) went on to confirm, on average 29 days after the wake.'
-            : gap != null && gap > 0
-              ? 'No wake recorded on this journey. A close above the base ceiling is what records one.'
-              : 'No wake recorded on this journey.'}
+        {baseRateLine(j, rates, gap)}
         {' '}Observational — recorded frequencies, not a forecast.
       </p>
     </div>

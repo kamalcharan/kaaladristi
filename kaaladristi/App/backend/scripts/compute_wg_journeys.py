@@ -712,6 +712,72 @@ CURRENT_COLS = [
 ]
 
 
+# The population every rate below is measured over: CLOSED arcs that carry both
+# a wake and a sleep date. A journey still running has no outcome to count, and
+# one archived without ever waking never entered the population. Keep this
+# WHERE identical to migration 209's seed — they are the same statement twice,
+# and the migration's verification numbers are what prove it.
+_BASE_RATES_SQL = """
+INSERT INTO km_journey_base_rates (
+  as_of, closed_total, confirmed_total, confirmed_pct, avg_days_to_confirm,
+  avg_life_confirmed, avg_life_unconfirmed, oldest_wake, newest_close, open_journeys)
+SELECT
+  CURRENT_DATE,
+  count(*),
+  count(*) FILTER (WHERE confirm_date IS NOT NULL),
+  round(100.0 * count(*) FILTER (WHERE confirm_date IS NOT NULL) / NULLIF(count(*), 0), 1),
+  round(avg(confirm_date - wake_date) FILTER (WHERE confirm_date IS NOT NULL))::int,
+  round(avg(sleep_date - wake_date)  FILTER (WHERE confirm_date IS NOT NULL))::int,
+  round(avg(sleep_date - wake_date)  FILTER (WHERE confirm_date IS NULL))::int,
+  min(wake_date),
+  max(sleep_date),
+  (SELECT count(*) FROM km_wg_journeys WHERE is_current)
+FROM km_wg_journeys
+WHERE NOT is_current AND wake_date IS NOT NULL AND sleep_date IS NOT NULL
+ON CONFLICT (as_of) DO UPDATE SET
+  closed_total         = EXCLUDED.closed_total,
+  confirmed_total      = EXCLUDED.confirmed_total,
+  confirmed_pct        = EXCLUDED.confirmed_pct,
+  avg_days_to_confirm  = EXCLUDED.avg_days_to_confirm,
+  avg_life_confirmed   = EXCLUDED.avg_life_confirmed,
+  avg_life_unconfirmed = EXCLUDED.avg_life_unconfirmed,
+  oldest_wake          = EXCLUDED.oldest_wake,
+  newest_close         = EXCLUDED.newest_close,
+  open_journeys        = EXCLUDED.open_journeys,
+  computed_at          = now()
+"""
+
+
+def _write_base_rates(cur) -> bool:
+    """Recompute the journey base rates from the rows just written.
+
+    Runs on the SAME cursor, inside the SAME transaction as the
+    km_wg_journeys DELETE + INSERT. That is the whole design: a summary
+    written by a different job than the rows it describes can drift from them,
+    and this codebase has already paid for that (derived pipeline dimensions
+    holding values computed from superseded inputs). Same writer, same
+    transaction, cannot disagree — and a `fix` on the wg_journeys dimension
+    recomputes the rates for free, with no new dependency edge.
+
+    Returns False and leaves the journey write intact when the table is not
+    there yet. The backend is always deployed BEFORE migrations are run here,
+    so a missing table must not fail the nightly journey step over a display
+    figure — the same rule CURRENT_COLS already follows for missing columns.
+    A SAVEPOINT is required rather than a bare try: an undefined-table error
+    aborts the whole transaction otherwise, taking the journeys with it.
+    """
+    cur.execute('SAVEPOINT base_rates')
+    try:
+        cur.execute(_BASE_RATES_SQL)
+        cur.execute('RELEASE SAVEPOINT base_rates')
+        return True
+    except psycopg2.errors.UndefinedTable:
+        cur.execute('ROLLBACK TO SAVEPOINT base_rates')
+        print('  NOTE: km_journey_base_rates missing — run migration 209. '
+              'Journeys written; base rates skipped.')
+        return False
+
+
 def write_rows(conn, current_rows: list[dict], archive_rows: list[dict]):
     """Replace the table. Opens its OWN connection and ignores `conn`.
 
@@ -752,9 +818,12 @@ def write_rows(conn, current_rows: list[dict], archive_rows: list[dict]):
             psycopg2.extras.execute_batch(
                 cur, f'INSERT INTO km_wg_journeys ({cols}) VALUES ({ph})',
                 rows, page_size=500)
+            wrote_rates = _write_base_rates(cur)
         w.commit()
         print(f'  Wrote {len(rows):,} rows '
               f'({len(current_rows):,} current + {len(archive_rows):,} archived).')
+        if wrote_rates:
+            print('  Base rates refreshed (km_journey_base_rates).')
     except Exception:
         w.rollback()
         raise

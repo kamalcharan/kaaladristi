@@ -121,5 +121,65 @@ const noSince = bars(DATES, {
 assert.deepEqual(titles(buildStoryEvents(noSince).filter((e) => e.kind === 'stage')), ['Entered Stage 3'],
   'the bar-diff fallback must still work where stage_since is absent');
 
+// ── 5. Base rates are read, never remembered ───────────────────────────────
+// The four figures in this sentence were hardcoded. They are derived from
+// km_wg_journeys, which changes nightly, so a typed-in number goes stale
+// silently. migration 209 computes them; the component must cite what it is
+// given and say LESS when given nothing.
+const stripSrc = fs.readFileSync(new URL('../../src/components/domain/StockCockpit/JourneyStrip.tsx', import.meta.url), 'utf8');
+const stripJs = ts.transpileModule(stripSrc, { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.React } }).outputText;
+const stripExports = {};
+// The component imports React types only; a stub require keeps the module
+// loadable without pulling React into this check.
+new Function('exports', 'require', stripJs)(stripExports, () => ({}));
+const { baseRateLine } = stripExports;
+
+const RATES = {
+  as_of: '2026-09-14', closed_total: 595, confirmed_total: 348, confirmed_pct: 58.5,
+  avg_days_to_confirm: 29, avg_life_confirmed: 494, avg_life_unconfirmed: 38,
+};
+
+// Woken, not confirmed — cites the rate WITH its denominator.
+let line = baseRateLine({ wake_date: '2026-07-09' }, RATES, null);
+assert.match(line, /Of 595 recorded journeys/, 'the denominator must be stated, not just a percentage');
+assert.match(line, /348 \(58\.5%\)/);
+assert.match(line, /29 days after the wake/);
+
+// Confirmed — cites the confirmed lifespan.
+line = baseRateLine({ confirm_date: '2026-07-31' }, RATES, null);
+assert.match(line, /494 days/, 'a confirmed arc cites the confirmed lifespan');
+
+// THE RULE THAT MATTERS: no reading → the frequency clause disappears. It must
+// never fall back to a remembered figure.
+for (const missing of [null, undefined, { closed_total: 0 }]) {
+  const l = baseRateLine({ wake_date: '2026-07-09' }, missing, null);
+  assert.equal(l, 'Woken, not yet confirmed.',
+    'with no base rate the clause must be dropped, not defaulted');
+  assert.ok(!/\d{3}/.test(l), 'no three-digit figure may survive a missing reading');
+}
+// Same for a confirmed arc.
+assert.equal(baseRateLine({ confirm_date: '2026-07-31' }, null, null), 'Confirmed 31 Jul 26.');
+
+// A partial reading uses what it has and omits what it lacks.
+line = baseRateLine({ wake_date: '2026-07-09' },
+  { ...RATES, avg_days_to_confirm: null }, null);
+assert.match(line, /went on to confirm\./, 'a missing sub-figure drops its own clause only');
+assert.ok(!/average/.test(line));
+
+// No wake at all — no population claim of any kind.
+assert.match(baseRateLine({}, RATES, 103.25), /A close above the base ceiling/);
+assert.ok(!/595/.test(baseRateLine({}, RATES, 103.25)),
+  'an arc that never woke must cite no wake frequency');
+
+// No figure may be hardcoded in the component any more. Strip EVERY block and
+// line comment first — prose may cite an example ("348 of 595"); executable
+// code may not.
+const stripCode = stripSrc
+  .replace(/\/\*[\s\S]*?\*\//g, '')
+  .replace(/^\s*\/\/.*$/gm, '');
+assert.ok(!/\b595\b|\b58\.5\b|\b494\b|\b348\b/.test(stripCode),
+  'base-rate figures must not appear in JourneyStrip executable code');
+
 console.log('PASS: archived arcs emit wake/confirm/close, multiple journeys per stock, '
-  + 'out-of-window silence, stage_since transitions incl. first-bar and UNKNOWN suppression');
+  + 'out-of-window silence, stage_since transitions incl. first-bar and UNKNOWN suppression, '
+  + 'base rates read from the nightly table and dropped when absent');

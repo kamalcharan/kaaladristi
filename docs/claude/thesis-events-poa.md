@@ -181,8 +181,24 @@ typecheck clean, 98 backend tests unaffected.
   `discovery` kind; stage transitions now read `stage_since`.
 - `components/domain/StockCockpit/JourneyStrip.tsx` — new. The five-milestone
   arc, clocks, distance to the base ceiling, and the base rate.
-- `scripts/qa/check-journey-events.mjs` — verified to fail against both
+- `scripts/qa/check-journey-events.mjs` — verified to fail against all three
   regressions it guards.
+
+**1c (part) — base rates are computed nightly, not typed in.** Owner call: the
+four figures JourneyStrip cites move every night, so `km_journey_base_rates`
+(migration 209) stores them, written by `compute_wg_journeys.py` **in the same
+transaction as the journeys it summarises**. Same writer, same transaction —
+the summary cannot describe a different population than the arcs on screen, and
+the wg_journeys `fix` cascade recomputes it with no new dependency edge. The
+script's SQL and the migration's seed are asserted byte-identical after
+normalisation.
+
+Two rules the check enforces, both more important than the storage choice:
+a rate carries its **denominator**, and a missing reading **drops the clause**
+rather than defaulting to a remembered number.
+
+Remaining in 1c: the VaNi base-rate intent, which now reads the same table
+rather than recomputing.
 
 **The `is_current` trap.** `sleep_date` only ever exists on an archived row, so
 filtering to `is_current` structurally hid the end of every completed arc.
