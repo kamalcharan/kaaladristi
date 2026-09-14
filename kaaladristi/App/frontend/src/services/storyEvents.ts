@@ -29,6 +29,9 @@ export interface StoryBar {
   magic_rs_zone?: string | null
   flow_type?: string | null
   stage?: string | null
+  /** The date the CURRENT stage began — `stage_since === trade_date` is the
+   *  transition itself. Absent on resampled weekly/monthly bars and indices. */
+  stage_since?: string | null
   stage_confirmed?: string | null
   sma_150?: number | null
   gl_event?: string | null
@@ -309,20 +312,43 @@ function breakawayEvents(bars: StoryBar[]): { i: number; title: string; detail: 
  *  km_wg_journeys describing a multi-year arc, so it contributes two DATED
  *  markers rather than something scanned bar by bar. Undefined for the vast
  *  majority of stocks, which are on no journey at all. */
+/** One Waking Giants journey — current or archived.
+ *
+ *  km_wg_journeys stores SIX dated milestones and the story layer read two of
+ *  them (turn, wake). `confirm_date` is the Ascent moment — the payoff the whole
+ *  engine exists to find, 75 current + 348 archived rows on 2026-09-14 — and it
+ *  had never appeared on a chart; `sleep_date` (595 archived rows) closes the
+ *  arc. Both are emitted now.
+ *
+ *  `sleep_date` is only ever set on an ARCHIVED row (is_current = false): a
+ *  current journey by definition has not slept. Reading journeys with
+ *  `is_current` alone therefore cannot show a journey that ended inside the
+ *  loaded window — which is why the fetch now returns every journey for the
+ *  stock and the builder walks them all. */
 export interface StoryJourney {
   state?: string | null
+  is_current?: boolean | null
   wake_date?: string | null
   wake_close?: number | null
   turn_date?: string | null
   turn_close?: number | null
+  confirm_date?: string | null
+  sleep_date?: string | null
+  base_start?: string | null
+  base_high?: number | null
   base_years?: number | null
+  stir_days?: number | null
+  align_score?: number | null
+  resting?: boolean | null
+  pct_from_turn?: number | null
+  pct_from_wake?: number | null
 }
 
 export function buildStoryEvents(
   bars: StoryBar[],
   bigMoneyDates?: Set<string>,
   sectorByDate?: Map<string, { leading: boolean }>,
-  journey?: StoryJourney | null,
+  journey?: StoryJourney | StoryJourney[] | null,
 ): StoryEvent[] {
   const out: StoryEvent[] = []
   const add = (i: number, kind: StoryKind, title: string, detail: string, tone: StoryTone) =>
@@ -337,6 +363,40 @@ export function buildStoryEvents(
       reactionPct: reactionPct(bars, i),
       priority: PRIORITY[kind],
     })
+
+  // Weinstein stage transition.
+  //
+  // `stage_since` is the classifier's OWN record of when the current stage
+  // began, so `stage_since === trade_date` IS the transition — a stored fact
+  // rather than one we re-derive. Preferred wherever the column is loaded, for
+  // two reasons the bar-diff cannot cover: the previous LOADED bar may be days
+  // earlier (a gap, a suspension), and a stock that leaves a stage and returns
+  // to the same one reads as "unchanged" to a diff. The diff remains the
+  // fallback for series carrying no stage_since — resampled weekly/monthly
+  // bars and indices.
+  //
+  // `prev` is undefined for the first bar, which is the case the diff could
+  // never see at all: a window opening on the very session a stage began drew
+  // nothing. stage_since answers it without a predecessor.
+  const addStageEvent = (i: number, b: StoryBar, prev?: StoryBar) => {
+    if (!b.stage) return
+    const changed = b.stage_since != null
+      ? b.stage_since === b.trade_date
+      : (!!prev?.stage && b.stage !== prev.stage)
+    if (!changed) return
+    // UNKNOWN is not a stage, it is the classifier saying it could not tell.
+    // A move OUT of it is the indicator arriving, not the stock changing
+    // character — 713 fabricated events when this was missing.
+    if (prev?.stage === 'UNKNOWN') return
+    const st = STAGE_LABEL[b.stage]   // undefined for UNKNOWN — nothing fires
+    if (!st) return
+    const from = prev?.stage ? (STAGE_NAME[prev.stage] ?? prev.stage) : null
+    add(i, 'stage', st.title, from ? `${from} → ${st.name}` : `Now ${st.name}`, st.tone)
+  }
+
+  // The first bar carries no predecessor, so only a stored stage_since can
+  // speak for it.
+  if (bars.length) addStageEvent(0, bars[0])
 
   for (let i = 1; i < bars.length; i++) {
     const b = bars[i]
@@ -376,10 +436,16 @@ export function buildStoryEvents(
     // announcing "Entered Stage 4" on the day a moving average finally has
     // enough bars would be a fabricated event (713 of them since 2026-07-01).
     // Treat it exactly like a missing previous stage: say nothing.
-    if (b.stage && p.stage && b.stage !== p.stage && p.stage !== 'UNKNOWN') {
-      const st = STAGE_LABEL[b.stage]   // undefined for UNKNOWN — nothing fires
-      if (st) add(i, 'stage', st.title, `${STAGE_NAME[p.stage] ?? p.stage} → ${st.name}`, st.tone)
-    }
+    //
+    // `stage_since` is the classifier's OWN record of when the current stage
+    // began, so `stage_since === trade_date` IS the transition — a stored fact
+    // rather than a diff we re-derive. Preferred when the column is loaded,
+    // because the bar-to-bar diff cannot see a transition that happened on the
+    // first bar of the window (there is no previous bar to compare against),
+    // and a 1-year chart silently dropped every stage change that landed on its
+    // left edge. The diff stays as the fallback for series that carry no
+    // stage_since (resampled weekly/monthly bars, indices).
+    addStageEvent(i, b, p)
 
     // 4b) Golden Line event — an SVD/SBD-backed cross or hold of the 150 SMA.
     // gl_event is only ever written on a bar that already carries the volume
@@ -424,27 +490,59 @@ export function buildStoryEvents(
   // the timeline showing no sign of it. Matched by date rather than scanned,
   // and skipped silently when the date falls outside the loaded range — a
   // journey that woke two years ago has no bar to sit on in a 1-year view.
-  if (journey) {
-    const barAt = (d?: string | null) =>
-      d ? bars.findIndex((x) => x.trade_date === d) : -1
-    const yrs = journey.base_years != null
-      ? `${journey.base_years} years` : 'a long stretch'
+  // A stock can hold several journeys (one current, the rest archived —
+  // 755 stocks have one, 226 have two, a handful many more). Walk them all:
+  // an arc that ENDED inside the loaded window is exactly as much a part of
+  // this chart's story as the one still running.
+  const journeys: StoryJourney[] = !journey ? []
+    : Array.isArray(journey) ? journey : [journey]
 
-    const ti = barAt(journey.turn_date)
+  const barAt = (d?: string | null) =>
+    d ? bars.findIndex((x) => x.trade_date === d) : -1
+
+  for (const j of journeys) {
+    const yrs = j.base_years != null ? `${j.base_years} years` : 'a long stretch'
+
+    const ti = barAt(j.turn_date)
     if (ti >= 0) {
       add(ti, 'discovery', 'Journey turned',
           `The weekly clock turned green and price cleared the Golden Line after ${yrs} of dormancy` +
-          (journey.turn_close != null ? ` — from Rs ${journey.turn_close}.` : '.'),
+          (j.turn_close != null ? ` — from Rs ${j.turn_close}.` : '.'),
           'bull')
     }
 
-    const wi = barAt(journey.wake_date)
+    const wi = barAt(j.wake_date)
     if (wi >= 0) {
       add(wi, 'discovery', 'Journey woke',
           `Cleared its hibernation ceiling` +
-          (journey.wake_close != null ? ` at Rs ${journey.wake_close}` : '') +
-          `${journey.state ? ` — now ${journey.state.toLowerCase()}` : ''}.`,
+          (j.wake_close != null ? ` at Rs ${j.wake_close}` : '') +
+          `${j.state ? ` — now ${j.state.toLowerCase()}` : ''}.`,
           'bull')
+    }
+
+    // The Ascent moment. Of 595 closed journeys, 348 reached it — and the
+    // confirmed ones ran 494 days on average against 38 for those that never
+    // did, so this is the single most consequential marker on the arc.
+    const ci = barAt(j.confirm_date)
+    if (ci >= 0) {
+      add(ci, 'discovery', 'Journey confirmed',
+          'All three clocks aligned and the monthly close held above the base ceiling' +
+          (j.base_high != null ? ` of Rs ${j.base_high}.` : '.'),
+          'bull')
+    }
+
+    // Only ever present on an archived row. D39: describe the structure, not
+    // a direction — the journey closed, that is all this says.
+    const si = barAt(j.sleep_date)
+    if (si >= 0) {
+      const lived = j.wake_date && j.sleep_date
+        ? Math.round((Date.parse(j.sleep_date) - Date.parse(j.wake_date)) / 86400000)
+        : null
+      add(si, 'discovery', 'Journey closed',
+          'Clock alignment collapsed and the journey was archived' +
+          (lived != null ? ` — ${lived} days after its wake.` : '.') +
+          (j.confirm_date ? '' : ' It never reached confirmation.'),
+          'bear')
     }
   }
 

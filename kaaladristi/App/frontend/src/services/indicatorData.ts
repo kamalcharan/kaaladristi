@@ -126,6 +126,11 @@ export interface IndicatorRow {
   // Weinstein stage + the Golden Line event trio. Equity-only (km_index_eod has
   // none of them), and optional so resampled W/M bars still type.
   stage?: string | null;
+  /** Date the current stage began. `stage_since === trade_date` is the
+   *  transition — the classifier's own record, so the story layer no longer
+   *  has to re-derive it by diffing bars (which misses a change landing on the
+   *  first bar of the loaded window). */
+  stage_since?: string | null;
   stage_confirmed?: string | null;
   gl_event?: string | null;
   gl_days_above?: number | null;
@@ -351,7 +356,7 @@ export async function fetchEquityEodById(
   // Equity-only extras (NOT in shared INDICATOR_COLS — km_index_eod lacks the
   // delivery columns): the Study cockpit's stat strip + Delivery-vs-Traded
   // widget read these.
-  const EQUITY_EXTRA_COLS = 'pct_chng,value_cr,delivery_pct,delivery_qty,deliv_value_cr,ret_5d,ret_22d,ret_66d,w52_high,w52_low,delivery_surge_x,stage,stage_confirmed,gl_event,gl_days_above,pct_from_gl,bm_event,bm_ratio,is_vani_s2,is_vani_smart,is_vani_breakout,is_vani_surge,is_vani_distrib,is_vani_weakness,is_vani_oversold';
+  const EQUITY_EXTRA_COLS = 'pct_chng,value_cr,delivery_pct,delivery_qty,deliv_value_cr,ret_5d,ret_22d,ret_66d,w52_high,w52_low,delivery_surge_x,stage,stage_since,stage_confirmed,gl_event,gl_days_above,pct_from_gl,bm_event,bm_ratio,is_vani_s2,is_vani_smart,is_vani_breakout,is_vani_surge,is_vani_distrib,is_vani_weakness,is_vani_oversold';
   const cols = `trade_date,open,high,low,close,volume,${INDICATOR_COLS},${EQUITY_EXTRA_COLS}`;
 
   const run = async (selectCols: string) => {
@@ -382,32 +387,61 @@ export async function fetchEquityEodById(
   return (data ?? []) as IndicatorRow[];
 }
 
-/** The stock's Waking Giants journey row, if it is on one.
+/** Every Waking Giants journey this stock has been on — current and archived.
  *
- *  km_wg_journeys is a JOURNEY table — one row per stock describing a
- *  multi-year sleep/wake arc — so unlike everything else the chart reads it is
- *  not a time series. It contributes two dated markers (the turn and the wake)
- *  to the story timeline. Most stocks are on no journey and get null. */
-export async function fetchStockJourney(
+ *  km_wg_journeys is a JOURNEY table, not a time series: one row per arc
+ *  through hibernation → turn → wake → ascent → sleep. It contributes the
+ *  dated markers the price series cannot carry.
+ *
+ *  Reads ALL journeys, not just `is_current`. `sleep_date` is only ever set on
+ *  an archived row — a current journey has not slept — so an `is_current`
+ *  filter structurally cannot show a journey that ENDED inside the loaded
+ *  window, and the chart lost the end of every completed arc. Most stocks hold
+ *  one or two rows (755 and 226 respectively on 2026-09-14); the cap is for the
+ *  long tail, one stock carries 43.
+ *
+ *  Ordered newest wake first so the cap keeps the recent arcs, and the current
+ *  journey (which may have no wake yet) is pulled to the front by the caller
+ *  via `currentJourney`. */
+const JOURNEY_COLS =
+  'state,is_current,wake_date,wake_close,turn_date,turn_close,confirm_date,' +
+  'sleep_date,base_start,base_high,base_years,stir_days,align_score,resting,' +
+  'pct_from_turn,pct_from_wake';
+
+export async function fetchStockJourneys(
   equityId: number,
-): Promise<StoryJourney | null> {
+): Promise<StoryJourney[]> {
   const { data, error } = await from('km_wg_journeys')
-    .select('state,wake_date,wake_close,turn_date,turn_close,base_years')
+    .select(JOURNEY_COLS)
     .eq('equity_id', equityId)
-    .is('is_current', 'true')
-    .limit(1)
+    .order('wake_date', { ascending: false, nullsFirst: true })
+    .limit(12)
     .execute();
   // Absent table (migration 177 not applied) or no journey are the same answer
   // to the caller: this stock has nothing to mark.
-  if (error || !Array.isArray(data) || data.length === 0) return null;
-  const r = data[0] as Record<string, unknown>;
+  if (error || !Array.isArray(data)) return [];
   const num = (v: unknown) => (v == null ? null : Number(v));
-  return {
+  return (data as Record<string, unknown>[]).map((r) => ({
     state: (r.state as string) ?? null,
+    is_current: (r.is_current as boolean) ?? null,
     wake_date: (r.wake_date as string) ?? null,
     wake_close: num(r.wake_close),
     turn_date: (r.turn_date as string) ?? null,
     turn_close: num(r.turn_close),
+    confirm_date: (r.confirm_date as string) ?? null,
+    sleep_date: (r.sleep_date as string) ?? null,
+    base_start: (r.base_start as string) ?? null,
+    base_high: num(r.base_high),
     base_years: num(r.base_years),
-  };
+    stir_days: num(r.stir_days),
+    align_score: num(r.align_score),
+    resting: (r.resting as boolean) ?? null,
+    pct_from_turn: num(r.pct_from_turn),
+    pct_from_wake: num(r.pct_from_wake),
+  }));
+}
+
+/** The live arc, if the stock is on one. Null when every journey is archived. */
+export function currentJourney(js: StoryJourney[] | null | undefined): StoryJourney | null {
+  return (js ?? []).find((j) => j.is_current) ?? null;
 }

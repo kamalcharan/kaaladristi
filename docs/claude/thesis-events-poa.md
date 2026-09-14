@@ -168,6 +168,37 @@ cascade from `km_jobs`.
 
 Highest value per unit of work in the whole plan. No migration, no backfill.
 
+### ✅ 1a + 1b BUILT 2026-09-14
+
+Frontend only, no migration, no backfill. Build + theme + persona gates green,
+typecheck clean, 98 backend tests unaffected.
+
+- `services/indicatorData.ts` — `fetchStockJourney` → **`fetchStockJourneys`**,
+  returning every arc (current and archived) with the full milestone set, plus
+  `currentJourney()`. `stage_since` added to `EQUITY_EXTRA_COLS`.
+- `services/storyEvents.ts` — `StoryJourney` widened; the builder accepts one
+  journey or many; **`Journey confirmed`** and **`Journey closed`** join the
+  `discovery` kind; stage transitions now read `stage_since`.
+- `components/domain/StockCockpit/JourneyStrip.tsx` — new. The five-milestone
+  arc, clocks, distance to the base ceiling, and the base rate.
+- `scripts/qa/check-journey-events.mjs` — verified to fail against both
+  regressions it guards.
+
+**The `is_current` trap.** `sleep_date` only ever exists on an archived row, so
+filtering to `is_current` structurally hid the end of every completed arc.
+PGHL's real journey — woke 2026-07-09, confirmed 07-31, slept 08-31 — is one
+chart window and was entirely invisible. METROPOLIS holds eight rows, five of
+them wakes that died inside two days.
+
+**A correction worth keeping.** The first version justified `stage_since` as
+"catches a transition on the first bar of the window". That was false: the
+event loop starts at `i = 1`, so neither implementation could see it — and the
+test passed against the bar-diff, the exact trap CLAUDE.md warns about. The fix
+was to make the claim true (`addStageEvent` is now called for bar 0, where only
+a stored `stage_since` can speak) rather than to soften the comment. `stage_since`
+also survives gaps in the loaded series and a stock that leaves a stage and
+returns to it, neither of which a diff can see.
+
 ### 1a · Discovery milestones (the big one)
 
 `km_wg_journeys` already journals six milestones. `storyEvents.ts` reads **two**.

@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { TrendingUp, TrendingDown, BarChart3, AlertCircle, RefreshCw, ArrowLeft } from 'lucide-react';
-import { fetchIndicatorDataById, fetchEquityEodById, fetchEquityTimeframeById, resampleRows, type EquityTimeframe, fetchStockJourney, type IndicatorRow } from '@/services/indicatorData';
+import { fetchIndicatorDataById, fetchEquityEodById, fetchEquityTimeframeById, resampleRows, type EquityTimeframe, fetchStockJourneys, currentJourney, type IndicatorRow } from '@/services/indicatorData';
 import TradingChart from '@/components/charts/TradingChart';
 import VaNiInsight from '@/components/domain/VaNiInsight';
 import { useInstrumentInsight } from '@/hooks';
@@ -601,17 +601,20 @@ export default function ChartView() {
   // score/magic_rs/flow columns (conviction · magic-RS flip · flow flip fire);
   // equity-only signals (stage/scan/big-money/sector) simply don't trigger when
   // their columns are absent.
-  // The Waking Giants journey — one row, two dated markers (turn and wake).
-  // Equity-only: indices are on no journey.
-  const { data: journey } = useQuery({
-    queryKey: ['stock-journey', numId],
-    queryFn: () => fetchStockJourney(numId),
+  // Every Waking Giants journey this stock has been on — current AND archived.
+  // Archived arcs matter: sleep_date only ever exists on one, so filtering to
+  // is_current structurally hid the END of every completed journey. Equity-only;
+  // indices are on no journey.
+  const { data: journeys } = useQuery({
+    queryKey: ['stock-journeys', numId],
+    queryFn: () => fetchStockJourneys(numId),
     enabled: isEquity && !!numId,
     staleTime: 300_000,
   });
+  const journey = useMemo(() => currentJourney(journeys), [journeys]);
   const storyEvents = useMemo(
-    () => ((isEquity || isIndex) && tf === 'daily' ? buildStoryEvents(rows, bigMoneyDates, sectorByDate, journey) : []),
-    [isEquity, isIndex, tf, rows, bigMoneyDates, sectorByDate, journey],
+    () => ((isEquity || isIndex) && tf === 'daily' ? buildStoryEvents(rows, bigMoneyDates, sectorByDate, journeys) : []),
+    [isEquity, isIndex, tf, rows, bigMoneyDates, sectorByDate, journeys],
   );
 
   /** Full editorial overlay bundle passed to TradingChart. Combines the

@@ -324,6 +324,34 @@ Steps run sequentially for a trade date:
 6f. Monthly aggregate (last calendar day only)
 **6g. `compute_rolling_metrics_for_date(db, trade_date)`** — populates `d30_pct_chng`, `d365_pct_chng`, `avg_amt_5d`, `avg_amt_22d`, `delivery_surge_x`, `w52_high`, `w52_low`, `lifetime_high`. This step exists because the PostgreSQL RPC (step 6) sets `indicators_computed_at` but never computes these rolling columns.
 
+### Discovery milestones reach the chart (2026-09-14)
+
+`km_wg_journeys` stores six dated milestones; the story layer read two.
+`confirm_date` — the Ascent moment, the payoff the engine exists to find — had
+never been drawn anywhere, and `sleep_date` closes an arc the chart simply
+stopped following. Both now emit as `discovery` events, and
+`components/domain/StockCockpit/JourneyStrip.tsx` renders the arc in the Thesis
+tab. Zero schema change: every value was already stored.
+
+⚠ **Never read journeys with `is_current` alone.** `sleep_date` exists only on
+an ARCHIVED row — a current journey has not slept — so that filter structurally
+hides the end of every completed arc. `fetchStockJourneys` returns all of them
+(capped at 12; 755 stocks hold one, 226 two, one holds 43) and
+`buildStoryEvents` walks the set. PGHL's real arc — woke 2026-07-09, confirmed
+07-31, slept 08-31 — fits in one chart window and was invisible before this.
+
+**Stage transitions read `stage_since`**, not a bar-to-bar diff:
+`stage_since === trade_date` is the classifier's own record. It survives gaps in
+the loaded series, catches a stock that leaves a stage and returns to it, and —
+because `addStageEvent` is now called for bar 0 as well — catches a transition
+on the first loaded bar, which no diff can see. The diff stays as the fallback
+for series carrying no `stage_since` (resampled weekly/monthly bars, indices).
+The UNKNOWN suppression is unchanged.
+
+Guarded by `scripts/qa/check-journey-events.mjs` (manual, like the rest of
+`scripts/qa/`), verified to fail against both a dropped confirm/close emission
+and a reverted stage diff.
+
 ### `fix` jobs cascade to their dependents (2026-09-14)
 
 `DAILY_STEPS` gets the order right nightly. The **`fix` path did not**: a fix

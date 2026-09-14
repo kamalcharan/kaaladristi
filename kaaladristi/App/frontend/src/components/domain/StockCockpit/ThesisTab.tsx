@@ -15,6 +15,7 @@ import { useAuthStore } from '@/stores/authStore'
 import { useBookmarkStore } from '@/stores/bookmarkStore'
 import { computeThesis, type Relationship, type ThesisBar, type ThesisRead } from '@/services/thesis'
 import type { StoryJourney } from '@/services/storyEvents'
+import JourneyStrip from './JourneyStrip'
 import { KIND_COLORS } from '@/services/storyEvents'
 import { narrateVani } from '@/services/vaniNarrate'
 import type { Pillar } from './VerdictHero'
@@ -234,6 +235,11 @@ export default function ThesisTab({
       {/* ── Structure: Big Money × Golden Line. Same component the VaNi inline
           popover renders, so the chart and the popover cannot disagree. ── */}
       <StructureStrip structure={thesis.structure} />
+
+      {/* ── The Waking Giants arc. Stored in km_wg_journeys all along and shown
+          nowhere: confirm_date (the Ascent moment) and sleep_date had never
+          reached a user. Renders only for a stock actually on a journey. ── */}
+      <JourneyStrip journey={journey} close={currentClose} />
 
       {/* ── Add-position form ── */}
       {showForm && relationship !== 'position' && (
