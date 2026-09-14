@@ -12,6 +12,8 @@
  * historical scan membership needed (the is_vani_* flags are per-bar columns).
  */
 
+import { priceActionEvents } from './priceActionEvents'
+
 export type StoryTone = 'bull' | 'bear' | 'neutral'
 
 /** The per-bar shape the extractor needs (a loose subset of the equity row). */
@@ -34,6 +36,19 @@ export interface StoryBar {
   stage_since?: string | null
   stage_confirmed?: string | null
   sma_150?: number | null
+  /** Price Action geometry (migrations 112 / 187). Present from each stock's
+   *  FIRST bar — RELIANCE reads back to 1996 — unlike ema_20 (2025+). */
+  pct_chng?: number | null
+  breakout_level?: number | null
+  pct_from_breakout?: number | null
+  breakdown_level?: number | null
+  pct_from_breakdown?: number | null
+  /** Period-to-date pair. `prev_*_close` is the REFERENCE the pct is measured
+   *  against, and it is what makes a crossing real or phantom — never drop it. */
+  prev_week_close?: number | null
+  pct_wtd?: number | null
+  prev_month_close?: number | null
+  pct_mtd?: number | null
   gl_event?: string | null
   gl_days_above?: number | null
   pct_from_gl?: number | null
@@ -55,6 +70,7 @@ export type StoryKind =
   | 'flow'
   | 'rs_breakaway'
   | 'gl'
+  | 'price_action'
   | 'discovery'
 
 /** One signature colour per kind (→ globals.css --story-* vars). */
@@ -69,6 +85,7 @@ export const KIND_COLORS: Record<StoryKind, string> = {
   flow: 'var(--story-flow)',
   rs_breakaway: 'var(--story-rsbreakaway)',
   gl: 'var(--story-gl)',
+  price_action: 'var(--story-priceaction)',
   discovery: 'var(--story-discovery)',
 }
 
@@ -102,6 +119,12 @@ const PRIORITY: Record<StoryKind, number> = {
   scan: 3,
   conviction: 2,
   flow: 1,
+  // Deliberately last. Price Action fires often (44 events on SOLARA's 123
+  // bars) and carries no cooldown — see priceActionEvents.ts on why a measured
+  // distribution refused to supply one. Bottom priority is how that density is
+  // paid for: on a shared bar it never displaces a journey milestone, a Big
+  // Money day or a stage change.
+  price_action: 0.5,
 }
 
 function zoneBucket(z?: string | null): StoryTone | null {
@@ -158,10 +181,28 @@ const FLOW_LABEL: Record<string, { title: string; tone: StoryTone }> = {
 
 // Stage-2 (advancing) is covered by the Stage event, so is_vani_s2 is omitted
 // here to avoid a duplicate bubble on the same bar.
+//
+// ⚠ NAMING TRAP, fixed here. `is_vani_surge` was titled "Breakout surge" and
+// `is_vani_breakout` "Fresh breakout" — but NEITHER is the Breakout Surge
+// scanner. That scanner qualifies on 20-day-high geometry
+// (`pct_chng > 0 AND pct_from_breakout > 0`); these two flags are 52-WEEK-high
+// proximity plus a volume surge:
+//
+//   is_vani_breakout  rvol > 3 AND close > sma_150 AND rsi_14 in [50,78]
+//                     AND magic_rs > 20 AND close >= w52_high * 0.95
+//   is_vani_surge     rvol > 5 AND close >= w52_high * 0.95 AND rsi_14 < 78
+//                     AND magic_rs > 0 AND close > sma_50
+//
+// On 2026-09-11 the scanner held 200 stocks and the flag fired on 8, overlap 6;
+// on SOLARA's own bars the flag fired 0 times where the scanner condition fired
+// 14. Same word, different rule. What the flags actually DO is decide the
+// scanner's HIGHLIGHT (`vani_flag` = is_vani_surge OR is_vani_breakout) — so
+// they are titled for what they measure, and the derived 20-day-high events
+// live in priceActionEvents.ts under their own names.
 const SCAN_FLAGS: { flag: keyof StoryBar; title: string; tone: StoryTone }[] = [
   { flag: 'is_vani_smart', title: 'Smart Money loading', tone: 'bull' },
-  { flag: 'is_vani_breakout', title: 'Fresh breakout', tone: 'bull' },
-  { flag: 'is_vani_surge', title: 'Breakout surge', tone: 'bull' },
+  { flag: 'is_vani_breakout', title: 'Near the 52-week high on volume', tone: 'bull' },
+  { flag: 'is_vani_surge', title: 'At the 52-week high on heavy volume', tone: 'bull' },
   { flag: 'is_vani_distrib', title: 'Distribution warning', tone: 'bear' },
   { flag: 'is_vani_weakness', title: 'Weakness confluence', tone: 'bear' },
 ]
@@ -544,6 +585,15 @@ export function buildStoryEvents(
           (j.confirm_date ? '' : ' It never reached confirmation.'),
           'bear')
     }
+  }
+
+  // 10) The six Price Action scanners, derived from the bar row. Emitted
+  //     through the same add() as everything else — one emission point, so
+  //     reaction and priority are computed identically — but derived in its own
+  //     module, because the reference-reset guard is subtle enough to earn its
+  //     own test.
+  for (const e of priceActionEvents(bars)) {
+    add(e.barIndex, 'price_action', e.title, e.detail, e.tone)
   }
 
   out.sort((a, b) => a.barIndex - b.barIndex)

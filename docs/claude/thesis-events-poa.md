@@ -311,19 +311,74 @@ source that can actually see the answer.
 
 ---
 
-## Phase 2 — Derive Price Action on read · zero schema change
+## Phase 2 — Derive Price Action on read · zero schema change ✅ BUILT
 
 Six of the nine Price Action scanners are one `LAG` over columns already on the
-bar row. Do **not** give them columns.
+bar row. They were **not** given columns.
 
 | Scanner | Predicate | History |
 |---|---|---|
-| Breakout Surge | `pct_chng > 0 AND pct_from_breakout > 0` | 2018 |
-| Breakdown Surge | `pct_chng < 0 AND pct_from_breakdown < 0` | 2020 |
-| Weekly Movers / Decliners | `pct_wtd` 0-cross | 2018 |
-| Monthly Movers / Decliners | `pct_mtd` 0-cross | 2018 |
+| Breakout Surge | `pct_chng > 0 AND pct_from_breakout > 0` | each stock's first bar |
+| Breakdown Surge | `pct_chng < 0 AND pct_from_breakdown < 0` | each stock's first bar |
+| Weekly Movers / Decliners | `pct_wtd` 0-cross | each stock's first bar |
+| Monthly Movers / Decliners | `pct_mtd` 0-cross | each stock's first bar |
 
 Golden Line Breakout / Retest are already stored (`gl_event`).
+
+**History correction.** This plan guessed 2018/2020. Measured on the live table,
+all four columns are populated from each stock's **first bar** — RELIANCE reads
+back to 1996-01-02, TCS to 2002-08-13. That is 26 years of Price Action history
+against `ema_20`'s 2025, and it is the argument for deriving rather than storing.
+
+### What shipped
+
+- `services/priceActionEvents.ts` — the derivation, guards and all, in its own
+  module because the reference-reset rule is subtle enough to need its own test.
+- `storyEvents.ts` — `price_action` kind at the **bottom** of the priority
+  table, emitted through the same `add()` as everything else.
+- `thesis.ts` — the signal list now trims by **priority**, then displays by
+  recency (see below).
+- `indicatorData.ts` — the eight columns join the chart fetch.
+- `scripts/qa/check-price-action-events.mjs` — verified to fail against all
+  eight regressions it guards.
+
+### Validated against the database, bar for bar
+
+The derivation was run as SQL over live SOLARA bars and as TypeScript over the
+same bars: **22 events, identical dates, identical types, identical order.** A
+browser derivation that disagrees with the database is the failure mode this
+whole phase risks, so it was checked rather than assumed.
+
+### The three rules, and the one that was rejected
+
+1. **Reference-reset guard** (mandatory). 17 of 35 weekly and 3 of 17 monthly
+   sign changes on SOLARA's last 123 bars are phantom — the period rolled over,
+   the two sides were measured against different reference prices, and nothing
+   happened. Twenty fabricated events out of fifty-two.
+2. **One crossing per period per direction.** Removes 6 of 14 surviving monthly
+   events; 0 weekly, since a five-day week rarely crosses twice the same way.
+3. **NULL is not zero.** An absent previous value is unmeasured, never "was
+   negative"; treating it as zero manufactures an event on the first bar that
+   has data.
+4. **No breakout cooldown — deliberately.** Re-entries cluster (SOLARA cleared
+   its 20-day high five times in fifteen days), so a "suppress within N bars"
+   rule was drafted. The gap distribution was measured first across a 1-in-37
+   NSE sample, 566 entries: 1 bar 12.5%, 2 bars 9.2%, 3-5 bars 20.8%, 6+ 40.8%.
+   **No cliff anywhere in it**, so any N would have been taste wearing the
+   costume of a rule. The edge is emitted faithfully and density is paid for by
+   priority instead.
+
+### The regression this would otherwise have shipped
+
+`thesis.ts` selected its "Recent signals" with `slice(-8)` — a pure recency cut,
+safe only while every event kind was rare. Price Action is not rare: 22 events
+on SOLARA's last 74 bars against 4 of everything else. All eight rows would have
+filled with "above last week's close", evicting the Big Money day, the stage
+change and the journey confirmation — and the tab's headline sentence reads
+`signals[0]`, so it would have degraded too. The chart never had this problem
+because `eventAtBar` already resolves a shared bar by priority; the list simply
+had no equivalent. It now ranks by priority, cuts, then restores recency for
+display.
 
 ### ⚠ The reference-reset guard is mandatory
 
@@ -339,6 +394,10 @@ Also de-duplicate repeat crossings inside one period (6 more on SOLARA), or a
 stock that oscillates around last week's close fires "weekly breakout" daily.
 
 ### Two naming traps to fix while here
+
+Both are **fixed**, not just noted. The flags are now titled for what they
+measure ("Near the 52-week high on volume" / "At the 52-week high on heavy
+volume") and the QA check fails if the scanner's name is put back on them.
 
 1. **`is_vani_breakout` is not the Breakout Surge scanner.** It is
    `rvol > 3 AND close > sma_150 AND rsi_14 BETWEEN 50 AND 78 AND magic_rs > 20

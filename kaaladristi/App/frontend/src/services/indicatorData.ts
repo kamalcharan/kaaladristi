@@ -135,6 +135,20 @@ export interface IndicatorRow {
   gl_event?: string | null;
   gl_days_above?: number | null;
   pct_from_gl?: number | null;
+  // Price Action geometry (migrations 112 / 187). The six Price Action
+  // scanners qualify on nothing but these, which is why services/
+  // priceActionEvents.ts can derive their whole history without a column.
+  // `prev_week_close` / `prev_month_close` are not decoration: they are the
+  // REFERENCE each pct is measured against, and the only way to tell a real
+  // zero-crossing from the period rolling over.
+  breakout_level?: number | null;
+  pct_from_breakout?: number | null;
+  breakdown_level?: number | null;
+  pct_from_breakdown?: number | null;
+  prev_week_close?: number | null;
+  pct_wtd?: number | null;
+  prev_month_close?: number | null;
+  pct_mtd?: number | null;
   // Big Money day (migration 200). Equity-only, and sparse by design —
   // bm_event is NULL on every bar that is not one.
   bm_event?: string | null;
@@ -356,7 +370,12 @@ export async function fetchEquityEodById(
   // Equity-only extras (NOT in shared INDICATOR_COLS — km_index_eod lacks the
   // delivery columns): the Study cockpit's stat strip + Delivery-vs-Traded
   // widget read these.
-  const EQUITY_EXTRA_COLS = 'pct_chng,value_cr,delivery_pct,delivery_qty,deliv_value_cr,ret_5d,ret_22d,ret_66d,w52_high,w52_low,delivery_surge_x,stage,stage_since,stage_confirmed,gl_event,gl_days_above,pct_from_gl,bm_event,bm_ratio,is_vani_s2,is_vani_smart,is_vani_breakout,is_vani_surge,is_vani_distrib,is_vani_weakness,is_vani_oversold';
+  // The eight Price Action columns are appended, not guarded the way
+  // bm_event/bm_ratio are below: migrations 112 and 187 are long applied and
+  // all eight were verified present on the live table before this shipped.
+  const PRICE_ACTION_COLS = 'breakout_level,pct_from_breakout,breakdown_level,'
+    + 'pct_from_breakdown,prev_week_close,pct_wtd,prev_month_close,pct_mtd';
+  const EQUITY_EXTRA_COLS = 'pct_chng,value_cr,delivery_pct,delivery_qty,deliv_value_cr,ret_5d,ret_22d,ret_66d,w52_high,w52_low,delivery_surge_x,stage,stage_since,stage_confirmed,gl_event,gl_days_above,pct_from_gl,bm_event,bm_ratio,is_vani_s2,is_vani_smart,is_vani_breakout,is_vani_surge,is_vani_distrib,is_vani_weakness,is_vani_oversold,' + PRICE_ACTION_COLS;
   const cols = `trade_date,open,high,low,close,volume,${INDICATOR_COLS},${EQUITY_EXTRA_COLS}`;
 
   const run = async (selectCols: string) => {

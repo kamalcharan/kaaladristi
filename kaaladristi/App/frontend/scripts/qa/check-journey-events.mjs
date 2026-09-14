@@ -19,11 +19,21 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import ts from 'typescript';
 
-const source = fs.readFileSync(new URL('../../src/services/storyEvents.ts', import.meta.url), 'utf8');
-const js = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
-const exports = {};
-new Function('exports', js)(exports);
-const { buildStoryEvents } = exports;
+// storyEvents imports priceActionEvents (Phase 2). Transpiled to CommonJS it
+// asks for `require`, which an .mjs scope does not have — so the real module is
+// loaded and handed over rather than stubbed empty: this check must exercise
+// the same event stream the chart does, Price Action included.
+function loadTs(rel, deps = {}) {
+  const src = fs.readFileSync(new URL(rel, import.meta.url), 'utf8');
+  const js = ts.transpileModule(src, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
+  const exp = {};
+  new Function('exports', 'require', js)(exp, (m) => deps[m] ?? {});
+  return exp;
+}
+const priceAction = loadTs('../../src/services/priceActionEvents.ts');
+const { buildStoryEvents } = loadTs('../../src/services/storyEvents.ts', {
+  './priceActionEvents': priceAction,
+});
 
 /** Minimal flat bars — no signal columns, so only the events under test fire. */
 function bars(dates, extra = {}) {
