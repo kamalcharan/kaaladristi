@@ -290,18 +290,24 @@ happened") into a decision aid ("this happened 595 times, 58.5% confirmed,
 confirmation lands around day 29"). This is the single highest-leverage VaNi
 content change available and it needs no new data.
 
-⚠ **Open — `km_journey_base_rates` grants are unverified.** Migration 209
-contains `GRANT SELECT … TO authenticated, anon, kd_app`, but
-`information_schema.role_table_grants` returned only `kd_readonly` when read
-over the read-only MCP connection. That view shows only grants where the
-current role is grantor or grantee, so this may be a visibility artefact of
-that connection rather than a real gap — the definitive read is `pg_class.relacl`
-or `has_table_privilege('authenticated', …)`, and the DB has been timing out
-since. It matters because logged-in browser users run PostgREST as
-`authenticated`: if the grant genuinely did not apply, `fetchJourneyBaseRates`
-returns null for everyone and the frequency clause silently disappears — which
-is the designed degraded state, so **nothing would look broken**. That is the
-migration-142 failure mode precisely. Re-check before treating 1c as closed.
+✅ **Grants verified (2026-09-14).** `pg_class.relacl` on
+`km_journey_base_rates` reads
+`{vikuna_admin=arwdDxtm, anon=r, kd_app=arwd, kd_readonly=r, authenticated=r}`
+— migration 209's grants applied exactly as written, including the decisive
+`authenticated=r` that logged-in browser users need.
+
+**The trap that nearly produced a wrong conclusion.**
+`information_schema.role_table_grants` returned ONLY `kd_readonly` for this
+table, which looks precisely like the migration-142 failure (a table shipped
+with no `authenticated` grant, failing silently because the frequency clause is
+designed to disappear when the fetch returns null). It was not: that view shows
+only grants where the **current role** is grantor or grantee, and the read-only
+MCP connects as `kd_readonly`. Over such a connection it can only ever see its
+own row. **Read `pg_class.relacl` (or `has_table_privilege`) instead — those are
+role-independent.** Asserting the gap from the `information_schema` reading
+would have sent the owner to re-run a grant that was already in place, which is
+the same shape as the diagnostic-hygiene lesson in CLAUDE.md: reason from a
+source that can actually see the answer.
 
 ---
 
