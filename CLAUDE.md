@@ -734,6 +734,21 @@ Base threshold: 6% with ATR adaptive factor.
 ## Current Plan
 
 
+### ▶ NEXT TOPIC: PEAD — start at `docs/claude/handover-2026-09-15-pead.md`
+
+Session handover written 2026-09-15. Read it before anything else: it carries
+the state of the merged sprint, what is still open, and — the part that matters
+— what was **verified** about PEAD readiness.
+
+The headline finding, so it is not rediscovered: **this database holds no
+earnings data at all.** No announcement/results/quarterly table exists;
+`km_corporate_actions` is 0 rows. So the framework's **Type 1 (Earnings
+Misread) cannot be computed today**, while Types 2 and 3 are human-date-tagged
+and need no ingest. That sequencing choice belongs to the owner and should be
+raised early. The spec — `docs/scanners/PEAD_FRAMEWORK.md`, 576 lines, incl. its
+own SEBI-safe framing section — already exists; `km_pead_tracker` is specified
+in it but **built nowhere**.
+
 ### Thesis events — PARKED 2026-09-15, Phases 1–3 shipped
 
 `docs/claude/thesis-events-poa.md`. Phases 1c, 2, 3a and 3b are on
