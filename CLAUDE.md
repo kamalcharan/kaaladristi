@@ -388,6 +388,37 @@ Guarded by `scripts/qa/check-journey-events.mjs` (manual, like the rest of
 reverted stage diff, a hardcoded base-rate fallback, a flipped ceiling side, a
 raw signed number handed to the model, and a dropped frequency fence.
 
+### Flower Pot is already derived on read — and the chart cannot see it on short ranges (2026-09-15)
+
+⚠ **Do NOT add `fpb_*` columns to `km_equity_eod`.** `fpbEvents()` in
+`services/storyEvents.ts` already derives the whole gate — coil, burst and
+shatter — from the loaded bars, and `breakawayEvents()` does the same for
+`rs_breakaway`. Checked line by line against the `flower_pot_burst` matview arm,
+the two **agree**: identical thresholds (0.8 / 0.08 / 0.6 / 2 / ≥60 bars / >20 /
+not S3-S4) and identical windows (atr15/atr60, vol5/vol22, hi10/lo10,
+`lag(magic_rs,5)`, the 22-bar prior-setup lookback, `lag(vol22,1)` and
+`lag(avgrng15,1)` on release). Storing them would be a **third** implementation
+of one eligibility rule, for a backfill ceiling (coil ~2022 on `magic_rs`,
+release 2025 on `delivery_pct`) the derivation already has.
+
+**The real defect: there is no warm-up on the chart's fetch.** `fpbEvents`
+needs 61 bars and returns `[]` below that; `getStartDate` fetches exactly the
+requested range. So Flower Pot is evaluable on **nothing at 1M** (~21 bars),
+**2 of 62 bars at 3M**, 64 of 124 at 6M, 188 of 248 at 1Y. Measured on a 1-in-23
+NSE sample (36 coil starts over a year), a 6M window loses **2 of its 28** coil
+starts to the blind first 60 bars. None of it was visible — the chart showed no
+coils and VaNi reported none.
+
+`storyCoverage(bars)` and `blindLeadingBars(bars)` make the blind zone sayable,
+and `buildThesisFacts` hands it to VaNi as an explicit **"NOT EVALUATED in this
+window — do not report these as absent"** line naming the requirement *and* the
+actual bar count. **A window too short to look must never read as a stock with
+nothing in it.**
+
+Still open: the warm-up fetch (request ~61 extra bars, derive over all, render
+only the display window). Not bundled because `rows` has ~25 consumers in
+`ChartView.tsx` and slicing them all needs the app in front of you.
+
 ### Stirring is a TALLY, never a run — and the schema now says so (2026-09-15)
 
 `km_wg_journeys.stir_days` counts qualifying bars inside the **last 60
@@ -1149,6 +1180,7 @@ These are in `LESSONS_LEARNED.md` in full; summary for quick reference:
 - **`information_schema.role_table_grants` is BLIND over a restricted connection — read `pg_class.relacl`** (2026-09-14). Checking migration 209's grants through the read-only `kaala-postgres` MCP returned only `kd_readonly` for `km_journey_base_rates`, which looks exactly like the migration-142 failure (table shipped with zero `authenticated` grant). It was wrong: that view exposes only grants where the **current role** is grantor or grantee, so a `kd_readonly` connection can never see anyone else's. `relacl` told the truth in one query — `{vikuna_admin=arwdDxtm, anon=r, kd_app=arwd, kd_readonly=r, authenticated=r}`, every grant present. Use `pg_class.relacl` or `has_table_privilege('<role>', …)`; both are role-independent. This matters most for exactly the tables where it is tempting to skip the check, because a missing SELECT on a read-optional table fails **silently** by design.
 - **Measure before inventing a threshold — and accept the answer when the data refuses to supply one** (2026-09-14). Price Action breakout re-entries cluster (SOLARA cleared its 20-day high five times in fifteen days), so a "suppress a repeat within N bars" cooldown looked obviously right. The gap distribution across a 1-in-37 NSE sample, 566 entries, came back 12.5% / 9.2% / 20.8% / 40.8% — smooth, no cliff, no natural break. The correct outcome of checking the distribution is sometimes **no threshold at all**: any N would have been taste wearing the costume of a rule, silently dropping real events. Density got solved structurally instead (bottom priority in the story table). The house rule is "check the distribution first"; this is the case where checking it says *don't*.
 - **A rare-event assumption is load-bearing even where nothing states it** (2026-09-14). `thesis.ts` picked its "Recent signals" with `slice(-8)` — correct for years, because every event kind was rare. Phase 2 added a kind that fires 22 times in 74 bars and the list would have filled with it, evicting the Big Money day and the journey confirmation, and degrading the tab's headline sentence (which reads `signals[0]`). Nothing in the type or the call site said "this assumes events are rare". When adding a high-frequency member to a shared stream, audit every CONSUMER that trims it, not just the producer — the chart was already immune because `eventAtBar` resolved by priority; the list had no equivalent rule.
+- **A derivation starved of warm-up reports "none", not "I could not look"** (2026-09-15). `fpbEvents` needs 61 bars and returns `[]` below that; the chart fetched exactly the user's range, so Flower Pot was **never evaluated once on a 1M chart** and reached 2 of 62 bars on a 3M one. Nothing errored, nothing looked wrong — the absence was indistinguishable from a genuine absence, which is the worst shape a data bug can take. Before adding storage to "fix" a missing signal, check whether the derivation is merely being starved: the cure is usually warm-up bars, not columns. And whatever the cure, make the blind zone **sayable** (`storyCoverage`) so the gap can be named rather than silently reported as zero.
 - **RLS on pipeline-computed tables**: don't add RLS to aggregate tables (`km_industry_eod`, etc.) — they contain no user data and RLS creates silent access bugs when `kd_app` role differs from `authenticated`.
 - **`auth.*` is Supabase-only — this deployment shimmed it in migration 149 (2026-07-14)**: RLS policies and `public.is_admin()` call `auth.uid()`/`auth.role()`/`auth.jwt()`, which exist on Supabase but NOT on self-hosted PostgREST. For a long time no migration DEFINED them (8 referenced, 0 defined), so every `auth.*`-based policy *errored at evaluation* — hidden because most tables have RLS OFF and admin writes go via FastAPI (`kd_app`). It surfaced as "permission denied"→then a silent `is_admin()` error on `km_index_constituents` (the one RLS-ON table with an `is_admin()` write policy) when custom-index saves (direct PostgREST) broke. Migration 149 defines `auth.uid/role/email/jwt` over `current_setting('request.jwt.claims', true)` — the same idiom `kd_update_profile` uses. If you add a new RLS policy, `auth.uid()`/`is_admin()` now work; if `is_admin()` ever "does nothing," first check the `auth` schema still exists. Also: two DB roles matter — logged-in users are `authenticated` (migration 144 reverted `kd_auth_login` to issue that for everyone, admins included), so any RLS-ON table needing admin writes must grant the verb to `authenticated` AND rely on `is_admin()` for authorization (e.g. migration 148).
 - **Warm-up windows sized in CALENDAR DAYS are cadence-blind** (migration 169, 2026-08-06). `compute_indicators_batch` (`300 days`) and `compute_magic_rs_batch` (`350 days`) are also called on `km_equity_weekly`/`km_equity_monthly` by `pipeline/compute/_indicator_chain.py`. The same window loads ~43 weekly bars and ~10 monthly bars, below every indicator's minimum (`IF i >= 50`, `IF i >= 20`, Wilder-14) — so they wrote NULL **while still stamping `indicators_computed_at = NOW()`**, making the row look computed. After the 2026-08-06 backfill: monthly `rsi_14`/`ema_20`/`sma_50` were 0/3,257 for May–Jul even for RELIANCE and TCS, which hold all 80 monthly bars. magic_rs failed harder — long MagicRS sits inside `IF n >= 145` (weekly never reached it) and monthly tripped `IF n < 22 THEN RETURN 0` before writing anything, which is why monthly `magic_rs` had been NULL *since the table existed*. Two consequences worth remembering: (1) a resume marker written unconditionally is worse than none — `... AND indicators_computed_at IS NULL` in the UPDATE means a re-run **skips** the rows it corrupted, so any fix must clear the stamp first; (2) **monthly long MagicRS is structurally impossible** — 145 monthly bars is ~12 years and the deepest symbol has 80, so monthly carries `magic_rs_short` only. When a function is shared across timeframes, size every lookback by bar count, not by date arithmetic.
