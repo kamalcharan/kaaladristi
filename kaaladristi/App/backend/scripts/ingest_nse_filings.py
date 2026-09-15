@@ -140,49 +140,91 @@ def upsert_raw(conn, rows: list[dict]) -> tuple[int, int]:
     return inserted, revisions
 
 
-def derive_events(conn) -> int:
+def derive_events(conn) -> tuple[int, int]:
     """Classify every raw row that has no event yet, using NSE's own `desc`.
-    63.5% of the stream resolves here with no model. The rest lands as
-    UNCLASSIFIED -- which is NOT the same as GENERAL, and is Sprint 3's queue."""
+    Returns (events_written, unresolvable_rows).
+
+    ⚠ ISIN IS RESOLVED, NOT REQUIRED. The first live run ingested 571 rows and
+    produced only 295 events: 276 carried an empty `sm_isin` and were skipped
+    SILENTLY — no count, no log, no queue. Half the stream disappearing with
+    nothing to show for it is the exact failure class this repo keeps
+    re-learning, so:
+
+      1. A missing ISIN now falls back to source_symbol -> km_equity_symbols,
+         which holds an ISIN for all 3,825 active NSE rows. Most of the gap
+         should close here.
+      2. Whatever still cannot be resolved is COUNTED AND RETURNED, so an
+         unresolvable tail is a number on the run report rather than an
+         absence nobody can see.
+
+    A row that resolves later (a new listing reaching km_equity_symbols on the
+    next master sync) is picked up on the next pass, because this selects on
+    'has no event yet' rather than marking rows as done.
+    """
     written = 0
     with conn.cursor() as cur:
+        # COALESCE(raw, symbol-lookup): the payload's ISIN wins where present.
         cur.execute("""
-            SELECT r.id, r.isin, r.company_name, r.desc_raw, r.disseminated_at
+            SELECT r.id, COALESCE(r.isin, s.isin) AS resolved_isin,
+                   r.company_name, r.desc_raw, r.disseminated_at, s.id
             FROM km_filings_raw r
             LEFT JOIN km_corporate_events e ON e.primary_raw_id = r.id
-            WHERE e.id IS NULL AND r.isin IS NOT NULL
+            LEFT JOIN LATERAL (
+                SELECT id, isin FROM km_equity_symbols
+                 WHERE symbol = r.source_symbol AND exchange = 'NSE' AND is_active
+                 ORDER BY id LIMIT 1
+            ) s ON TRUE
+            WHERE e.id IS NULL
+              AND COALESCE(r.isin, s.isin) IS NOT NULL
             ORDER BY r.id
         """)
-        for raw_id, isin, name, desc_raw, diss in cur.fetchall():
-            family, event_type, polarity, conf = classify_desc(desc_raw)
-            with conn.cursor() as c2:
-                # day_0 via the shared SQL function -- one implementation of the
-                # after-the-close rule, never repeated per caller.
-                c2.execute('SELECT kd_day_zero_trade_date(%s)', (diss,))
-                day0 = c2.fetchone()[0]
-                if day0 is None:
-                    continue          # no session within 15 days: a data gap,
-                                      # not a filing to classify. Retried later.
-                c2.execute("""
-                    INSERT INTO km_corporate_events
-                      (isin, equity_id, company_name, disseminated_at,
-                       day_0_trade_date, family, event_type, polarity, desc_raw,
-                       classified_by, classifier_version, confidence,
-                       primary_raw_id, raw_ids)
-                    SELECT %s,
-                           (SELECT id FROM km_equity_symbols
-                             WHERE isin=%s AND exchange='NSE' AND is_active
-                             ORDER BY id LIMIT 1),
-                           %s,%s,%s,%s,%s,%s,%s,'desc_map','v1',%s,%s,ARRAY[%s]
-                    ON CONFLICT (primary_raw_id) DO NOTHING
-                """, (isin, isin, name, diss, day0, family, event_type,
-                      polarity, desc_raw, conf, raw_id, raw_id))
-                written += c2.rowcount
-    return written
+        rows = cur.fetchall()
+
+    for raw_id, isin, name, desc_raw, diss, equity_id in rows:
+        family, event_type, polarity, conf = classify_desc(desc_raw)
+        with conn.cursor() as c2:
+            # day_0 via the shared SQL function -- one implementation of the
+            # after-the-close rule, never repeated per caller.
+            c2.execute('SELECT kd_day_zero_trade_date(%s)', (diss,))
+            day0 = c2.fetchone()[0]
+            if day0 is None:
+                continue          # no session within 15 days: a data gap, not a
+                                  # filing to classify. Retried on the next pass.
+            c2.execute("""
+                INSERT INTO km_corporate_events
+                  (isin, equity_id, company_name, disseminated_at,
+                   day_0_trade_date, family, event_type, polarity, desc_raw,
+                   classified_by, classifier_version, confidence,
+                   primary_raw_id, raw_ids)
+                VALUES (%s,
+                        COALESCE(%s, (SELECT id FROM km_equity_symbols
+                                       WHERE isin=%s AND exchange='NSE' AND is_active
+                                       ORDER BY id LIMIT 1)),
+                        %s,%s,%s,%s,%s,%s,%s,'desc_map','v1',%s,%s,ARRAY[%s])
+                ON CONFLICT (primary_raw_id) DO NOTHING
+            """, (isin, equity_id, isin, name, diss, day0, family, event_type,
+                  polarity, desc_raw, conf, raw_id, raw_id))
+            written += c2.rowcount
+
+    # What is STILL unresolvable, so it is a number rather than an absence.
+    with conn.cursor() as cur:
+        cur.execute("""
+            SELECT count(*) FROM km_filings_raw r
+            LEFT JOIN km_corporate_events e ON e.primary_raw_id = r.id
+            LEFT JOIN LATERAL (
+                SELECT isin FROM km_equity_symbols
+                 WHERE symbol = r.source_symbol AND exchange = 'NSE' AND is_active
+                 ORDER BY id LIMIT 1
+            ) s ON TRUE
+            WHERE e.id IS NULL AND COALESCE(r.isin, s.isin) IS NULL
+        """)
+        unresolvable = cur.fetchone()[0]
+    return written, unresolvable
 
 
 def run(conn, session, start: date, end: date, dry_run=False) -> dict:
-    stats = {'fetched': 0, 'inserted': 0, 'revisions': 0, 'events': 0, 'calls': 0}
+    stats = {'fetched': 0, 'inserted': 0, 'revisions': 0, 'events': 0,
+             'calls': 0, 'unresolvable': 0}
     cur = start
     while cur <= end:
         win_end = min(cur + timedelta(days=BACKFILL_WINDOW_DAYS - 1), end)
@@ -199,9 +241,17 @@ def run(conn, session, start: date, end: date, dry_run=False) -> dict:
         cur = win_end + timedelta(days=1)
 
     if not dry_run:
-        stats['events'] = derive_events(conn)
+        stats['events'], stats['unresolvable'] = derive_events(conn)
         conn.commit()
         log.info(f'  events derived: {stats["events"]:,}')
+        if stats['unresolvable']:
+            # Loud on purpose. A silent skip here is how half a stream goes
+            # missing without anyone noticing.
+            log.warning(f'  ⚠ {stats["unresolvable"]:,} raw rows have NO '
+                        f'resolvable ISIN (neither sm_isin nor a symbol match '
+                        f'in km_equity_symbols) and produced no event. '
+                        f'Inspect: SELECT source_symbol, company_name, desc_raw '
+                        f'FROM km_filings_raw WHERE isin IS NULL LIMIT 20;')
     return stats
 
 
@@ -226,7 +276,8 @@ def main():
         stats = run(conn, NseSession(), start, end, args.dry_run)
         print(f'\nfetched {stats["fetched"]:,} in {stats["calls"]} calls  |  '
               f'new {stats["inserted"]:,}  revisions {stats["revisions"]}  '
-              f'events {stats["events"]:,}')
+              f'events {stats["events"]:,}  '
+              f'unresolvable {stats["unresolvable"]:,}')
     finally:
         if conn:
             conn.close()
