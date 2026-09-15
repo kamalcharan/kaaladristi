@@ -1,6 +1,28 @@
 # Thesis events — plan of action
 
-**Status:** audited 2026-09-14, not built. Owner decision pending on Phase 3 scope.
+**Status: PARKED 2026-09-15 at the owner's call — Phases 1c, 2, 3a and 3b are
+SHIPPED on `claude/tender-euler-2j7ab5`. Phase 4 (VaNi narration per family) is
+NOT started.**
+
+What landed: journey milestones + nightly base rates (migration 209), the six
+Price Action scanners derived on read, per-dimension watermarks (migration 210),
+the honest stirring pair (migration 211), and the chart warm-up fetch. Three of
+those phases DISPROVED this plan's own premise before building — see the
+sections below, each of which now records what the measurement said instead.
+
+Open when this resumes, in the order the owner will care about them:
+
+1. **UI verification has not happened.** None of this has been seen in a
+   browser. The checklist, with stocks picked from the live DB, is in CLAUDE.md
+   under Current Plan → Thesis events.
+2. **Phase 4.** Its rules are unchanged: pre-compute every comparison into a
+   word, name the evidence gap, and let *"nothing here matches how you work"* be
+   a valid reading.
+3. **Owner decisions still open** (listed in full further down): flow events
+   (column / derive / drop), whether the Thesis STRUCTURE strip keeps top
+   billing given `bm_event` has only 9 days, whether to backfill `bm_event`, and
+   verifying the 2021 Discovery archive floor.
+
 **Mock:** https://claude.ai/code/artifact/80f26d82-6a67-4d80-9a08-987cffe5b89e
 (SOLARA, 132 real bars, every scanner event computed with its verified predicate)
 

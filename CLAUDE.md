@@ -734,7 +734,60 @@ Base threshold: 6% with ATR adaptive factor.
 ## Current Plan
 
 
-Active sprint: **VaNi research companions** (2026-09-12 → 09-14) — Market
+### Thesis events — PARKED 2026-09-15, Phases 1–3 shipped
+
+`docs/claude/thesis-events-poa.md`. Phases 1c, 2, 3a and 3b are on
+`claude/tender-euler-2j7ab5`: journey milestones + base rates, the six Price
+Action scanners derived on read, per-dimension watermarks (migration 210), the
+honest stirring pair (migration 211), and the chart warm-up fetch.
+
+**Phase 4 — VaNi narration per family — is NOT started and is parked at the
+owner's call.** The POA's rules for it stand unchanged when it resumes:
+pre-compute every comparison into a word, name the evidence gap, and treat
+*"nothing here matches how you work"* as a valid reading rather than a failure.
+
+**How to run everything this sprint added** — backend (`cd App/backend`, no DB,
+no network, no LLM): `python -m unittest test_dimension_watermarks`,
+`test_journey_fields` (needs numpy/pandas), `test_pipeline_cascade`, the ten
+companion suites, plus `python test_vani_routing.py` and
+`python -m pyflakes lib/ pipeline2/ pipeline2_api.py scripts/`. Frontend
+(`cd App/frontend`): `npm run typecheck`, `npm run build`, and the four pure-node
+guards `check-price-action-events.mjs`, `check-journey-events.mjs`,
+`check-sector-horizons.mjs`, `check-persona.mjs`. All green 2026-09-15 (36 + 20
++ 84 backend tests). ⚠ Ten `scripts/qa/` checks call Playwright with
+`channel: 'chrome'` and need Chrome installed — they cannot run in the cloud
+container, which has Chromium at `/opt/pw-browsers/chromium` only. That is an
+environment limit, not a failure.
+
+**UI verification is OPEN — nothing here has been seen in a browser.** Stocks
+picked from the live DB on 2026-09-15:
+
+| Check | Where | What proves it |
+|---|---|---|
+| Warm-up reaches the derivation | `/chart/equity/599` (IPCALAB) at **1M** | A Flower Pot marker appears at all. At 1M the window is ~21 bars, so before this change `fpbEvents` returned `[]` without evaluating anything — a marker was structurally impossible. Also ORIENTHOT 39696, PANACHE 39713, AMBER 77. |
+| Rebase is exact | same stock, 1M → 3M → 6M | The marker stays on its own date instead of sliding |
+| Evidence gap shrank | Thesis tab, ask VaNi | No "NOT EVALUATED" line for Flower Pot at 1M; still present on **MAX** (no prefix there, correctly) |
+| Journey arc | `/chart/equity/39897` (SOTL) at 6M | turn 05-04 → wake 07-23 → **confirm 09-01**, all three in one window |
+| A COMPLETED arc | `/chart/equity/39767` (PGHL) at 6M | wake 07-09, confirm 07-31, **slept 08-31** — the end the `is_current` filter used to hide |
+| Base rate is read, not remembered | any journey stock, Thesis | The footnote cites **"348 of 595"** with its denominator |
+| Priority trim | `/chart/equity/40012` (SOLARA) at 3M | "Recent signals" is not eight rows of "above last week's close" |
+
+⚠ **Two things will look unfinished until the next `wg_journeys` run, and are
+not bugs.** Verified on the live DB 2026-09-15: `stir_first_date` and
+`stir_window_bars` are populated on **0 of 1,697** rows, so `JourneyStrip`
+correctly shows the bare count ("21") rather than "21 / 41" — that IS the
+designed fallback. Archived `turn_date` is likewise still NULL (PGHL included);
+the `turn_at()` derivation lands on the same run. `km_journey_base_rates` DOES
+carry its row (as_of 2026-09-14 — 348 of 595, 58.50%, 29 days average), so the
+base-rate check is live now.
+
+The warm-up and story-event work is **frontend-only**. Phase 1c's VaNi side is
+not: `/api/ai/vani-narrate` gaining `_sebi_post_filter` and the two
+`_VANI_NARRATE_SYSTEM` rules need the backend deployed and the API restarted.
+
+---
+
+Prior sprint: **VaNi research companions** (2026-09-12 → 09-14) — Market
 Structure, Sector Rotation (Current Flow + Longer-Term Leadership), the Price
 Action / Stage / Flow / Market / Discovery scanner defaults, and scanner
 highlight authority. All shipped on `claude/tender-euler-2j7ab5`; per-increment
