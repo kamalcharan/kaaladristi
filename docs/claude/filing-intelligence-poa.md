@@ -567,14 +567,18 @@ already is, not somewhere they must remember to go.
    query-pattern analysis first — do not bundle either into a filings sprint.
 5. **Classification gating** — confidence threshold, per family (above).
 
-## Still open
+## No decisions are open — Sprint 1 can start
 
-1. **Qwen throughput per call** — the 6 s/call figure above is an estimate. The
-   spike must measure it; the backfill schedule depends on it.
-2. **Keyword V1 catch rate** — assumed 80% from the filings spec. If it is 50%,
-   the backfill doubles.
-3. **`attchmntText` coverage** — if NSE's JSON summary classifies well on its
-   own, the PDF fetch and extraction drop out for a large share of filings and
-   Sprint 3 gets materially cheaper. Quantify in the spike.
-4. **BSE sprint timing** — when the second source arrives.
-   queue for a period, or go live with a confidence threshold?
+Every design question raised in the 2026-09-15 review is answered above. What
+remains are **measurements the Sprint 1 spike produces**, not choices anyone has
+to make. They move the schedule, not the design.
+
+| Spike must measure | Why it matters |
+|---|---|
+| **Qwen seconds per call** | The 6 s figure is an estimate. Sets the real backfill duration. |
+| **Keyword V1 catch rate** | Assumed 80% from the filings spec. At 50% the backfill doubles. |
+| **`attchmntText` coverage** | If NSE's JSON summary classifies well alone, PDF fetch and extraction drop out for a large share and Sprint 3 gets materially cheaper. |
+| **NSE announcement depth + rate limits** | Bounds the metadata backfill — and depth is a one-time opportunity. |
+
+**BSE:** sequenced after NSE, timing at the owner's call. The schema is
+two-source from day one so it arrives additively, never as a refactor.
