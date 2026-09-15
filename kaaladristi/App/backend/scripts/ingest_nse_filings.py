@@ -140,9 +140,22 @@ def upsert_raw(conn, rows: list[dict]) -> tuple[int, int]:
     return inserted, revisions
 
 
-def derive_events(conn) -> tuple[int, int]:
+def derive_events(conn) -> tuple[int, int, int]:
     """Classify every raw row that has no event yet, using NSE's own `desc`.
-    Returns (events_written, unresolvable_rows).
+    Returns (events_written, deferred_rows, unresolvable_rows).
+
+    ⚠ DEFERRED IS NOT AN ERROR, AND MUST NOT BE COUNTED AS ONE. Measured on the
+    first two live runs: 287 of 582 rows produced no event, every one of them
+    disseminated between 15:30:11 and 22:55 on the latest bar in km_equity_eod.
+    kd_day_zero_trade_date returns NULL for those because the NEXT session does
+    not exist yet — you cannot assign a Day 0 that has not happened. That is the
+    lookahead guard working, not a failure, and those rows classify themselves
+    on the next pass once tomorrow's bar lands.
+
+    Roughly half of every evening run will be deferred, because filings cluster
+    after the close. A report that does not distinguish deferred from broken
+    makes a healthy run look like a half-failed one — and would train whoever
+    reads it to ignore the number.
 
     ⚠ ISIN IS RESOLVED, NOT REQUIRED. The first live run ingested 571 rows and
     produced only 295 events: 276 carried an empty `sm_isin` and were skipped
@@ -155,13 +168,15 @@ def derive_events(conn) -> tuple[int, int]:
          should close here.
       2. Whatever still cannot be resolved is COUNTED AND RETURNED, so an
          unresolvable tail is a number on the run report rather than an
-         absence nobody can see.
+         absence nobody can see. (Measured 0 on live NSE data — every row
+         carried sm_isin. The fallback stays as the safety net for BSE and for
+         newly listed symbols.)
 
     A row that resolves later (a new listing reaching km_equity_symbols on the
     next master sync) is picked up on the next pass, because this selects on
     'has no event yet' rather than marking rows as done.
     """
-    written = 0
+    written = deferred = 0
     with conn.cursor() as cur:
         # COALESCE(raw, symbol-lookup): the payload's ISIN wins where present.
         cur.execute("""
@@ -188,8 +203,10 @@ def derive_events(conn) -> tuple[int, int]:
             c2.execute('SELECT kd_day_zero_trade_date(%s)', (diss,))
             day0 = c2.fetchone()[0]
             if day0 is None:
-                continue          # no session within 15 days: a data gap, not a
-                                  # filing to classify. Retried on the next pass.
+                deferred += 1     # after the close on the newest bar: the
+                                  # session it belongs to has not happened yet.
+                                  # Retried, and resolved, on the next pass.
+                continue
             c2.execute("""
                 INSERT INTO km_corporate_events
                   (isin, equity_id, company_name, disseminated_at,
@@ -219,12 +236,12 @@ def derive_events(conn) -> tuple[int, int]:
             WHERE e.id IS NULL AND COALESCE(r.isin, s.isin) IS NULL
         """)
         unresolvable = cur.fetchone()[0]
-    return written, unresolvable
+    return written, deferred, unresolvable
 
 
 def run(conn, session, start: date, end: date, dry_run=False) -> dict:
     stats = {'fetched': 0, 'inserted': 0, 'revisions': 0, 'events': 0,
-             'calls': 0, 'unresolvable': 0}
+             'calls': 0, 'deferred': 0, 'unresolvable': 0}
     cur = start
     while cur <= end:
         win_end = min(cur + timedelta(days=BACKFILL_WINDOW_DAYS - 1), end)
@@ -241,9 +258,16 @@ def run(conn, session, start: date, end: date, dry_run=False) -> dict:
         cur = win_end + timedelta(days=1)
 
     if not dry_run:
-        stats['events'], stats['unresolvable'] = derive_events(conn)
+        (stats['events'], stats['deferred'],
+         stats['unresolvable']) = derive_events(conn)
         conn.commit()
         log.info(f'  events derived: {stats["events"]:,}')
+        if stats['deferred']:
+            # Normal, and expected to be large on an evening run. Stated plainly
+            # so nobody reads a healthy result as a half-failure.
+            log.info(f'  {stats["deferred"]:,} deferred — disseminated after '
+                     f'the close, waiting on the next session to exist. They '
+                     f'classify on the next run; nothing is lost.')
         if stats['unresolvable']:
             # Loud on purpose. A silent skip here is how half a stream goes
             # missing without anyone noticing.
@@ -277,6 +301,7 @@ def main():
         print(f'\nfetched {stats["fetched"]:,} in {stats["calls"]} calls  |  '
               f'new {stats["inserted"]:,}  revisions {stats["revisions"]}  '
               f'events {stats["events"]:,}  '
+              f'deferred {stats["deferred"]:,}  '
               f'unresolvable {stats["unresolvable"]:,}')
     finally:
         if conn:
