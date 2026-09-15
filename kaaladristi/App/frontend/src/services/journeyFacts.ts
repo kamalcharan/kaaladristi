@@ -118,7 +118,18 @@ export function journeyFacts(
     out.push(`- Base: ${j.base_years} years${j.base_start ? ` from ${fmtDate(j.base_start)}` : ''}.`)
   }
   if (j.turn_date) out.push(`- Turn recorded ${fmtDate(j.turn_date)}${age(j.turn_date)}.`)
-  if (j.stir_days != null) out.push(`- Stirring for ${j.stir_days} days.`)
+  if (j.stir_days != null) {
+    // A TALLY with its denominator, never "stirring for N days". The
+    // qualifying bars are scattered (9.4 across a 41.3-bar span; 2.8%
+    // contiguous), so a duration phrasing is a false claim — and it is
+    // exactly the phrasing a model reaches for if handed a bare count.
+    out.push(j.stir_window_bars
+      ? `- Stirring signature on ${j.stir_days} of the last ${j.stir_window_bars} sessions`
+        + ` (scattered bars, not a continuous run)`
+        + (j.stir_first_date ? `, earliest ${fmtDate(j.stir_first_date)}.` : '.')
+      : `- Stirring signature on ${j.stir_days} sessions in the recent window`
+        + ` (scattered bars, not a continuous run).`)
+  }
   if (j.wake_date) {
     out.push(`- Wake recorded ${fmtDate(j.wake_date)}${age(j.wake_date)}.`)
   } else {

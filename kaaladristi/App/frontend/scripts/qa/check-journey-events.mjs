@@ -25,7 +25,10 @@ import ts from 'typescript';
 // the same event stream the chart does, Price Action included.
 function loadTs(rel, deps = {}) {
   const src = fs.readFileSync(new URL(rel, import.meta.url), 'utf8');
-  const js = ts.transpileModule(src, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
+  // jsx is required for the .tsx component; harmless for the .ts services.
+  const js = ts.transpileModule(src, {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.React },
+  }).outputText;
   const exp = {};
   new Function('exports', 'require', js)(exp, (m) => deps[m] ?? {});
   return exp;
@@ -197,6 +200,33 @@ for (const [label, src] of [
     `base-rate figures must not appear in ${label} executable code`);
 }
 
+// ── 5b. The stirring tally is never phrased as a run ───────────────────────
+// `stir_days` counts qualifying bars inside the last-60 window; they are
+// scattered (9.4 over a 41.3-bar span, 2.8% contiguous across 1,048 stocks).
+// "Stirring for 24 days" is therefore false for 97% of the population, and it
+// is the phrasing both the strip and a language model reach for by default.
+const strip = loadTs('../../src/components/domain/StockCockpit/JourneyStrip.tsx', {
+  '@/services/journeyFacts': { baseRateLine },
+  react: { createElement: () => null },
+});
+assert.equal(strip.stirLabel({ stir_days: 24, stir_window_bars: 41 }), '24 / 41',
+  'the cell must state the denominator');
+assert.equal(strip.stirLabel({ stir_days: 24 }), '24',
+  'with no window recorded, show the bare count \u2014 never an invented denominator');
+assert.equal(strip.stirLabel({}), '\u2014');
+
+let sf = journeyFacts({ state: 'STIRRING', stir_days: 24, stir_window_bars: 41,
+                        stir_first_date: '2026-06-12' }, null, null, '2026-09-11').join('\n');
+assert.match(sf, /24 of the last 41 sessions/, 'VaNi gets the rate with its denominator');
+assert.match(sf, /scattered bars, not a continuous run/,
+  'and is told explicitly that it is not a duration');
+assert.doesNotMatch(sf, /Stirring for \d+ days/,
+  'the duration phrasing must not survive anywhere');
+
+sf = journeyFacts({ state: 'STIRRING', stir_days: 24 }, null, null, '2026-09-11').join('\n');
+assert.doesNotMatch(sf, /of the last/, 'no denominator claimed when none is recorded');
+assert.match(sf, /scattered bars/, 'the caveat still applies without a window');
+
 // ── 6. What VaNi is given ──────────────────────────────────────────────────
 // The fact block is the only thing the model sees. Two properties are
 // load-bearing and neither is visible in a type: every comparison is already
@@ -250,4 +280,5 @@ assert.match(f, /BELOW the base ceiling/, 'the arc itself is still fully describ
 console.log('PASS: archived arcs emit wake/confirm/close, multiple journeys per stock, '
   + 'out-of-window silence, stage_since transitions incl. first-bar and UNKNOWN suppression, '
   + 'base rates read from the nightly table and dropped when absent, '
+  + 'stirring stated as a tally with its denominator, '
   + 'VaNi fact block states every comparison as a word and fences the frequency');

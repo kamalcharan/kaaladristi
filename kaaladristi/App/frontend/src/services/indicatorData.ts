@@ -424,7 +424,8 @@ export async function fetchEquityEodById(
  *  via `currentJourney`. */
 const JOURNEY_COLS =
   'state,is_current,wake_date,wake_close,turn_date,turn_close,confirm_date,' +
-  'sleep_date,base_start,base_high,base_years,stir_days,align_score,resting,' +
+  'sleep_date,base_start,base_high,base_years,stir_days,stir_first_date,' +
+  'stir_window_bars,align_score,resting,' +
   'pct_from_turn,pct_from_wake';
 
 export async function fetchStockJourneys(
@@ -453,6 +454,10 @@ export async function fetchStockJourneys(
     base_high: num(r.base_high),
     base_years: num(r.base_years),
     stir_days: num(r.stir_days),
+    // The tally's earliest bar and its DENOMINATOR (migration 211).
+    // stir_days alone reads as a run and is not one.
+    stir_first_date: (r.stir_first_date as string) ?? null,
+    stir_window_bars: num(r.stir_window_bars),
     align_score: num(r.align_score),
     resting: (r.resting as boolean) ?? null,
     pct_from_turn: num(r.pct_from_turn),

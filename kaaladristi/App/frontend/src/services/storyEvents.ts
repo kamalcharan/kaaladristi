@@ -378,7 +378,13 @@ export interface StoryJourney {
   base_start?: string | null
   base_high?: number | null
   base_years?: number | null
+  /** Qualifying bars in the stirring window — a TALLY, never a run length.
+   *  Measured 2026-09-14 across 1,048 stirring stocks: 9.4 bars scattered over
+   *  a 41.3-bar span, only 2.8% contiguous. Render it only with its window. */
   stir_days?: number | null
+  stir_first_date?: string | null
+  /** The denominator stir_days is measured over (migration 211). */
+  stir_window_bars?: number | null
   align_score?: number | null
   resting?: boolean | null
   pct_from_turn?: number | null

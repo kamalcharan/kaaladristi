@@ -505,14 +505,57 @@ on release only `fpb_vol_burst`, `fpb_range_exp`, `fpb_close_strength`,
 ~2022. Release needs `delivery_pct`, which is **0% before 2024**, 53% in 2024,
 89% in 2025 → releases realistically start 2025.
 
-### 3b · `km_wg_journeys` — `stir_start_date`, and persist on archive
+### 3b · `km_wg_journeys` ✅ BUILT — and this plan was wrong about it twice
 
-- **`stir_start_date`** — the one genuinely missing Discovery field. `stir_days`
-  is a rolling count recomputed each run, so the scanner built for *early*
-  detection cannot say when it began. Ceiling 2024 (`delivery_pct`).
-- **Persist `turn_date` and `gl_event_date` at archive.** Both are live-only:
-  560 and 94 current rows carry them, **0 archived rows do**. On a closed journey
-  you can never see where the turn was.
+**Scope call:** 3b shipped first (the plan's open decision #5). Discovery is the
+family with the measurable asymmetry — 595 closed arcs, 58.5% confirm, 494 vs
+38 days — and 3a's release columns cannot backfill before 2025 regardless, so
+nothing is lost by sequencing it second.
+
+**⛔ `stir_start_date` does not exist, and must not.** The premise — "`stir_days`
+is a rolling count, so the scanner built for early detection cannot say when it
+began" — assumes the qualifying bars form a run. They do not. Measured across
+all **1,048 stirring stocks** on 2026-09-14:
+
+> **9.4 qualifying bars spread over a 41.3-bar span; 29 of 1,048 (2.8%)
+> contiguous.**
+
+"Stirring since 12 June" would therefore be false for 97% of the population. A
+field name implying continuity over a scattered tally is a lie told by the
+schema, and no amount of careful UI copy undoes it. What shipped instead is the
+honest pair — `stir_first_date` (earliest qualifying bar) and
+`stir_window_bars` (the denominator) — so the reading is "**9 qualifying
+sessions since 12 June, out of 41**". Same rule `km_journey_base_rates`
+enforces: a rate always carries its sample.
+
+**The frontend already had the bug.** `JourneyStrip` rendered
+`` `${stir_days} days` `` — "24 days", read by anyone as three weeks of
+continuous stirring. Now `24 / 41`, with the bare count (never an invented
+denominator) when no window is recorded. `journeyFacts` tells VaNi the same
+thing and adds *"scattered bars, not a continuous run"*, because a bare count is
+exactly what a model turns into a duration.
+
+**`turn_date` on archive is a derivation, not a copy.** The plan said "persist
+turn_date at archive" as though the value were sitting there. It is not: the
+snapshot's turn is explicitly *"a property of NOW, anchored to the CURRENT
+unbroken run above the Golden Line"* — which a closed arc does not have. So
+`turn_at(i)` was extracted as **one implementation with two callers**: the
+snapshot asks it at the last bar, an archived arc asks it at its **wake** bar.
+Same question, two moments — and a wake requires `close >= GL`, so the wake bar
+is always inside a run, and the run containing it holds the turn that led into
+the wake. Asking at the *sleep* bar would return NULL for exactly the arcs worth
+inspecting, because losing the Golden Line is frequently why a journey slept.
+`gl_dist_pct` is captured at sleep for the same row.
+
+No schema change was needed for any of that — `turn_date`, `turn_close` and
+`gl_dist_pct` are existing columns that were simply never written. **Migration
+211** adds only the two stirring columns.
+
+Guarded by `test_journey_fields.py` (20 tests) and the extended
+`check-journey-events.mjs`, verified to fail against twelve regressions
+including the archive turn moving to the sleep bar, the run-start walkback being
+removed, the refused name returning, and both the strip and VaNi reverting to a
+duration phrasing.
 
 ### Cost
 

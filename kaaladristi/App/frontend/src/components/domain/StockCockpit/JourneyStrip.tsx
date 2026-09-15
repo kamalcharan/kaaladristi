@@ -70,6 +70,27 @@ function reachedIndex(j: StoryJourney): number {
   return 0
 }
 
+/** The stirring cell.
+ *
+ *  This read `${stir_days} days`, which is the one wrong thing you can say
+ *  about this number: `stir_days` is a TALLY of qualifying bars inside the
+ *  last-60 window, not a run. Measured across all 1,048 stirring stocks on
+ *  2026-09-14 — 9.4 qualifying bars spread over a 41.3-bar span, and only
+ *  2.8% contiguous — so "24 days" was read as three weeks of continuous
+ *  stirring by anyone looking at it.
+ *
+ *  Stating the denominator fixes it without losing anything: "24 / 41" says
+ *  both how much and how thinly. Same rule as the confirmation base rate —
+ *  a rate always carries the sample it was measured over. With no window
+ *  recorded (before migration 211 runs) the bare count is shown rather than
+ *  an invented denominator. */
+export function stirLabel(j: StoryJourney): string {
+  const n = j.stir_days
+  if (n == null) return '—'
+  const w = j.stir_window_bars
+  return w ? `${n} / ${w}` : `${n}`
+}
+
 export default function JourneyStrip({
   journey, close, rates,
 }: {
@@ -155,9 +176,7 @@ export default function JourneyStrip({
               </div>
               <div style={{ ...MONO, fontSize: 9.5, color: 'var(--text-faint)',
                 whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                {s.key === 'stir'
-                  ? (j.stir_days != null ? `${j.stir_days} days` : '—')
-                  : fmtDate(date)}
+                {s.key === 'stir' ? stirLabel(j) : fmtDate(date)}
               </div>
             </div>
           )
