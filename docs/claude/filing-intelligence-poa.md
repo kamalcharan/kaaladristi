@@ -59,33 +59,46 @@ it is only reachable because the event was framed as the head of a chain.
 
 ---
 
-## Naming — keys are permanent, labels are not
+## Naming — two layers, and keys outlive both
 
-**"CATALYST" is StockScans' branding and must not appear in the product.**
-DristiQ has its own vocabulary and the owner owns it.
+Owner decision, 2026-09-15:
 
-The house already has the mechanism (`signalScale.ts`, and the rule that scanner
-IDs are addresses that never follow a rename):
+| Layer | Word | Where it appears |
+|---|---|---|
+| **UI / feature** | **Eagles** | Section, category, chips — the watcher. Fits `Kāla-Drishti` = *time-vision*; the eagle is the sharpest sight in nature. Names STOCKS, following the Waking Giants precedent. |
+| **Event** | **Spark** | The dated event itself — what woke the giant. |
+
+**"CATALYST" is StockScans' branding and must not appear anywhere in the
+product.**
+
+**Sparks carry polarity.** Not every filing points the same way: promoter
+selling, pledge increase, regulatory action, audit qualification, debt increase
+and order cancellation are all real sparks with the opposite sign. So the event
+carries `polarity` ∈ `positive | negative | neutral` — stored for filtering and
+ranking, never rendered as directional language. D39 governs the label: state
+what the filing IS ("promoter reduced holding"), never what it implies.
+
+In the journey metaphor this is coherent — giants wake, and they also sleep. A
+negative spark is what sends one back to sleep.
+
+The house already has the key/label mechanism (`signalScale.ts`, and the rule
+that scanner IDs are addresses that never follow a rename):
 
 | Layer | Value | Changes? |
 |---|---|---|
-| `km_corporate_events.event_type` | `LARGE_ORDER`, `CAPACITY_EXPANSION`, … | **Never** — it is an address |
-| Display label | whatever VaNi calls it | Freely, in one constants file |
+| `km_corporate_events.event_type` | `LARGE_ORDER`, `PROMOTER_SELLING`, … | **Never** — it is an address |
+| `polarity` | `positive` / `negative` / `neutral` | Never |
+| Display label | Eagles/Spark vocabulary | Freely, in one constants file |
 
-**Consequence: the naming decision does not block ingestion.** Build on stable
-UPPER_SNAKE keys; settle vocabulary later in one file, no migration. Constants
-First Rule applies — never inline a label.
+**Consequence: vocabulary never blocks ingestion.** Build on stable
+UPPER_SNAKE keys; labels live in one file, no migration. Constants First Rule —
+never inline a label. And nothing in the copy may imply the spark *causes* the
+move; that is a prediction, and the reason we cite base rates instead.
 
-One constraint on whatever is chosen: it must not imply the filing *causes* the
-move. That is a prediction, and the reason we cite base rates instead. D39's ban
-on directional language applies to every label here.
-
----
-
-## The event taxonomy — four families, not one list
+## The event taxonomy — five families, not one list
 
 The owner's examples (*large order, management restructuring, bonus,
-preferential allotment, general*) span three different kinds of event. Flattening
+preferential allotment, general*) span several different kinds of event. Flattening
 them would put a 1:1 bonus beside a ₹2,000 Cr order as the same sort of thing.
 
 | Family | Examples | Consumes into |
@@ -93,6 +106,7 @@ them would put a 1:1 bonus beside a ₹2,000 Cr order as the same sort of thing.
 | **TRIGGER** (8 types) | large order, management change, capex/capacity, acquisition/JV, approval/policy, first commercial production, strategy switch, theme | The chain → journeys, the A/B |
 | **CORPORATE ACTION** | **bonus**, split, dividend, rights, buyback | `km_corporate_actions` + `adj_factor` |
 | **OWNERSHIP / STRUCTURAL** | **preferential allotment**, QIP, promoter pledge, SAST | Dilution + smart-money |
+| **NEGATIVE SPARK** | promoter selling, pledge increase, regulatory action, audit qualification, debt increase, order cancellation | The chain (opposite sign) + risk flags |
 | **GENERAL** | board-meeting intimation, newspaper publication, trading-window closure | Classified routine, parked |
 
 The eight TRIGGER types map 1:1 onto the reference deck's taxonomy, which covers
@@ -243,7 +257,7 @@ fetched_at
 `km_corporate_events` — normalised, deduped, one row per real-world event, FKs
 back to every raw row that evidenced it. Carries `day_0_trade_date`.
 
-### The five rules that make it correct
+### The six rules that make it correct
 
 1. **Key on ISIN, not `equity_id`.** A filing is about the **company**, not the
    listing — ANURAS on NSE and 543275 on BSE are two `equity_id`s, one company,
@@ -259,7 +273,21 @@ back to every raw row that evidenced it. Carries `day_0_trade_date`.
    natural key + different `content_hash` = the company revised it. The original
    may already have been classified and already moved the price; overwriting
    destroys the Day 0 we measured against.
-4. **Cross-exchange: raw never dedups, events always do.** **2,521 ISINs are
+4. **NSE ONLY in this sprint — BSE is sequenced later, not dropped.** Owner
+   decision, 2026-09-15. This removes an entire class of complexity from the
+   first build: the cross-exchange dedup rule below does not need to run at all
+   while there is one source. It covers 3,443 active non-ETF NSE companies;
+   3,855 BSE-only companies wait for the later sprint.
+   **⚠ This is a SEQUENCING choice, not a scope narrowing.** CLAUDE.md's settled
+   decision is full NSE + BSE coverage, and BSE filings must follow — the schema
+   below is built for two sources from day one so that arrival is additive.
+   **No mcap floor.** A `mcap_cr >= 700` filter was considered and rejected:
+   `mcap_cr` is **16% NULL on NSE and 37% NULL on BSE**, so the filter would
+   select on data availability rather than company size (the silent-NULL-column
+   lesson); large caps file *more* than small ones so the volume saving is far
+   below the 53% headcount saving; and smallcaps are exactly the population
+   where slow repricing is supposed to live.
+5. **Cross-exchange (BSE sprint): raw never dedups, events always do.** **2,521 ISINs are
    dual-listed — 33% of the active universe, two-thirds of the NSE list** — and
    the same letter is filed to both (the reference deck shows one addressed to
    BSE *and* NSE). Match on identical `content_hash` where the same PDF was
@@ -270,7 +298,7 @@ back to every raw row that evidenced it. Carries `day_0_trade_date`.
    preferred source's.** If BSE received it at 18:40 and NSE at 18:42, the market
    knew at 18:40. Getting this backwards biases every drift measurement by the
    inter-exchange filing lag.
-5. **Store `announced_at`; DERIVE `day_0_trade_date`.** A result announced 16:30
+6. **Store `announced_at`; DERIVE `day_0_trade_date`.** A result announced 16:30
    has Day 0 = *next* session. Off by one day here injects lookahead bias into
    every number downstream. This single field decides whether the study is
    trustworthy.
@@ -344,21 +372,76 @@ this sprint considerably cheaper than budgeted. Quantify in the Sprint 1 spike.
 Financial **tables** extract poorly even from good PDFs — which is the argument
 for taking XBRL in Sprint 4 rather than parsing result PDFs.
 
-### Classification
+### Classification — Qwen first, and SERIALIZED
 
-Keyword V1 (catches ~80% per the filings spec) then LLM assist for the
-remainder, into the four families above. **Classification is re-derived from
-stored text, never re-scraped** — that is the whole reason raw is immutable: the
-V1 keyword list *will* be wrong, and fixing it must not mean re-fetching three
-years of NSE.
+**Qwen, not Sonnet, is the default.** D42's finding — that Qwen cannot identify
+Indian mid/small caps — was about *generation from world knowledge* ("which
+companies are in the nuclear supply chain"). Classification is a different task:
+text is supplied, and the model only has to read it. Sonnet escalates only what
+Qwen flags low-confidence.
 
-Sonnet is required for Indian mid/small-cap knowledge (D42), so classification
-cost is real and belongs behind a budget.
+**Because classification is then near-free, it runs on the FULL universe.** That
+matters beyond cost: classifying only the stocks users look at would select on
+the outcome, and bias the Sprint 4 A/B in exactly the way this plan criticises
+elsewhere.
+
+#### Capacity is the binding constraint, and backfill is the wall
+
+Local Qwen has finite capacity and **must be driven serially — one request in
+flight, never fanned out.** Modelled at ~6 s/call (estimate; measure in the
+spike):
+
+| | items | serial hours |
+|---|---|---|
+| Daily, every filing → Qwen | 300 | 0.5 |
+| Daily, keyword first + Qwen residual | 60 | 0.1 |
+| **Backfill 12 mo, every filing** | **75,600** | **126 (5.2 days)** |
+| Backfill 12 mo, Qwen residual only | 15,120 | 25 (1.0 day) |
+
+**So the keyword V1 pass is not a cost optimisation — it is the capacity
+strategy.** Daily operation is trivial either way; the 12-month backfill is 5.2
+days of continuous inference unfiltered, and about one day behind a keyword
+pass.
+
+#### Worker contract
+
+- **One worker, one request in flight**, guarded by the existing
+  `single_flight()` advisory lock so two cannot start.
+- **Queue with explicit state**: `status` (queued/running/done/failed/
+  needs_human), `attempts`, `next_attempt_at`, `last_error`, `priority`,
+  `model_used`, `confidence`, **`classifier_version`**.
+- **Auto-retry with exponential backoff** (1 min → 5 → 25), capped attempts,
+  then `needs_human` rather than an infinite loop.
+- **Priority ordering**: today's filings first, then relevance, then backfill
+  drains behind everything.
+- **⚠ Yield to the live product.** Qwen already serves the VaNi companions, and
+  CLAUDE.md records that `_fallback_complete` is *already* failing most of the
+  time on that path (larger prompts). A backfill firehose would make live
+  readings worse. The worker runs in off-hours windows with a hard stop if
+  latency degrades — the backfill is never more important than the product.
+- **Truncate the input.** Headline + `attchmntText` + first N chars, never a
+  30-page PDF. Prompt size is the known failure mode on this model.
+- **`classifier_version` keys the result**, so a V2 re-classification is a clean
+  re-queue that never loses V1's record.
+
+#### Accuracy is measured, not assumed
+
+Hand-label ~200 filings once; run Qwen and Sonnet over the same set; compare.
+Half a day, and it settles both the model choice and the confidence threshold
+that gates publication. Keyword V1 handles the bulk regardless.
 
 An **admin review queue** (internal tool, not product UI) with
 `human_reviewed` / `human_override`, prioritised by confidence × materiality.
 
-**Exit:** classified events across four families, with provenance to the
+#### Gating — confidence threshold, per family (owner decision)
+
+High-confidence classifications publish immediately; the rest queue.
+**Corporate actions publish ungated** — bonus/split are keyword-detectable with
+near-certainty and carry no interpretive risk. **Spark-family classifications
+stay gated** until the classifier has a measured accuracy on real filings,
+because those are the ones carrying an implied story.
+
+**Exit:** classified events across the five families, with provenance to the
 document. No product UI.
 
 ---
@@ -398,11 +481,13 @@ predict anything at all.
 8. **Grant SELECT to `authenticated`** on anything PostgREST reads, verified with
    `pg_class.relacl` — `information_schema.role_table_grants` is blind over a
    restricted connection.
-9. **Measure before adopting any threshold.** Every number in the reference deck
+9. **Qwen is driven serially, with backoff, yielding to the live product.**
+    Never fan out; never let a backfill degrade a user's reading.
+10. **Measure before adopting any threshold.** Every number in the reference deck
    (mcap ≥ 1000, Revenue ≥ 20, PAT ≥ 30, × 1.10, the 2–5 week window) is a round
    number with no stated basis. Check the distribution, and accept "no threshold"
    as an answer — the Price Action cooldown died that way.
-10. **Base rates carry their denominator**, always. The reference deck has zero
+11. **Base rates carry their denominator**, always. The reference deck has zero
     base rates in 88 pages; that is our differentiator, not our template.
 
 ---
@@ -466,17 +551,30 @@ already is, not somewhere they must remember to go.
 
 ---
 
-## Open decisions for the owner
+## Decisions taken (2026-09-15)
 
-1. **Display vocabulary.** Not "catalyst". Does not block ingestion — stable keys
-   now, labels later in one file.
-2. **Universe for Tier B.** Full universe (440 MB/yr) or on-demand cache only
-   (330 MB for 300 stocks over 5 years)? On-demand self-selects the stocks users
-   care about; full universe makes the Sprint 4 A/B stronger.
-3. **How far back to backfill.** Bounded by the spike, and by our own enriched
-   layer: price history is 26 years but `ema_20` starts ~2025 and `delivery_pct`
-   is on only 3,082 of 7,496 rows on the latest bar.
-4. **`shared_buffers` / partitioning** — how far to go in Sprint 1 on the I/O
-   finding.
-5. **Classification gating** — does the classifier stay behind the admin review
+1. **Vocabulary** — Eagles in the UI, Spark for events, sparks carry polarity.
+2. **Universe** — full universe for metadata, text and classification. No mcap
+   floor. **NSE first, BSE sequenced later** (not dropped).
+3. **Backfill depth** — tiered by purpose: metadata as deep as the source
+   serves (depth is a one-time opportunity — a source that ages out cannot be
+   re-fetched later); text 12 months; corporate actions ≥24 months, because
+   that is what fixes the D44 bug; LLM classification recent + on-demand.
+4. **I/O** — Sprint 1 does the index cleanup only. `shared_buffers` at 2 GB is
+   the textbook 25% of ~8 GB RAM and is NOT misconfigured; the machine is
+   undersized for a 27 GB table. Raising it would starve the OS page cache. More
+   RAM is a hosting decision; partitioning is its own project needing
+   query-pattern analysis first — do not bundle either into a filings sprint.
+5. **Classification gating** — confidence threshold, per family (above).
+
+## Still open
+
+1. **Qwen throughput per call** — the 6 s/call figure above is an estimate. The
+   spike must measure it; the backfill schedule depends on it.
+2. **Keyword V1 catch rate** — assumed 80% from the filings spec. If it is 50%,
+   the backfill doubles.
+3. **`attchmntText` coverage** — if NSE's JSON summary classifies well on its
+   own, the PDF fetch and extraction drop out for a large share of filings and
+   Sprint 3 gets materially cheaper. Quantify in the spike.
+4. **BSE sprint timing** — when the second source arrives.
    queue for a period, or go live with a confidence threshold?
