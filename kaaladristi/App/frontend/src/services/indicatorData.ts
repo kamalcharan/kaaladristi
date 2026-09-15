@@ -359,6 +359,41 @@ export async function fetchInstrumentEod(symbol: string, range: TimeRange): Prom
   return []
 }
 
+// Equity-only extras (NOT in shared INDICATOR_COLS — km_index_eod lacks the
+// delivery columns): the Study cockpit's stat strip + Delivery-vs-Traded
+// widget read these.
+// The eight Price Action columns are appended, not guarded the way
+// bm_event/bm_ratio are: migrations 112 and 187 are long applied and all eight
+// were verified present on the live table before this shipped.
+const PRICE_ACTION_COLS = 'breakout_level,pct_from_breakout,breakdown_level,'
+  + 'pct_from_breakdown,prev_week_close,pct_wtd,prev_month_close,pct_mtd';
+const EQUITY_EXTRA_COLS = 'pct_chng,value_cr,delivery_pct,delivery_qty,deliv_value_cr,ret_5d,ret_22d,ret_66d,w52_high,w52_low,delivery_surge_x,stage,stage_since,stage_confirmed,gl_event,gl_days_above,pct_from_gl,bm_event,bm_ratio,is_vani_s2,is_vani_smart,is_vani_breakout,is_vani_surge,is_vani_distrib,is_vani_weakness,is_vani_oversold,' + PRICE_ACTION_COLS;
+const EQUITY_EOD_COLS = `trade_date,open,high,low,close,volume,${INDICATOR_COLS},${EQUITY_EXTRA_COLS}`;
+
+/** Run an equity-EOD select, retrying once without bm_event/bm_ratio.
+ *
+ *  Deploy-ordering guard. bm_event/bm_ratio arrive with migration 200, which
+ *  the owner runs by hand — so a frontend deployed first would ask PostgREST
+ *  for columns that do not exist yet and 400 the ENTIRE chart, not just the
+ *  Big Money card. Retry once without them so the page degrades to "no big
+ *  money days" instead of going blank. Matched on the column name, so a real
+ *  error still surfaces as a real error.
+ *
+ *  Shared by the display fetch and the warm-up fetch so the two can never
+ *  drift into asking for different columns — a warm-up bar missing a column
+ *  the derivation reads would silently evaluate to nothing, which is the
+ *  exact failure shape the warm-up exists to remove. */
+async function runEquityEodSelect(
+  build: (selectCols: string) => Promise<{ data: unknown; error: { message?: string } | null }>,
+): Promise<IndicatorRow[]> {
+  let { data, error } = await build(EQUITY_EOD_COLS);
+  if (error && /bm_event|bm_ratio/.test(error.message ?? '')) {
+    ({ data, error } = await build(EQUITY_EOD_COLS.replace(',bm_event,bm_ratio', '')));
+  }
+  if (error) throw new Error(error.message);
+  return (data ?? []) as IndicatorRow[];
+}
+
 /** Fetch full indicator data for an equity by its DB id (used by /chart/equity/:id).
  *  Same columns as index fetch — TradingChart renders SMA overlays, dots,
  *  RSI, Sniper Dragon, and MagicRS panes. */
@@ -367,18 +402,7 @@ export async function fetchEquityEodById(
   range: TimeRange,
 ): Promise<IndicatorRow[]> {
   const startDate = getStartDate(range);
-  // Equity-only extras (NOT in shared INDICATOR_COLS — km_index_eod lacks the
-  // delivery columns): the Study cockpit's stat strip + Delivery-vs-Traded
-  // widget read these.
-  // The eight Price Action columns are appended, not guarded the way
-  // bm_event/bm_ratio are below: migrations 112 and 187 are long applied and
-  // all eight were verified present on the live table before this shipped.
-  const PRICE_ACTION_COLS = 'breakout_level,pct_from_breakout,breakdown_level,'
-    + 'pct_from_breakdown,prev_week_close,pct_wtd,prev_month_close,pct_mtd';
-  const EQUITY_EXTRA_COLS = 'pct_chng,value_cr,delivery_pct,delivery_qty,deliv_value_cr,ret_5d,ret_22d,ret_66d,w52_high,w52_low,delivery_surge_x,stage,stage_since,stage_confirmed,gl_event,gl_days_above,pct_from_gl,bm_event,bm_ratio,is_vani_s2,is_vani_smart,is_vani_breakout,is_vani_surge,is_vani_distrib,is_vani_weakness,is_vani_oversold,' + PRICE_ACTION_COLS;
-  const cols = `trade_date,open,high,low,close,volume,${INDICATOR_COLS},${EQUITY_EXTRA_COLS}`;
-
-  const run = async (selectCols: string) => {
+  return runEquityEodSelect((selectCols) => {
     let query = from('km_equity_eod')
       .select(selectCols)
       .eq('equity_id', equityId)
@@ -388,22 +412,43 @@ export async function fetchEquityEodById(
       query = query.gte('trade_date', startDate);
     }
     return query.execute();
-  };
+  });
+}
 
-  let { data, error } = await run(cols);
-
-  // Deploy-ordering guard. bm_event/bm_ratio arrive with migration 200, which
-  // the owner runs by hand — so a frontend deployed first would ask PostgREST
-  // for columns that do not exist yet and 400 the ENTIRE chart, not just the
-  // Big Money card. Retry once without them so the page degrades to "no big
-  // money days" instead of going blank. Matched on the column name, so a real
-  // error still surfaces as a real error.
-  if (error && /bm_event|bm_ratio/.test(error.message ?? '')) {
-    ({ data, error } = await run(cols.replace(',bm_event,bm_ratio', '')));
-  }
-  if (error) throw new Error(error.message);
-
-  return (data ?? []) as IndicatorRow[];
+/** Bars STRICTLY BEFORE `beforeDate` — warm-up for the derived story layers.
+ *
+ *  Several story derivations need history the user never asked to see.
+ *  `fpbEvents` needs 61 bars before it can judge a single one and returns []
+ *  below that; `breakawayEvents` needs 6. The display fetch returns exactly
+ *  the requested range, so on a 1M chart (~21 bars) Flower Pot compression was
+ *  evaluated on NOTHING, and on 3M (~62 bars) on 2 bars of 62 — reported to
+ *  the user and to VaNi as an absence rather than as "could not look".
+ *
+ *  This is deliberately a SEPARATE additive query rather than a widened range
+ *  on the display fetch: `rows` feeds ~25 consumers (the chart itself, the
+ *  stat strip, the scrubber, the data tab, the export), and every one of them
+ *  would silently gain bars the user did not select. The prefix is consumed by
+ *  the derivation and discarded before render.
+ *
+ *  Returns oldest-first, like every other fetch here. */
+export async function fetchEquityWarmupBars(
+  equityId: number,
+  beforeDate: string,
+  bars: number,
+): Promise<IndicatorRow[]> {
+  if (bars <= 0) return [];
+  const rows = await runEquityEodSelect((selectCols) =>
+    from('km_equity_eod')
+      .select(selectCols)
+      .eq('equity_id', equityId)
+      // DESC + limit takes the N bars IMMEDIATELY before the window. Ascending
+      // would take the stock's first N bars ever — 1996 for RELIANCE — which
+      // is not warm-up, it is a different decade.
+      .order('trade_date', { ascending: false })
+      .lt('trade_date', beforeDate)
+      .limit(bars)
+      .execute());
+  return rows.slice().reverse();
 }
 
 /** Every Waking Giants journey this stock has been on — current and archived.

@@ -266,11 +266,18 @@ function buildStructure(bars: ThesisBar[], events: BigMoneyEvent[]): StructureRe
   }
 }
 
+/** @param warmupBars  history fetched BEFORE `bars` purely so the derivations
+ *  with a lookback (Flower Pot compression needs 60 prior bars) can evaluate
+ *  the window's earliest displayed sessions. It feeds the event derivation
+ *  ONLY — every other reading here (pillars, posture trajectory, position
+ *  risk, structure) stays measured over `bars` exactly as displayed, because
+ *  those are statements about the window the user chose. */
 export function computeThesis(
   bars: ThesisBar[] | undefined,
   relationship: Relationship,
   position?: PositionInput | null,
   journey?: StoryJourney | null,
+  warmupBars?: ThesisBar[],
 ): ThesisRead | null {
   if (!bars || bars.length === 0) return null
   const latest = bars[bars.length - 1]
@@ -307,7 +314,11 @@ export function computeThesis(
   // the chart's own timeline showed them.
   const bigMoneyEvents = readBigMoneyDays(bars)
   const bigMoneyDates = new Set(bigMoneyEvents.map((e) => e.trade_date))
-  const events = buildStoryEvents(bars, bigMoneyDates, undefined, journey)
+  const warm = warmupBars ?? []
+  const events = buildStoryEvents(
+    warm.length ? [...warm, ...bars] : bars,
+    bigMoneyDates, undefined, journey, warm.length,
+  )
   let signals = events
   if (relationship === 'position' && position?.entryDate) {
     signals = signals.filter((e) => e.date >= position.entryDate)

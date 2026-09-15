@@ -41,6 +41,7 @@ function buildThesisFacts(
   close?: number | null,
   rates?: JourneyBaseRates | null,
   asOf?: string | null,
+  warmupBars?: ThesisBar[],
 ): string {
   const lines: string[] = [`Instrument: ${name}`, `Relationship: ${t.relationship}`]
   if (t.relationship === 'position' && t.positionRisk) {
@@ -67,7 +68,8 @@ function buildThesisFacts(
   // would then report "no coils", which is a claim about the stock when it is
   // really a claim about the range. Saying what could not be evaluated is what
   // makes the answers that ARE given believable.
-  const cov = storyCoverage(bars)
+  const warm = warmupBars ?? []
+  const cov = storyCoverage(warm.length ? [...warm, ...bars] : bars, warm.length)
   if (cov.missing.length) {
     lines.push('', 'NOT EVALUATED in this window — say so if asked, and do NOT '
       + 'report these as absent: ' + cov.missing.join('; ') + '.')
@@ -90,9 +92,11 @@ const TONE: Record<'bull' | 'bear' | 'neutral', string> = {
 }
 
 export default function ThesisTab({
-  bars, journey, equityId, name, currentClose, autoOpenForm, onAutoOpened,
+  bars, journey, equityId, name, currentClose, autoOpenForm, onAutoOpened, warmupBars,
 }: {
   bars: ThesisBar[]
+  /** Context-only history immediately before `bars` — see computeThesis. */
+  warmupBars?: ThesisBar[]
   journey?: StoryJourney | null
   equityId: number
   name: string
@@ -118,8 +122,8 @@ export default function ThesisTab({
   const relationship: Relationship = position ? 'position' : bookmarkedIds.has(equityId) ? 'watchlist' : 'none'
 
   const thesis = useMemo(
-    () => computeThesis(bars, relationship, position, journey),
-    [bars, relationship, position, journey],
+    () => computeThesis(bars, relationship, position, journey, warmupBars),
+    [bars, relationship, position, journey, warmupBars],
   )
 
   // Recorded outcome across ALL journeys — a universe-level constant, computed
@@ -139,8 +143,8 @@ export default function ThesisTab({
   // base-rate chip must all be grounded in the SAME facts, or VaNi can answer
   // two questions about one stock from two different pictures of it.
   const facts = useMemo(
-    () => (thesis ? buildThesisFacts(name, thesis, bars, journey, currentClose, baseRates, lastDate) : ''),
-    [name, thesis, journey, currentClose, baseRates, lastDate],
+    () => (thesis ? buildThesisFacts(name, thesis, bars, journey, currentClose, baseRates, lastDate, warmupBars) : ''),
+    [name, thesis, bars, journey, currentClose, baseRates, lastDate, warmupBars],
   )
   const [showForm, setShowForm] = useState(false)
   const [entryPrice, setEntryPrice] = useState('')

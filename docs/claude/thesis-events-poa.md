@@ -529,12 +529,39 @@ these as absent"** line, naming the requirement and the actual bar count. That
 is Phase 4's own rule #2 (*"Name the evidence gap"*) arriving early, because a
 window too short to look was reading as a stock with nothing in it.
 
-**Still to do — the warm-up fetch itself.** The fix is to request ~61 extra bars
-before the display start, derive over all of them, and render only the display
-window. Deliberately NOT bundled here: `rows` has ~25 consumers in
-`ChartView.tsx` (chart data, stat strips, the RS subchart, heatmaps, the
-"N days · from → to" footer, the Thesis tab), and slicing them all is a
-refactor that needs the app in front of you, not a blind single pass.
+**Shipped 2026-09-15 — the warm-up fetch.** The ~25 consumers of `rows` were
+the reason to defer it, and they turned out to be the reason it is *safe*: the
+prefix is a **separate additive query**, not a widened range, so `rows` is
+byte-identical and not one of those consumers changes. No app in front of you
+required — the risk was never the slicing, it was assuming the prefix had to
+travel inside `rows`.
+
+- `fetchEquityWarmupBars(equityId, beforeDate, bars)` — DESC + limit + `lt`,
+  reversed to oldest-first, through the **same** `runEquityEodSelect` as the
+  display fetch so the two can never ask for different columns.
+- `buildStoryEvents(bars, …, warmup)` — derives over prefix + window, then
+  drops prefix events and rebases the rest **once, on the finished array**.
+  `warmup = 0` is a no-op, so every pre-existing call site is untouched.
+- `ChartView` holds the prefix in its own query and passes it to `StoryMode`
+  and `ThesisTab` as `warmupBars`; `computeThesis` feeds it to the event
+  derivation ONLY — pillars, posture, position risk and structure stay measured
+  over the window the user chose, because those are statements about that
+  window.
+- Skipped where it would be meaningless: `MAX` already starts at the stock's
+  first bar, and weekly/monthly bars are resampled, where 60 bars is a
+  different question.
+
+`storyCoverage(bars, warmup)` now reports the REMAINING gap. A fully warmed
+window disclaims nothing — a disclaimer that is always present stops being read
+— while a partial warm-up (a recent listing, MAX, a resampled series) still
+names exactly what is left.
+
+Verified: on live SOLARA bars the blind head goes 60 → 0, every rebased
+`barIndex` resolves to its own bar, and the non-FPB event stream is unchanged
+(+0 / −0) — the warm-up adds, it never alters. A constructed coil run through
+the REAL gate is recovered from the blind head at exactly the bar the 10-bar
+range leg clears on. Nine sabotages in
+`scripts/qa/check-price-action-events.mjs` §6c–6f, all caught.
 
 ### 3a (original plan, retained for the record)
 

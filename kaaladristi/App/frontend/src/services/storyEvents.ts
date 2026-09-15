@@ -241,35 +241,56 @@ const FPB = {
  *   · 6M  (~124 bars) — 2 of 28 coil starts fall in the blind first 60 bars
  *   · 1Y  (~248 bars) — 60 of 248 bars blind
  *
- * The real fix is warm-up bars on the fetch (see the POA). Until that lands,
- * this makes the gap SAYABLE, which is the difference between an incomplete
- * answer and a wrong one — and it is what lets VaNi say "I could not look"
- * instead of "there were none".
+ * The fix is warm-up bars on the fetch — `fetchEquityWarmupBars` requests
+ * STORY_WARMUP_BARS extra bars before the display start, and every function
+ * here takes that prefix length so it reports coverage of the DISPLAY window
+ * rather than of the array it happens to be handed. A fully warmed window
+ * reports nothing missing, which is the point. The reporting stays because a
+ * caller with no warm-up (weekly/monthly bars, a short-listed stock whose
+ * history simply does not reach back) still has a real gap, and a gap that
+ * cannot be named gets narrated as an absence.
  */
 export interface StoryCoverage {
+  /** Bars in the DISPLAY window — never the warm-up prefix. */
   bars: number
-  /** Derivations this window is long enough to evaluate. */
+  /** Derivations at least one display bar is long enough to evaluate. */
   fpb: boolean
   breakaway: boolean
+  /** Display bars at the start that compression still cannot reach. 0 when
+   *  the warm-up covers the whole window. */
+  blind: number
   /** Human-readable names of what could NOT be evaluated. Empty when all can. */
   missing: string[]
 }
 
-export function storyCoverage(bars: StoryBar[]): StoryCoverage {
+/** Bars of history to request BEFORE the display window so every derivation
+ *  can evaluate the window's very first bar. Sized by the longest lookback
+ *  any of them needs — Flower Pot compression, at 60 prior bars. */
+export const STORY_WARMUP_BARS = FPB.MIN_BARS
+
+/** @param bars  full array — warm-up prefix followed by the display window
+ *  @param warmup  length of that prefix (0 when the caller fetched none) */
+export function storyCoverage(bars: StoryBar[], warmup = 0): StoryCoverage {
   const n = bars.length
-  const fpb = n >= FPB.MIN_BARS + 1
-  const breakaway = n >= BREAKAWAY.WINDOW + 1
+  const display = Math.max(0, n - warmup)
+  const blind = Math.max(0, Math.min(display, FPB.MIN_BARS - warmup))
+  const fpb = display > blind
+  const breakaway = display > Math.max(0, Math.min(display, BREAKAWAY.WINDOW - warmup))
   const missing: string[] = []
-  if (!fpb) missing.push(`Flower Pot compression (needs ${FPB.MIN_BARS + 1} bars, has ${n})`)
-  if (!breakaway) missing.push(`Magic RS breakaway (needs ${BREAKAWAY.WINDOW + 1} bars, has ${n})`)
-  return { bars: n, fpb, breakaway, missing }
+  if (!fpb) missing.push(`Flower Pot compression (needs ${FPB.MIN_BARS} prior bars, window has ${n})`)
+  if (!breakaway) missing.push(`Magic RS breakaway (needs ${BREAKAWAY.WINDOW} prior bars, window has ${n})`)
+  // Long enough to look at all, but not at the whole window: a coil in the
+  // opening weeks is still invisible, so it is still said.
+  if (fpb && blind > 0) missing.push(`Flower Pot compression on the first ${blind} sessions shown`)
+  return { bars: display, fpb, breakaway, blind, missing }
 }
 
-/** Bars at the START of the window that no compression test can reach, even
- *  when the window is long enough overall. A 1-year chart cannot evaluate its
- *  first 60 bars, so a coil there is invisible and silently absent. */
-export function blindLeadingBars(bars: StoryBar[]): number {
-  return Math.min(bars.length, FPB.MIN_BARS)
+/** Display bars at the START of the window that no compression test can
+ *  reach. With a full warm-up this is 0; with none, a 1-year chart cannot
+ *  evaluate its first 60 bars and a coil there is silently absent. */
+export function blindLeadingBars(bars: StoryBar[], warmup = 0): number {
+  const display = Math.max(0, bars.length - warmup)
+  return Math.max(0, Math.min(display, FPB.MIN_BARS - warmup))
 }
 
 function fpbEvents(bars: StoryBar[]): { i: number; title: string; detail: string; tone: StoryTone }[] {
@@ -438,11 +459,21 @@ export interface StoryJourney {
   pct_from_wake?: number | null
 }
 
+/** Build the story-event stream over `bars`.
+ *
+ *  `warmup` says how many LEADING bars of `bars` are context only — history
+ *  fetched so the derivations that need a lookback (Flower Pot compression
+ *  needs 61 bars, Magic RS breakaway 6) can actually evaluate the bars the
+ *  user asked to see. Events landing inside the warm-up prefix are dropped and
+ *  the survivors are rebased onto the DISPLAY window, so a returned barIndex
+ *  always indexes `bars.slice(warmup)` — which is exactly the array every
+ *  caller renders. Default 0: every existing call site is unchanged. */
 export function buildStoryEvents(
   bars: StoryBar[],
   bigMoneyDates?: Set<string>,
   sectorByDate?: Map<string, { leading: boolean }>,
   journey?: StoryJourney | StoryJourney[] | null,
+  warmup = 0,
 ): StoryEvent[] {
   const out: StoryEvent[] = []
   const add = (i: number, kind: StoryKind, title: string, detail: string, tone: StoryTone) =>
@@ -650,6 +681,17 @@ export function buildStoryEvents(
   }
 
   out.sort((a, b) => a.barIndex - b.barIndex)
+
+  // Rebase onto the display window. Done LAST, on one array, rather than
+  // offsetting each emitter: every emitter indexes `bars` and there are a
+  // dozen of them, so one of them would eventually be written against the
+  // wrong origin. reactionPct is already resolved to a number here, so
+  // dropping the prefix cannot change a value that was measured across it.
+  if (warmup > 0) {
+    return out
+      .filter((e) => e.barIndex >= warmup)
+      .map((e) => ({ ...e, barIndex: e.barIndex - warmup }))
+  }
   return out
 }
 

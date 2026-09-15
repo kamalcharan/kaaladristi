@@ -388,7 +388,7 @@ Guarded by `scripts/qa/check-journey-events.mjs` (manual, like the rest of
 reverted stage diff, a hardcoded base-rate fallback, a flipped ceiling side, a
 raw signed number handed to the model, and a dropped frequency fence.
 
-### Flower Pot is already derived on read — and the chart cannot see it on short ranges (2026-09-15)
+### Flower Pot is derived on read — and now with warm-up (2026-09-15)
 
 ⚠ **Do NOT add `fpb_*` columns to `km_equity_eod`.** `fpbEvents()` in
 `services/storyEvents.ts` already derives the whole gate — coil, burst and
@@ -415,9 +415,42 @@ window — do not report these as absent"** line naming the requirement *and* th
 actual bar count. **A window too short to look must never read as a stock with
 nothing in it.**
 
-Still open: the warm-up fetch (request ~61 extra bars, derive over all, render
-only the display window). Not bundled because `rows` has ~25 consumers in
-`ChartView.tsx` and slicing them all needs the app in front of you.
+**The warm-up fetch is now in (2026-09-15).** `fetchEquityWarmupBars()` asks
+for `STORY_WARMUP_BARS` (= `FPB.MIN_BARS`, 60) bars strictly BEFORE the display
+start; `buildStoryEvents(bars, …, warmup)` derives over prefix + window, drops
+every event inside the prefix and **rebases** the survivors so a returned
+`barIndex` still indexes the display window. On a 3M SOLARA window the blind
+head goes 60 → 0 and the non-FPB event stream is unchanged, +0 / −0.
+
+Four properties are load-bearing — none of them is visible in a type:
+
+1. **`rows` is never widened.** The prefix is its OWN query (`['chart-warmup',
+   …]`), because `rows` drives ~25 consumers — the chart, the stat strip, the
+   scrubber, the Data tab, the export, the "N days · from · to" footer — and
+   widening the range hands all of them 60 bars the user did not ask for. The
+   prefix is consumed by the derivation and discarded.
+2. **Rebasing happens ONCE, on the finished array**, not per emitter. A dozen
+   emitters index `bars`; offsetting each one means one of them is eventually
+   written against the wrong origin, and every marker then lands 60 sessions
+   from the bar it describes — which reads as a data bug, not an off-by-N.
+3. **`warmup = 0` is a no-op.** Every pre-existing call site passes nothing.
+4. **Same columns, or the warm-up is worse than none.** Both fetches go through
+   `runEquityEodSelect`, so a prefix bar can never be missing a column the
+   derivation reads — that would evaluate to nothing, which is the exact
+   silence the warm-up exists to remove.
+
+`storyCoverage(bars, warmup)` now reports the **remaining** gap, so a fully
+warmed window disclaims nothing (a disclaimer that is always there stops being
+read) while a partial warm-up still names what is left. It keeps earning its
+place: MAX starts at the stock's first bar and weekly/monthly bars get no
+prefix, so a blind head is still real in those paths.
+
+Covered by `scripts/qa/check-price-action-events.mjs` §6c–6f, verified to fail
+against nine sabotages including a rebase removed, a prefix event leaking
+through, an undersized warm-up, a prefix fetched ascending (the stock's first
+bars ever, a different decade), a merged-instead-of-additive query, and
+`fpbEvents` starved of the prefix — the last of which silently returns Flower
+Pot to reporting an absence it never measured.
 
 ### Stirring is a TALLY, never a run — and the schema now says so (2026-09-15)
 

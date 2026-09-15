@@ -37,6 +37,10 @@ interface Props {
   open: boolean
   onClose: () => void
   bars: IndicatorRow[]
+  /** Context-only history immediately before `bars`, so the derivations with a
+   *  lookback can reach the window's first displayed sessions. Never rendered:
+   *  the replay still runs over `bars` alone. */
+  warmupBars?: IndicatorRow[]
   journey?: StoryJourney | null
   name: string
   latest: LatestRow | null
@@ -78,8 +82,14 @@ function readAtDate(map: Map<string, SectorPoint> | undefined, date: string): Se
 const SPEEDS = [0.5, 1, 2] as const
 const BASE_DWELL_MS = 2600
 
-export default function StoryMode({ open, onClose, bars, name, latest, snapshot, bigMoneyDates, sectorByDate, breadthByDate, mode, breadthPct, overlays, astroBands, journey }: Props) {
-  const events = useMemo(() => buildStoryEvents(bars, bigMoneyDates, sectorByDate, journey), [bars, bigMoneyDates, sectorByDate, journey])
+export default function StoryMode({ open, onClose, bars, warmupBars, name, latest, snapshot, bigMoneyDates, sectorByDate, breadthByDate, mode, breadthPct, overlays, astroBands, journey }: Props) {
+  const events = useMemo(() => {
+    const warm = warmupBars ?? []
+    return buildStoryEvents(
+      warm.length ? [...warm, ...bars] : bars,
+      bigMoneyDates, sectorByDate, journey, warm.length,
+    )
+  }, [bars, warmupBars, bigMoneyDates, sectorByDate, journey])
   const pillars = useMemo(() => (latest ? buildPillars(latest, { mode, breadthPct }) : []), [latest, mode, breadthPct])
   // Thermometer source: a stock reads its SECTOR percentile; an index reads its
   // own BREADTH score. Same vertical card, different feed + label.

@@ -30,7 +30,7 @@ function load(rel, deps = {}) {
 }
 
 const { priceActionEvents } = load('../../src/services/priceActionEvents.ts');
-const { buildStoryEvents, KIND_COLORS, storyCoverage, blindLeadingBars } = load('../../src/services/storyEvents.ts', {
+const { buildStoryEvents, KIND_COLORS, storyCoverage, blindLeadingBars, STORY_WARMUP_BARS } = load('../../src/services/storyEvents.ts', {
   './priceActionEvents': { priceActionEvents },
 });
 
@@ -217,31 +217,180 @@ let cov = storyCoverage(short);
 assert.equal(cov.fpb, false, '20 bars cannot evaluate a 60-bar compression window');
 assert.equal(cov.breakaway, true, 'but 20 bars IS enough for the 8-bar breakaway');
 assert.equal(cov.missing.length, 1);
-assert.match(cov.missing[0], /Flower Pot compression \(needs 61 bars, has 20\)/,
+assert.match(cov.missing[0], /Flower Pot compression \(needs 60 prior bars, window has 20\)/,
   'the gap must state the requirement AND what it actually has — a bare '
   + '"not available" is the same silence in different words');
 
 const tiny = [{ trade_date: '2026-08-01', close: 100 }];
 assert.equal(storyCoverage(tiny).missing.length, 2, 'both derivations report');
 
+// A long window CAN look — but only past its own blind head. Saying "no gap"
+// there would be the same lie in a longer window: a coil in the opening weeks
+// of an un-warmed 1-year chart is just as invisible as one on a 1M chart.
 const long = Array.from({ length: 300 }, (_, i) => ({ trade_date: `d${i}`, close: 100 }));
 cov = storyCoverage(long);
-assert.equal(cov.missing.length, 0, 'a long window claims no gap');
-assert.equal(cov.fpb, true);
+assert.equal(cov.fpb, true, '300 bars can evaluate compression somewhere');
+assert.equal(cov.blind, 60, 'but its first 60 sessions are still unreachable');
+assert.equal(cov.missing.length, 1, 'and a partial gap is still a gap');
+assert.match(cov.missing[0], /first 60 sessions shown/);
 
-// Even a long window has a blind head — a 1-year chart cannot evaluate its
-// first 60 bars, so a coil there is silently absent.
 assert.equal(blindLeadingBars(long), 60);
 assert.equal(blindLeadingBars(short), 20, 'capped at what the window holds');
 
-// And the Thesis must actually hand that gap to VaNi.
+// ── 6c. Warm-up closes the blind head — and must not leak into the window ──
+// The cure for the blind head is history the user never asked to see: fetch
+// STORY_WARMUP_BARS bars BEFORE the display start, derive over all of them,
+// render only the display window. Two things have to hold or the cure is
+// worse than the disease — the prefix must be fully consumed (no gap left to
+// report) and no event may escape from it into the window's indices.
+
+assert.equal(STORY_WARMUP_BARS, 60,
+  'the warm-up must be sized by the LONGEST lookback any derivation needs');
+
+// A fully warmed window reports nothing missing at all.
+const warmed = storyCoverage(long, 60);
+assert.equal(warmed.bars, 240, 'coverage counts the DISPLAY window, not the prefix');
+assert.equal(warmed.blind, 0, 'a full warm-up leaves no blind head');
+assert.deepEqual(warmed.missing, [], 'and therefore nothing to disclaim');
+assert.equal(blindLeadingBars(long, 60), 0);
+
+// A PARTIAL warm-up must not be rounded up to "covered".
+const half = storyCoverage(long, 25);
+assert.equal(half.blind, 35, '25 of the 60 needed bars leaves 35 still blind');
+assert.equal(half.missing.length, 1, 'and that remainder is still said');
+
+// Events inside the prefix are DROPPED; events after it are REBASED so a
+// returned barIndex still indexes the display window. Get this wrong and every
+// marker on the chart lands 60 sessions away from the bar it describes — a
+// failure that looks like a data bug, not an off-by-N.
+const mkBar = (d, extra = {}) => ({ trade_date: d, close: 100, ...extra });
+const withPrefix = [
+  // prefix: a stage change the user must never see, it predates the window
+  mkBar('2026-01-05', { stage: 'S2', stage_since: '2026-01-05' }),
+  mkBar('2026-01-06'),
+  // display window starts here
+  mkBar('2026-05-14', { pct_chng: -0.5, pct_from_breakout: -1.2 }),
+  mkBar('2026-05-15', { close: 114, pct_chng: 14.22, pct_from_breakout: 10.13, breakout_level: 500 }),
+  mkBar('2026-05-16', { close: 115 }),
+];
+const rebased = buildStoryEvents(withPrefix, undefined, undefined, undefined, 2);
+assert.ok(rebased.length > 0, 'the window still produces events');
+assert.ok(rebased.every((e) => e.barIndex >= 0),
+  'no event may carry a negative index — that is the prefix leaking through');
+assert.ok(!rebased.some((e) => e.date < '2026-05-14'),
+  'no event dated inside the prefix may survive: the user did not ask to see '
+  + 'those sessions and cannot be shown a marker on a bar that is not rendered');
+const display = withPrefix.slice(2);
+for (const e of rebased) {
+  assert.ok(e.barIndex < display.length,
+    `barIndex ${e.barIndex} is past the end of the ${display.length}-bar display `
+    + 'window — the events were dropped but never rebased, so every marker sits '
+    + 'warmup sessions away from the bar it describes');
+  assert.equal(e.date, display[e.barIndex].trade_date,
+    'barIndex must index the DISPLAY window — bars.slice(warmup) — so the '
+    + 'chart, the scrubber and the Thesis list all resolve the same bar');
+}
+
+// The same bars with no warm-up declared: the prefix event now appears, at its
+// own absolute index. This is the control — it proves the drop above was the
+// warmup argument doing work, not an event that never fired.
+const unrebased = buildStoryEvents(withPrefix);
+assert.ok(unrebased.some((e) => e.date === '2026-01-05'),
+  'control: without the warmup argument the prefix event IS emitted');
+assert.equal(unrebased.length, rebased.length + 1,
+  'exactly the prefix events are dropped — no more, no fewer');
+
+// warmup: 0 must be byte-identical to omitting it. Every existing call site
+// passes nothing, and a default that quietly reshapes their output would be a
+// silent regression across the chart, StoryMode and the Thesis tab at once.
+assert.deepEqual(buildStoryEvents(withPrefix, undefined, undefined, undefined, 0), unrebased,
+  'warmup 0 must be a no-op');
+
+// ── 6d. The warm-up fetch must stay ADDITIVE ───────────────────────────────
+// The tempting implementation is to widen the display fetch's range. That
+// silently hands 60 extra bars to ~25 consumers of `rows` — the chart, the
+// stat strip, the scrubber, the Data tab, the export, the "N days" footer —
+// none of which asked for them. The prefix must be its own query.
+const dataSrc = fs.readFileSync(new URL('../../src/services/indicatorData.ts', import.meta.url), 'utf8');
+const warmFn = dataSrc.match(/export async function fetchEquityWarmupBars[\s\S]*?\n\}/);
+assert.ok(warmFn, 'the warm-up fetch must exist as its own function');
+assert.match(warmFn[0], /ascending: false/,
+  'DESC + limit takes the bars IMMEDIATELY before the window; ascending would '
+  + "take the stock's first N bars ever, which is a different decade");
+assert.match(warmFn[0], /\.lt\('trade_date', beforeDate\)/,
+  'strictly before the display start — an overlap would double-count a bar');
+assert.match(warmFn[0], /\.reverse\(\)/,
+  'returned oldest-first like every other fetch here, or the derivation runs '
+  + 'over a backwards series and every lookback is inverted');
+assert.ok(/EQUITY_EOD_COLS/.test(warmFn[0]) || /runEquityEodSelect/.test(warmFn[0]),
+  'warm-up bars must carry the SAME columns as display bars — a prefix missing '
+  + 'a column the derivation reads evaluates to nothing, which is the exact '
+  + 'silence the warm-up exists to remove');
+
+const chartSrc = fs.readFileSync(new URL('../../src/views/ChartView.tsx', import.meta.url), 'utf8');
+assert.match(chartSrc, /queryKey: \['chart-warmup'/,
+  'the prefix must be a SEPARATE query, not a widened range on the display fetch');
+assert.ok(!/fetchEquityEodById\(numId, range, \s*STORY_WARMUP_BARS/.test(chartSrc),
+  'the display fetch must not grow a warm-up argument');
+assert.match(chartSrc, /range !== 'MAX'/,
+  'MAX already starts at the first bar — there is nothing before it to fetch');
+assert.match(chartSrc, /buildStoryEvents\(\s*\n\s*warmupBars\.length \? \[\.\.\.warmupBars, \.\.\.rows\] : rows,/,
+  'events derive over prefix + rows — and `rows` itself is never reassigned');
+
+// ── 6e. The Thesis must hand the REMAINING gap to VaNi, and no more ────────
+// Naming a gap is what makes the answers that ARE given believable — but a
+// disclaimer that fires on a fully warmed window is noise, and a disclaimer
+// that is always there stops being read.
 const thesisSrc2 = fs.readFileSync(new URL('../../src/components/domain/StockCockpit/ThesisTab.tsx', import.meta.url), 'utf8');
-assert.match(thesisSrc2, /storyCoverage\(bars\)/, 'the fact block must measure coverage');
+assert.match(thesisSrc2, /storyCoverage\(\s*warm\.length \? \[\.\.\.warm, \.\.\.bars\] : bars,\s*warm\.length\s*\)/,
+  'the fact block must measure coverage of the DISPLAY window while counting '
+  + 'the warm-up it was given — measuring `bars` alone re-reports a gap the '
+  + 'warm-up already closed');
 assert.match(thesisSrc2, /NOT EVALUATED in this window/,
   'and tell the model, in words, not to report these as absent');
 assert.match(thesisSrc2, /do NOT/, 'the instruction must be explicit');
 assert.match(thesisSrc2, /report these as absent/,
   'a model handed an empty list says "none" unless told not to');
+assert.match(thesisSrc2, /warmupBars/,
+  'the tab must accept the prefix — a component that cannot be given warm-up '
+  + 'silently keeps the blind head forever');
+
+// ── 6f. The whole point: a coil in the blind head is RECOVERED ─────────────
+// Everything above proves the plumbing. This proves the plumbing was worth
+// building — a compression the user's window could not reach becomes visible,
+// through the real gate, with no threshold touched.
+//
+// Shape: 70 volatile sessions, then tightness — narrow range, volume dying,
+// Magic RS flat. The gate's 10-bar range leg is the last to clear, so the coil
+// starts on the first bar whose whole 10-bar window sits inside the quiet.
+const D = (i) => `2026-${String(1 + Math.floor(i / 28)).padStart(2, '0')}-${String(1 + (i % 28)).padStart(2, '0')}`;
+const coilSeries = Array.from({ length: 130 }, (_, i) => (i < 70
+  ? { trade_date: D(i), close: 100, high: 106, low: 94, volume: 1_000_000, magic_rs: 5 }
+  : { trade_date: D(i), close: 100, high: 100.8, low: 99.2, volume: 300_000, magic_rs: 5 }));
+
+// The user asked for the last 60 sessions. Alone, that is one bar short of
+// what compression needs — so it is evaluated on NOTHING.
+const shown = coilSeries.slice(70);
+const blindRun = buildStoryEvents(shown);
+assert.equal(blindRun.filter((e) => e.kind === 'fpb').length, 0,
+  'without warm-up a 60-bar window finds no compression — not because there is '
+  + 'none, but because the derivation cannot run at all');
+assert.equal(storyCoverage(shown).fpb, false, 'and coverage says so out loud');
+
+// The same window, warmed. Same bars on screen, same thresholds, same code.
+const warmedRun = buildStoryEvents(coilSeries.slice(10), undefined, undefined, undefined, 60);
+const coils = warmedRun.filter((e) => e.kind === 'fpb');
+assert.ok(coils.length > 0,
+  'THE POINT: warm-up recovers a coil the window could not reach. If this ever '
+  + 'goes to zero the warm-up has stopped reaching the derivation, and Flower '
+  + 'Pot is silently back to reporting an absence it never measured');
+assert.equal(coils[0].date, D(79),
+  'and it is dated to the bar the gate actually cleared on — the first whose '
+  + 'full 10-bar range sits inside the quiet, not the first quiet bar');
+assert.equal(shown[coils[0].barIndex].trade_date, coils[0].date,
+  'rebased onto the DISPLAY window, so the marker lands on the rendered bar');
+assert.equal(storyCoverage(coilSeries.slice(10), 60).blind, 0,
+  'and there is no longer a blind head to disclaim');
 
 // ── 7. The naming trap must stay fixed ─────────────────────────────────────
 // is_vani_surge is a 52-WEEK-high + volume flag; the Breakout Surge SCANNER is
@@ -279,4 +428,6 @@ console.log('PASS: reference-reset guard on both period columns, NULL never read
   + 'one crossing per period per direction with ISO-week keying, breakout/breakdown '
   + 'edge-triggered on both legs, faithful re-entries at bottom priority, '
   + 'Thesis list trims by priority, unevaluable windows are named not silent, '
+  + 'warm-up drops and rebases correctly, stays additive and recovers a coil '
+  + 'the raw window could not reach, '
   + 'naming trap held');
