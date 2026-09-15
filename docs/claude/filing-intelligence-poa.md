@@ -230,6 +230,99 @@ instrumented, the I/O pain diagnosed, and more disk free than the plan consumes.
 
 ---
 
+## ⚑ MEASURED ON THE VPS, 2026-09-15 — several assumptions below were wrong
+
+`scripts/probe_nse_filings.py` run against the live NSE API. Everything in this
+section is measured; the sections after it still carry some pre-probe figures
+where noted.
+
+### Volume is 2.5× what this plan assumed
+
+| | assumed | **measured** |
+|---|---|---|
+| announcements / calendar day | ~300 | **551–762** |
+| announcements / year (NSE) | 80,000 | **~201,000** |
+
+Consequences, recomputed:
+
+| | POA | measured |
+|---|---|---|
+| Tier A metadata /yr | 0.06 GB | **0.15 GB** |
+| Tier B text /yr | 0.44 GB | **1.10 GB** |
+| 5 yr, A + B | 2.19 GB | **5.51 GB** |
+| **Qwen 12-mo backfill, no pre-filter** | 5.2 days | **14.0 days** |
+| Qwen 12-mo backfill, 80% pre-filtered | 1.0 day | **2.8 days** |
+
+Storage is still a non-issue — 5.5 GB over five years against `km_equity_eod`'s
+27 GB and the 4–5 GB of dead indexes Sprint 1 reclaims. **The pre-filter is now
+load-bearing rather than merely prudent**: unfiltered backfill is two weeks of
+continuous inference on a model that also serves the live companions.
+
+### Depth: at least 5 years, no cutoff reached
+
+Sampled at −1/6/12/24/36/**60** months; every window returned rows (2,332–7,366
+per 7-day sample). No zero-row boundary was hit, so the real limit is deeper than
+5 years. **Take the deepest it serves** — a window the source ages out of cannot
+be re-fetched later.
+
+### The API accepts very large windows
+
+1d → 1,476 · 7d → 5,334 · 30d → 20,108 · 90d → 53,738 · **180d → 99,162 in 7.0 s.**
+No cap was hit. ⚠ The per-day rate falls as the window grows (762 → 551), which
+is *either* seasonality (the −1mo sample landed in results season) *or* silent
+truncation. `probe_nse_filings2.py` §B settles it, and the two have opposite
+consequences for batching.
+
+### ⚠ The schema in this POA is wrong in five places
+
+Verbatim keys: `symbol` · `sm_name` · **`sm_isin`** · `an_dt` · `exchdisstime` ·
+`sort_date` · `dt` · `desc` · `attchmntText` · `attchmntFile` · **`seq_id`** ·
+`hasXbrl` · `attFileSize` · `fileSize` · `difference` · `smIndustry` · `bflag` ·
+`csvName` · `old_new` · `orgid`.
+
+1. **`sm_isin` is supplied in the payload.** The ISIN *resolution* step, the
+   unresolved queue and the "251 BSE rows have no ISIN" concern all evaporate
+   for NSE ingestion. Store it directly.
+2. **`seq_id` is the natural key** (e.g. `106780146`). `UNIQUE (source, seq_id)`
+   — no composite fallback needed.
+3. **`desc` IS the category, not a description** — e.g. *"Analysts/
+   Institutional Investor Meet/Con. Call Updates"*. **NSE pre-categorises every
+   announcement.** If that taxonomy is small and clean it replaces most of the
+   keyword classifier and collapses the backfill from 14 days to well under one.
+   `probe_nse_filings2.py` §A measures it. **This is the single biggest cost
+   lever in the plan** and it was not in the plan at all.
+4. **There are TWO timestamps, and the plan picked the wrong one.**
+   `an_dt` is when the company filed; **`exchdisstime` is when the exchange
+   disseminated it** — the moment the market could act. `difference` gives the
+   gap. **`day_0_trade_date` must derive from `exchdisstime`.** Using `an_dt`
+   injects exactly the lookahead bias the non-negotiables warn about.
+5. **`hasXbrl`** flags machine-readable structure — a likely shortcut into
+   Sprint 4's quarterly panel. Capture it; it costs a boolean.
+
+### `attchmntText`: classify yes, EXTRACT no
+
+**79.7% carry ≥80 usable characters, mean 142, zero empty.** So ~80% classify
+with no PDF fetch, no extraction and no OCR risk.
+
+⚠ **But 142 characters is a category sentence, not content.** The sample reads
+*"Vedant Fashions Limited has informed the Exchange about a schedule of meet with
+the Institutional Investor/Analyst vide the enclosed Letter."* — no order value,
+no capacity figure, no ratio. So:
+
+> **Classification can skip the PDF. Numeric extraction cannot.**
+
+Materiality ranking and the bonus/split ratios therefore still need the document
+for the filings that matter, even though the bulk of the stream does not. Plan
+the PDF path as the *minority* route it is, not the default.
+
+### Bulk deals: endpoint unresolved
+
+`/api/historical/bulk-deals` returned **503 on all three retries**. Alternatives
+are tried in `probe_nse_filings2.py` §C. Until one lands, Tier D is unscheduled —
+it does not block Tier A.
+
+---
+
 ## Sprint 2 — Ingestion spine (Tier A + D)
 
 **No LLM. No text extraction. No classifier. Zero extraction risk.**
