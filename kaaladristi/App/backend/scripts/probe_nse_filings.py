@@ -27,12 +27,20 @@ like a scraper.
 
 import argparse
 import json
+import os
 import sys
 import time
 from collections import Counter
 from datetime import date, timedelta
 
-sys.path.insert(0, __file__.rsplit('/scripts/', 1)[0])
+# Makes `pipeline` importable however this is invoked -- `python3
+# scripts/probe_nse_filings.py` from App/backend, or by absolute path. The
+# earlier rsplit('/scripts/') form only resolved for an ABSOLUTE path: run
+# relatively it inserted the script's own FILE path into sys.path and the
+# import below died with ModuleNotFoundError. Same idiom every other CLI
+# script in this directory uses, and the same failure
+# compute_scan_membership_snapshot.py records in its own header.
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
 from pipeline.utils.nse_session import NseSession   # noqa: E402  (proven cookie/403 handling)
 
 ANN_URL = 'https://www.nseindia.com/api/corporate-announcements'
