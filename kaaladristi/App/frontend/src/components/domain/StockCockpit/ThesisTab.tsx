@@ -17,7 +17,7 @@ import { journeyFacts } from '@/services/journeyFacts'
 import { useAuthStore } from '@/stores/authStore'
 import { useBookmarkStore } from '@/stores/bookmarkStore'
 import { computeThesis, type Relationship, type ThesisBar, type ThesisRead } from '@/services/thesis'
-import type { StoryJourney } from '@/services/storyEvents'
+import { storyCoverage, type StoryJourney } from '@/services/storyEvents'
 import JourneyStrip from './JourneyStrip'
 import { KIND_COLORS } from '@/services/storyEvents'
 import { narrateVani } from '@/services/vaniNarrate'
@@ -36,6 +36,7 @@ import StructureStrip from './StructureStrip'
 function buildThesisFacts(
   name: string,
   t: ThesisRead,
+  bars: ThesisBar[],
   journey?: StoryJourney | null,
   close?: number | null,
   rates?: JourneyBaseRates | null,
@@ -59,6 +60,18 @@ function buildThesisFacts(
     lines.push('Recent signals: ' + t.signals.slice(0, 4).map((e) => `${e.title} [${e.tone}] (${e.date})`).join('; '))
   }
   lines.push(...journeyFacts(journey, close, rates, asOf))
+
+  // NAME THE EVIDENCE GAP. Several derivations need a warm-up before they can
+  // answer at all — Flower Pot compression needs 61 bars — and a window too
+  // short to look was indistinguishable from a window with nothing in it. VaNi
+  // would then report "no coils", which is a claim about the stock when it is
+  // really a claim about the range. Saying what could not be evaluated is what
+  // makes the answers that ARE given believable.
+  const cov = storyCoverage(bars)
+  if (cov.missing.length) {
+    lines.push('', 'NOT EVALUATED in this window — say so if asked, and do NOT '
+      + 'report these as absent: ' + cov.missing.join('; ') + '.')
+  }
   return lines.join('\n')
 }
 
@@ -126,7 +139,7 @@ export default function ThesisTab({
   // base-rate chip must all be grounded in the SAME facts, or VaNi can answer
   // two questions about one stock from two different pictures of it.
   const facts = useMemo(
-    () => (thesis ? buildThesisFacts(name, thesis, journey, currentClose, baseRates, lastDate) : ''),
+    () => (thesis ? buildThesisFacts(name, thesis, bars, journey, currentClose, baseRates, lastDate) : ''),
     [name, thesis, journey, currentClose, baseRates, lastDate],
   )
   const [showForm, setShowForm] = useState(false)

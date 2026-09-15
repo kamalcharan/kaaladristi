@@ -225,6 +225,53 @@ const FPB = {
   VOL_BURST: 3.0, RANGE_EXP: 2.0, CLOSE_STR: 0.70, DELIV_MIN: 45,
 } as const
 
+/**
+ * What the LOADED WINDOW can and cannot be asked.
+ *
+ * Several derivations need a warm-up before they can answer at all, and until
+ * now a window too short to look was indistinguishable from a window with
+ * nothing in it. `fpbEvents` returns [] on fewer than 61 bars; the chart and
+ * the Thesis then read "no coils", which is a claim about the stock when it is
+ * really a claim about the range.
+ *
+ * Measured cost of that silence (1-in-23 NSE sample, 36 coil starts over a
+ * year):
+ *   · 1M  (~21 bars)  — Flower Pot is entirely disabled, never evaluated once
+ *   · 3M  (~62 bars)  — evaluable on 2 of 62 bars
+ *   · 6M  (~124 bars) — 2 of 28 coil starts fall in the blind first 60 bars
+ *   · 1Y  (~248 bars) — 60 of 248 bars blind
+ *
+ * The real fix is warm-up bars on the fetch (see the POA). Until that lands,
+ * this makes the gap SAYABLE, which is the difference between an incomplete
+ * answer and a wrong one — and it is what lets VaNi say "I could not look"
+ * instead of "there were none".
+ */
+export interface StoryCoverage {
+  bars: number
+  /** Derivations this window is long enough to evaluate. */
+  fpb: boolean
+  breakaway: boolean
+  /** Human-readable names of what could NOT be evaluated. Empty when all can. */
+  missing: string[]
+}
+
+export function storyCoverage(bars: StoryBar[]): StoryCoverage {
+  const n = bars.length
+  const fpb = n >= FPB.MIN_BARS + 1
+  const breakaway = n >= BREAKAWAY.WINDOW + 1
+  const missing: string[] = []
+  if (!fpb) missing.push(`Flower Pot compression (needs ${FPB.MIN_BARS + 1} bars, has ${n})`)
+  if (!breakaway) missing.push(`Magic RS breakaway (needs ${BREAKAWAY.WINDOW + 1} bars, has ${n})`)
+  return { bars: n, fpb, breakaway, missing }
+}
+
+/** Bars at the START of the window that no compression test can reach, even
+ *  when the window is long enough overall. A 1-year chart cannot evaluate its
+ *  first 60 bars, so a coil there is invisible and silently absent. */
+export function blindLeadingBars(bars: StoryBar[]): number {
+  return Math.min(bars.length, FPB.MIN_BARS)
+}
+
 function fpbEvents(bars: StoryBar[]): { i: number; title: string; detail: string; tone: StoryTone }[] {
   const n = bars.length
   const out: { i: number; title: string; detail: string; tone: StoryTone }[] = []

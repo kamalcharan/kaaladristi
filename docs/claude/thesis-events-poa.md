@@ -482,7 +482,63 @@ invent a constant for it.
 
 Four things genuinely need storing. Everything else is already on the row.
 
-### 3a · `km_equity_eod` — Flower Pot + breakaway
+### 3a · ⛔ REFUSED — Flower Pot and breakaway are ALREADY derived on read
+
+**The premise is false.** This plan says *"Flower Pot spans a 60-bar window, so
+nothing about it is derivable from row + previous row. It is the only Price
+Action scanner with **zero history** today."* Both halves of that are wrong:
+
+- `fpbEvents()` in `services/storyEvents.ts` **already derives the whole gate**
+  — coil, burst and shatter — from the loaded bars, and has all along. The
+  chart has had Flower Pot history since that function shipped.
+- `breakawayEvents()` does the same for `rs_breakaway`.
+
+Checked line by line against the `flower_pot_burst` matview arm, the two agree:
+identical thresholds (0.8 / 0.08 / 0.6 / 2 / ≥60 bars / >20 / not S3-S4) and
+identical windows (atr15/atr60, vol5/vol22, hi10/lo10, `lag(magic_rs,5)`, the
+22-bar prior-setup lookback, `lag(vol22,1)` and `lag(avgrng15,1)` on release).
+
+So adding twelve stored columns would make a **THIRD implementation of one
+eligibility rule** — against this codebase's most expensive recorded lesson
+("One eligibility rule, one implementation — delete the loser"), for a backfill
+whose ceiling (coil ~2022 on `magic_rs`, release 2025 on `delivery_pct`) is
+exactly the ceiling the derivation already has. Twelve columns on a 147-column,
+16.65M-row, 19 GB table buys no history the chart cannot already compute.
+
+### The real defect the premise was hiding: no warm-up on the fetch
+
+`fpbEvents` needs 61 bars and returns `[]` below that. `getStartDate` fetches
+**exactly** the requested range with no warm-up prefix, so:
+
+| Range | Bars | Flower Pot evaluable on |
+|---|---|---|
+| 1M | ~21 | **nothing — never runs once** |
+| 3M | ~62 | 2 of 62 bars |
+| 6M | ~124 | 64 of 124 |
+| 1Y | ~248 | 188 of 248 |
+
+Measured on a 1-in-23 NSE sample (36 coil starts over a year): a 6M window
+loses **2 of its 28** coil starts to the blind first 60 bars, and a 3M window
+loses nearly all of them. None of this was visible — the chart simply showed no
+coils, and the Thesis and VaNi reported none.
+
+**Shipped now (small, pure, testable):** `storyCoverage(bars)` and
+`blindLeadingBars(bars)` make the blind zone *sayable*, and `buildThesisFacts`
+hands it to VaNi as an explicit **"NOT EVALUATED in this window — do not report
+these as absent"** line, naming the requirement and the actual bar count. That
+is Phase 4's own rule #2 (*"Name the evidence gap"*) arriving early, because a
+window too short to look was reading as a stock with nothing in it.
+
+**Still to do — the warm-up fetch itself.** The fix is to request ~61 extra bars
+before the display start, derive over all of them, and render only the display
+window. Deliberately NOT bundled here: `rows` has ~25 consumers in
+`ChartView.tsx` (chart data, stat strips, the RS subchart, heatmaps, the
+"N days · from → to" footer, the Thesis tab), and slicing them all is a
+refactor that needs the app in front of you, not a blind single pass.
+
+### 3a (original plan, retained for the record)
+
+#### `km_equity_eod` — Flower Pot + breakaway
 
 Flower Pot spans a 60-bar window, so nothing about it is derivable from row +
 previous row. It is the only Price Action scanner with **zero history** today —

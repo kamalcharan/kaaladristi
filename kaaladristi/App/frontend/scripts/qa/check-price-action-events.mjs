@@ -30,7 +30,7 @@ function load(rel, deps = {}) {
 }
 
 const { priceActionEvents } = load('../../src/services/priceActionEvents.ts');
-const { buildStoryEvents, KIND_COLORS } = load('../../src/services/storyEvents.ts', {
+const { buildStoryEvents, KIND_COLORS, storyCoverage, blindLeadingBars } = load('../../src/services/storyEvents.ts', {
   './priceActionEvents': { priceActionEvents },
 });
 
@@ -204,6 +204,45 @@ assert.ok(nums.every(([k, v]) => k === 'price_action' || v > paPri),
   'price_action must be the LOWEST priority — that is how an uncapped event '
   + 'stream is kept from burying the journey milestones');
 
+// ── 6b. A window too short to look must not read as "nothing found" ────────
+// fpbEvents returns [] on fewer than 61 bars. Until this, that was
+// indistinguishable from a window with no coils in it — so the Thesis and VaNi
+// reported "no coils", a claim about the STOCK made from a fact about the
+// RANGE. Measured (1-in-23 NSE sample, 36 coil starts over a year): a 1M chart
+// never evaluates Flower Pot once; a 3M chart reaches 2 of its 62 bars; a 6M
+// chart loses 2 of 28 coil starts to its blind first 60.
+
+const short = Array.from({ length: 20 }, (_, i) => ({ trade_date: `2026-08-${i + 1}`, close: 100 }));
+let cov = storyCoverage(short);
+assert.equal(cov.fpb, false, '20 bars cannot evaluate a 60-bar compression window');
+assert.equal(cov.breakaway, true, 'but 20 bars IS enough for the 8-bar breakaway');
+assert.equal(cov.missing.length, 1);
+assert.match(cov.missing[0], /Flower Pot compression \(needs 61 bars, has 20\)/,
+  'the gap must state the requirement AND what it actually has — a bare '
+  + '"not available" is the same silence in different words');
+
+const tiny = [{ trade_date: '2026-08-01', close: 100 }];
+assert.equal(storyCoverage(tiny).missing.length, 2, 'both derivations report');
+
+const long = Array.from({ length: 300 }, (_, i) => ({ trade_date: `d${i}`, close: 100 }));
+cov = storyCoverage(long);
+assert.equal(cov.missing.length, 0, 'a long window claims no gap');
+assert.equal(cov.fpb, true);
+
+// Even a long window has a blind head — a 1-year chart cannot evaluate its
+// first 60 bars, so a coil there is silently absent.
+assert.equal(blindLeadingBars(long), 60);
+assert.equal(blindLeadingBars(short), 20, 'capped at what the window holds');
+
+// And the Thesis must actually hand that gap to VaNi.
+const thesisSrc2 = fs.readFileSync(new URL('../../src/components/domain/StockCockpit/ThesisTab.tsx', import.meta.url), 'utf8');
+assert.match(thesisSrc2, /storyCoverage\(bars\)/, 'the fact block must measure coverage');
+assert.match(thesisSrc2, /NOT EVALUATED in this window/,
+  'and tell the model, in words, not to report these as absent');
+assert.match(thesisSrc2, /do NOT/, 'the instruction must be explicit');
+assert.match(thesisSrc2, /report these as absent/,
+  'a model handed an empty list says "none" unless told not to');
+
 // ── 7. The naming trap must stay fixed ─────────────────────────────────────
 // is_vani_surge is a 52-WEEK-high + volume flag; the Breakout Surge SCANNER is
 // 20-day-high geometry. Titling the flag "Breakout surge" put the scanner's
@@ -239,4 +278,5 @@ assert.ok(!/signals\.slice\(-8\)/.test(thesisSrc),
 console.log('PASS: reference-reset guard on both period columns, NULL never read as zero, '
   + 'one crossing per period per direction with ISO-week keying, breakout/breakdown '
   + 'edge-triggered on both legs, faithful re-entries at bottom priority, '
-  + 'Thesis list trims by priority, naming trap held');
+  + 'Thesis list trims by priority, unevaluable windows are named not silent, '
+  + 'naming trap held');
