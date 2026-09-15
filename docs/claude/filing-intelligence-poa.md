@@ -156,7 +156,7 @@ Measured on the live DB, 2026-09-15.
 | Tier B — announcement text (TOAST-compressed) | 0.44 GB/yr |
 | Tier C — quarterly fundamentals | ~0.005 GB/yr (22 MB initial) |
 | Tier D — bulk/block deals | ~0.005 GB/yr |
-| Tier E — shareholding pattern | ~0.01 GB/yr |
+| Tier E — shareholding pattern *(deferred — see below)* | ~0.01 GB/yr |
 | **Everything this plan adds** | **~0.52 GB/yr** |
 
 The filing layer adds **~15%** to annual growth. `km_equity_eod` alone grows six
@@ -424,6 +424,34 @@ pass.
 - **`classifier_version` keys the result**, so a V2 re-classification is a clean
   re-queue that never loses V1's record.
 
+#### Numeric extraction — a SECOND output, not a side-effect of classification
+
+**Classification says *which category*; extraction says *how much*.** Different
+tasks, and only the first was planned. `LARGE_ORDER` on *"Anawil secures
+largest-ever ₹133.98 Cr order"* is easy; pulling out **133.98**, knowing it is
+crores, and recognising that the ₹140.68 Cr figure is the same order including
+GST, is structured extraction.
+
+Without it, two things specified elsewhere in this plan cannot exist:
+
+- **Materiality ranking** — the rolling panel is specified to rank by order size
+  relative to revenue (the reference deck's own example is *"₹2,000 Cr order for
+  a ₹500 Cr revenue business"*). No number, no ranking.
+- **The `L` family's whole point** — a ₹5 Cr order and a ₹2,000 Cr order
+  classify identically without it.
+
+So the same Qwen pass emits an optional typed payload alongside the class:
+`amount_value`, `amount_unit`, `amount_basis` (`incl_gst` / `excl_gst` / NULL),
+`ratio_num` / `ratio_den` (bonus 1:1, split 1:2), `capacity_value` /
+`capacity_unit` (MTPA, GWh). **Every field nullable — extraction failing must
+never invalidate a correct classification.**
+
+⚠ **Extraction accuracy is measured separately from classification accuracy.**
+They fail differently: a model can pick the right category and the wrong number,
+and a confidently wrong ₹ figure is worse than none — same class as the
+signed-number lesson. A materiality number that cannot be trusted must be
+absent, not approximate.
+
 #### Accuracy is measured, not assumed
 
 Hand-label ~200 filings once; run Qwen and Sonnet over the same set; compare.
@@ -446,6 +474,46 @@ document. No product UI.
 
 ---
 
+## Sprint 3b — The corporate-action adjustment chain
+
+**Its own tracked item, deliberately not folded into Sprint 3.** It touches the
+largest table in the database and the recompute cascade, and it is the piece
+most likely to be quietly skipped if it hides inside a filings sprint.
+
+Classifying "this is a 1:1 bonus" changes nothing on its own. The D44 fix is a
+five-step chain and only the first step lives in Sprint 3:
+
+| Step | Where |
+|---|---|
+| 1. Classify the corporate action | Sprint 3 |
+| 2. Extract the ratio (1:1, 1:2, dividend/share) | Sprint 3 (numeric extraction) |
+| 3. Compute `adj_factor`, populate `km_corporate_actions` | **here** |
+| 4. Back-adjust closes | **here** |
+| 5. Recompute `sma_150`, `w52_high`, `d365_pct_chng`, breadth | **here** |
+
+D44 records what is broken today: `km_corporate_actions` has **0 rows**, closes
+are raw bhavcopy, 64 traded stocks showed >40% one-day cliffs in a trailing year,
+stocks read below their 150-EMA for months post-split, and `adjust_close_cliffs()`
+in `lib/breadth_common.py` exists only as a heuristic patch over the gap.
+
+Two constraints:
+
+- **Step 5 runs through `DIMENSION_DEPENDENTS`**, not by hand — the cascade
+  already knows what derives from what, and a back-adjustment invalidates a long
+  chain.
+- **Never overwrite raw closes.** Adjustment is a derived column or a view.
+  Losing the as-traded price destroys the ability to reconcile against bhavcopy
+  and makes the correction unauditable.
+
+**Requires ≥24 months of corporate-action history** to matter — a 4-month
+backfill fixes four months of splits and leaves the documented bug in place.
+
+**Exit:** `km_corporate_actions` populated, adjusted closes available, the
+dependent indicators recomputed, and `adjust_close_cliffs()` retired or
+demoted to a backstop.
+
+---
+
 ## Sprint 4 — Fundamentals panel + the measurement (Tier C)
 
 - **BSE XBRL quarterly panel**: Revenue, PAT, OPM, NPM × ~8 quarters. Four
@@ -453,16 +521,47 @@ document. No product UI.
   reference deck.
 - **The scanners' data side**: J-Curve, Turnaround/Breakout Earnings, Consistent
   NPM — the predicates, as derived columns or SQL, not the pages.
-- **The A/B**: do journeys waking within N days of a material filing confirm at
+- **VSTOP 10W** — the J-Curve scan's last filter is `close >= VSTOP 10W 2`, and
+  **VSTOP exists nowhere in the codebase**. Not a data gap: `atr_10` and
+  `atr_14` are already on `km_equity_weekly`, so it is an indicator to
+  implement, roughly half a day.
+- **The A/B**: do journeys waking within N days of a material spark confirm at
   better than **58.5%**? Reported with its denominator, per the house rule.
+
+### ⚠ The A/B needs a MATCHED control, not the global baseline
+
+Comparing spark-adjacent wakes against the all-journeys 58.5% is **confounded**:
+bigger, more liquid companies file more filings *and* behave differently, so the
+comparison would measure company size as much as it measures the spark.
+
+The control must be matched — same mcap band, same sector, same period, no spark
+— and the matching rule fixed **before** the numbers are looked at. This is a
+method decision, not a data gap, and it is the difference between a real answer
+and a flattering one. It is the same discipline the plan applies to the
+geopolitical layer: a sample selected on the outcome proves nothing.
 
 Two traps that silently fabricate a J-curve: **standalone vs consolidated** mixed
 across quarters (fake inflection at the switch point), and **restatements
 overwritten** (the trough moves). Store `as_reported` tied to the filing that
 produced it; never overwrite.
 
-**Exit:** the panel queryable, and the first measured answer on whether filings
+**Exit:** the panel queryable, and the first measured answer on whether sparks
 predict anything at all.
+
+---
+
+## Tier E (shareholding pattern) — deferred, and why that is safe
+
+Listed in the data inventory, planned into no sprint. That is deliberate:
+
+- The **negative-spark use case is already covered** — "promoter sold", "pledge
+  increased" arrive as SAST and pledge intimations through the Sprint 2/3
+  filing stream, as events.
+- What Tier E adds is the **level** rather than the change: promoter holds 62%,
+  15% pledged, the FII trend. That is context on a stock page, not a spark.
+
+So it is a later addition whenever the context is wanted. Recorded here so it is
+not mistaken for an oversight.
 
 ---
 
