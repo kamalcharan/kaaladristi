@@ -126,10 +126,29 @@ export interface IndicatorRow {
   // Weinstein stage + the Golden Line event trio. Equity-only (km_index_eod has
   // none of them), and optional so resampled W/M bars still type.
   stage?: string | null;
+  /** Date the current stage began. `stage_since === trade_date` is the
+   *  transition — the classifier's own record, so the story layer no longer
+   *  has to re-derive it by diffing bars (which misses a change landing on the
+   *  first bar of the loaded window). */
+  stage_since?: string | null;
   stage_confirmed?: string | null;
   gl_event?: string | null;
   gl_days_above?: number | null;
   pct_from_gl?: number | null;
+  // Price Action geometry (migrations 112 / 187). The six Price Action
+  // scanners qualify on nothing but these, which is why services/
+  // priceActionEvents.ts can derive their whole history without a column.
+  // `prev_week_close` / `prev_month_close` are not decoration: they are the
+  // REFERENCE each pct is measured against, and the only way to tell a real
+  // zero-crossing from the period rolling over.
+  breakout_level?: number | null;
+  pct_from_breakout?: number | null;
+  breakdown_level?: number | null;
+  pct_from_breakdown?: number | null;
+  prev_week_close?: number | null;
+  pct_wtd?: number | null;
+  prev_month_close?: number | null;
+  pct_mtd?: number | null;
   // Big Money day (migration 200). Equity-only, and sparse by design —
   // bm_event is NULL on every bar that is not one.
   bm_event?: string | null;
@@ -340,6 +359,41 @@ export async function fetchInstrumentEod(symbol: string, range: TimeRange): Prom
   return []
 }
 
+// Equity-only extras (NOT in shared INDICATOR_COLS — km_index_eod lacks the
+// delivery columns): the Study cockpit's stat strip + Delivery-vs-Traded
+// widget read these.
+// The eight Price Action columns are appended, not guarded the way
+// bm_event/bm_ratio are: migrations 112 and 187 are long applied and all eight
+// were verified present on the live table before this shipped.
+const PRICE_ACTION_COLS = 'breakout_level,pct_from_breakout,breakdown_level,'
+  + 'pct_from_breakdown,prev_week_close,pct_wtd,prev_month_close,pct_mtd';
+const EQUITY_EXTRA_COLS = 'pct_chng,value_cr,delivery_pct,delivery_qty,deliv_value_cr,ret_5d,ret_22d,ret_66d,w52_high,w52_low,delivery_surge_x,stage,stage_since,stage_confirmed,gl_event,gl_days_above,pct_from_gl,bm_event,bm_ratio,is_vani_s2,is_vani_smart,is_vani_breakout,is_vani_surge,is_vani_distrib,is_vani_weakness,is_vani_oversold,' + PRICE_ACTION_COLS;
+const EQUITY_EOD_COLS = `trade_date,open,high,low,close,volume,${INDICATOR_COLS},${EQUITY_EXTRA_COLS}`;
+
+/** Run an equity-EOD select, retrying once without bm_event/bm_ratio.
+ *
+ *  Deploy-ordering guard. bm_event/bm_ratio arrive with migration 200, which
+ *  the owner runs by hand — so a frontend deployed first would ask PostgREST
+ *  for columns that do not exist yet and 400 the ENTIRE chart, not just the
+ *  Big Money card. Retry once without them so the page degrades to "no big
+ *  money days" instead of going blank. Matched on the column name, so a real
+ *  error still surfaces as a real error.
+ *
+ *  Shared by the display fetch and the warm-up fetch so the two can never
+ *  drift into asking for different columns — a warm-up bar missing a column
+ *  the derivation reads would silently evaluate to nothing, which is the
+ *  exact failure shape the warm-up exists to remove. */
+async function runEquityEodSelect(
+  build: (selectCols: string) => Promise<{ data: unknown; error: { message?: string } | null }>,
+): Promise<IndicatorRow[]> {
+  let { data, error } = await build(EQUITY_EOD_COLS);
+  if (error && /bm_event|bm_ratio/.test(error.message ?? '')) {
+    ({ data, error } = await build(EQUITY_EOD_COLS.replace(',bm_event,bm_ratio', '')));
+  }
+  if (error) throw new Error(error.message);
+  return (data ?? []) as IndicatorRow[];
+}
+
 /** Fetch full indicator data for an equity by its DB id (used by /chart/equity/:id).
  *  Same columns as index fetch — TradingChart renders SMA overlays, dots,
  *  RSI, Sniper Dragon, and MagicRS panes. */
@@ -348,13 +402,7 @@ export async function fetchEquityEodById(
   range: TimeRange,
 ): Promise<IndicatorRow[]> {
   const startDate = getStartDate(range);
-  // Equity-only extras (NOT in shared INDICATOR_COLS — km_index_eod lacks the
-  // delivery columns): the Study cockpit's stat strip + Delivery-vs-Traded
-  // widget read these.
-  const EQUITY_EXTRA_COLS = 'pct_chng,value_cr,delivery_pct,delivery_qty,deliv_value_cr,ret_5d,ret_22d,ret_66d,w52_high,w52_low,delivery_surge_x,stage,stage_confirmed,gl_event,gl_days_above,pct_from_gl,bm_event,bm_ratio,is_vani_s2,is_vani_smart,is_vani_breakout,is_vani_surge,is_vani_distrib,is_vani_weakness,is_vani_oversold';
-  const cols = `trade_date,open,high,low,close,volume,${INDICATOR_COLS},${EQUITY_EXTRA_COLS}`;
-
-  const run = async (selectCols: string) => {
+  return runEquityEodSelect((selectCols) => {
     let query = from('km_equity_eod')
       .select(selectCols)
       .eq('equity_id', equityId)
@@ -364,50 +412,156 @@ export async function fetchEquityEodById(
       query = query.gte('trade_date', startDate);
     }
     return query.execute();
-  };
-
-  let { data, error } = await run(cols);
-
-  // Deploy-ordering guard. bm_event/bm_ratio arrive with migration 200, which
-  // the owner runs by hand — so a frontend deployed first would ask PostgREST
-  // for columns that do not exist yet and 400 the ENTIRE chart, not just the
-  // Big Money card. Retry once without them so the page degrades to "no big
-  // money days" instead of going blank. Matched on the column name, so a real
-  // error still surfaces as a real error.
-  if (error && /bm_event|bm_ratio/.test(error.message ?? '')) {
-    ({ data, error } = await run(cols.replace(',bm_event,bm_ratio', '')));
-  }
-  if (error) throw new Error(error.message);
-
-  return (data ?? []) as IndicatorRow[];
+  });
 }
 
-/** The stock's Waking Giants journey row, if it is on one.
+/** Bars STRICTLY BEFORE `beforeDate` — warm-up for the derived story layers.
  *
- *  km_wg_journeys is a JOURNEY table — one row per stock describing a
- *  multi-year sleep/wake arc — so unlike everything else the chart reads it is
- *  not a time series. It contributes two dated markers (the turn and the wake)
- *  to the story timeline. Most stocks are on no journey and get null. */
-export async function fetchStockJourney(
+ *  Several story derivations need history the user never asked to see.
+ *  `fpbEvents` needs 61 bars before it can judge a single one and returns []
+ *  below that; `breakawayEvents` needs 6. The display fetch returns exactly
+ *  the requested range, so on a 1M chart (~21 bars) Flower Pot compression was
+ *  evaluated on NOTHING, and on 3M (~62 bars) on 2 bars of 62 — reported to
+ *  the user and to VaNi as an absence rather than as "could not look".
+ *
+ *  This is deliberately a SEPARATE additive query rather than a widened range
+ *  on the display fetch: `rows` feeds ~25 consumers (the chart itself, the
+ *  stat strip, the scrubber, the data tab, the export), and every one of them
+ *  would silently gain bars the user did not select. The prefix is consumed by
+ *  the derivation and discarded before render.
+ *
+ *  Returns oldest-first, like every other fetch here. */
+export async function fetchEquityWarmupBars(
   equityId: number,
-): Promise<StoryJourney | null> {
+  beforeDate: string,
+  bars: number,
+): Promise<IndicatorRow[]> {
+  if (bars <= 0) return [];
+  const rows = await runEquityEodSelect((selectCols) =>
+    from('km_equity_eod')
+      .select(selectCols)
+      .eq('equity_id', equityId)
+      // DESC + limit takes the N bars IMMEDIATELY before the window. Ascending
+      // would take the stock's first N bars ever — 1996 for RELIANCE — which
+      // is not warm-up, it is a different decade.
+      .order('trade_date', { ascending: false })
+      .lt('trade_date', beforeDate)
+      .limit(bars)
+      .execute());
+  return rows.slice().reverse();
+}
+
+/** Every Waking Giants journey this stock has been on — current and archived.
+ *
+ *  km_wg_journeys is a JOURNEY table, not a time series: one row per arc
+ *  through hibernation → turn → wake → ascent → sleep. It contributes the
+ *  dated markers the price series cannot carry.
+ *
+ *  Reads ALL journeys, not just `is_current`. `sleep_date` is only ever set on
+ *  an archived row — a current journey has not slept — so an `is_current`
+ *  filter structurally cannot show a journey that ENDED inside the loaded
+ *  window, and the chart lost the end of every completed arc. Most stocks hold
+ *  one or two rows (755 and 226 respectively on 2026-09-14); the cap is for the
+ *  long tail, one stock carries 43.
+ *
+ *  Ordered newest wake first so the cap keeps the recent arcs, and the current
+ *  journey (which may have no wake yet) is pulled to the front by the caller
+ *  via `currentJourney`. */
+const JOURNEY_COLS =
+  'state,is_current,wake_date,wake_close,turn_date,turn_close,confirm_date,' +
+  'sleep_date,base_start,base_high,base_years,stir_days,stir_first_date,' +
+  'stir_window_bars,align_score,resting,' +
+  'pct_from_turn,pct_from_wake';
+
+export async function fetchStockJourneys(
+  equityId: number,
+): Promise<StoryJourney[]> {
   const { data, error } = await from('km_wg_journeys')
-    .select('state,wake_date,wake_close,turn_date,turn_close,base_years')
+    .select(JOURNEY_COLS)
     .eq('equity_id', equityId)
-    .is('is_current', 'true')
-    .limit(1)
+    .order('wake_date', { ascending: false, nullsFirst: true })
+    .limit(12)
     .execute();
   // Absent table (migration 177 not applied) or no journey are the same answer
   // to the caller: this stock has nothing to mark.
-  if (error || !Array.isArray(data) || data.length === 0) return null;
-  const r = data[0] as Record<string, unknown>;
+  if (error || !Array.isArray(data)) return [];
   const num = (v: unknown) => (v == null ? null : Number(v));
-  return {
+  return (data as Record<string, unknown>[]).map((r) => ({
     state: (r.state as string) ?? null,
+    is_current: (r.is_current as boolean) ?? null,
     wake_date: (r.wake_date as string) ?? null,
     wake_close: num(r.wake_close),
     turn_date: (r.turn_date as string) ?? null,
     turn_close: num(r.turn_close),
+    confirm_date: (r.confirm_date as string) ?? null,
+    sleep_date: (r.sleep_date as string) ?? null,
+    base_start: (r.base_start as string) ?? null,
+    base_high: num(r.base_high),
     base_years: num(r.base_years),
+    stir_days: num(r.stir_days),
+    // The tally's earliest bar and its DENOMINATOR (migration 211).
+    // stir_days alone reads as a run and is not one.
+    stir_first_date: (r.stir_first_date as string) ?? null,
+    stir_window_bars: num(r.stir_window_bars),
+    align_score: num(r.align_score),
+    resting: (r.resting as boolean) ?? null,
+    pct_from_turn: num(r.pct_from_turn),
+    pct_from_wake: num(r.pct_from_wake),
+  }));
+}
+
+/** The live arc, if the stock is on one. Null when every journey is archived. */
+export function currentJourney(js: StoryJourney[] | null | undefined): StoryJourney | null {
+  return (js ?? []).find((j) => j.is_current) ?? null;
+}
+
+/** Recorded outcome of the Waking Giants arc, computed nightly.
+ *
+ *  A UNIVERSE-LEVEL constant — one reading for every stock, every user, every
+ *  chart — so it is fetched once and shared, never per stock. Written by
+ *  scripts/compute_wg_journeys.py inside the same transaction as the journeys
+ *  it summarises (migration 209), so the rates can never describe a different
+ *  population than the arcs on screen. */
+export interface JourneyBaseRates {
+  as_of: string;
+  closed_total: number;
+  confirmed_total: number;
+  confirmed_pct: number | null;
+  avg_days_to_confirm: number | null;
+  avg_life_confirmed: number | null;
+  avg_life_unconfirmed: number | null;
+  oldest_wake: string | null;
+  newest_close: string | null;
+}
+
+/** Latest reading, or null.
+ *
+ *  Null is a real answer and callers must handle it by saying LESS, never by
+ *  falling back to a remembered figure: before migration 209 runs there is no
+ *  row, and a confidently wrong frequency is worse than an absent one. */
+export async function fetchJourneyBaseRates(): Promise<JourneyBaseRates | null> {
+  const { data, error } = await from('km_journey_base_rates')
+    .select('as_of,closed_total,confirmed_total,confirmed_pct,avg_days_to_confirm,'
+      + 'avg_life_confirmed,avg_life_unconfirmed,oldest_wake,newest_close')
+    .order('as_of', { ascending: false })
+    .limit(1)
+    .execute();
+  if (error || !Array.isArray(data) || data.length === 0) return null;
+  const r = data[0] as Record<string, unknown>;
+  const num = (v: unknown) => (v == null ? null : Number(v));
+  const closed = Number(r.closed_total ?? 0);
+  // A denominator of zero is not a base rate. Treat it as no reading rather
+  // than rendering "0 of 0".
+  if (!closed) return null;
+  return {
+    as_of: String(r.as_of),
+    closed_total: closed,
+    confirmed_total: Number(r.confirmed_total ?? 0),
+    confirmed_pct: num(r.confirmed_pct),
+    avg_days_to_confirm: num(r.avg_days_to_confirm),
+    avg_life_confirmed: num(r.avg_life_confirmed),
+    avg_life_unconfirmed: num(r.avg_life_unconfirmed),
+    oldest_wake: (r.oldest_wake as string) ?? null,
+    newest_close: (r.newest_close as string) ?? null,
   };
 }

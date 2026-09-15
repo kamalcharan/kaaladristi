@@ -266,11 +266,18 @@ function buildStructure(bars: ThesisBar[], events: BigMoneyEvent[]): StructureRe
   }
 }
 
+/** @param warmupBars  history fetched BEFORE `bars` purely so the derivations
+ *  with a lookback (Flower Pot compression needs 60 prior bars) can evaluate
+ *  the window's earliest displayed sessions. It feeds the event derivation
+ *  ONLY — every other reading here (pillars, posture trajectory, position
+ *  risk, structure) stays measured over `bars` exactly as displayed, because
+ *  those are statements about the window the user chose. */
 export function computeThesis(
   bars: ThesisBar[] | undefined,
   relationship: Relationship,
   position?: PositionInput | null,
   journey?: StoryJourney | null,
+  warmupBars?: ThesisBar[],
 ): ThesisRead | null {
   if (!bars || bars.length === 0) return null
   const latest = bars[bars.length - 1]
@@ -307,14 +314,34 @@ export function computeThesis(
   // the chart's own timeline showed them.
   const bigMoneyEvents = readBigMoneyDays(bars)
   const bigMoneyDates = new Set(bigMoneyEvents.map((e) => e.trade_date))
-  const events = buildStoryEvents(bars, bigMoneyDates, undefined, journey)
+  const warm = warmupBars ?? []
+  const events = buildStoryEvents(
+    warm.length ? [...warm, ...bars] : bars,
+    bigMoneyDates, undefined, journey, warm.length,
+  )
   let signals = events
   if (relationship === 'position' && position?.entryDate) {
     signals = signals.filter((e) => e.date >= position.entryDate)
   } else {
     signals = signals.filter((e) => e.barIndex >= bars.length - RECENT_SIGNAL_BARS)
   }
-  signals = signals.slice(-8).reverse()
+  // Trim by PRIORITY, then display by recency.
+  //
+  // `slice(-8)` alone is a pure recency cut, and that was safe only while every
+  // event kind was rare. Price Action (Phase 2) is not rare — 22 events on
+  // SOLARA's last 74 bars, against 4 of everything else — so a recency cut
+  // would fill all eight rows with "above last week's close" and push out the
+  // Big Money day, the stage change and the journey confirmation. Worse, the
+  // deterministic VaNi line below reads signals[0] as "Latest signal:", so the
+  // tab's headline sentence would degrade to the noisiest kind on the page.
+  //
+  // The chart never had this problem because eventAtBar already resolves a
+  // shared bar by priority; this list simply had no equivalent. It does now:
+  // choose the eight by (priority, recency), then restore recency for display.
+  signals = [...signals]
+    .sort((a, b) => b.priority - a.priority || b.barIndex - a.barIndex)
+    .slice(0, 8)
+    .sort((a, b) => b.barIndex - a.barIndex)
 
   // Verdict — ratio of aligned pillars (data-present) + latest posture. The line
   // NAMES what's strong vs weak, so a "Mixed" reads as an insight — "leading on

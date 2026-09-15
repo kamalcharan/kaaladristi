@@ -12,6 +12,8 @@
  * historical scan membership needed (the is_vani_* flags are per-bar columns).
  */
 
+import { priceActionEvents } from './priceActionEvents'
+
 export type StoryTone = 'bull' | 'bear' | 'neutral'
 
 /** The per-bar shape the extractor needs (a loose subset of the equity row). */
@@ -29,8 +31,24 @@ export interface StoryBar {
   magic_rs_zone?: string | null
   flow_type?: string | null
   stage?: string | null
+  /** The date the CURRENT stage began — `stage_since === trade_date` is the
+   *  transition itself. Absent on resampled weekly/monthly bars and indices. */
+  stage_since?: string | null
   stage_confirmed?: string | null
   sma_150?: number | null
+  /** Price Action geometry (migrations 112 / 187). Present from each stock's
+   *  FIRST bar — RELIANCE reads back to 1996 — unlike ema_20 (2025+). */
+  pct_chng?: number | null
+  breakout_level?: number | null
+  pct_from_breakout?: number | null
+  breakdown_level?: number | null
+  pct_from_breakdown?: number | null
+  /** Period-to-date pair. `prev_*_close` is the REFERENCE the pct is measured
+   *  against, and it is what makes a crossing real or phantom — never drop it. */
+  prev_week_close?: number | null
+  pct_wtd?: number | null
+  prev_month_close?: number | null
+  pct_mtd?: number | null
   gl_event?: string | null
   gl_days_above?: number | null
   pct_from_gl?: number | null
@@ -52,6 +70,7 @@ export type StoryKind =
   | 'flow'
   | 'rs_breakaway'
   | 'gl'
+  | 'price_action'
   | 'discovery'
 
 /** One signature colour per kind (→ globals.css --story-* vars). */
@@ -66,6 +85,7 @@ export const KIND_COLORS: Record<StoryKind, string> = {
   flow: 'var(--story-flow)',
   rs_breakaway: 'var(--story-rsbreakaway)',
   gl: 'var(--story-gl)',
+  price_action: 'var(--story-priceaction)',
   discovery: 'var(--story-discovery)',
 }
 
@@ -99,6 +119,12 @@ const PRIORITY: Record<StoryKind, number> = {
   scan: 3,
   conviction: 2,
   flow: 1,
+  // Deliberately last. Price Action fires often (44 events on SOLARA's 123
+  // bars) and carries no cooldown — see priceActionEvents.ts on why a measured
+  // distribution refused to supply one. Bottom priority is how that density is
+  // paid for: on a shared bar it never displaces a journey milestone, a Big
+  // Money day or a stage change.
+  price_action: 0.5,
 }
 
 function zoneBucket(z?: string | null): StoryTone | null {
@@ -155,10 +181,28 @@ const FLOW_LABEL: Record<string, { title: string; tone: StoryTone }> = {
 
 // Stage-2 (advancing) is covered by the Stage event, so is_vani_s2 is omitted
 // here to avoid a duplicate bubble on the same bar.
+//
+// ⚠ NAMING TRAP, fixed here. `is_vani_surge` was titled "Breakout surge" and
+// `is_vani_breakout` "Fresh breakout" — but NEITHER is the Breakout Surge
+// scanner. That scanner qualifies on 20-day-high geometry
+// (`pct_chng > 0 AND pct_from_breakout > 0`); these two flags are 52-WEEK-high
+// proximity plus a volume surge:
+//
+//   is_vani_breakout  rvol > 3 AND close > sma_150 AND rsi_14 in [50,78]
+//                     AND magic_rs > 20 AND close >= w52_high * 0.95
+//   is_vani_surge     rvol > 5 AND close >= w52_high * 0.95 AND rsi_14 < 78
+//                     AND magic_rs > 0 AND close > sma_50
+//
+// On 2026-09-11 the scanner held 200 stocks and the flag fired on 8, overlap 6;
+// on SOLARA's own bars the flag fired 0 times where the scanner condition fired
+// 14. Same word, different rule. What the flags actually DO is decide the
+// scanner's HIGHLIGHT (`vani_flag` = is_vani_surge OR is_vani_breakout) — so
+// they are titled for what they measure, and the derived 20-day-high events
+// live in priceActionEvents.ts under their own names.
 const SCAN_FLAGS: { flag: keyof StoryBar; title: string; tone: StoryTone }[] = [
   { flag: 'is_vani_smart', title: 'Smart Money loading', tone: 'bull' },
-  { flag: 'is_vani_breakout', title: 'Fresh breakout', tone: 'bull' },
-  { flag: 'is_vani_surge', title: 'Breakout surge', tone: 'bull' },
+  { flag: 'is_vani_breakout', title: 'Near the 52-week high on volume', tone: 'bull' },
+  { flag: 'is_vani_surge', title: 'At the 52-week high on heavy volume', tone: 'bull' },
   { flag: 'is_vani_distrib', title: 'Distribution warning', tone: 'bear' },
   { flag: 'is_vani_weakness', title: 'Weakness confluence', tone: 'bear' },
 ]
@@ -180,6 +224,74 @@ const FPB = {
   MIN_CLOSE: 20, MIN_BARS: 60, PRIOR: 22,
   VOL_BURST: 3.0, RANGE_EXP: 2.0, CLOSE_STR: 0.70, DELIV_MIN: 45,
 } as const
+
+/**
+ * What the LOADED WINDOW can and cannot be asked.
+ *
+ * Several derivations need a warm-up before they can answer at all, and until
+ * now a window too short to look was indistinguishable from a window with
+ * nothing in it. `fpbEvents` returns [] on fewer than 61 bars; the chart and
+ * the Thesis then read "no coils", which is a claim about the stock when it is
+ * really a claim about the range.
+ *
+ * Measured cost of that silence (1-in-23 NSE sample, 36 coil starts over a
+ * year):
+ *   · 1M  (~21 bars)  — Flower Pot is entirely disabled, never evaluated once
+ *   · 3M  (~62 bars)  — evaluable on 2 of 62 bars
+ *   · 6M  (~124 bars) — 2 of 28 coil starts fall in the blind first 60 bars
+ *   · 1Y  (~248 bars) — 60 of 248 bars blind
+ *
+ * The fix is warm-up bars on the fetch — `fetchEquityWarmupBars` requests
+ * STORY_WARMUP_BARS extra bars before the display start, and every function
+ * here takes that prefix length so it reports coverage of the DISPLAY window
+ * rather than of the array it happens to be handed. A fully warmed window
+ * reports nothing missing, which is the point. The reporting stays because a
+ * caller with no warm-up (weekly/monthly bars, a short-listed stock whose
+ * history simply does not reach back) still has a real gap, and a gap that
+ * cannot be named gets narrated as an absence.
+ */
+export interface StoryCoverage {
+  /** Bars in the DISPLAY window — never the warm-up prefix. */
+  bars: number
+  /** Derivations at least one display bar is long enough to evaluate. */
+  fpb: boolean
+  breakaway: boolean
+  /** Display bars at the start that compression still cannot reach. 0 when
+   *  the warm-up covers the whole window. */
+  blind: number
+  /** Human-readable names of what could NOT be evaluated. Empty when all can. */
+  missing: string[]
+}
+
+/** Bars of history to request BEFORE the display window so every derivation
+ *  can evaluate the window's very first bar. Sized by the longest lookback
+ *  any of them needs — Flower Pot compression, at 60 prior bars. */
+export const STORY_WARMUP_BARS = FPB.MIN_BARS
+
+/** @param bars  full array — warm-up prefix followed by the display window
+ *  @param warmup  length of that prefix (0 when the caller fetched none) */
+export function storyCoverage(bars: StoryBar[], warmup = 0): StoryCoverage {
+  const n = bars.length
+  const display = Math.max(0, n - warmup)
+  const blind = Math.max(0, Math.min(display, FPB.MIN_BARS - warmup))
+  const fpb = display > blind
+  const breakaway = display > Math.max(0, Math.min(display, BREAKAWAY.WINDOW - warmup))
+  const missing: string[] = []
+  if (!fpb) missing.push(`Flower Pot compression (needs ${FPB.MIN_BARS} prior bars, window has ${n})`)
+  if (!breakaway) missing.push(`Magic RS breakaway (needs ${BREAKAWAY.WINDOW} prior bars, window has ${n})`)
+  // Long enough to look at all, but not at the whole window: a coil in the
+  // opening weeks is still invisible, so it is still said.
+  if (fpb && blind > 0) missing.push(`Flower Pot compression on the first ${blind} sessions shown`)
+  return { bars: display, fpb, breakaway, blind, missing }
+}
+
+/** Display bars at the START of the window that no compression test can
+ *  reach. With a full warm-up this is 0; with none, a 1-year chart cannot
+ *  evaluate its first 60 bars and a coil there is silently absent. */
+export function blindLeadingBars(bars: StoryBar[], warmup = 0): number {
+  const display = Math.max(0, bars.length - warmup)
+  return Math.max(0, Math.min(display, FPB.MIN_BARS - warmup))
+}
 
 function fpbEvents(bars: StoryBar[]): { i: number; title: string; detail: string; tone: StoryTone }[] {
   const n = bars.length
@@ -309,20 +421,59 @@ function breakawayEvents(bars: StoryBar[]): { i: number; title: string; detail: 
  *  km_wg_journeys describing a multi-year arc, so it contributes two DATED
  *  markers rather than something scanned bar by bar. Undefined for the vast
  *  majority of stocks, which are on no journey at all. */
+/** One Waking Giants journey — current or archived.
+ *
+ *  km_wg_journeys stores SIX dated milestones and the story layer read two of
+ *  them (turn, wake). `confirm_date` is the Ascent moment — the payoff the whole
+ *  engine exists to find, 75 current + 348 archived rows on 2026-09-14 — and it
+ *  had never appeared on a chart; `sleep_date` (595 archived rows) closes the
+ *  arc. Both are emitted now.
+ *
+ *  `sleep_date` is only ever set on an ARCHIVED row (is_current = false): a
+ *  current journey by definition has not slept. Reading journeys with
+ *  `is_current` alone therefore cannot show a journey that ended inside the
+ *  loaded window — which is why the fetch now returns every journey for the
+ *  stock and the builder walks them all. */
 export interface StoryJourney {
   state?: string | null
+  is_current?: boolean | null
   wake_date?: string | null
   wake_close?: number | null
   turn_date?: string | null
   turn_close?: number | null
+  confirm_date?: string | null
+  sleep_date?: string | null
+  base_start?: string | null
+  base_high?: number | null
   base_years?: number | null
+  /** Qualifying bars in the stirring window — a TALLY, never a run length.
+   *  Measured 2026-09-14 across 1,048 stirring stocks: 9.4 bars scattered over
+   *  a 41.3-bar span, only 2.8% contiguous. Render it only with its window. */
+  stir_days?: number | null
+  stir_first_date?: string | null
+  /** The denominator stir_days is measured over (migration 211). */
+  stir_window_bars?: number | null
+  align_score?: number | null
+  resting?: boolean | null
+  pct_from_turn?: number | null
+  pct_from_wake?: number | null
 }
 
+/** Build the story-event stream over `bars`.
+ *
+ *  `warmup` says how many LEADING bars of `bars` are context only — history
+ *  fetched so the derivations that need a lookback (Flower Pot compression
+ *  needs 61 bars, Magic RS breakaway 6) can actually evaluate the bars the
+ *  user asked to see. Events landing inside the warm-up prefix are dropped and
+ *  the survivors are rebased onto the DISPLAY window, so a returned barIndex
+ *  always indexes `bars.slice(warmup)` — which is exactly the array every
+ *  caller renders. Default 0: every existing call site is unchanged. */
 export function buildStoryEvents(
   bars: StoryBar[],
   bigMoneyDates?: Set<string>,
   sectorByDate?: Map<string, { leading: boolean }>,
-  journey?: StoryJourney | null,
+  journey?: StoryJourney | StoryJourney[] | null,
+  warmup = 0,
 ): StoryEvent[] {
   const out: StoryEvent[] = []
   const add = (i: number, kind: StoryKind, title: string, detail: string, tone: StoryTone) =>
@@ -337,6 +488,40 @@ export function buildStoryEvents(
       reactionPct: reactionPct(bars, i),
       priority: PRIORITY[kind],
     })
+
+  // Weinstein stage transition.
+  //
+  // `stage_since` is the classifier's OWN record of when the current stage
+  // began, so `stage_since === trade_date` IS the transition — a stored fact
+  // rather than one we re-derive. Preferred wherever the column is loaded, for
+  // two reasons the bar-diff cannot cover: the previous LOADED bar may be days
+  // earlier (a gap, a suspension), and a stock that leaves a stage and returns
+  // to the same one reads as "unchanged" to a diff. The diff remains the
+  // fallback for series carrying no stage_since — resampled weekly/monthly
+  // bars and indices.
+  //
+  // `prev` is undefined for the first bar, which is the case the diff could
+  // never see at all: a window opening on the very session a stage began drew
+  // nothing. stage_since answers it without a predecessor.
+  const addStageEvent = (i: number, b: StoryBar, prev?: StoryBar) => {
+    if (!b.stage) return
+    const changed = b.stage_since != null
+      ? b.stage_since === b.trade_date
+      : (!!prev?.stage && b.stage !== prev.stage)
+    if (!changed) return
+    // UNKNOWN is not a stage, it is the classifier saying it could not tell.
+    // A move OUT of it is the indicator arriving, not the stock changing
+    // character — 713 fabricated events when this was missing.
+    if (prev?.stage === 'UNKNOWN') return
+    const st = STAGE_LABEL[b.stage]   // undefined for UNKNOWN — nothing fires
+    if (!st) return
+    const from = prev?.stage ? (STAGE_NAME[prev.stage] ?? prev.stage) : null
+    add(i, 'stage', st.title, from ? `${from} → ${st.name}` : `Now ${st.name}`, st.tone)
+  }
+
+  // The first bar carries no predecessor, so only a stored stage_since can
+  // speak for it.
+  if (bars.length) addStageEvent(0, bars[0])
 
   for (let i = 1; i < bars.length; i++) {
     const b = bars[i]
@@ -376,10 +561,16 @@ export function buildStoryEvents(
     // announcing "Entered Stage 4" on the day a moving average finally has
     // enough bars would be a fabricated event (713 of them since 2026-07-01).
     // Treat it exactly like a missing previous stage: say nothing.
-    if (b.stage && p.stage && b.stage !== p.stage && p.stage !== 'UNKNOWN') {
-      const st = STAGE_LABEL[b.stage]   // undefined for UNKNOWN — nothing fires
-      if (st) add(i, 'stage', st.title, `${STAGE_NAME[p.stage] ?? p.stage} → ${st.name}`, st.tone)
-    }
+    //
+    // `stage_since` is the classifier's OWN record of when the current stage
+    // began, so `stage_since === trade_date` IS the transition — a stored fact
+    // rather than a diff we re-derive. Preferred when the column is loaded,
+    // because the bar-to-bar diff cannot see a transition that happened on the
+    // first bar of the window (there is no previous bar to compare against),
+    // and a 1-year chart silently dropped every stage change that landed on its
+    // left edge. The diff stays as the fallback for series that carry no
+    // stage_since (resampled weekly/monthly bars, indices).
+    addStageEvent(i, b, p)
 
     // 4b) Golden Line event — an SVD/SBD-backed cross or hold of the 150 SMA.
     // gl_event is only ever written on a bar that already carries the volume
@@ -424,31 +615,83 @@ export function buildStoryEvents(
   // the timeline showing no sign of it. Matched by date rather than scanned,
   // and skipped silently when the date falls outside the loaded range — a
   // journey that woke two years ago has no bar to sit on in a 1-year view.
-  if (journey) {
-    const barAt = (d?: string | null) =>
-      d ? bars.findIndex((x) => x.trade_date === d) : -1
-    const yrs = journey.base_years != null
-      ? `${journey.base_years} years` : 'a long stretch'
+  // A stock can hold several journeys (one current, the rest archived —
+  // 755 stocks have one, 226 have two, a handful many more). Walk them all:
+  // an arc that ENDED inside the loaded window is exactly as much a part of
+  // this chart's story as the one still running.
+  const journeys: StoryJourney[] = !journey ? []
+    : Array.isArray(journey) ? journey : [journey]
 
-    const ti = barAt(journey.turn_date)
+  const barAt = (d?: string | null) =>
+    d ? bars.findIndex((x) => x.trade_date === d) : -1
+
+  for (const j of journeys) {
+    const yrs = j.base_years != null ? `${j.base_years} years` : 'a long stretch'
+
+    const ti = barAt(j.turn_date)
     if (ti >= 0) {
       add(ti, 'discovery', 'Journey turned',
           `The weekly clock turned green and price cleared the Golden Line after ${yrs} of dormancy` +
-          (journey.turn_close != null ? ` — from Rs ${journey.turn_close}.` : '.'),
+          (j.turn_close != null ? ` — from Rs ${j.turn_close}.` : '.'),
           'bull')
     }
 
-    const wi = barAt(journey.wake_date)
+    const wi = barAt(j.wake_date)
     if (wi >= 0) {
       add(wi, 'discovery', 'Journey woke',
           `Cleared its hibernation ceiling` +
-          (journey.wake_close != null ? ` at Rs ${journey.wake_close}` : '') +
-          `${journey.state ? ` — now ${journey.state.toLowerCase()}` : ''}.`,
+          (j.wake_close != null ? ` at Rs ${j.wake_close}` : '') +
+          `${j.state ? ` — now ${j.state.toLowerCase()}` : ''}.`,
           'bull')
+    }
+
+    // The Ascent moment. Of 595 closed journeys, 348 reached it — and the
+    // confirmed ones ran 494 days on average against 38 for those that never
+    // did, so this is the single most consequential marker on the arc.
+    const ci = barAt(j.confirm_date)
+    if (ci >= 0) {
+      add(ci, 'discovery', 'Journey confirmed',
+          'All three clocks aligned and the monthly close held above the base ceiling' +
+          (j.base_high != null ? ` of Rs ${j.base_high}.` : '.'),
+          'bull')
+    }
+
+    // Only ever present on an archived row. D39: describe the structure, not
+    // a direction — the journey closed, that is all this says.
+    const si = barAt(j.sleep_date)
+    if (si >= 0) {
+      const lived = j.wake_date && j.sleep_date
+        ? Math.round((Date.parse(j.sleep_date) - Date.parse(j.wake_date)) / 86400000)
+        : null
+      add(si, 'discovery', 'Journey closed',
+          'Clock alignment collapsed and the journey was archived' +
+          (lived != null ? ` — ${lived} days after its wake.` : '.') +
+          (j.confirm_date ? '' : ' It never reached confirmation.'),
+          'bear')
     }
   }
 
+  // 10) The six Price Action scanners, derived from the bar row. Emitted
+  //     through the same add() as everything else — one emission point, so
+  //     reaction and priority are computed identically — but derived in its own
+  //     module, because the reference-reset guard is subtle enough to earn its
+  //     own test.
+  for (const e of priceActionEvents(bars)) {
+    add(e.barIndex, 'price_action', e.title, e.detail, e.tone)
+  }
+
   out.sort((a, b) => a.barIndex - b.barIndex)
+
+  // Rebase onto the display window. Done LAST, on one array, rather than
+  // offsetting each emitter: every emitter indexes `bars` and there are a
+  // dozen of them, so one of them would eventually be written against the
+  // wrong origin. reactionPct is already resolved to a number here, so
+  // dropping the prefix cannot change a value that was measured across it.
+  if (warmup > 0) {
+    return out
+      .filter((e) => e.barIndex >= warmup)
+      .map((e) => ({ ...e, barIndex: e.barIndex - warmup }))
+  }
   return out
 }
 

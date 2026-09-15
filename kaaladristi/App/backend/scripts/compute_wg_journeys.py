@@ -492,6 +492,41 @@ def walk_stock(s: pd.Series, zones: pd.Series, wk: pd.DataFrame, mo: pd.DataFram
             r = i_
         last_rec[i_] = r
 
+    def turn_at(i):
+        """The turn for the above-Golden-Line run CONTAINING bar `i`.
+
+        Returns (turn_date, turn_close) or (None, None) when bar `i` is not
+        above the line, or the run holds no weekly-green bar.
+
+        Extracted so the current snapshot and every ARCHIVED journey share one
+        definition. They had none: the snapshot computed the turn inline and
+        archived rows were written with turn_date NULL — 560 current rows carry
+        it and **0 archived rows do**, so on a closed journey you could never
+        see where the turn was. Two definitions of "the turn" on one column
+        would be worse than none, which is why this is a function and not a
+        second inline block.
+
+        The snapshot calls it on the LAST bar; an archived arc calls it on its
+        WAKE bar. Those are the same question asked at two moments: a wake
+        requires `close >= GL`, so the wake bar is always inside a run, and the
+        turn that run contains is the one that led into the wake. (The engine's
+        own note: the wake "fires late" relative to the turn, by a median 62
+        sessions over the eight 2026 wakes.)
+        """
+        if not (i < n and gl_arr[i] == gl_arr[i] and vals[i] > gl_arr[i]):
+            return None, None
+        above = (vals > gl_arr) & ~np.isnan(gl_arr)
+        # Walk back to the first bar of this unbroken run.
+        run_start = i
+        while run_start > 0 and above[run_start - 1]:
+            run_start -= 1
+        wk_ok = w_known & w_green
+        cand = np.where(wk_ok[run_start:i + 1])[0]
+        if not len(cand):
+            return None, None
+        j = run_start + int(cand[0])
+        return idx[j].date(), float(vals[j])
+
     def base_years_at(i):
         """Sleep length at a breakout of vals[i]:
         - level traded before → years since it was LAST traded there
@@ -548,6 +583,10 @@ def walk_stock(s: pd.Series, zones: pd.Series, wk: pd.DataFrame, mo: pd.DataFram
                         'wake_close': float(c),
                         'base_years': round(by, 1), 'base_start': bstart,
                         'confirm_date': None, 'weekly_confirmed': False,
+                        # Kept so the archive can ask turn_at() about the run
+                        # this journey woke inside. Stripped before the row is
+                        # written — it is a walk-local index, not a column.
+                        'wake_i': i,
                     }
                     state = 'WAKING'
         else:
@@ -576,6 +615,17 @@ def walk_stock(s: pd.Series, zones: pd.Series, wk: pd.DataFrame, mo: pd.DataFram
                         or journey.get('daily_red', 0) >= DAILY_VETO_DAYS):
                     journey['sleep_date'] = idx[i]
                     journey['end_state'] = state
+                    # Capture the arc's OWN turn before the row is archived.
+                    # Computed at the WAKE bar, not at sleep: by the sleep bar
+                    # the stock has usually lost the Golden Line — that is
+                    # frequently why it slept — so asking there would return
+                    # NULL for exactly the journeys worth inspecting.
+                    journey['turn_date'], journey['turn_close'] = turn_at(journey['wake_i'])
+                    # And where price sat against the line when it closed.
+                    g_sleep = gl_arr[i]
+                    journey['gl_dist_pct'] = (
+                        round((float(c) / float(g_sleep) - 1) * 100, 2)
+                        if g_sleep == g_sleep and g_sleep > 0 else None)
                     archived.append(journey)
                     journey = None
                     state = 'HIBERNATING'
@@ -608,23 +658,15 @@ def walk_stock(s: pd.Series, zones: pd.Series, wk: pd.DataFrame, mo: pd.DataFram
     # A property of NOW, not of the journey: it is anchored to the CURRENT
     # unbroken run above the Golden Line, so if the line is lost the turn goes
     # NULL rather than reporting a turn the stock has since given back.
-    turn_date = turn_close = pct_from_turn = None
-    above_gl = (vals > gl_arr) & ~np.isnan(gl_arr)
-    if above_gl[-1]:
-        not_above = np.where(~above_gl)[0]
-        run_start = int(not_above[-1] + 1) if len(not_above) else 0
-        wk_ok = w_known & w_green
-        cand = np.where(wk_ok[run_start:])[0]
-        if len(cand):
-            j = run_start + int(cand[0])
-            turn_date = idx[j].date()
-            # Same numpy.float64-leak pattern as `c` above, independent of
-            # it: vals[j] was cast for turn_close but not for the division
-            # feeding pct_from_turn two lines down.
-            turn_close_raw = float(vals[j])
-            turn_close = round(turn_close_raw, 2)
-            if turn_close_raw > 0:
-                pct_from_turn = round((c / turn_close_raw - 1) * 100, 2)
+    # Same definition every archived arc uses — see turn_at(). The float() cast
+    # lives inside the helper now: vals[j] is a numpy.float64 and under
+    # numpy>=2.0 its repr is 'np.float64(4.6)', which psycopg2 would bind
+    # verbatim into the INSERT ("schema \"np\" does not exist").
+    pct_from_turn = None
+    turn_date, turn_close_raw = turn_at(n - 1)
+    turn_close = round(turn_close_raw, 2) if turn_close_raw is not None else None
+    if turn_close_raw is not None and turn_close_raw > 0:
+        pct_from_turn = round((c / turn_close_raw - 1) * 100, 2)
 
     resting = False
     if state in ('WAKING', 'ASCENDING') and len(wk_close):
@@ -678,14 +720,30 @@ def walk_stock(s: pd.Series, zones: pd.Series, wk: pd.DataFrame, mo: pd.DataFram
 
 # ── STIRRING evidence (relative-delivery gate) ───────────────────────────
 
-def stir_days_map(stir: pd.DataFrame) -> dict[int, int]:
-    out = {}
+def stir_days_map(stir: pd.DataFrame) -> dict[int, tuple]:
+    """equity_id -> (qualifying_days, first_qualifying_date, window_bars).
+
+    ⚠ `stir_days` is a TALLY, not a run length, and the two read very
+    differently to a user. Measured over the 1,048 stirring stocks on
+    2026-09-14: **9.4 qualifying bars scattered across a 41.3-bar span, and
+    only 29 of 1,048 (2.8%) contiguous.** So there is no "stirring since"
+    date to report — a field called `stir_start_date` would invite precisely
+    the wrong reading ("three months of continuous stirring") over what is
+    really nine scattered sessions.
+
+    What IS honest and derivable is the pair this returns: the date of the
+    EARLIEST qualifying bar, and the number of bars the tally was measured
+    over. That lets the UI say "9 qualifying sessions since 12 June, out of
+    41" — a rate WITH its denominator, the same rule the journey base rates
+    enforce. Never render the first date alone.
+    """
+    out: dict[int, tuple] = {}
     for eq, grp in stir.groupby('equity_id'):
         grp = grp.sort_values('trade_date').tail(60)
         del_ = grp['delivery_pct'].astype(float)
         med_src = del_.dropna()
         if not len(med_src):
-            out[eq] = 0
+            out[eq] = (0, None, 0)
             continue
         med = float(med_src.median())
         gate = max(STIR_DELIV_FLOOR, med * STIR_DELIV_MULT)
@@ -694,7 +752,16 @@ def stir_days_map(stir: pd.DataFrame) -> dict[int, int]:
             & (grp['pct_chng'].astype(float).abs().fillna(0) <= STIR_MAX_ABS_PCT)
             & (grp['rvol'].astype(float).fillna(1) <= STIR_MAX_RVOL)
         )
-        out[eq] = int(ok.sum())
+        n_ok = int(ok.sum())
+        if not n_ok:
+            out[eq] = (0, None, int(len(grp)))
+            continue
+        hits = grp.loc[ok.values, 'trade_date']
+        first = hits.iloc[0]
+        # The window is the span the tally was measured over, bounded by the
+        # bars this stock actually has — a recent listing carries fewer than 60
+        # and must not report a 60-bar denominator it never had.
+        out[eq] = (n_ok, first.date() if hasattr(first, 'date') else first, int(len(grp)))
     return out
 
 
@@ -704,12 +771,79 @@ CURRENT_COLS = [
     'equity_id', 'is_current', 'state', 'resting', 'base_start', 'base_high', 'base_years',
     'wake_date', 'confirm_date', 'sleep_date', 'align_score', 'align_daily', 'align_weekly',
     'align_monthly', 'gl_dist_pct', 'pct_from_base_high', 'journey_age_days', 'stir_days',
+    'stir_first_date', 'stir_window_bars',
     'wake_close', 'pct_from_wake',
     'symbol', 'company_name', 'industry', 'exchange', 'isin', 'mcap_cr', 'close', 'pct_chng',
     'delivery_pct', 'magic_rs', 'magic_rs_zone', 'listing_age_years', 'trade_date',
     'score_5d', 'score_22d', 'rvol', 'dot_svd', 'dot_sbd', 'dot_syd',
     'gl_event', 'gl_event_date', 'gl_days_above', 'turn_date', 'turn_close', 'pct_from_turn',
 ]
+
+
+# The population every rate below is measured over: CLOSED arcs that carry both
+# a wake and a sleep date. A journey still running has no outcome to count, and
+# one archived without ever waking never entered the population. Keep this
+# WHERE identical to migration 209's seed — they are the same statement twice,
+# and the migration's verification numbers are what prove it.
+_BASE_RATES_SQL = """
+INSERT INTO km_journey_base_rates (
+  as_of, closed_total, confirmed_total, confirmed_pct, avg_days_to_confirm,
+  avg_life_confirmed, avg_life_unconfirmed, oldest_wake, newest_close, open_journeys)
+SELECT
+  CURRENT_DATE,
+  count(*),
+  count(*) FILTER (WHERE confirm_date IS NOT NULL),
+  round(100.0 * count(*) FILTER (WHERE confirm_date IS NOT NULL) / NULLIF(count(*), 0), 1),
+  round(avg(confirm_date - wake_date) FILTER (WHERE confirm_date IS NOT NULL))::int,
+  round(avg(sleep_date - wake_date)  FILTER (WHERE confirm_date IS NOT NULL))::int,
+  round(avg(sleep_date - wake_date)  FILTER (WHERE confirm_date IS NULL))::int,
+  min(wake_date),
+  max(sleep_date),
+  (SELECT count(*) FROM km_wg_journeys WHERE is_current)
+FROM km_wg_journeys
+WHERE NOT is_current AND wake_date IS NOT NULL AND sleep_date IS NOT NULL
+ON CONFLICT (as_of) DO UPDATE SET
+  closed_total         = EXCLUDED.closed_total,
+  confirmed_total      = EXCLUDED.confirmed_total,
+  confirmed_pct        = EXCLUDED.confirmed_pct,
+  avg_days_to_confirm  = EXCLUDED.avg_days_to_confirm,
+  avg_life_confirmed   = EXCLUDED.avg_life_confirmed,
+  avg_life_unconfirmed = EXCLUDED.avg_life_unconfirmed,
+  oldest_wake          = EXCLUDED.oldest_wake,
+  newest_close         = EXCLUDED.newest_close,
+  open_journeys        = EXCLUDED.open_journeys,
+  computed_at          = now()
+"""
+
+
+def _write_base_rates(cur) -> bool:
+    """Recompute the journey base rates from the rows just written.
+
+    Runs on the SAME cursor, inside the SAME transaction as the
+    km_wg_journeys DELETE + INSERT. That is the whole design: a summary
+    written by a different job than the rows it describes can drift from them,
+    and this codebase has already paid for that (derived pipeline dimensions
+    holding values computed from superseded inputs). Same writer, same
+    transaction, cannot disagree — and a `fix` on the wg_journeys dimension
+    recomputes the rates for free, with no new dependency edge.
+
+    Returns False and leaves the journey write intact when the table is not
+    there yet. The backend is always deployed BEFORE migrations are run here,
+    so a missing table must not fail the nightly journey step over a display
+    figure — the same rule CURRENT_COLS already follows for missing columns.
+    A SAVEPOINT is required rather than a bare try: an undefined-table error
+    aborts the whole transaction otherwise, taking the journeys with it.
+    """
+    cur.execute('SAVEPOINT base_rates')
+    try:
+        cur.execute(_BASE_RATES_SQL)
+        cur.execute('RELEASE SAVEPOINT base_rates')
+        return True
+    except psycopg2.errors.UndefinedTable:
+        cur.execute('ROLLBACK TO SAVEPOINT base_rates')
+        print('  NOTE: km_journey_base_rates missing — run migration 209. '
+              'Journeys written; base rates skipped.')
+        return False
 
 
 def write_rows(conn, current_rows: list[dict], archive_rows: list[dict]):
@@ -752,9 +886,12 @@ def write_rows(conn, current_rows: list[dict], archive_rows: list[dict]):
             psycopg2.extras.execute_batch(
                 cur, f'INSERT INTO km_wg_journeys ({cols}) VALUES ({ph})',
                 rows, page_size=500)
+            wrote_rates = _write_base_rates(cur)
         w.commit()
         print(f'  Wrote {len(rows):,} rows '
               f'({len(current_rows):,} current + {len(archive_rows):,} archived).')
+        if wrote_rates:
+            print('  Base rates refreshed (km_journey_base_rates).')
     except Exception:
         w.rollback()
         raise
@@ -794,7 +931,7 @@ def run(dry_run: bool):
     _clock_days = int(zones_piv.notna().sum().sum())
     print(f'  Merged per-ISIN clocks: {_clock_days:,} daily zone points, '
           f'{len(wk_all):,} weekly / {len(mo_all):,} monthly rows')
-    stir = stir_days_map(load_stir_inputs(conn, ids))
+    stir = stir_days_map(load_stir_inputs(conn, ids))   # eq -> (days, first, window)
     display = load_display(conn, ids)
     pool_by_id = pool.set_index('id')
 
@@ -812,7 +949,7 @@ def run(dry_run: bool):
         if cur_state is None:
             continue
 
-        sd = stir.get(int(eq), 0)
+        sd, stir_first, stir_window = stir.get(int(eq), (0, None, 0))
         if cur_state['state'] == 'HIBERNATING' and sd >= STIR_MIN_DAYS:
             cur_state['state'] = 'STIRRING'
         counts[cur_state['state']] += 1
@@ -823,6 +960,11 @@ def run(dry_run: bool):
         base = {
             'equity_id': int(eq), 'is_current': True, 'sleep_date': None,
             'stir_days': sd,
+            # The tally's earliest bar and the span it was measured over.
+            # stir_days alone reads as a run ("stirring for 24 days") and is
+            # not one: 9.4 scattered bars in a 41.3-bar span on the measured
+            # population, 2.8% contiguous. Always render the pair.
+            'stir_first_date': stir_first, 'stir_window_bars': stir_window,
             'symbol': p['symbol'], 'company_name': p['company_name'],
             'industry': p['industry'], 'exchange': p['exchange'], 'isin': p['isin'],
             'mcap_cr': p['mcap_cr'], 'listing_age_years': int(p['age_yr']),
@@ -851,7 +993,17 @@ def run(dry_run: bool):
                 'confirm_date': j['confirm_date'].date() if j.get('confirm_date') else None,
                 'sleep_date': j['sleep_date'].date(),
                 'symbol': p['symbol'], 'exchange': p['exchange'], 'isin': p['isin'],
-                'stir_days': None,
+                # Stirring is measured over the LAST 60 bars, so it is a
+                # property of now and has no meaning on a closed arc.
+                'stir_days': None, 'stir_first_date': None, 'stir_window_bars': None,
+                # The arc's own turn (turn_at at its wake bar) and where price
+                # sat against the Golden Line when it closed. Both were NULL on
+                # every archived row before this — 560 current rows carried a
+                # turn and 0 archived ones did, so a closed journey could never
+                # show where its turn was.
+                'turn_date': j.get('turn_date'),
+                'turn_close': round(j['turn_close'], 2) if j.get('turn_close') is not None else None,
+                'gl_dist_pct': j.get('gl_dist_pct'),
             })
 
     print(f"  States: " + '  '.join(f'{k}={v}' for k, v in counts.items()))

@@ -11,17 +11,38 @@
  */
 
 import { useEffect, useMemo, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { fetchJourneyBaseRates, type JourneyBaseRates } from '@/services/indicatorData'
+import { journeyFacts } from '@/services/journeyFacts'
 import { useAuthStore } from '@/stores/authStore'
 import { useBookmarkStore } from '@/stores/bookmarkStore'
 import { computeThesis, type Relationship, type ThesisBar, type ThesisRead } from '@/services/thesis'
-import type { StoryJourney } from '@/services/storyEvents'
+import { storyCoverage, type StoryJourney } from '@/services/storyEvents'
+import JourneyStrip from './JourneyStrip'
 import { KIND_COLORS } from '@/services/storyEvents'
 import { narrateVani } from '@/services/vaniNarrate'
 import type { Pillar } from './VerdictHero'
 import StructureStrip from './StructureStrip'
 
-/** Assemble the deterministic facts VaNi will narrate — nothing derived here. */
-function buildThesisFacts(name: string, t: ThesisRead): string {
+/** Assemble the deterministic facts VaNi will narrate — nothing derived here.
+ *
+ *  The journey block is appended last and matters more than its size suggests:
+ *  without it VaNi could see "Journey woke" as a bare timeline entry and knew
+ *  nothing about the arc it belongs to, how far the close sits from the base
+ *  ceiling, or how often a wake has historically gone on to confirm — which is
+ *  the one genuinely measurable thing on this page. Every comparison in that
+ *  block is resolved into words before VaNi sees it (services/journeyFacts.ts).
+ */
+function buildThesisFacts(
+  name: string,
+  t: ThesisRead,
+  bars: ThesisBar[],
+  journey?: StoryJourney | null,
+  close?: number | null,
+  rates?: JourneyBaseRates | null,
+  asOf?: string | null,
+  warmupBars?: ThesisBar[],
+): string {
   const lines: string[] = [`Instrument: ${name}`, `Relationship: ${t.relationship}`]
   if (t.relationship === 'position' && t.positionRisk) {
     const r = t.positionRisk
@@ -39,8 +60,31 @@ function buildThesisFacts(name: string, t: ThesisRead): string {
   if (t.signals.length) {
     lines.push('Recent signals: ' + t.signals.slice(0, 4).map((e) => `${e.title} [${e.tone}] (${e.date})`).join('; '))
   }
+  lines.push(...journeyFacts(journey, close, rates, asOf))
+
+  // NAME THE EVIDENCE GAP. Several derivations need a warm-up before they can
+  // answer at all — Flower Pot compression needs 61 bars — and a window too
+  // short to look was indistinguishable from a window with nothing in it. VaNi
+  // would then report "no coils", which is a claim about the stock when it is
+  // really a claim about the range. Saying what could not be evaluated is what
+  // makes the answers that ARE given believable.
+  const warm = warmupBars ?? []
+  const cov = storyCoverage(warm.length ? [...warm, ...bars] : bars, warm.length)
+  if (cov.missing.length) {
+    lines.push('', 'NOT EVALUATED in this window — say so if asked, and do NOT '
+      + 'report these as absent: ' + cov.missing.join('; ') + '.')
+  }
   return lines.join('\n')
 }
+
+/** The base-rate chip's question. Fixed text, so the answer is cacheable and
+ *  the phrasing can be reviewed once rather than typed differently each time.
+ *  It asks where the arc IS and what the population recorded — never what comes
+ *  next, which is the line between a recorded frequency and a forecast. */
+const JOURNEY_QUESTION =
+  'Where is this stock in its Waking Giants journey, and what have the recorded '
+  + 'journeys done from this point? State the frequency with its denominator, and '
+  + 'do not turn it into an expectation for this stock.'
 
 const MONO: React.CSSProperties = { fontFamily: 'var(--font-mono)' }
 const TONE: Record<'bull' | 'bear' | 'neutral', string> = {
@@ -48,9 +92,11 @@ const TONE: Record<'bull' | 'bear' | 'neutral', string> = {
 }
 
 export default function ThesisTab({
-  bars, journey, equityId, name, currentClose, autoOpenForm, onAutoOpened,
+  bars, journey, equityId, name, currentClose, autoOpenForm, onAutoOpened, warmupBars,
 }: {
   bars: ThesisBar[]
+  /** Context-only history immediately before `bars` — see computeThesis. */
+  warmupBars?: ThesisBar[]
   journey?: StoryJourney | null
   equityId: number
   name: string
@@ -76,11 +122,30 @@ export default function ThesisTab({
   const relationship: Relationship = position ? 'position' : bookmarkedIds.has(equityId) ? 'watchlist' : 'none'
 
   const thesis = useMemo(
-    () => computeThesis(bars, relationship, position, journey),
-    [bars, relationship, position, journey],
+    () => computeThesis(bars, relationship, position, journey, warmupBars),
+    [bars, relationship, position, journey, warmupBars],
   )
 
+  // Recorded outcome across ALL journeys — a universe-level constant, computed
+  // nightly (migration 209), so it is one shared fetch rather than per stock.
+  // Long staleTime because the value moves once a day at most; a null answer
+  // makes JourneyStrip say less, never fall back to a remembered number.
+  const { data: baseRates } = useQuery({
+    queryKey: ['journey-base-rates'],
+    queryFn: fetchJourneyBaseRates,
+    enabled: !!journey,
+    staleTime: 3_600_000,
+  })
+
   const lastDate = bars[bars.length - 1]?.trade_date ?? ''
+
+  // Assembled once. The narrate button, the free-form question and the
+  // base-rate chip must all be grounded in the SAME facts, or VaNi can answer
+  // two questions about one stock from two different pictures of it.
+  const facts = useMemo(
+    () => (thesis ? buildThesisFacts(name, thesis, bars, journey, currentClose, baseRates, lastDate, warmupBars) : ''),
+    [name, thesis, bars, journey, currentClose, baseRates, lastDate, warmupBars],
+  )
   const [showForm, setShowForm] = useState(false)
   const [entryPrice, setEntryPrice] = useState('')
   const [entryDate, setEntryDate] = useState('')
@@ -173,7 +238,7 @@ export default function ThesisTab({
               <button
                 onClick={async () => {
                   setVaniLoading(true)
-                  const text = await narrateVani(name, buildThesisFacts(name, thesis))
+                  const text = await narrateVani(name, facts)
                   setVaniText(text); setVaniTried(true); setVaniLoading(false)
                 }}
                 disabled={vaniLoading}
@@ -189,6 +254,25 @@ export default function ThesisTab({
             >
               {askOpen ? '▴ Ask a question' : '▾ Ask a question'}
             </button>
+            {/* The one question on this page with a measured answer. Offered
+                only when there IS an arc and a nightly reading to cite — with
+                no reading VaNi would have nothing but the arc itself, which
+                JourneyStrip already states in full. */}
+            {journey && baseRates && (
+              <button
+                onClick={async () => {
+                  if (asking) return
+                  setAskOpen(true); setQuestion(JOURNEY_QUESTION); setAsking(true)
+                  const a = await narrateVani(name, facts, JOURNEY_QUESTION)
+                  setAnswer(a); setAsking(false)
+                }}
+                disabled={asking}
+                style={{ ...MONO, fontSize: 10, fontWeight: 600, color: 'var(--vani)', background: 'none',
+                  border: 'none', cursor: asking ? 'default' : 'pointer', padding: 0, marginLeft: 12, opacity: asking ? 0.6 : 1 }}
+              >
+                ✦ Where is this in its journey?
+              </button>
+            )}
           </div>
 
           {askOpen && (
@@ -200,7 +284,7 @@ export default function ThesisTab({
                   onKeyDown={async (e) => {
                     if (e.key === 'Enter' && question.trim() && !asking) {
                       setAsking(true)
-                      const a = await narrateVani(name, buildThesisFacts(name, thesis), question.trim())
+                      const a = await narrateVani(name, facts, question.trim())
                       setAnswer(a); setAsking(false)
                     }
                   }}
@@ -211,7 +295,7 @@ export default function ThesisTab({
                   onClick={async () => {
                     if (!question.trim() || asking) return
                     setAsking(true)
-                    const a = await narrateVani(name, buildThesisFacts(name, thesis), question.trim())
+                    const a = await narrateVani(name, facts, question.trim())
                     setAnswer(a); setAsking(false)
                   }}
                   disabled={asking || !question.trim()}
@@ -234,6 +318,11 @@ export default function ThesisTab({
       {/* ── Structure: Big Money × Golden Line. Same component the VaNi inline
           popover renders, so the chart and the popover cannot disagree. ── */}
       <StructureStrip structure={thesis.structure} />
+
+      {/* ── The Waking Giants arc. Stored in km_wg_journeys all along and shown
+          nowhere: confirm_date (the Ascent moment) and sleep_date had never
+          reached a user. Renders only for a stock actually on a journey. ── */}
+      <JourneyStrip journey={journey} close={currentClose} rates={baseRates} />
 
       {/* ── Add-position form ── */}
       {showForm && relationship !== 'position' && (

@@ -127,6 +127,7 @@ const PIN_COLOR: Record<OverlayStoryPin['kind'], string> = {
   scan: 'var(--story-scan)',
   sector: 'var(--story-sector)',
   gl: 'var(--story-gl)',
+  price_action: 'var(--story-priceaction)',
   discovery: 'var(--story-discovery)',
 };
 

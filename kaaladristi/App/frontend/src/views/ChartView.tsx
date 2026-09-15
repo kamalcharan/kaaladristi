@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { TrendingUp, TrendingDown, BarChart3, AlertCircle, RefreshCw, ArrowLeft } from 'lucide-react';
-import { fetchIndicatorDataById, fetchEquityEodById, fetchEquityTimeframeById, resampleRows, type EquityTimeframe, fetchStockJourney, type IndicatorRow } from '@/services/indicatorData';
+import { fetchIndicatorDataById, fetchEquityEodById, fetchEquityWarmupBars, fetchEquityTimeframeById, resampleRows, type EquityTimeframe, fetchStockJourneys, currentJourney, type IndicatorRow } from '@/services/indicatorData';
 import TradingChart from '@/components/charts/TradingChart';
 import VaNiInsight from '@/components/domain/VaNiInsight';
 import { useInstrumentInsight } from '@/hooks';
@@ -13,7 +13,7 @@ import DataTab from '@/components/domain/StockCockpit/DataTab';
 import type { ThesisBar } from '@/services/thesis';
 import StoryMode from '@/components/domain/StockCockpit/StoryMode';
 import ScannerArrivalView from '@/components/domain/StockCockpit/ScannerArrival/ScannerArrivalView';
-import { buildStoryEvents, KIND_COLORS, type StoryEvent, type StoryKind } from '@/services/storyEvents';
+import { buildStoryEvents, KIND_COLORS, STORY_WARMUP_BARS, type StoryEvent, type StoryKind } from '@/services/storyEvents';
 import { fetchSectorSeries } from '@/services/sectorSeries';
 import DeliveryVsTraded from '@/components/domain/StockCockpit/DeliveryVsTraded';
 import SectorMembershipCard from '@/components/domain/StockCockpit/SectorMembershipCard';
@@ -80,6 +80,11 @@ import SignalLineChart from '@/components/domain/StockCockpit/SignalLineChart';
 // Index-native evidence (Breadth chapter) — reused from the sector page.
 import MarketBreadthChart from '@/components/domain/MarketBreadthChart';
 import BreadthRocChart from '@/components/domain/BreadthRocChart';
+
+/** Stable empty default for the warm-up query. A fresh `[]` in the useQuery
+ *  default would be a new identity every render, invalidating the storyEvents
+ *  memo on each one and rebuilding the whole event stream for nothing. */
+const EMPTY_BARS: IndicatorRow[] = [];
 
 const TIME_RANGES: TimeRange[] = ['1M', '3M', '6M', '1Y', '5Y', 'MAX'];
 
@@ -601,17 +606,53 @@ export default function ChartView() {
   // score/magic_rs/flow columns (conviction · magic-RS flip · flow flip fire);
   // equity-only signals (stage/scan/big-money/sector) simply don't trigger when
   // their columns are absent.
-  // The Waking Giants journey — one row, two dated markers (turn and wake).
-  // Equity-only: indices are on no journey.
-  const { data: journey } = useQuery({
-    queryKey: ['stock-journey', numId],
-    queryFn: () => fetchStockJourney(numId),
+  // Every Waking Giants journey this stock has been on — current AND archived.
+  // Archived arcs matter: sleep_date only ever exists on one, so filtering to
+  // is_current structurally hid the END of every completed journey. Equity-only;
+  // indices are on no journey.
+  const { data: journeys } = useQuery({
+    queryKey: ['stock-journeys', numId],
+    queryFn: () => fetchStockJourneys(numId),
     enabled: isEquity && !!numId,
     staleTime: 300_000,
   });
+  const journey = useMemo(() => currentJourney(journeys), [journeys]);
+  // ── Story warm-up ──────────────────────────────────────────────────────
+  // Some derivations cannot answer about a bar without the bars before it.
+  // Flower Pot compression needs 60 prior sessions and returns nothing below
+  // that, so on a 1M chart it was never evaluated ONCE, and on 3M on 2 bars of
+  // 62 — reported to the reader and to VaNi as "no coils" when the truth was
+  // "could not look". A window too short to look must never read as a stock
+  // with nothing in it.
+  //
+  // Fetched SEPARATELY and never merged into `rows`. `rows` drives ~25
+  // consumers — the chart itself, the stat strip, the scrubber, the Data tab,
+  // the export, the "N days · from · to" footer — and every one of them would
+  // silently gain 60 bars the user did not ask for. The prefix exists only to
+  // be consumed by the derivation and discarded.
+  const warmupBefore = rows.length ? rows[0].trade_date : null;
+  const { data: warmupBars = EMPTY_BARS } = useQuery({
+    queryKey: ['chart-warmup', numId, warmupBefore],
+    queryFn: () => fetchEquityWarmupBars(numId, warmupBefore as string, STORY_WARMUP_BARS),
+    // MAX already starts at the stock's first bar, so there is nothing before
+    // it to fetch. Daily only: weekly/monthly bars are resampled, and 60 of
+    // those is a different question the story layer does not ask.
+    enabled: isEquity && tf === 'daily' && range !== 'MAX' && !!numId && !!warmupBefore,
+    staleTime: 300_000,
+  });
+
+  // Events are derived over warm-up + display, then rebased onto the display
+  // window by buildStoryEvents, so every returned barIndex still indexes
+  // `rows`. A failed or still-loading warm-up degrades to the old behaviour —
+  // fewer early events, never wrong ones.
   const storyEvents = useMemo(
-    () => ((isEquity || isIndex) && tf === 'daily' ? buildStoryEvents(rows, bigMoneyDates, sectorByDate, journey) : []),
-    [isEquity, isIndex, tf, rows, bigMoneyDates, sectorByDate, journey],
+    () => ((isEquity || isIndex) && tf === 'daily'
+      ? buildStoryEvents(
+          warmupBars.length ? [...warmupBars, ...rows] : rows,
+          bigMoneyDates, sectorByDate, journeys, warmupBars.length,
+        )
+      : []),
+    [isEquity, isIndex, tf, rows, warmupBars, bigMoneyDates, sectorByDate, journeys],
   );
 
   /** Full editorial overlay bundle passed to TradingChart. Combines the
@@ -1355,6 +1396,7 @@ export default function ChartView() {
         {isEquity && dvTab === 'thesis' && !isLoading && rows.length > 0 && (
           <ThesisTab
             bars={rows as unknown as ThesisBar[]}
+            warmupBars={warmupBars as unknown as ThesisBar[]}
             journey={journey}
             equityId={numId}
             name={name}
@@ -1384,6 +1426,7 @@ export default function ChartView() {
           open={storyOpen}
           onClose={() => setStoryOpen(false)}
           bars={rows}
+          warmupBars={warmupBars}
           name={name}
           latest={latest ?? null}
           snapshot={snapshot}

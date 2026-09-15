@@ -2901,6 +2901,13 @@ def vani_narrate(req: VaniNarrateRequest):
     _t0 = time.monotonic()
     insight = _ai_complete(system=skill.system, user=user_msg, max_tokens=skill.max_tokens, no_think=True)
     _lat = int((time.monotonic() - _t0) * 1000)
+    # This endpoint narrates the thesis AND, since the journey block was added,
+    # recorded confirmation frequencies — the exact material a model turns into
+    # "this stock will probably…". The prompt forbids it; this is the backstop,
+    # and a rejected answer surfaces as VaNi being unavailable rather than as a
+    # compliant-looking one. (The legacy /api/ai/* family still routes to the
+    # cloud provider — that remains open, see Known Issues.)
+    insight, _rejected = _sebi_post_filter(insight)
     if insight:
         _log_interaction(
             product="dristiq",

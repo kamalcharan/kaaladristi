@@ -82,6 +82,157 @@ DAILY_STEPS: list[tuple[str, Optional[str]]] = [
 ]
 
 
+# ── Recompute dependencies ───────────────────────────────────────────────
+#
+# DAILY_STEPS gets the order right on a nightly run. The `fix` path did not:
+# a fix job runs ONE dimension and stops, so a corrected input left every
+# dimension derived from it holding a value computed from the superseded data,
+# with nothing recording that. Measured over six weeks to 2026-09-14:
+# vani_flags took 162 fix jobs, nse_magic_rs 160, nse_equity_indicators 128 —
+# while gl_events, big_money, dots, wg_journeys and scan_refresh took ZERO.
+# Fix jobs land 1-6 days after the bar (2026-09-01 was still being rewritten
+# on 09-07), so this is not a rare window.
+#
+# A fill-rate check cannot catch it: gl_events and big_money ARE in
+# health.DIMENSIONS and report `ok`, because gl_days_above / bm_ratio are
+# populated. Populated, not current — the presence-vs-correctness lesson.
+#
+# Each entry maps a dimension to the dimensions that must be RECOMPUTED when
+# it changes. Direct edges only; dependents_closure() walks the transitive set.
+# Every edge below is justified by a comment in DAILY_STEPS or by the reading
+# the handler does — do not add one on a hunch, and keep the graph acyclic
+# (validate_dependents() enforces both shape rules).
+#
+# integrity_checks is deliberately absent: it is a nightly sweep over the whole
+# day, not a per-dimension derivative, and cascading into it would enqueue a
+# full audit on every column repair.
+DIMENSION_DEPENDENTS: dict[str, list[str]] = {
+    # Downloads rewrite the bars themselves, so the compute chain re-enters at
+    # the indicator step and the closure carries it the rest of the way.
+    'index_eod_download':     ['index_indicators'],
+    'nse_eod_download':       ['nse_equity_indicators'],
+    'bse_eod_download':       ['bse_equity_indicators'],
+
+    # Indicator columns feed every later per-bar computation.
+    'index_indicators':       ['index_flow', 'index_magic_rs', 'index_returns'],
+    'nse_equity_indicators':  ['nse_flow', 'nse_magic_rs', 'supertrend',
+                               'rolling_metrics', 'd365', 'stage_classification',
+                               'equity_weekly', 'equity_monthly',
+                               'market_breadth', 'index_breadth'],
+    'bse_equity_indicators':  ['bse_flow', 'bse_magic_rs', 'supertrend',
+                               'rolling_metrics', 'd365', 'stage_classification'],
+
+    # 'rs_percentile ranks by magic_rs - must run after magic_rs, before
+    # vani_flags'; wg_journeys reads the final daily zones.
+    'nse_magic_rs':           ['rs_percentile', 'dots', 'industry_composites',
+                               'wg_journeys'],
+    'bse_magic_rs':           ['rs_percentile', 'dots'],
+    'index_magic_rs':         ['index_returns'],
+    'rs_percentile':          ['vani_flags'],
+
+    # is_vani_52wh / is_vani_ath read w52_high / lifetime_high; big_money
+    # measures against the avg_amt_66d baseline rolling_metrics writes.
+    'rolling_metrics':        ['big_money', 'vani_flags'],
+
+    # The Flower Pot arm gates on stage; the journey walk excludes S3/S4.
+    'stage_classification':   ['vani_flags', 'scan_refresh', 'wg_journeys'],
+
+    # Everything the km_scan_results arms select on.
+    'nse_flow':               ['scan_refresh'],
+    'bse_flow':               ['scan_refresh'],
+    'index_flow':             ['index_returns'],
+    'supertrend':             ['scan_refresh'],
+    'd365':                   ['scan_refresh'],
+    'industry_composites':    ['scan_refresh'],
+
+    # 'SVD/SBD/SYD - Volume Drive selects on these; must precede scan_refresh'
+    # and 'gl_events reads sma_150 AND the dots, so AFTER dots'.
+    'dots':                   ['gl_events', 'scan_refresh'],
+    'gl_events':              ['scan_refresh', 'scan_membership_snapshot',
+                               'wg_journeys'],
+    'big_money':              ['scan_refresh'],
+    'vani_flags':             ['scan_refresh', 'scan_membership_snapshot'],
+
+    # 'journey state reads final daily zones + weekly/monthly aggregates'
+    'equity_weekly':          ['wg_journeys'],
+    'equity_monthly':         ['wg_journeys'],
+
+    'market_breadth':         ['breadth_roc'],
+
+    # scan_membership_snapshot reads km_equity_eod directly and by its own
+    # header 'does NOT depend on scan_refresh having just run', so the matview
+    # is a leaf rather than its parent.
+    'scan_refresh':           [],
+}
+
+# Rank by nightly execution order so a cascade is enqueued in the order the
+# daily run would have computed it.
+_STEP_ORDER: dict[str, int] = {dim: i for i, (dim, _) in enumerate(DAILY_STEPS)}
+
+
+def validate_dependents() -> None:
+    """Fail loudly on an unknown dimension name or a cycle.
+
+    Called at import so a typo is a startup error, not a fix job that dies at
+    2am having already written half a cascade.
+    """
+    known = set(handlers.KNOWN_DIMENSIONS)
+    for dim, deps in DIMENSION_DEPENDENTS.items():
+        if dim not in known:
+            raise ValueError(f'DIMENSION_DEPENDENTS: unknown dimension {dim!r}')
+        for d in deps:
+            if d not in known:
+                raise ValueError(
+                    f'DIMENSION_DEPENDENTS[{dim!r}]: unknown dependent {d!r}')
+            if d == dim:
+                raise ValueError(f'DIMENSION_DEPENDENTS[{dim!r}] depends on itself')
+
+    # Depth-first cycle check. A cycle would make dependents_closure loop, and
+    # every dependent is also enqueued as a job — so a cycle is an outage.
+    WHITE, GREY, BLACK = 0, 1, 2
+    colour: dict[str, int] = {}
+
+    def visit(node: str, path: list[str]) -> None:
+        colour[node] = GREY
+        for nxt in DIMENSION_DEPENDENTS.get(node, []):
+            c = colour.get(nxt, WHITE)
+            if c == GREY:
+                raise ValueError(
+                    'DIMENSION_DEPENDENTS has a cycle: '
+                    + ' -> '.join(path + [node, nxt]))
+            if c == WHITE:
+                visit(nxt, path + [node])
+        colour[node] = BLACK
+
+    for dim in DIMENSION_DEPENDENTS:
+        if colour.get(dim, WHITE) == WHITE:
+            visit(dim, [])
+
+
+def dependents_closure(dimension: str) -> list[str]:
+    """Every dimension that must be recomputed after `dimension` changed.
+
+    Transitive and computed in ONE pass, returned in DAILY_STEPS order. Doing
+    the whole closure up front is what keeps this bounded: the worker enqueues
+    this list and those jobs do not cascade again, so one repaired column can
+    never start a self-feeding chain of fix jobs.
+
+    The source dimension is never included.
+    """
+    seen: set[str] = set()
+    stack = list(DIMENSION_DEPENDENTS.get(dimension, []))
+    while stack:
+        d = stack.pop()
+        if d in seen or d == dimension:
+            continue
+        seen.add(d)
+        stack.extend(DIMENSION_DEPENDENTS.get(d, []))
+    return sorted(seen, key=lambda d: _STEP_ORDER.get(d, len(_STEP_ORDER)))
+
+
+validate_dependents()
+
+
 @dataclass
 class StepOutcome:
     dimension: str
@@ -146,7 +297,8 @@ ProgressFn = Callable[[str, int], None]
 def run_daily(conn: 'psycopg2.extensions.connection',
               trade_date: date,
               on_progress: ProgressFn,
-              force: bool = False) -> RunOutcome:
+              force: bool = False,
+              job_id: int | None = None) -> RunOutcome:
     """Run the full daily pipeline for `trade_date`: download then compute.
 
     Steps 1-3 fetch NSE index bhav, NSE equity bhav, and BSE equity bhav.
@@ -156,6 +308,14 @@ def run_daily(conn: 'psycopg2.extensions.connection',
     matviews. A failed download step does not abort compute — downstream steps
     run against whatever rows are already present.
     """
+    # Imported here rather than at module scope: watermarks reads
+    # DIMENSION_DEPENDENTS and DAILY_STEPS from THIS module, so a top-level
+    # import is circular. ABSOLUTE, not `from . import` — test_leadership_pipeline
+    # compiles run_daily on its own via ast/exec, where a relative import has no
+    # __package__ to resolve against and raises
+    # KeyError: "'__name__' not in globals". One lookup per run, not per step.
+    from pipeline2 import watermarks
+
     outcome = RunOutcome(trade_date=str(trade_date))
     total_steps = len(DAILY_STEPS)
 
@@ -188,6 +348,18 @@ def run_daily(conn: 'psycopg2.extensions.connection',
             rows_affected=result.rows_affected,
             error_msg=result.error_msg,
         ))
+
+        # Watermark (migration 210). These 22 StepOutcomes were built and then
+        # discarded — the worker folds them into ONE aggregate km_jobs row, so
+        # nothing in the database could say when a given dimension was last
+        # computed for a date. Without that, the Phase-0 cascade can recompute a
+        # dependent and no one can prove it happened; a row derived from
+        # superseded inputs is indistinguishable from a current one, and
+        # fill-rate checks cannot see the difference by construction.
+        # Best-effort: instrumentation must never fail a compute that worked.
+        watermarks.stamp(conn, dim, trade_date, result.status,
+                         source='daily_run', job_id=job_id,
+                         rows_affected=result.rows_affected)
 
     # Publish only after the full source refresh succeeds; retain old dated
     # snapshots if any enrichment failed instead of presenting partial evidence.

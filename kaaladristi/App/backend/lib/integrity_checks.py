@@ -301,12 +301,97 @@ def check_step_failures(conn, run_date: date) -> list[Finding]:
     return out
 
 
+# ── 6. Derivation staleness — the fifth check class ──────────────────────
+#
+# Every other check in this file asks whether a value is PRESENT, PLAUSIBLE or
+# MOVING. None can ask whether it is CURRENT. That is not a gap in coverage, it
+# is a gap in kind: a dimension recomputed from stale inputs has every column
+# populated, every invariant satisfied and a perfectly healthy fill rate. It is
+# simply wrong, invisibly, until someone reads a number and acts on it.
+#
+# `km_dimension_watermarks` (migration 210) dates each dimension per trade date,
+# and orchestrator.DIMENSION_DEPENDENTS — inverted — says which dimensions each
+# one derives FROM. A parent computed LATER than its child means the child was
+# built from data that has since been replaced.
+#
+# This is the counterpart to the Phase-0 cascade, not a duplicate of it. The
+# cascade makes the recompute happen; this proves it did, and catches the three
+# cases the cascade structurally cannot see: a fix applied while
+# PIPELINE2_CASCADE was off, a cascade job enqueued and then failed, and a
+# backfill script run straight against the database.
+#
+# SEVERITY: warning, not critical. A stale derivation is a real defect but a
+# recoverable one — the next daily run recomputes the whole chain in order, so
+# a finding that persists across runs is the signal, and one that appears once
+# after a mid-day fix is the system working. Firing critical on the second case
+# would turn the Pipeline Dashboard red nightly and get the check muted, which
+# is exactly how the reconciliation check was calibrated (see CASH_EQUITY_SERIES).
+DERIVATION_LOOKBACK_DAYS = 7
+DERIVATION_MIN_LAG_SEC   = 60     # below this, a same-run ordering artefact
+
+
+def check_derivation_staleness(conn, run_date: date) -> list[Finding]:
+    """Dimensions computed BEFORE a dimension they derive from.
+
+    Silent by construction until watermarks exist: `stale_derivations` joins
+    two watermark rows, so a missing one yields nothing. Absent is UNKNOWN,
+    never stale — the table starts empty and fills forward, and a check that
+    reported the empty state would emit thousands of findings on its first
+    night and be ignored by its second.
+    """
+    try:
+        from pipeline2.watermarks import stale_derivations
+    except Exception:
+        return []
+
+    since = run_date - timedelta(days=DERIVATION_LOOKBACK_DAYS)
+    rows = stale_derivations(conn, since, run_date)
+
+    out: list[Finding] = []
+    for r in rows:
+        lag = int(r.get('lag_seconds') or 0)
+        # A parent finishing seconds after its child inside one run is clock
+        # ordering, not a stale derivation. Real staleness is a fix landing
+        # hours or days later — measured at 1-6 days in the Phase-0 audit.
+        if lag < DERIVATION_MIN_LAG_SEC:
+            continue
+        out.append(Finding(
+            check_key=f'stale_derivation_{r["dimension"]}',
+            check_class='derivation', severity='warning',
+            subject=f'{r["dimension"]} @ {r["trade_date"]}',
+            summary=(f'{r["dimension"]} for {r["trade_date"]} was computed '
+                     f'{_human_lag(lag)} BEFORE its input {r["parent"]} — it is '
+                     f'derived from data that has since been replaced'),
+            metric=float(lag),
+            detail={
+                'dimension': r['dimension'],
+                'parent': r['parent'],
+                'trade_date': str(r['trade_date']),
+                'lag_seconds': lag,
+                'parent_source': r.get('parent_source'),
+                'child_status': r.get('child_status'),
+            }))
+    return out
+
+
+def _human_lag(seconds: int) -> str:
+    if seconds >= 86400:
+        d = seconds // 86400
+        return f'{d} day{"s" if d != 1 else ""}'
+    if seconds >= 3600:
+        h = seconds // 3600
+        return f'{h} hour{"s" if h != 1 else ""}'
+    m = max(seconds // 60, 1)
+    return f'{m} minute{"s" if m != 1 else ""}'
+
+
 ALL_CHECKS = [
     check_reconciliation,
     check_value_cr_invariant,
     check_period_bars,
     check_signal_staleness,
     check_step_failures,
+    check_derivation_staleness,
 ]
 
 
@@ -503,6 +588,14 @@ def check_scanner_contract(conn, run_date: date) -> list[Finding]:
             subject=missing, metric=0, expected=1,
             detail={'preset': missing}))
 
+    # Assigned BEFORE its first use. It used to be read here at C1b and only
+    # assigned ~15 lines further down, so every call raised NameError on its
+    # first statement — which is why this check has not actually run since the
+    # commit that removed MIN_AVG_AMT_22D_CR (see the note above). `run_all`
+    # converted the crash into a bland `checker_error_*` warning, so the guard
+    # looked present while being blind.
+    db_meta = _db_preset_meta(conn)
+
     # C1b — the row mapper. A column can be present and populated in the
     # matview and still render as a dash, because scanRowToScanStock decides
     # what survives into the ScanStock the table reads. Migration 180's five
@@ -523,7 +616,6 @@ def check_scanner_contract(conn, run_date: date) -> list[Finding]:
             subject='scanRowToScanStock'))
 
     # C1 — columns present and populated
-    db_meta = _db_preset_meta(conn)
 
     # C0b — the hardcoded SCAN_PRESETS array vs the live kd_scan_presets row.
     # getPresetMeta() prefers the DB, so a disagreement means the code says one
@@ -543,7 +635,6 @@ def check_scanner_contract(conn, run_date: date) -> list[Finding]:
             detail={'preset': preset, 'drift': {k: {'code': c, 'db': d}
                                                 for k, (c, d) in fields.items()}}))
 
-    db_meta = _db_preset_meta(conn)
     for preset, cols in matview_preset_columns(existing, db_meta).items():
         absent = [c for c in cols if c not in existing]
         if absent:
@@ -587,13 +678,6 @@ def check_scanner_contract(conn, run_date: date) -> list[Finding]:
                 f'{preset} is declared {universe} in kd_scan_presets but returned {bse_n} BSE rows',
                 subject=preset, metric=bse_n, expected=0,
                 detail={'preset': preset, 'declared': universe, 'bse_rows': int(bse_n)}))
-        if unmeasured_n:
-            out.append(Finding(
-                f'contract_liquidity_unmeasured_{preset}', 'invariant', 'warning',
-                f'{preset}: {unmeasured_n} of {rows_n} rows carry no turnover on the latest '
-                f'session — the liquidity floor cannot be verified for them',
-                subject=preset, metric=unmeasured_n, expected=0,
-                detail={'preset': preset, 'unmeasured': int(unmeasured_n), 'rows': int(rows_n)}))
         if vani_rule and vani_rule != 'always_true':
             pred = VANI_RULE_SQL.get(vani_rule)
             base = None

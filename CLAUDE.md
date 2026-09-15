@@ -73,7 +73,45 @@ python test_ephemeris.py        # Swiss Ephemeris / pyswisseph
 python test_nse_industry.py     # NSE industry data
 python test_bse.py              # BSE data
 python scripts/rule_discovery_test.py   # quick rule discovery (2026 only)
+python test_vani_routing.py     # VaNi wire test: which backend, what prompt
 ```
+
+### VaNi / research companion suites (`unittest`, no DB, no LLM)
+
+```bash
+cd App/backend
+python -m unittest test_sector_vani test_market_structure_vani \
+  test_sector_leadership test_leadership_intents test_leadership_pipeline \
+  test_scanner_explanation test_sector_flow_intents test_fpb_actions \
+  test_highlight_story test_custom_index_rebuild test_pipeline_cascade
+# 98 tests — last green 2026-09-14
+python -m unittest test_dimension_watermarks   # +22, migration 210
+python -m unittest test_journey_fields         # +20, migration 211 (needs numpy/pandas)
+```
+
+These run on synthetic fixtures: no PostgreSQL, no model call, no network.
+`test_vani_routing.py` is the exception — it stands up a stub
+OpenAI-compatible server and asserts **on the wire**.
+
+### Frontend QA harness (`scripts/qa/`, headless Chromium)
+
+```bash
+cd App/frontend
+PYTHON=python3 node scripts/qa/check-sector-contracts.mjs   # needs Python (scan_contract)
+node scripts/qa/check-market-structure.mjs
+node scripts/qa/check-scanner-vani.mjs
+node scripts/qa/check-scanner-introductions.mjs
+node scripts/qa/check-scanner-authority.mjs      # 40 DB-authority cases
+node scripts/qa/check-fpb-actions.mjs
+node scripts/qa/check-sector-ui.mjs              # needs Vite on loopback :4318
+```
+
+⚠ **Only `check-theme-standard.mjs` and `check-persona.mjs` run inside
+`npm run build`.** Everything else in `scripts/qa/` is manual — a green build
+proves nothing about them. `check-sector-ui.mjs` renders the real route
+components against synthetic responses at 320/390/768/1440 px in light and dark
+with all external requests blocked; set `SECTOR_QA_BROWSER` for a non-default
+Chromium and `SECTOR_QA_OUTPUT` to keep its screenshots.
 
 ### One-shot backfill scripts
 ```bash
@@ -94,6 +132,8 @@ kaaladristi/
 ├── App/
 │   ├── backend/           # Python — data pipeline + FastAPI sidecar
 │   │   ├── lib/           # Shared: db_client, breeze_client, config, sync_logger, ai_client, ai_prompts, auth, pg_client, data_assemblers, vani_assemblers, vani_intents, vani_cache, health_checks
+│   │   │                  #   research companions: market_structure_vani, sector_vani, sector_flow_intents,
+│   │   │                  #   sector_leadership, sector_leadership_intents, scanner_explanation
 │   │   ├── pipeline/      # Downloaders (NSE/BSE bhav, FII/DII), processors, utils
 │   │   ├── pipeline2/     # Pipeline2 orchestrator (handlers, scheduler, worker, health)
 │   │   ├── engine/        # Risk engine (risk_engine.py) + correlations
@@ -109,7 +149,7 @@ kaaladristi/
 │   │       ├── views/     # Page-level components
 │   │       ├── services/  # Supabase/PostgREST query functions
 │   │       ├── hooks/     # React Query hooks
-│   │       ├── components/  # UI + domain components
+│   │       ├── components/  # UI + domain components (domain/VaNi/ = research companions)
 │   │       └── config/theme/  # 3-theme system (kaaladristi / tech-ai / jade-thorn)
 │   └── DBscripts/         # SQL migrations (km_migration_NNN_*.sql)
 ├── docker-compose.yml
@@ -142,6 +182,13 @@ kaaladristi/
 | `dc_lookup` | Lookup values for DC inferences |
 | `km_profiles` | User profiles + roles + `tier` column (RLS-controlled); migration 090 adds `tier TEXT DEFAULT 'free'` |
 | `user_subscriptions` | Payment subscription rows; one per purchase (migration 090); `tier`, `started_at`, `expires_at` |
+| `km_vani_cache` | Persistent VaNi answer cache (migration 038) — key includes intent id + version + depth + period + snapshot hash |
+| `km_sector_leadership_snapshots` | Published longer-term leadership payloads (migration 208); PK `trade_date+category+months`, `months IN (3,6,12)` |
+| `km_leadership_generation` | Single-row generation counter (migration 208); bumped by membership/catalog triggers to invalidate every snapshot |
+| `km_leadership_observations` | Previous published leadership payloads, keyed by snapshot id (migration 207) |
+| `km_custom_index_revisions` | Per-custom-index `revision` vs `computed_revision` (migration 207) — detects a stale calculation |
+| `km_custom_index_membership_log` | Append-only add/remove log for custom indices, seeded with a `baseline` row (migration 207) |
+| `km_custom_index_history_archive` | Archived synthetic bars per custom-index revision (migration 207) |
 
 Latest migration: **149** (`km_migration_149_auth_schema_shim.sql`). ⚠ **The RLS layer is written in the Supabase idiom (`auth.uid()`/`auth.role()`/`auth.jwt()` + `public.is_admin()`), but this is SELF-HOSTED PostgREST with NO `auth` schema — 8 migrations REFERENCE `auth.*` and none DEFINED it, so every `auth.*`-based policy silently ERRORED at evaluation until migration 149 created the shim over `current_setting('request.jwt.claims', true)` (the same idiom the working `kd_update_profile` uses). This was masked because most tables have RLS OFF and admin writes go through FastAPI as `kd_app`; it only bit `km_index_constituents` (the rare RLS-ON table with an `is_admin()` write policy). See migrations 148/149 below.** Prior detail — migration 142 (`km_migration_142_index_constituents_grants.sql`) — **CONFIRMED FIX** for Sector Rotation → index detail Constituents + Flow Map tabs showing "Unable to load flow data"/empty for regular users while admin saw them fine. Root cause: `km_index_constituents` was created in migration 022 with RLS + a permissive read policy (`USING (true)`) but ZERO table-level GRANTs; the historical blanket grant script that gave `authenticated` SELECT on every other data table MISSED this one table. Logged-in browser users run PostgREST as DB role `authenticated` (verified from a live user JWT: `role` claim = `authenticated` for a profile-role=`user` account — the running `kd_auth_login` issues `authenticated`, the migration-003 behavior, NOT the profile role), so `authenticated` hit permission-denied while admin worked via broader/owner privileges. RLS was NOT the cause (`SET ROLE authenticated; SELECT count(*)` returns all rows). Migration 142 grants SELECT to `authenticated`/anon/kd_app/admin/kd_readonly + `NOTIFY pgrst`; the decisive line is the `authenticated` grant. migration 149 is `km_migration_149_auth_schema_shim.sql` — creates `auth.uid()/role()/email()/jwt()` over `request.jwt.claims` so `is_admin()` (and every `auth.*` policy) resolves on self-hosted PostgREST instead of erroring (see the ⚠ note at the top of this entry); migration 148 is `km_migration_148_index_constituents_write_grants.sql` — grants INSERT/UPDATE/DELETE on `km_index_constituents` + USAGE on its id sequence to `authenticated`/`admin`/`kd_app` (RLS `idx_const_write USING is_admin()` stays the real admin-only gate) so admin custom-index saves work; needed because migration 144 moved admins onto the `authenticated` DB role which only had SELECT (migration 142). migrations 145–147 are breadth_movers / transit_event_fields / scan_results_matview. **CORRECTION (2026-07-14):** an earlier version of this note claimed migrations 143/144 were "throwaway…DELETED" on a wrong `user`-role theory — that is FALSE. 143 (`km_migration_143_profile_self_update.sql` — the `kd_update_profile` SECURITY DEFINER RPC used by `updateProfile`) and 144 (`km_migration_144_restore_authenticated_role.sql` — reverts `kd_auth_login` to issue JWT role `authenticated` for everyone, since PostgREST's authenticator isn't a member of `user`/`admin`, and switches `idx_const_write` from a JWT-role check to `is_admin()`) are both LIVE and load-bearing. Migration 144 is exactly why direct-PostgREST admin constituent writes broke: before it, admins ran as the DB role `admin` (full grants); after it they run as `authenticated`. migration 141 is `km_migration_141_profile_mode.sql` — `km_profiles.mode TEXT` (dark/light/system, default 'dark'): makes color-mode preference follow a user across devices the same way `theme` already does via migration 091 — `updateProfile({ mode })` on change in ThemeSettings, re-applied via `applyProfileTheme()` in authStore on login/session restore; supersedes the never-wired `dark_mode BOOLEAN` column from migration 091, left in place unused; migration 140 is `km_migration_140_users_admin.sql` — Users admin: `km_profiles.is_suspended` + `kd_auth_login` rejects suspended accounts at next login + `km_admin_audit` action log; feeds the admin-only /users page (list, suspend, plan reassign, subscription extend, physical delete via `/api/admin/users/*` FastAPI endpoints with server-side role check); migration 139 is `km_migration_139_confidence_benchmarks.sql` — `km_rule_confidence_bench`: per-benchmark rule validation, PK (rule_id, benchmark_index_id); windows stay universal, `score_benchmark_confidence()` in confidence_scoring.py measures each window on each index's closes (≥250 bars, curated included) vs the active-inference hypothesis; runs nightly 19:00, on Compute Confidence, and per-rule on inference save/delete; read by the chart tooltip (viewed index's row, NIFTY 50 fallback) and /rules/:id BenchConfidenceStrip; migration 138 is `km_migration_138_confidence_hypothesis.sql` — km_rule_confidence gains `hypothesis_source` ('inference'|'base_bias') + `hypothesis_impact`: records WHICH hypothesis the matched/confidence numbers were tested against; stamped by `rescore_rules()` in confidence_scoring.py, which re-derives `matched` from stored returns × the current hypothesis on inference save, inference delete, nightly 19:00 scoring, and manual Compute Confidence; migration 137 is `km_migration_137_patterns_grants_profile_roles.sql` — grants km_rule_patterns/km_rule_inference to profile roles admin/user, the JWT roles PostgREST actually runs as; migration 136 is `km_migration_136_inference_versioning.sql` — km_rule_inference versioning: one ACTIVE hypothesis per (rule_a, rule_b) scope, auto-supersede on save with frozen validation snapshot; migration 135 widens `km_rule_inference` to the full /inference capture shape: 12-value market_impact vocabulary, expert `confidence` 1-10, `applicability_scope`/`applicability` JSONB, `notes`; migration 134 created the table, 133 restricts Catalog visibility to Mercury/Mars/Saturn/Jupiter/Bayer/MajorTransit-tagged rules)
 
@@ -201,8 +248,9 @@ VITE_RAZORPAY_KEY_ID=...       # frontend public key
 - **Stack**: React 19, TypeScript 5.8, Vite 6, Tailwind CSS, React Query, Recharts, lightweight-charts
 - **Theme**: 3 themes in `src/config/theme/themes/`, user-switchable (Settings), server-persisted (`km_profiles.theme/mode`). **DARK-LOCKED FOR LAUNCH** — `LIGHT_MODE_ENABLED = false` in `src/stores/themeStore.ts` + a mirrored flag in `index.html` (sync pair; flip both to re-enable light). Light mode is fully built + owner-calibrated but not release-cleared.
 - **Theme/Glass-UX — READ BEFORE ANY THEME/UX WORK**: `kaaladristi/docs/claude/glass-ux-status.md` (canonical rules: settled header decisions, bug classes + gates, light composition rules) and `kaaladristi/docs/claude/theme-session-2026-07-12.md` (2026-07-12 session record: why light took 5 sessions, owner calibration picks, the dark-lock rationale, the two sanctioned paths for finishing light — do NOT resume light as another calibration loop). `npm run check:theme` gates (phantom vars, dark fills, literal ratchet) run inside `npm run build`. QA screenshot harness: `scripts/qa/` (`qa-screenshots.mjs` desktop, `qa-mobile.mjs` 390px phone pass, `qa-overflow.mjs`, `qa-diff.mjs`). The harness seeds a JWT-shaped auth token with a far-future `exp` — `services/auth.ts tokenExpired()` treats any unparseable token as expired and bounces to the landing page, which is why an opaque placeholder token silently captured the login screen for every route (fixed 2026-09-06).
-- **Onboarding (2026-09-07, agentic IX — plan + status: `docs/claude/onboarding-poa.md`)**: `/setup` is a six-step persona flow (What is VaNi + details → Personality → Scanners → How VaNi will guide → Plan → Look); persona vocabulary/derivation in `src/constants/personaConfig.ts` (mirrors migration 204 CHECKs, gated by `npm run check:persona`), screens in `components/domain/Onboarding/`, `/guide` "How to use DristiQ" (Show me = real page + `?tour=1&guide=<key>`), Account → "How you invest" tab, Morning Brief `ContinuityLine`. Astro is deliberately absent from the flow.
-- **Routes/Views**: **Workspace (`/workspace`)**, **Guide (`/guide`)**, Dashboard, Markets, Chart, DC Calendar, Inference, Rule Eval, Scanner, Settings, Visual Pulse (Index), Visual Pulse (Equity), **Intraday (`/intraday/:indexId`)**, Manipulation Watch, Industry Transition
+- **Onboarding (2026-09-07, agentic IX — plan + status: `docs/claude/onboarding-poa.md`)**: `/setup` is a six-step persona flow (What is VaNi + details → Personality → Scanners → How VaNi will guide → Plan → Look); persona vocabulary in `src/constants/personaConfig.ts` (mirrors migration 204 CHECKs, gated by `npm run check:persona`). **Derivation was simplified 2026-09-13** (`docs/icp-scanner-experience.md`): onboarding and Account now ask the same two plain-language questions — holding period and discovery preference. Holding period sets the starting persona; discovery preference covers "still exploring"; an explicit persona choice overrides both. The old weighted table is gone and exit preferences no longer classify (but still drive the breadth leg — see Critical Lessons). New workspace templates append that persona's four starter scanners below the template's other blocks; existing templates are never mutated, screens in `components/domain/Onboarding/`, `/guide` "How to use DristiQ" (Show me = real page + `?tour=1&guide=<key>`), Account → "How you invest" tab, Morning Brief `ContinuityLine`. Astro is deliberately absent from the flow.
+- **Routes/Views**: **Workspace (`/workspace`)**, **Guide (`/guide`)**, **Market Structure (`/market-structure`)**, **Sector Rotation (`/sector-rotation`, `/sector-rotation/:indexId`)**, Dashboard, Markets, Chart, DC Calendar, Inference, Rule Eval, Scanner (`/scan`), Settings, Visual Pulse (Index), Visual Pulse (Equity), **Intraday (`/intraday/:indexId`)**, Manipulation Watch, Industry Transition
+- **Research companions**: Market Structure, Sector Rotation (Current Flow · Longer-Term Leadership), the scanner Studios and Flower Pot each carry a persistent VaNi panel — see **VaNi Research Companions**. `/sector-rotation` historical views carry `?asof=YYYY-MM-DD`; Flower Pot cohort links carry `fpb_intent`/`fpb_group`/`fpb_asof`/`exchange`.
 - **Gemini**: `src/services/geminiService.ts` — secondary AI integration (alongside VaNi/Anthropic), currently limited use
 - **Settings sub-pages**: Index Catalog, Equity Catalog, Commodity Catalog, Market Data Hub, Pipeline Dashboard
 
@@ -278,9 +326,349 @@ Steps run sequentially for a trade date:
 6f. Monthly aggregate (last calendar day only)
 **6g. `compute_rolling_metrics_for_date(db, trade_date)`** — populates `d30_pct_chng`, `d365_pct_chng`, `avg_amt_5d`, `avg_amt_22d`, `delivery_surge_x`, `w52_high`, `w52_low`, `lifetime_high`. This step exists because the PostgreSQL RPC (step 6) sets `indicators_computed_at` but never computes these rolling columns.
 
+### Discovery milestones reach the chart (2026-09-14)
+
+`km_wg_journeys` stores six dated milestones; the story layer read two.
+`confirm_date` — the Ascent moment, the payoff the engine exists to find — had
+never been drawn anywhere, and `sleep_date` closes an arc the chart simply
+stopped following. Both now emit as `discovery` events, and
+`components/domain/StockCockpit/JourneyStrip.tsx` renders the arc in the Thesis
+tab. Zero schema change: every value was already stored.
+
+⚠ **Never read journeys with `is_current` alone.** `sleep_date` exists only on
+an ARCHIVED row — a current journey has not slept — so that filter structurally
+hides the end of every completed arc. `fetchStockJourneys` returns all of them
+(capped at 12; 755 stocks hold one, 226 two, one holds 43) and
+`buildStoryEvents` walks the set. PGHL's real arc — woke 2026-07-09, confirmed
+07-31, slept 08-31 — fits in one chart window and was invisible before this.
+
+**Stage transitions read `stage_since`**, not a bar-to-bar diff:
+`stage_since === trade_date` is the classifier's own record. It survives gaps in
+the loaded series, catches a stock that leaves a stage and returns to it, and —
+because `addStageEvent` is now called for bar 0 as well — catches a transition
+on the first loaded bar, which no diff can see. The diff stays as the fallback
+for series carrying no `stage_since` (resampled weekly/monthly bars, indices).
+The UNKNOWN suppression is unchanged.
+
+**Base rates are read, never remembered.** `JourneyStrip`'s closing sentence
+cites how often a wake goes on to confirm. Those figures were typed into the
+component and would have gone stale silently — they move every night as arcs
+close. They now come from `km_journey_base_rates` (migration 209). Two rules the
+tests enforce: a rate always carries its **denominator** ("348 of 595"), never a
+bare percentage; and with no reading the frequency clause is **dropped**, never
+replaced by a remembered number — a confidently wrong base rate is worse than
+none. The figures may not appear in the component's executable code at all.
+
+**VaNi narrates the arc, not just the marker.** The fact block VaNi is given
+(`buildThesisFacts` in `ThesisTab.tsx`) carried the story events and nothing
+about the arc they belong to. `services/journeyFacts.ts` is now the **only**
+place a journey sentence is written — `baseRateLine` moved there out of
+`JourneyStrip.tsx`, because the strip's footnote and VaNi's narration are one
+comparison and two phrasings of one comparison drift apart on the same screen.
+The Thesis tab assembles the facts **once** and shares them across the narrate
+button, the question box, and a "✦ Where is this in its journey?" chip (shown
+only when there is both an arc and a nightly reading).
+
+Two properties in that block are load-bearing, neither visible in a type:
+
+1. **Every comparison is a WORD before the model sees it** — ABOVE / BELOW,
+   UP / DOWN, "53 days after its wake". The model never receives `base_high`
+   and `close` to subtract, nor a signed percentage to read the sign of. Same
+   failure class as the first live autorun, which read `-0.0361` and wrote
+   "the fast reading is slightly above the slow reading".
+2. **The frequency is fenced.** "58.5% of 595 confirmed" is one sentence from
+   "this stock has a 58.5% chance", a forecast about a specific security. The
+   facts carry an explicit line saying it is not that, `_VANI_NARRATE_SYSTEM`
+   forbids the restatement however the facts are worded, and
+   `/api/ai/vani-narrate` now applies `_sebi_post_filter` (it had been skipping
+   it). No reading → no fence sentence, because there is nothing to fence.
+
+Guarded by `scripts/qa/check-journey-events.mjs` (manual, like the rest of
+`scripts/qa/`), verified to fail against a dropped confirm/close emission, a
+reverted stage diff, a hardcoded base-rate fallback, a flipped ceiling side, a
+raw signed number handed to the model, and a dropped frequency fence.
+
+### Flower Pot is derived on read — and now with warm-up (2026-09-15)
+
+⚠ **Do NOT add `fpb_*` columns to `km_equity_eod`.** `fpbEvents()` in
+`services/storyEvents.ts` already derives the whole gate — coil, burst and
+shatter — from the loaded bars, and `breakawayEvents()` does the same for
+`rs_breakaway`. Checked line by line against the `flower_pot_burst` matview arm,
+the two **agree**: identical thresholds (0.8 / 0.08 / 0.6 / 2 / ≥60 bars / >20 /
+not S3-S4) and identical windows (atr15/atr60, vol5/vol22, hi10/lo10,
+`lag(magic_rs,5)`, the 22-bar prior-setup lookback, `lag(vol22,1)` and
+`lag(avgrng15,1)` on release). Storing them would be a **third** implementation
+of one eligibility rule, for a backfill ceiling (coil ~2022 on `magic_rs`,
+release 2025 on `delivery_pct`) the derivation already has.
+
+**The real defect: there is no warm-up on the chart's fetch.** `fpbEvents`
+needs 61 bars and returns `[]` below that; `getStartDate` fetches exactly the
+requested range. So Flower Pot is evaluable on **nothing at 1M** (~21 bars),
+**2 of 62 bars at 3M**, 64 of 124 at 6M, 188 of 248 at 1Y. Measured on a 1-in-23
+NSE sample (36 coil starts over a year), a 6M window loses **2 of its 28** coil
+starts to the blind first 60 bars. None of it was visible — the chart showed no
+coils and VaNi reported none.
+
+`storyCoverage(bars)` and `blindLeadingBars(bars)` make the blind zone sayable,
+and `buildThesisFacts` hands it to VaNi as an explicit **"NOT EVALUATED in this
+window — do not report these as absent"** line naming the requirement *and* the
+actual bar count. **A window too short to look must never read as a stock with
+nothing in it.**
+
+**The warm-up fetch is now in (2026-09-15).** `fetchEquityWarmupBars()` asks
+for `STORY_WARMUP_BARS` (= `FPB.MIN_BARS`, 60) bars strictly BEFORE the display
+start; `buildStoryEvents(bars, …, warmup)` derives over prefix + window, drops
+every event inside the prefix and **rebases** the survivors so a returned
+`barIndex` still indexes the display window. On a 3M SOLARA window the blind
+head goes 60 → 0 and the non-FPB event stream is unchanged, +0 / −0.
+
+Four properties are load-bearing — none of them is visible in a type:
+
+1. **`rows` is never widened.** The prefix is its OWN query (`['chart-warmup',
+   …]`), because `rows` drives ~25 consumers — the chart, the stat strip, the
+   scrubber, the Data tab, the export, the "N days · from · to" footer — and
+   widening the range hands all of them 60 bars the user did not ask for. The
+   prefix is consumed by the derivation and discarded.
+2. **Rebasing happens ONCE, on the finished array**, not per emitter. A dozen
+   emitters index `bars`; offsetting each one means one of them is eventually
+   written against the wrong origin, and every marker then lands 60 sessions
+   from the bar it describes — which reads as a data bug, not an off-by-N.
+3. **`warmup = 0` is a no-op.** Every pre-existing call site passes nothing.
+4. **Same columns, or the warm-up is worse than none.** Both fetches go through
+   `runEquityEodSelect`, so a prefix bar can never be missing a column the
+   derivation reads — that would evaluate to nothing, which is the exact
+   silence the warm-up exists to remove.
+
+`storyCoverage(bars, warmup)` now reports the **remaining** gap, so a fully
+warmed window disclaims nothing (a disclaimer that is always there stops being
+read) while a partial warm-up still names what is left. It keeps earning its
+place: MAX starts at the stock's first bar and weekly/monthly bars get no
+prefix, so a blind head is still real in those paths.
+
+Covered by `scripts/qa/check-price-action-events.mjs` §6c–6f, verified to fail
+against nine sabotages including a rebase removed, a prefix event leaking
+through, an undersized warm-up, a prefix fetched ascending (the stock's first
+bars ever, a different decade), a merged-instead-of-additive query, and
+`fpbEvents` starved of the prefix — the last of which silently returns Flower
+Pot to reporting an absence it never measured.
+
+### Stirring is a TALLY, never a run — and the schema now says so (2026-09-15)
+
+`km_wg_journeys.stir_days` counts qualifying bars inside the **last 60
+sessions**. Those bars are scattered. Measured across all **1,048 stirring
+stocks** on 2026-09-14: **9.4 qualifying bars over a 41.3-bar span, only 29
+(2.8%) contiguous.**
+
+So there is no "stirring since" date, and `stir_start_date` was **refused**
+rather than built — a field name implying continuity over a scattered tally is a
+lie told by the schema, and careful UI copy cannot undo it. Migration 211 adds
+the honest pair instead: **`stir_first_date`** (earliest qualifying bar) and
+**`stir_window_bars`** (the denominator, capped at what the stock actually has —
+a recent listing must not report a 60-bar window it never had). The reading is
+"9 qualifying sessions since 12 June, out of 41". **Never render
+`stir_first_date` alone** — that reconstructs the claim this refuses to store.
+
+The frontend already had the bug: `JourneyStrip` rendered `` `${stir_days} days` ``
+— "24 days", read as three weeks of continuous stirring. Now `24 / 41`, with the
+bare count (never an invented denominator) when no window is recorded.
+`journeyFacts` gives VaNi the same pair plus *"scattered bars, not a continuous
+run"*, because a bare count is exactly what a model turns into a duration.
+
+⚠ **The delivery gate is RELATIVE, so uniformly high delivery qualifies on
+nothing** — the median rises with it and nothing clears `median × 1.15`. This is
+the `sniper_inst` lesson inside the stirring rule. "High delivery = stirring" is
+the intuitive reading and it is wrong; a test pins it.
+
+**`turn_date` on an archived journey is a derivation, not a copy.** The
+snapshot's turn is explicitly *"a property of NOW, anchored to the CURRENT
+unbroken run above the Golden Line"*, which a closed arc does not have — so
+`turn_at(i)` is now **one implementation with two callers**: the snapshot asks
+it at the last bar, an archived arc at its **wake** bar. A wake requires
+`close >= GL`, so the wake bar is always inside a run and that run holds the turn
+which led into it. Asking at the *sleep* bar returns NULL for exactly the arcs
+worth inspecting, because losing the Golden Line is frequently why one slept.
+Before this, 560 current rows carried a turn and **0 archived rows did**.
+`turn_date`/`turn_close`/`gl_dist_pct` are existing columns — they were simply
+never written, so none of that needed SQL.
+
+Guarded by `test_journey_fields.py` (20 tests) and `check-journey-events.mjs`,
+verified to fail against twelve regressions.
+
+### The six Price Action scanners are derived on read (2026-09-14)
+
+Breakout Surge, Breakdown Surge and the Weekly/Monthly Movers and Decliners each
+qualify on **one predicate over columns already stored on the bar row** — the
+`km_scan_results` arms verbatim. `services/priceActionEvents.ts` turns that into
+dated events; no column, no migration, no nightly job.
+
+The columns reach each stock's **first bar** — RELIANCE 1996-01-02, TCS
+2002-08-13 — so these events carry 26 years of history where `ema_20` carries
+2025 onward. Validated against the DB bar for bar: the same derivation as SQL
+and as TypeScript over live SOLARA bars returns 22 events, identical dates,
+types and order.
+
+⚠ **The reference-reset guard is mandatory.** `pct_wtd` is measured against
+`prev_week_close`, which changes every Monday; `pct_mtd` likewise every month. A
+naive sign-change test fires a **phantom** crossing on the first bar of each
+period, where the two sides were measured against different reference prices and
+nothing happened. On SOLARA's last 123 bars: 17 of 35 weekly and 3 of 17 monthly
+are phantom — twenty fabricated events out of fifty-two. Never drop
+`prev_week_close` / `prev_month_close` from a fetch; they are not decoration,
+they are the only way to tell a crossing from a rollover. Two further rules: one
+crossing per period per direction (6 of 14 monthly), and **NULL is never zero**.
+
+**A cooldown was drafted and rejected, on measurement.** Re-entries cluster —
+SOLARA cleared its 20-day high five times in fifteen days — so "suppress within
+N bars" is the obvious fix. The gap distribution across a 1-in-37 NSE sample
+(566 entries) is 12.5% / 9.2% / 20.8% / 40.8%: **no cliff anywhere**, so any N
+would be taste wearing the costume of a rule. The edge is emitted faithfully and
+density is paid for by priority — `price_action` sits at the BOTTOM of the story
+priority table and can never displace a journey milestone or a Big Money day.
+
+**Density broke a list that had no priority rule.** `thesis.ts` picked "Recent
+signals" with `slice(-8)`, safe only while every kind was rare. At 22 Price
+Action events per 74 bars against 4 of everything else, all eight rows would
+have filled with "above last week's close" — and the tab's headline sentence
+reads `signals[0]`. It now ranks by priority, cuts, then restores recency for
+display. The chart never had this bug because `eventAtBar` already resolved a
+shared bar by priority; the list simply had no equivalent.
+
+⚠ **`is_vani_surge` is NOT the Breakout Surge scanner.** The flag is
+`rvol > 5 AND close >= w52_high * 0.95 …` — 52-WEEK-high proximity plus volume;
+the scanner is 20-day-high geometry. On 2026-09-11 the scanner held 200 stocks
+and the flag fired on 8. The chart titled it "Breakout surge" — the scanner's
+name on a different rule. Both flags are now titled for what they measure, and
+what they actually DO is decide the scanner's HIGHLIGHT (`vani_flag`), not its
+membership. Guarded by `scripts/qa/check-price-action-events.mjs`, verified to
+fail against all eight regressions above.
+
+### `fix` jobs cascade to their dependents (2026-09-14)
+
+`DAILY_STEPS` gets the order right nightly. The **`fix` path did not**: a fix
+job repaired one dimension and stopped, so every dimension derived from it kept
+a value computed from the superseded data. Measured over six weeks:
+`vani_flags` 162 fix jobs, `nse_magic_rs` 160, `nse_equity_indicators` 128 —
+against **zero** for `gl_events`, `big_money`, `dots`, `wg_journeys` and
+`scan_refresh`. Fixes land 1–6 days after the bar.
+
+A fill-rate check cannot see this — `gl_events` and `big_money` are in
+`health.DIMENSIONS` and report `ok` because their columns are *populated*, just
+not *current*. Presence, not correctness, again.
+
+`orchestrator.DIMENSION_DEPENDENTS` now declares the recompute graph
+(evidence-backed edges only), `dependents_closure()` walks it transitively in
+DAILY_STEPS order, and `validate_dependents()` runs **at import** so a bad name
+or a cycle is a startup error. `worker._cascade_dependents()` enqueues the
+closure after any non-failing fix.
+
+Three properties that are load-bearing — do not "simplify" them away:
+
+1. **Forced.** `_handle_script` nullifies a dimension's columns only when
+   `force` is set; unforced, a derived handler can skip exactly the rows that
+   went stale. The cost is that a failed recompute leaves NULL rather than
+   stale — deliberately the better failure, because NULL drops the fill rate
+   and the gap sweep retries, while stale-but-populated is invisible forever.
+2. **A cascade never cascades.** The closure is computed in one pass and its
+   jobs carry `created_by='cascade'`, which the function refuses to expand.
+   Without this, one repaired column starts a self-feeding chain.
+3. **`integrity_checks` is not a dependent** — a nightly whole-day sweep, not a
+   per-dimension derivative.
+
+Knobs (env): `PIPELINE2_CASCADE` (`on`), `PIPELINE2_CASCADE_MAX` (`25`; the
+longest real chain, from `nse_eod_download`, is 21), `PIPELINE2_CASCADE_DEBOUNCE_MIN`
+(`30`). Guarded by `test_pipeline_cascade.py`, verified to fail against both an
+unforced enqueue and a re-expanding cascade. Plan + rollout watch:
+`docs/claude/thesis-events-poa.md`.
+
+### Per-dimension watermarks — the cascade is now provable (2026-09-14)
+
+The cascade above makes the recompute happen. **Nothing recorded that it did.**
+A row derived from superseded inputs has every column populated, every invariant
+satisfied and a healthy fill rate — it is simply wrong, invisibly. Presence, not
+correctness, one more time.
+
+The gap was wider than "no watermark". `run_daily` builds a `StepOutcome` for
+each of its 22 dimensions and the worker stores **none of them individually** —
+they fold into one aggregate `km_jobs` row (dimension NULL) plus a
+`progress_text` string. `fix` jobs do carry `(dimension, trade_date)`;
+`km_pipeline_runs` carries the LEGACY step names, which pipeline2 mostly skips.
+So nothing could answer *"when was `nse_magic_rs` last computed for
+2026-09-11"*.
+
+`km_dimension_watermarks` (migration 210) answers it. `pipeline2/watermarks.py`
+stamps from `run_daily` and `_run_fix`, and **inverts `DIMENSION_DEPENDENTS`** —
+one declaration, two directions: the cascade walks it down to decide what to
+recompute, `check_derivation_staleness` walks it up to find what should have
+been recomputed and was not. That check is a **fifth check class**: every other
+check asks whether a value is present, plausible or moving; none could ask
+whether it is *current*. It catches the three cases the cascade structurally
+cannot — a fix applied while `PIPELINE2_CASCADE` was off, a cascade job enqueued
+then failed, and a backfill run straight against the DB.
+
+Three calibration decisions, each the difference between a check that gets read
+and one that gets muted — **do not "tidy" any of them**:
+
+1. **Absent is UNKNOWN, never stale.** The table starts empty and fills forward;
+   `stale_derivations` INNER JOINs both watermarks. A LEFT JOIN would report
+   every un-stamped dimension on night one — thousands of findings, muted by
+   night two.
+2. **`partial` stamps; `failed` never does.** A partial compute ran against the
+   inputs as they stood, which is the only question a watermark answers.
+   **2,184 partial fix jobs are on record** — refusing them would make most
+   dimensions read permanently stale within a week.
+3. **Warning with a 60-second floor, not critical.** Parents finish seconds
+   before children inside one run; measured real staleness is **1–6 days**.
+   Same calibration reasoning as `CASH_EQUITY_SERIES`.
+
+Guarded by `test_dimension_watermarks.py` (22 tests), verified to fail against
+all seven properties plus both wiring guards (the stamp being removed, and the
+lazy import reverting to relative — which breaks `test_leadership_pipeline`,
+since it compiles `run_daily` on its own via `ast`/`exec` where a relative
+import has no `__package__`).
+
+⚠ `indicators_computed_at` is unchanged and still not a watermark: written under
+`WHERE indicators_computed_at IS NULL`, so re-runs skip stamped rows, and
+`backfill_vani_flags.py` touches no timestamp at all. It measures a different
+thing (did the legacy RPC visit this row) and `pipeline2/health.py` already
+refuses to trust it.
+
+### `leadership_snapshot` — publication is gated on a fully clean run
+
+`pipeline2/orchestrator.py run_daily()` publishes longer-term sector readings
+**only when `outcome.overall_status == 'completed'`** (`lib.sector_leadership.
+refresh_snapshots`, reported as the `leadership_snapshot` step at 99%).
+
+That gate is the design, not caution: if any enrichment step failed, publishing
+would present partial evidence as a finished reading. Instead the **earlier
+dated snapshots are retained** and the incomplete session simply is not
+published. A failed publication is recorded as its own failed step — it never
+turns a successful index calculation into a failure, and vice versa. Fix the
+failed source step and re-run the daily pipeline (or
+`python scripts/refresh_sector_leadership.py`) afterwards.
+
+Publication is **transactional across all five category scopes × three display
+windows** — there is no partially published batch. Stale membership generations
+and custom-index revisions are rejected rather than published.
+
 ### One-Shot Backfill Scripts
 
 All scripts live in `App/backend/scripts/`. Run with `KD_DB_PASSWORD=...` env var (uses hardcoded VPS host `187.127.136.65`). Key scripts: `backfill_d365.py` (supports `--date YYYY-MM-DD`), `backfill_supertrend.py`, `backfill_rolling_metrics.py`, `backfill_vani_flags.py`, `rule_discovery.py` (accepts optional year arg), and transit generators: `generate_bayer_windows.py`, `generate_gandanta_windows.py`, `generate_mercury_windows.py`, `generate_panchak_windows.py`, `generate_venus_windows.py`.
+
+`refresh_sector_leadership.py` is the exception to the pattern — it uses the
+deployed database configuration rather than `KD_DB_PASSWORD`, and it is the
+**only** way to prepare historical leadership dates:
+
+```bash
+cd App/backend
+python scripts/refresh_sector_leadership.py                       # latest session, all 5 scopes × 3 windows
+python scripts/refresh_sector_leadership.py --from 2026-06-01 --to 2026-09-11
+```
+
+Opening `/sector-rotation` on an unprepared date shows a preparation message —
+it **never** triggers the heavy calculation on a page load. After any basket
+membership or catalog edit, every snapshot across all dates is invalidated by
+the migration-208 trigger: the next daily run republishes the latest session,
+but earlier dates you still want must be re-prepared with `--from/--to`.
 
 ### Running locally
 ```bash
@@ -346,7 +734,83 @@ Base threshold: 6% with ATR adaptive factor.
 ## Current Plan
 
 
-Active sprint: **Astro Layer — Mercury slice** (2026-07-21 →). Narrative contract, launch decisions, yardstick design (VIX as one of several), and the combust-method finding + calibration subtask: **`docs/claude/astro-story.md`**. Companion: `MERCURY_SLICE_PLAN.md` (repo root). Launch catalog scope shipped as migration 160 (Variant B: 13 Mercury + 6 slow-planet almanac rules) — owner runs it in pgAdmin (kaala-postgres MCP is read-only).
+### Thesis events — PARKED 2026-09-15, Phases 1–3 shipped
+
+`docs/claude/thesis-events-poa.md`. Phases 1c, 2, 3a and 3b are on
+`claude/tender-euler-2j7ab5`: journey milestones + base rates, the six Price
+Action scanners derived on read, per-dimension watermarks (migration 210), the
+honest stirring pair (migration 211), and the chart warm-up fetch.
+
+**Phase 4 — VaNi narration per family — is NOT started and is parked at the
+owner's call.** The POA's rules for it stand unchanged when it resumes:
+pre-compute every comparison into a word, name the evidence gap, and treat
+*"nothing here matches how you work"* as a valid reading rather than a failure.
+
+**How to run everything this sprint added** — backend (`cd App/backend`, no DB,
+no network, no LLM): `python -m unittest test_dimension_watermarks`,
+`test_journey_fields` (needs numpy/pandas), `test_pipeline_cascade`, the ten
+companion suites, plus `python test_vani_routing.py` and
+`python -m pyflakes lib/ pipeline2/ pipeline2_api.py scripts/`. Frontend
+(`cd App/frontend`): `npm run typecheck`, `npm run build`, and the four pure-node
+guards `check-price-action-events.mjs`, `check-journey-events.mjs`,
+`check-sector-horizons.mjs`, `check-persona.mjs`. All green 2026-09-15 (36 + 20
++ 84 backend tests). ⚠ Ten `scripts/qa/` checks call Playwright with
+`channel: 'chrome'` and need Chrome installed — they cannot run in the cloud
+container, which has Chromium at `/opt/pw-browsers/chromium` only. That is an
+environment limit, not a failure.
+
+**UI verification is OPEN — nothing here has been seen in a browser.** Stocks
+picked from the live DB on 2026-09-15:
+
+| Check | Where | What proves it |
+|---|---|---|
+| Warm-up reaches the derivation | `/chart/equity/599` (IPCALAB) at **1M** | A Flower Pot marker appears at all. At 1M the window is ~21 bars, so before this change `fpbEvents` returned `[]` without evaluating anything — a marker was structurally impossible. Also ORIENTHOT 39696, PANACHE 39713, AMBER 77. |
+| Rebase is exact | same stock, 1M → 3M → 6M | The marker stays on its own date instead of sliding |
+| Evidence gap shrank | Thesis tab, ask VaNi | No "NOT EVALUATED" line for Flower Pot at 1M; still present on **MAX** (no prefix there, correctly) |
+| Journey arc | `/chart/equity/39897` (SOTL) at 6M | turn 05-04 → wake 07-23 → **confirm 09-01**, all three in one window |
+| A COMPLETED arc | `/chart/equity/39767` (PGHL) at 6M | wake 07-09, confirm 07-31, **slept 08-31** — the end the `is_current` filter used to hide |
+| Base rate is read, not remembered | any journey stock, Thesis | The footnote cites **"348 of 595"** with its denominator |
+| Priority trim | `/chart/equity/40012` (SOLARA) at 3M | "Recent signals" is not eight rows of "above last week's close" |
+
+⚠ **Two things will look unfinished until the next `wg_journeys` run, and are
+not bugs.** Verified on the live DB 2026-09-15: `stir_first_date` and
+`stir_window_bars` are populated on **0 of 1,697** rows, so `JourneyStrip`
+correctly shows the bare count ("21") rather than "21 / 41" — that IS the
+designed fallback. Archived `turn_date` is likewise still NULL (PGHL included);
+the `turn_at()` derivation lands on the same run. `km_journey_base_rates` DOES
+carry its row (as_of 2026-09-14 — 348 of 595, 58.50%, 29 days average), so the
+base-rate check is live now.
+
+The warm-up and story-event work is **frontend-only**. Phase 1c's VaNi side is
+not: `/api/ai/vani-narrate` gaining `_sebi_post_filter` and the two
+`_VANI_NARRATE_SYSTEM` rules need the backend deployed and the API restarted.
+
+---
+
+Prior sprint: **VaNi research companions** (2026-09-12 → 09-14) — Market
+Structure, Sector Rotation (Current Flow + Longer-Term Leadership), the Price
+Action / Stage / Flow / Market / Discovery scanner defaults, and scanner
+highlight authority. All shipped on `claude/tender-euler-2j7ab5`; per-increment
+handoffs are the `docs/*.md` files listed under **VaNi Research Companions**.
+Verified green 2026-09-14: 84 backend tests, `test_vani_routing.py`, typecheck,
+theme + persona gates, `check-sector-contracts.mjs`.
+
+⚠ **Deployment is not a frontend-only push.** Frontend and backend must be
+pulled and deployed **together** for every one of these increments (intent
+versions, evidence loaders and cache keys are matched pairs), and the API must
+be restarted. The sector evidence loader requires the **direct PostgreSQL
+client** — a PostgREST-only backend does not support it.
+
+**DB side is done** (verified live 2026-09-14): migrations 207 and 208 are
+applied, both invalidation triggers are enabled, and
+`refresh_sector_leadership.py` has published 15 snapshots (5 scopes × 3
+windows) for `2026-09-11` — which is the latest bar in `km_index_eod` and
+`km_equity_eod`, so leadership is in step. Only that one date is prepared; use
+`--from/--to` for historical sessions. Details and the one real finding this
+turned up — **there is no Haiku fallback in the deployed config, both paths are
+Qwen** — are under Known Issues.
+
+Parked sprint: **Astro Layer — Mercury slice** (2026-07-21 →). Narrative contract, launch decisions, yardstick design (VIX as one of several), and the combust-method finding + calibration subtask: **`docs/claude/astro-story.md`**. Companion: `MERCURY_SLICE_PLAN.md` (repo root). Launch catalog scope shipped as migration 160 (Variant B: 13 Mercury + 6 slow-planet almanac rules) — owner runs it in pgAdmin (kaala-postgres MCP is read-only).
 
 Prior sprint: **Rules Engine**.
 
@@ -415,12 +879,142 @@ AI_MODEL=claude-haiku-4-5      # any model the provider supports
 
 ---
 
+## VaNi Research Companions (2026-09-12 → 09-14)
+
+The second VaNi generation. Where `GET /api/ai/*` returns **one insight under
+one card**, a *companion* is a persistent panel beside a research page that
+opens on an automatic default reading and offers a short menu of follow-ups.
+Four pages have one: Market Structure, Sector Rotation (two modes), the
+scanner Studios, and Flower Pot Burst.
+
+Everything below routes through the existing `POST /api/vani/ask` — **no new
+endpoints were added.** Intents are registered in backend modules and answered
+by a per-family `answer()` function.
+
+| Family | Backend module | Version | Page |
+|---|---|---|---|
+| `structure.*` (8 intents) | `lib/market_structure_vani.py` | 2 | `/market-structure` |
+| `sector.*` / `sector.leadership.*` | `lib/sector_vani.py` | 8 | `/sector-rotation` |
+| leadership evidence | `lib/sector_leadership.py`, `lib/sector_leadership_intents.py` | — | `/sector-rotation` |
+| current-flow projection | `lib/sector_flow_intents.py` | — | `/sector-rotation` |
+| `scanner.*` default copy | `lib/scanner_explanation.py` | — | `/scan` |
+
+Frontend: `components/domain/VaNi/` (companions, evidence cards, learning
+illustrations, brand/mascot), `config/marketStructureIntents.ts`,
+`constants/scannerIntroductions.ts`, `lib/structureStates.ts`,
+`lib/sectorFlow.ts`, `lib/sectorHorizonStory.ts`, `services/sectorLeadership.ts`,
+`services/sectorPersonal.ts`, `stores/marketStructureStore.ts`,
+`stores/sectorResearchStore.ts`.
+
+Handoff docs, one per increment: `docs/market-structure-vani-handoff.md`,
+`docs/sector-rotation-handoff.md`, `docs/sector-leadership-review.md`,
+`docs/vani-intent-todo.md`, `docs/scanner-default-explanations.md`,
+`docs/scanner-highlight-authority.md`, `docs/icp-scanner-experience.md`,
+`docs/breakout-surge-beta.md`, `docs/flowerpot-result-actions.md`,
+`docs/vani-analytics.md`.
+
+### Three intent kinds — and only one of them costs a model call
+
+This is the load-bearing distinction. Do not add an intent without deciding
+which kind it is.
+
+1. **`STATIC`** — fixed educational copy in a dict (`STATIC` in
+   `market_structure_vani.py` / `sector_vani.py`), or shipped in the frontend
+   bundle (`constants/scannerIntroductions.ts`). **Bypasses the LLM entirely.**
+   No cache entry, no expiry, no recurring request. Change the copy → bump the
+   content version (`SCANNER_INTRODUCTION_VERSION`, currently 8).
+2. **Read-only evidence** — e.g. `sector.context`, `sector.pulse.context`.
+   Returns authoritative computed data. **No LLM.**
+3. **Grounded synthesis** — Qwen first, configured cloud fallback. The model
+   receives a *validated snapshot plus precomputed comparisons*, never raw rows
+   to interpret (see the signed-number lesson below).
+
+### `allow_cloud_fallback` — a real change to `ai_client.complete_with_source`
+
+`prefer_local=True` used to mean *Qwen only*: on Qwen failure it returned
+`(None, None)` and the caller had no answer. The Market Structure family needed
+Qwen-first **with** the configured cloud fallback, so `complete_with_source`
+gained a separate `allow_cloud_fallback: bool = False`.
+
+**Every older caller keeps Qwen-only behaviour** — the default is `False` on
+purpose. Opt in explicitly; do not flip the default. Your configured cloud
+provider/model must point at Haiku for the fallback to be the intended one.
+
+### Cache + single-flight
+
+Grounded answers use the **persistent** `km_vani_cache` table (migration 038)
+via `lib/vani_cache.py` — not the in-memory `_vani_cache` the Morning Brief
+uses. The cache key includes **intent id, intent version, explanation depth,
+period, and a hash of the exact data snapshot**, so a same-date data correction
+changes the key and cannot serve a stale reading. Bumping a family's `VERSION`
+invalidates every cached answer in it — that is the intended mechanism when a
+prompt's framing was wrong.
+
+`single_flight()` in `market_structure_vani.py` (reused by `sector_vani.py`)
+deduplicates concurrent identical generations: 64 local lock stripes, plus a
+PostgreSQL **advisory lock** across API workers when the db client exposes a
+real connection. A worker that cannot take the lock raises `ReadingInProgress`
+rather than holding the HTTP request, and the client polls. PostgREST-only
+deployments still deduplicate within each process.
+
+### Sector Rotation: two modes, and they must not be merged
+
+`/sector-rotation` has **Current Flow** (default) and **Longer-Term
+Leadership**. They are separate readings on separate bases and a basket can be
+*Running broadly* while its current flow is *Fading*. **Never compose them into
+one score** — several prompts say so explicitly, and the tests assert it.
+
+Longer-Term groups are explicit research rules, not a ranking:
+*Running broadly* (W/M agreement ≥ 8 completed weekly observations, ≥ 60%
+Stage 2 Leaders among classified constituents, ≥ 5 classified, ≥ 80% membership
+coverage) · *Building* (agreement, requirements unmet) · *Cooling* (agreement
+lost within the preceding 26 weekly observations) · *Limited coverage* ·
+*Unavailable* · *Not aligned*. A measured Leader share below 60% is a
+**shortfall, not missing data**.
+
+Reads are cheap by construction: the page and VaNi both read one **published
+snapshot** (`km_sector_leadership_snapshots`) plus a snapshot hash. Rendering
+the table performs no constituent scanning, no index calculation and no LLM
+call. All the heavy work happens in the refresh job.
+
+### The launch menu is deliberately smaller than the implementation
+
+`docs/vani-intent-todo.md` is the source of truth for what is *visible*: one
+automatic default plus **three** follow-ups per mode. Eight further intents
+(`sector.leaving`, `sector.read`, `sector.compare`, `sector.learn`,
+`sector.taxonomy`, `sector.leadership.persistence`, `.support`, `.learn`) are
+**hidden, not deleted** — their frontend definitions, backend handlers and
+evidence calculations are all live and regression-tested. Deferred items are
+hidden outright, never shown as disabled or "coming soon".
+
+### Analytics
+
+`lib/vaniAnalytics.ts` + `hooks/useVaniAnalytics.ts` emit nine categorical
+PostHog events through the existing wrapper (`product=dristiq`,
+`analytics_version=1`). Dictionary and the dashboards to build:
+`docs/vani-analytics.md`.
+
+**Privacy is enforced structurally, not by convention**: events carry only
+categorical dimensions and timing — never request/response bodies, stock
+names/IDs, positions, prices or tokens. Link destinations are *classified*
+before capture, explicit events override PostHog's automatic URL/referrer with
+a synthetic route, and VaNi containers carry `ph-no-capture` to keep autocapture
+out of the DOM text. Personal "Connected to your stocks" results stay in an
+account-keyed browser query and **never enter a shared prompt or response
+cache**.
+
+Counting rule that matters: `source=automatic` is the default brief opening by
+itself. Keep it **out of the numerator** for adoption — only `manual`/`external`
+selections are deliberate usage.
+
+---
+
 ## SQL Migration Convention
 
 
 New migrations go in `App/DBscripts/km_migration_NNN_description.sql`.
 Run them directly in pgAdmin, DBeaver, or `psql` — **no Python wrapper scripts**.
-Next migration number: **207** (disk is at 206 — `km_migration_206_onboarding_version.sql`, version-stamped re-onboarding: `km_profiles.onboarding_version INT DEFAULT 0` + the key added to `kd_update_profile`'s whitelist + a TARGETED stamp of `1` for everyone who already carries `persona_set_at` (2 of 17 on 2026-09-12). Replaces migration 165's blanket `onboarded = false`. Sending a cohort back through setup is now: bump `ONBOARDING_VERSION` in `src/constants/onboarding.ts`, then stamp whoever is exempt. Owner runs it in pgAdmin; no REFRESH needed; 205 — `km_migration_205_fpb_card_columns.sql`, Flower Pot card columns + ETFs out of the whole matview: mutual-fund units (`isin LIKE 'INF%'`) leave `active`/`wg_pool`/the exclusion-count universe, `km_equity_symbols.is_etf` is set from the same rule (it had been FALSE on all 16,938 rows since the column existed), the `flower_pot_burst` arm LEFT JOINs `stock` so it carries the shared card's columns instead of typed NULLs, three new columns `fpb_hi10`/`fpb_lo10`/`fpb_tight_today`, and `d_pct` stops being NULL on sixteen of the seventeen arms; **owner runs it then `REFRESH MATERIALIZED VIEW km_scan_results;` and `REFRESH MATERIALIZED VIEW km_scan_exclusion_counts;`**; measured effect on the 2026-09-07 bar: flower_pot_burst 106→68 rows with 67 of 68 carrying an industry, breakdown_watch 441→364, breakout_surge 295→277, conviction_flow stays at its cap of 50 with 12 real stocks replacing fund units; 204 = `km_migration_204_profile_persona.sql`, onboarding persona persistence: `km_profiles.persona/acts_on/hold_horizon/concede_level/persona_set_at/guide_progress`, `kd_update_profile` whitelist, `km_ux_events`; vocabulary mirrored in `src/constants/personaConfig.ts` and gated by `npm run check:persona` inside `npm run build`; plan: `docs/claude/onboarding-poa.md`; 203 = `km_migration_203_index_breadth.sql`, per-index breadth table + `compute_index_breadth()`; owner runs it then `python scripts/backfill_index_breadth.py`; 202 = `km_migration_202_gl_matview_arms.sql`, Golden Line arms + GL/Big Money bar columns on `km_scan_results`; 195/197/200/202/205 recreate the `km_scan_results` matview `WITH NO DATA`. **Convention as of 205 (gap audit C3): a migration that recreates it ENDS with the two `REFRESH` statements as executable SQL, after `COMMIT`** — a comment asking the next person to remember failed twice (200 on 2026-09-06, 205 on 2026-09-07), and each time every matview-served preset answered PostgREST with "materialized view has not been populated", which the UI shows as "Failed to run scan." on eleven scanners at once. Order matters: `km_scan_results` first, `km_scan_exclusion_counts` second (it SELECTs from the first); 200b is a suffixed duplicate). Older history: (166 = `km_migration_166_golarambh_almanac.sql` — Golārambha family: 4 generator-fed `planet_state` Sun rules (Uttara/Dakshina Gola halves + equinox ±1d turn windows, tag 'Gola'), windows from `scripts/generate_golarambh_windows.py` (TROPICAL equinox crossings — deliberately not the sidereal sankranti), almanac body in AlmanacPage + `astro_group:Gola` overlay; 165 = force-reonboard theme; 164 = forgot-password token leak; 163 = pricing GST beta default; NOTE 161/162 have DUPLICATE numbers (rule_evidence + scan_presets at 161, rule_evidence_transitions + user_bookmarks at 162); 160 = Mercury-slice launch catalog scope; see `docs/claude/astro-story.md`. ⚠ Numbering drifted: duplicates also at 152/153 and no 155 — always `ls App/DBscripts/ | sort` before picking a number, don't trust this line alone.)
+Next migration number: **212** (disk is at 211). **211** = `km_migration_211_journey_stir_window.sql` — `km_wg_journeys.stir_first_date` + `stir_window_bars`, so the Stirring reading states a rate WITH its denominator ("9 of 41"). Deliberately NOT `stir_start_date`: `stir_days` is a tally over the last 60 bars and those bars are scattered (9.4 across a 41.3-bar span, 2.8% contiguous over 1,048 stocks), so a start date would be false for 97% of the population. Both NULL on archived rows — stirring is a property of now. ADD COLUMN nullable-no-default on ~1,700 rows is instant; values appear on the next wg_journeys run, no backfill, nothing to REFRESH. Owner runs it in pgAdmin. **210** = `km_migration_210_dimension_watermarks.sql` — `km_dimension_watermarks` (dimension, trade_date, computed_at, status, source, job_id, rows_affected), ~7,500 rows a year: WHEN each pipeline2 dimension was last computed for a date. Compared against a dimension's PARENTS (`DIMENSION_DEPENDENTS` inverted) it detects a row derived from superseded inputs — which no fill-rate check can see. Starts EMPTY on purpose (absent is unknown, never stale) and fills from the next daily run; `'partial'` stamps, `'failed'` never does. Grants SELECT to `authenticated`/anon/kd_app/kd_readonly. Owner runs it in pgAdmin; no REFRESH, no backfill. **209** = `km_migration_209_journey_base_rates.sql` — `km_journey_base_rates`, the nightly recorded outcome of the Waking Giants arc (closed/confirmed counts, confirm %, days to confirm, confirmed vs unconfirmed lifespan), keyed by `as_of` so the series is inspectable. Written by `scripts/compute_wg_journeys.py` **inside the same transaction** as the `km_wg_journeys` DELETE+INSERT it summarises, so a `fix` on the `wg_journeys` dimension recomputes it for free and the summary can never describe a different population than the rows on screen. Grants SELECT to `authenticated`/anon/kd_app (the migration-142 lesson) and seeds the current reading, so the UI has a row before the next nightly run. No RLS. Owner runs it in pgAdmin; nothing else required. **208** = `km_migration_208_leadership_snapshots.sql` — published sector-leadership snapshots: `km_sector_leadership_snapshots` (PK trade_date+category+months, months IN (3,6,12)) + `km_leadership_generation` + statement-level triggers on `km_index_constituents` and `km_index_symbols` that bump the generation, so any membership or catalog edit invalidates every published snapshot across all dates at once. Apply AFTER 207, then run `python scripts/refresh_sector_leadership.py`. **207** = `km_migration_207_sector_leadership.sql` — `km_custom_index_revisions` (revision vs computed_revision, so a stale calculation is detectable), `km_custom_index_membership_log` (seeded with a `baseline` row per custom index before later add/remove actions), `km_leadership_observations` (previous published payloads) and `km_custom_index_history_archive`. Neither migration deletes existing data or rewrites index prices, and neither recreates `km_scan_results`. Prior: 206 — `km_migration_206_onboarding_version.sql`, version-stamped re-onboarding: `km_profiles.onboarding_version INT DEFAULT 0` + the key added to `kd_update_profile`'s whitelist + a TARGETED stamp of `1` for everyone who already carries `persona_set_at` (2 of 17 on 2026-09-12). Replaces migration 165's blanket `onboarded = false`. Sending a cohort back through setup is now: bump `ONBOARDING_VERSION` in `src/constants/onboarding.ts`, then stamp whoever is exempt. Owner runs it in pgAdmin; no REFRESH needed; 205 — `km_migration_205_fpb_card_columns.sql`, Flower Pot card columns + ETFs out of the whole matview: mutual-fund units (`isin LIKE 'INF%'`) leave `active`/`wg_pool`/the exclusion-count universe, `km_equity_symbols.is_etf` is set from the same rule (it had been FALSE on all 16,938 rows since the column existed), the `flower_pot_burst` arm LEFT JOINs `stock` so it carries the shared card's columns instead of typed NULLs, three new columns `fpb_hi10`/`fpb_lo10`/`fpb_tight_today`, and `d_pct` stops being NULL on sixteen of the seventeen arms; **owner runs it then `REFRESH MATERIALIZED VIEW km_scan_results;` and `REFRESH MATERIALIZED VIEW km_scan_exclusion_counts;`**; measured effect on the 2026-09-07 bar: flower_pot_burst 106→68 rows with 67 of 68 carrying an industry, breakdown_watch 441→364, breakout_surge 295→277, conviction_flow stays at its cap of 50 with 12 real stocks replacing fund units; 204 = `km_migration_204_profile_persona.sql`, onboarding persona persistence: `km_profiles.persona/acts_on/hold_horizon/concede_level/persona_set_at/guide_progress`, `kd_update_profile` whitelist, `km_ux_events`; vocabulary mirrored in `src/constants/personaConfig.ts` and gated by `npm run check:persona` inside `npm run build`; plan: `docs/claude/onboarding-poa.md`; 203 = `km_migration_203_index_breadth.sql`, per-index breadth table + `compute_index_breadth()`; owner runs it then `python scripts/backfill_index_breadth.py`; 202 = `km_migration_202_gl_matview_arms.sql`, Golden Line arms + GL/Big Money bar columns on `km_scan_results`; 195/197/200/202/205 recreate the `km_scan_results` matview `WITH NO DATA`. **Convention as of 205 (gap audit C3): a migration that recreates it ENDS with the two `REFRESH` statements as executable SQL, after `COMMIT`** — a comment asking the next person to remember failed twice (200 on 2026-09-06, 205 on 2026-09-07), and each time every matview-served preset answered PostgREST with "materialized view has not been populated", which the UI shows as "Failed to run scan." on eleven scanners at once. Order matters: `km_scan_results` first, `km_scan_exclusion_counts` second (it SELECTs from the first); 200b is a suffixed duplicate). Older history: (166 = `km_migration_166_golarambh_almanac.sql` — Golārambha family: 4 generator-fed `planet_state` Sun rules (Uttara/Dakshina Gola halves + equinox ±1d turn windows, tag 'Gola'), windows from `scripts/generate_golarambh_windows.py` (TROPICAL equinox crossings — deliberately not the sidereal sankranti), almanac body in AlmanacPage + `astro_group:Gola` overlay; 165 = force-reonboard theme; 164 = forgot-password token leak; 163 = pricing GST beta default; NOTE 161/162 have DUPLICATE numbers (rule_evidence + scan_presets at 161, rule_evidence_transitions + user_bookmarks at 162); 160 = Mercury-slice launch catalog scope; see `docs/claude/astro-story.md`. ⚠ Numbering drifted: duplicates also at 152/153 and no 155 — always `ls App/DBscripts/ | sort` before picking a number, don't trust this line alone.)
 
 **Target database**: most migrations target `kaala_dristi_db`. Migrations that target `vani_db` must say so explicitly in the file header (example: migration 092).
 
@@ -544,27 +1138,76 @@ import {
 All scan logic is pure TypeScript — no backend RPC. The scan engine fetches broad market data once and filters it client-side.
 
 ```
-services/scanEngine.ts   ← all 9 scan functions + data fetching + types
+services/scanEngine.ts   ← scan functions + data fetching + types
 hooks/useScan.ts         ← React Query wrappers: useScan(), useAllScanCounts(), useScanPresets()
 views/ScanView.tsx       ← page, sort, TradingView export, per-preset layouts
+views/ScannerStudio.tsx  ← Studio layout for STUDIO_DESCRIPTORS presets
+config/scannerStudio.ts  ← per-preset Studio descriptors (cards, levels, filters)
 kd_scan_presets (DB)     ← preset metadata (name/description/tooltip/limit); fetched via fetchScanPresets()
+km_scan_results (matview) ← the authoritative row source for the DB-served presets
 ```
 
-### 9 Current Scan Presets
+### 24 Scan Presets, 5 Categories
 
-| ID | Display Name |
-|---|---|
-| `power_buy` | Strength Confluence |
-| `power_sell` | Weakness Confluence |
-| `smart_money` | Smart Money Loading |
-| `fresh_breakout` | Fresh Breakouts |
-| `quiet_accumulation` | Quiet Accumulation |
-| `distribution_warning` | Distribution Warnings |
-| `conviction_flow` | Conviction Flow |
-| `breakout_surge` | Breakout Surge |
-| `stage_2_leaders` | Stage 2 Leaders |
+`category` / `category_label` / `category_sort` live on each `ScanDefinition`
+in `SCAN_PRESETS`. The `/scan` page renders them as category radio buttons
+with sibling tabs (`docs/icp-scanner-experience.md`) — the older scanner
+sidebar is gone.
 
-**Adding a new scan**: (1) add `ScanDefinition` entry to `SCAN_PRESETS` in `scanEngine.ts`, (2) implement `scanXxx(bundle)` function, (3) register in the `SCAN_HANDLERS` dispatch map, (4) insert DB row via SQL migration into `kd_scan_presets`.
+| Category (`sort`) | ID | Display Name |
+|---|---|---|
+| **Price Action** (1) | `breakout_surge` | Breakout Surge |
+| | `breakdown_watch` | Breakdown Surge *(ID kept on purpose — migration 189)* |
+| | `weekly_movers` | Weekly Movers |
+| | `monthly_movers` | Monthly Movers |
+| | `weekly_decliners` | Weekly Decliners |
+| | `monthly_decliners` | Monthly Decliners |
+| | `flower_pot_burst` | Flower Pot Burst |
+| | `gl_breakout` | Golden Line Breakout |
+| | `gl_retest` | Golden Line Retest |
+| **Stage Analysis** (2) | `stage_2_watch` | Stage 2 Watch |
+| | `stage_2_leaders` | Stage 2 Leaders |
+| | `stage_3_watch` | Stage 3 Watch |
+| | `stage_4_leaders` | Stage 4 Leaders |
+| | `vani_exit_watch` | VaNi Weakness Watch |
+| **Flow** (3) | `power_buy` | Strength Confluence |
+| | `conviction_flow` | Conviction Flow |
+| | `volume_drive` | Volume Drive |
+| **Market** (4) | `smart_money` | Smart Money Loading |
+| | `quiet_accumulation` | Quiet Rising Flow |
+| | `distribution_warning` | Falling Flow Warnings |
+| | `power_sell` | Weakness Confluence |
+| **Discovery** (5) | `wg_stirring` | Stirring |
+| | `waking_giants` | Waking Giants |
+| | `wg_ascent` | Ascent |
+
+Display names drifted from the old ones — `quiet_accumulation` is now
+**Quiet Rising Flow**, `distribution_warning` is **Falling Flow Warnings**.
+The IDs are addresses (`?setup=` URLs, adapter registry keys,
+`PRESET_COL_OVERRIDES`), so they never follow a rename. `fresh_breakout` no
+longer exists.
+
+**Adding a new scan**: (1) add `ScanDefinition` entry to `SCAN_PRESETS` in `scanEngine.ts`, (2) implement `scanXxx(bundle)` function, (3) register in the `SCAN_HANDLERS` dispatch map, (4) insert DB row via SQL migration into `kd_scan_presets`, (5) if it should carry a Studio layout, add a `StudioDescriptor` — and remember `lib/scan_contract.py` parses that file.
+
+### ⚠ Highlight authority: the DB decides, the browser never reconstructs
+
+Shipped 2026-09-13 (`docs/scanner-highlight-authority.md`). Breakout Surge
+(and its old daily alias), Breakdown Surge, Weekly/Monthly Movers,
+Weekly/Monthly Decliners and Flower Pot Burst read **`km_scan_results`
+exclusively**. The frontend maps `vani_flag` — *including `false`* — and never
+recomputes highlight eligibility. Flower Pot keeps its phase-specific columns
+without overriding the flag.
+
+The old client-side reconstructions were **deleted**, not left dormant:
+`fetchBreakoutSurge`, `fetchBreakdownWatch`, `fetchPeriodMovers` and the whole
+`computeFpbStock`/`fetchFlowerPotBurstClientSide` compression calculation —
+~950 lines out of `scanEngine.ts`. Two implementations of one eligibility rule
+is how a scanner silently disagrees with its own badge count.
+
+Failure semantics are deliberate: a failed request or an invalid/missing flag
+**fails visibly**; a successful empty result stays empty; an empty badge count
+never falls back to the legacy scanner. Golden Line and the other families are
+outside this change and still compute client-side.
 
 ### Key Scan Engine Patterns
 
@@ -620,6 +1263,10 @@ These are in `LESSONS_LEARNED.md` in full; summary for quick reference:
 - **PostgREST grants — JWT role is the PROFILE role, not 'authenticated'**: migration 096 patched `kd_auth_login` to embed the km_profiles role (`admin`/`user`) as the JWT role claim, so PostgREST runs logged-in browser queries as DB role `admin`/`user`. A new table granted only to `authenticated, anon, kd_app` is readable ANONYMOUSLY but permission-denied for logged-in users (hit on `km_rule_patterns`, 2026-07-07 — fixed in migration 137). Every new PostgREST-read table must grant to `admin, "user"` as well.
 - **The live `kd_auth_login` issues JWT `role`=`authenticated` for everyone** (found 2026-07-09 by decoding a live user token: `role`=`authenticated` for a profile-role=`user` account). Despite migrations 096/140 in the repo (which would embed the profile role `admin`/`user`), the RUNNING function is the migration-003 behavior — so in practice logged-in browser users are the `authenticated` DB role, NOT `user`/`admin`. Consequence: the "grant new PostgREST-read tables to `admin`/`user`" advice above describes intended-but-not-live behavior; what actually matters on this deployment is that **`authenticated` has SELECT**. There is no `user` DB role (`has_table_privilege('user',…)` errors) and the app does not need one. Verify the live `kd_auth_login` before trusting the profile-role-as-DB-role model.
 - **Diagnostic hygiene — don't read grant/permission state AFTER applying a candidate fix and then conclude from it.** The 2026-07-09 Constituents/Flow Map bug was fixed correctly on the first try (migration 142: `km_index_constituents` was missing its `authenticated` SELECT grant — migration 022 shipped RLS + policies but zero table GRANTs, and the blanket grant script missed this one table). It was then MIS-re-diagnosed for several rounds because the grant dumps analyzed were taken after 142 had already added `authenticated`, making it look like `authenticated` always had access — spawning throwaway "missing `user` role" migrations 143/144 (since deleted). Snapshot the broken state first, or reason from the fix that worked.
+- **`information_schema.role_table_grants` is BLIND over a restricted connection — read `pg_class.relacl`** (2026-09-14). Checking migration 209's grants through the read-only `kaala-postgres` MCP returned only `kd_readonly` for `km_journey_base_rates`, which looks exactly like the migration-142 failure (table shipped with zero `authenticated` grant). It was wrong: that view exposes only grants where the **current role** is grantor or grantee, so a `kd_readonly` connection can never see anyone else's. `relacl` told the truth in one query — `{vikuna_admin=arwdDxtm, anon=r, kd_app=arwd, kd_readonly=r, authenticated=r}`, every grant present. Use `pg_class.relacl` or `has_table_privilege('<role>', …)`; both are role-independent. This matters most for exactly the tables where it is tempting to skip the check, because a missing SELECT on a read-optional table fails **silently** by design.
+- **Measure before inventing a threshold — and accept the answer when the data refuses to supply one** (2026-09-14). Price Action breakout re-entries cluster (SOLARA cleared its 20-day high five times in fifteen days), so a "suppress a repeat within N bars" cooldown looked obviously right. The gap distribution across a 1-in-37 NSE sample, 566 entries, came back 12.5% / 9.2% / 20.8% / 40.8% — smooth, no cliff, no natural break. The correct outcome of checking the distribution is sometimes **no threshold at all**: any N would have been taste wearing the costume of a rule, silently dropping real events. Density got solved structurally instead (bottom priority in the story table). The house rule is "check the distribution first"; this is the case where checking it says *don't*.
+- **A rare-event assumption is load-bearing even where nothing states it** (2026-09-14). `thesis.ts` picked its "Recent signals" with `slice(-8)` — correct for years, because every event kind was rare. Phase 2 added a kind that fires 22 times in 74 bars and the list would have filled with it, evicting the Big Money day and the journey confirmation, and degrading the tab's headline sentence (which reads `signals[0]`). Nothing in the type or the call site said "this assumes events are rare". When adding a high-frequency member to a shared stream, audit every CONSUMER that trims it, not just the producer — the chart was already immune because `eventAtBar` resolved by priority; the list had no equivalent rule.
+- **A derivation starved of warm-up reports "none", not "I could not look"** (2026-09-15). `fpbEvents` needs 61 bars and returns `[]` below that; the chart fetched exactly the user's range, so Flower Pot was **never evaluated once on a 1M chart** and reached 2 of 62 bars on a 3M one. Nothing errored, nothing looked wrong — the absence was indistinguishable from a genuine absence, which is the worst shape a data bug can take. Before adding storage to "fix" a missing signal, check whether the derivation is merely being starved: the cure is usually warm-up bars, not columns. And whatever the cure, make the blind zone **sayable** (`storyCoverage`) so the gap can be named rather than silently reported as zero.
 - **RLS on pipeline-computed tables**: don't add RLS to aggregate tables (`km_industry_eod`, etc.) — they contain no user data and RLS creates silent access bugs when `kd_app` role differs from `authenticated`.
 - **`auth.*` is Supabase-only — this deployment shimmed it in migration 149 (2026-07-14)**: RLS policies and `public.is_admin()` call `auth.uid()`/`auth.role()`/`auth.jwt()`, which exist on Supabase but NOT on self-hosted PostgREST. For a long time no migration DEFINED them (8 referenced, 0 defined), so every `auth.*`-based policy *errored at evaluation* — hidden because most tables have RLS OFF and admin writes go via FastAPI (`kd_app`). It surfaced as "permission denied"→then a silent `is_admin()` error on `km_index_constituents` (the one RLS-ON table with an `is_admin()` write policy) when custom-index saves (direct PostgREST) broke. Migration 149 defines `auth.uid/role/email/jwt` over `current_setting('request.jwt.claims', true)` — the same idiom `kd_update_profile` uses. If you add a new RLS policy, `auth.uid()`/`is_admin()` now work; if `is_admin()` ever "does nothing," first check the `auth` schema still exists. Also: two DB roles matter — logged-in users are `authenticated` (migration 144 reverted `kd_auth_login` to issue that for everyone, admins included), so any RLS-ON table needing admin writes must grant the verb to `authenticated` AND rely on `is_admin()` for authorization (e.g. migration 148).
 - **Warm-up windows sized in CALENDAR DAYS are cadence-blind** (migration 169, 2026-08-06). `compute_indicators_batch` (`300 days`) and `compute_magic_rs_batch` (`350 days`) are also called on `km_equity_weekly`/`km_equity_monthly` by `pipeline/compute/_indicator_chain.py`. The same window loads ~43 weekly bars and ~10 monthly bars, below every indicator's minimum (`IF i >= 50`, `IF i >= 20`, Wilder-14) — so they wrote NULL **while still stamping `indicators_computed_at = NOW()`**, making the row look computed. After the 2026-08-06 backfill: monthly `rsi_14`/`ema_20`/`sma_50` were 0/3,257 for May–Jul even for RELIANCE and TCS, which hold all 80 monthly bars. magic_rs failed harder — long MagicRS sits inside `IF n >= 145` (weekly never reached it) and monthly tripped `IF n < 22 THEN RETURN 0` before writing anything, which is why monthly `magic_rs` had been NULL *since the table existed*. Two consequences worth remembering: (1) a resume marker written unconditionally is worse than none — `... AND indicators_computed_at IS NULL` in the UPDATE means a re-run **skips** the rows it corrupted, so any fix must clear the stamp first; (2) **monthly long MagicRS is structurally impossible** — 145 monthly bars is ~12 years and the deepest symbol has 80, so monthly carries `magic_rs_short` only. When a function is shared across timeframes, size every lookback by bar count, not by date arithmetic.
@@ -638,10 +1285,113 @@ These are in `LESSONS_LEARNED.md` in full; summary for quick reference:
 - **Two pipelines against one DB collide on the step advisory lock** (2026-09-07). `km_pipeline_runs` showed the VPS scheduler AND a Windows dev-machine run (`D:\projects\…`) both processing 2026-09-03; the second `nse_magic_rs` waited 600 s on `_step_lock` and recorded `failed`, the step then completed normally, and the nightly `integrity_checks` still reported the day critical. `check_step_failures` now downgrades a failure to warning when a later job for the same dimension + trade_date completed. Do not run `daily_pipeline` locally against `DB_PRIMARY` while the VPS scheduler window (12:30–19:30 IST) is open. Same session: `check_scanner_contract` had raised "scan contract source missing" every night since deploy — the backend image has no frontend source; docker-compose now bind-mounts `./App/frontend/src` read-only at `/frontend/src` (redeploy with `docker-compose up -d` to pick it up).
 - **Two breadth pipelines, one chart component — they are NOT comparable** (2026-09-09). `MarketBreadthChart` renders both, which is why `/workspace` and `/market-structure` invite a comparison they cannot survive. `/market-structure` passes no `data` prop and self-fetches `km_market_breadth` (ALL NSE, ~2,944 stocks, all three legs EMA, computed in pandas over **cliff-adjusted** closes — D44). `/workspace`, `/chart/index/:id` and `/sector-rotation/:id` inject `useIndexBreadth` → `km_index_breadth` (one index's constituents, `ema_20` + **`sma_50`** + **`sma_150`** — D40 and migration 203's own header — read from stored columns computed on RAW closes, so no corporate-action adjustment). Weights are the same (0.50/0.30/0.20); nothing else is. On 2026-09-09: All NSE 43.25 over 2,944, NIFTY 50 25.20 over 50. **Do not "fix" a divergence between these two — they measure different things on different bases.** Fixed the same day: the chart hardcoded "50 EMA/150 EMA" for both sources (the exact mislabel D44 fixed for market-wide, reintroduced by the per-index path) — labels now follow a `maBasis` prop defaulting from whether the series was injected. Also: the 22D/44D/66D toggle only ever changed the CHART SPAN, never the headline score or the MA pills (those read `data[data.length-1]`, the newest bar, which is the same bar at every window) — and on injecting pages it changed nothing at all, because the parent fetched at a fixed 66 while the toggle keyed only a discarded internal fetch. Both charts now fetch the max window once, gated on the external-data CONTRACT (`data` **or** `isLoading` passed — not on whether data has arrived, or the query still fires once during load), and slice locally.
 - **PostgreSQL `CREATE OR REPLACE VIEW` ordinal rule**: new columns must be appended to the end of the SELECT list. Inserting in the middle shifts all subsequent columns and causes a `cannot change name of view column` error (hit in migration 117).
+- **One eligibility rule, one implementation — delete the loser** (2026-09-13). Seven Price Action scanners had their qualifying logic in TWO places: the `km_scan_results` matview arms AND ~950 lines of TypeScript in `scanEngine.ts` (`fetchBreakoutSurge`, `fetchBreakdownWatch`, `fetchPeriodMovers`, `computeFpbStock`/`fetchFlowerPotBurstClientSide`). Two implementations of one rule do not stay in agreement; they disagree silently, and the badge count is where it shows. The fix was not to reconcile them but to **delete the client-side ones** and map `vani_flag` straight through — *including `false`*, because "no flag" and "flag is false" are different answers and only the DB knows which. Matching failure semantics matter as much as the happy path: a failed request or a missing/invalid flag now **fails visibly**, a successful empty result stays empty, and an empty badge count never silently falls back to the old path. `docs/scanner-highlight-authority.md`.
+- **Never publish a derived reading from an incomplete source run** (2026-09-12). `run_daily` publishes leadership snapshots only on `overall_status == 'completed'`, and publication is transactional across all 5 scopes × 3 windows. The tempting alternative — publish what succeeded — produces a reading that looks finished and is not, which is strictly worse than yesterday's clearly-dated snapshot. Retaining the older dated snapshot is the correct degraded state. A failed publication is also its own step: it must not mark a successful index calculation as failed, nor be hidden by one.
+- **Read paths must not be able to trigger heavy work** (2026-09-12). Sector leadership renders from one published JSON payload plus a snapshot hash — no constituent scanning, no index calculation, no LLM call on the read. An unprepared date shows a preparation message instead of computing on demand. The moment a page load *can* run the expensive job, one impatient refresh becomes an outage.
+- **A prompt is not a safe place to do arithmetic, and a "Use:" list is not a vocabulary** — both already cost us a wrong answer in production (see the signed-number entry under Known Issues). The research companions apply the same rule at scale: every comparison is precomputed into a sentence before the model sees it, and the model receives a *validated snapshot*, never rows to interpret. Where two readings exist on different bases (Current Flow vs Longer-Term Leadership; per-index vs market-wide breadth), the prompts are explicitly forbidden from combining them into one score — and the tests assert it, because a plausible-sounding merge is exactly what a small model will volunteer.
+- **Version the cache key, not just the content** (2026-09-12). `km_vani_cache` keys include intent id + intent **version** + depth + period + a hash of the exact data snapshot. This buys two things a TTL cannot: a same-date data correction changes the hash so a stale reading can never be served, and bumping a family's `VERSION` retires every misleading cached explanation in one line. Both `sector_vani.VERSION` (8) and `market_structure_vani.VERSION` (2) have already been bumped for exactly that reason.
+- **`prefer_local` meant Qwen-ONLY, and that was load-bearing for older callers** (2026-09-12). Market Structure needed Qwen-first *with* cloud fallback, so `complete_with_source` gained a separate `allow_cloud_fallback: bool = False` rather than changing what `prefer_local` does. Widening the existing flag would have silently moved every older Qwen-only caller onto a paid cloud path on each Qwen hiccup. When a flag's meaning needs to change for one caller, add the second flag.
+- **`concede_level` no longer derives the persona — but still selects the breadth leg** (2026-09-13). The weighted persona table (hold_horizon 2, acts_on/concede_level 1.5 each) is **gone**: onboarding now asks two plain-language questions, holding period sets the starting persona, discovery preference covers "still exploring", and exit preferences are saved as research settings that no longer classify anyone. What did NOT change is the ICP→breadth-leg mapping (`constants/breadthLegs.ts` / `_CONCEDE_LEG` in `vani_assemblers.py`): `tight`→20 EMA, `swing_low`→50 EMA, `structure`→150 EMA still keys the opening brief. Two different jobs for one column — do not "clean up" one by removing the other. `npm run check:persona` still gates the migration-204 vocabulary.
 
 ---
 
 ## Known Issues
+
+### ✅ Research companions: DB state verified live (2026-09-14)
+
+Migrations **207 and 208 are applied and working** — checked against the live
+DB, not assumed:
+
+- All six tables exist (`km_custom_index_revisions`,
+  `km_custom_index_membership_log`, `km_leadership_observations`,
+  `km_custom_index_history_archive`, `km_leadership_generation`,
+  `km_sector_leadership_snapshots`).
+- Both migration-208 invalidation triggers are installed and **enabled**
+  (`km_leadership_membership_changed` on `km_index_constituents`,
+  `km_leadership_catalog_changed` on `km_index_symbols`).
+- `km_leadership_generation.generation = 0` — no membership or catalog edit has
+  invalidated a snapshot since the migration landed.
+- **15 published snapshots = 5 category scopes × 3 windows**, exactly as the
+  publication contract requires, all for `2026-09-11`.
+- That date **is** the latest bar in both `km_index_eod` and `km_equity_eod`,
+  so leadership is fully in step with the pipeline — no gap, nothing to
+  re-prepare. 38 custom-index revision rows, **0 stale**
+  (`revision <> computed_revision`).
+- Only one date is prepared. Historical date selection still needs
+  `refresh_sector_leadership.py --from … --to …` for whichever earlier
+  sessions you want to inspect.
+
+The companions have also been **exercised live**: `km_vani_cache` holds 35
+`sector.*` and 17 `structure.*` entries with real `hit_count`s, newest
+2026-09-13. So the earlier "no live model invocation" caveat is retired — but
+see the routing finding immediately below, which that live data exposed.
+
+Still genuinely open (fixtures only, unchanged):
+
+- **Live model answers not yet reviewed** for the four index-detail questions
+  at each explanation depth, including the unavailable-data and small-sample
+  paths (`docs/vani-intent-todo.md`).
+- **Contrast/spacing not confirmed on every product theme** — automated
+  coverage is dark/light at mobile and desktop widths only.
+- **Cross-worker advisory locking and phone interaction** were never exercised
+  outside fixtures.
+- `scripts/refresh_sector_leadership.py` live run duration is unmeasured.
+
+Pre-existing build warnings (bundle size, Browserslist age, one ambiguous
+Tailwind class) are unchanged and were not introduced here.
+
+### ⚠ There is no Haiku fallback in the deployed config — both paths are Qwen
+
+Found 2026-09-14 by reading `km_vani_cache` on the live DB. The companions
+were built to be **Qwen-first with a configured cloud fallback**, and
+`docs/market-structure-vani-handoff.md` states the precondition plainly:
+*"Your configured cloud provider/model must point to Haiku."* On this
+deployment it does not.
+
+`llm_model` is written from `_AI_MODEL` (the `AI_MODEL` env var) whenever the
+answer did not come from the dedicated local path, so the cache records the
+configured cloud model directly. Recent rows say:
+
+| `llm_provider` | `llm_model` | entries (30d) | what it really is |
+|---|---|---|---|
+| `openai` | `Qwen3-4B-Q4_K_M.gguf` | 43 | `_primary_complete` → **local Qwen**, via its OpenAI-compatible API |
+| `qwen-local` | `qwen-local` | 3 | `_fallback_complete` → local Qwen |
+| `qwen-local` | `claude-haiku-4-5` | 33 | older `scanner.*`/`fpb.*` writers (they stamp the config constant, not the served model) |
+| `anthropic` | `claude-haiku-4-5` | 36 | **last one 2026-09-04** — before the provider was switched |
+
+So `AI_PROVIDER` is an OpenAI-compatible endpoint serving `Qwen3-4B-Q4_K_M.gguf`.
+`allow_cloud_fallback=True` therefore falls back **to the same Qwen server** —
+it is redundancy, not a second opinion, and no answer has been served by
+Anthropic since 2026-09-04.
+
+Two consequences worth acting on:
+
+1. **`_fallback_complete` is failing most of the time.** `prefer_local=True`
+   tries it first, yet only 3 of 30 recent sector answers carry
+   `provider='qwen-local'`; the other 27 (and all 13 `structure.*`) were
+   rescued by the fallback branch. The feature looks healthy precisely because
+   the fallback works — the primary local path quietly is not. `scanner.*`
+   does reach `qwen-local` normally, so this is specific to the companion
+   path (its prompts are far larger — snapshot plus precomputed comparisons).
+2. **`llm_provider` and `llm_model` cannot be read as a pair.** Two writers
+   populate them with different conventions, which is how the "qwen-local +
+   claude-haiku-4-5" combination exists at all — a combination the companion
+   modules' own conditional makes impossible. Trust `llm_provider` for the
+   branch and treat `llm_model` as "the configured model at write time".
+
+Neither is fixed here — both are deployment/instrumentation issues, not code
+this session changed.
+
+### ⚠ `prefer_local` still does not reach the legacy `/api/ai/*` family
+
+Unchanged and re-verified 2026-09-14: `pipeline2_api.py` has **15 `_ai_complete(`
+call sites**. The `/api/vani/ask` family and the five `fpb.*` endpoints route
+Qwen-first and apply `_sebi_post_filter`; the remaining legacy `GET /api/ai/*`
+endpoints — panchang-insight, breadth-insight, breadth-roc-insight,
+instrument-insight, market-pulse-insight — still go straight to the cloud
+provider **and still skip the SEBI filter**. `allow_cloud_fallback` exists in
+exactly three places (`ai_client.py`, `market_structure_vani.py`,
+`sector_vani.py`) and was deliberately not spread further.
 
 ### Onboarding: version-stamped re-onboarding + the step-3 skip (2026-09-12)
 
@@ -1045,8 +1795,13 @@ validated against the matview (both return 8 tight coils for 2026-09-08).
    today", the same string it shows for genuinely empty data. `pyflakes` finds
    this in one second. **Run `python -m pyflakes` on the backend before
    believing any "no data" symptom** — it also flags five live undefined names
-   in `lib/integrity_checks.py` (`db_meta` 512, `unmeasured_n` 590-596) that
-   are still unfixed.
+   in `lib/integrity_checks.py` — **fixed 2026-09-14**. `db_meta` was READ at
+   C1b and only ASSIGNED fifteen lines later, so `check_scanner_contract`
+   raised NameError on its first statement **every run** since the commit that
+   removed `MIN_AVG_AMT_22D_CR`; `run_all` converted the crash into a bland
+   `checker_error_*` warning, so the guard looked present while being blind on
+   exactly the contract drift it exists to catch. `unmeasured_n` was the orphan
+   of the deleted liquidity floor and is removed with it.
 2. **`fpb.recent_outcomes` queried columns that do not exist.**
    `km_fpb_active` has `status` and `release_date`; the query used
    `fpb_outcome` and `released_at`, and tested `'REACHED_TARGET'` where the
@@ -1059,9 +1814,9 @@ validated against the matview (both return 8 tight coils for 2026-09-08).
    `_sebi_post_filter` entirely and served raw model output; that is now
    applied.
 
-**Still open:** `prefer_local` appears in only the `/api/vani/ask` family
-against 19 `_ai_complete(` call sites — every other legacy `GET /api/ai/*`
-endpoint (panchang-insight, breadth-insight, market-pulse-insight, …) still
+**Still open** (re-verified 2026-09-14, now **15** `_ai_complete(` call sites —
+see the dedicated entry at the top of Known Issues): every legacy
+`GET /api/ai/*` endpoint outside the `/api/vani/ask` and `fpb.*` families still
 routes to the cloud and still skips the SEBI filter.
 
 **D1 (no `vani_rule`) stays deferred**, unchanged: tightness is now stored per
@@ -1128,6 +1883,12 @@ Metaphor-driven index/equity dashboards (`/pulse/:indexId`, `/pulse/equity/:equi
 
 ## VaNi Morning Brief — Implementation Status (June 2026)
 `POST /api/vani/daily` — panchang card first, max 3 cards, per-item LLM calls, in-memory `_vani_cache` (24h TTL — final design). Detail: `docs/claude/vani-status.md`
+
+⚠ **Two different caches, do not confuse them.** The Morning Brief's
+`_vani_cache` is in-process and TTL-based. The research companions use the
+**persistent `km_vani_cache` table** (migration 038, `lib/vani_cache.py`) with
+snapshot-hash + intent-version keys and no TTL — see **VaNi Research
+Companions**. A fix to one is not a fix to the other.
 
 ## Payments
 
