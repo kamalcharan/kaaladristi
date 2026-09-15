@@ -315,11 +315,72 @@ Materiality ranking and the bonus/split ratios therefore still need the document
 for the filings that matter, even though the bulk of the stream does not. Plan
 the PDF path as the *minority* route it is, not the default.
 
+### `desc` IS a taxonomy — 63.5% classifies with no model at all
+
+Probe v2, 14,776 announcements over 30 days (**492/day**, consistent with v1):
+**107 distinct `desc` values**, top 40 covering **96.8%**. NSE has already done
+the categorisation. Mapped to our five families:
+
+| From `desc` alone | rows | share |
+|---|---|---|
+| **GENERAL** (newspaper publication, shareholders meeting, analyst meet, trading window) | 7,142 | **48.3%** |
+| SWITCH (appointment, resignation, change in management/directors) | 882 | 6.0% |
+| CORPORATE ACTION (record date) | 421 | 2.8% |
+| OWNERSHIP (allotment, ESOP, SEBI takeover regs) | 344 | 2.3% |
+| NEGATIVE SPARK (insolvency, litigation, orders passed, auditor change) | 330 | 2.2% |
+| SPARK (order wins, acquisition, merger) | 264 | 1.8% |
+| **AMBIGUOUS** (General Updates 2,039 · Updates 1,302 · Board Meeting 544 · Press Release 440 · Credit Rating · Investor Presentation) | 4,922 | 33.3% |
+| tail — 67 values | 471 | 3.2% |
+
+**63.5% deterministic · 36.5% to the LLM.**
+
+Two structural facts worth more than the percentages:
+
+- **Almost half the stream is noise `desc` discards for free.** Newspaper
+  publications and shareholder meetings alone are 33%.
+- **The material spark stream is SMALL.** Order wins + acquisitions + mergers
+  are 264 rows in 30 days — roughly **3,200 a year**. The ambiguous buckets hold
+  more, but the thing we care about is a thin slice of a large stream. Sizing
+  the review queue and the panel against 201,000/year is the wrong denominator.
+
+Revised Qwen load (supersedes the 80%-keyword figures above):
+
+| | |
+|---|---|
+| 12-month backfill | **73,390 items · 122 h · 5.1 days** |
+| Daily | 180 items · **18 min/day** |
+
+**Worse than the 2.8 days the 80% keyword assumption predicted**, because `desc`
+resolves 63.5% rather than 80%. Still tractable, and a keyword pass over
+`attchmntText` *within* the ambiguous buckets should cut it further — most of
+"General Updates" is likely GENERAL. Measure that before assuming it.
+
+### ✓ No truncation — large windows are safe
+
+Probe v2 §B: a single 180-day call returned **99,162**; the two 90-day halves
+covering the same span returned **45,848 + 53,314 = 99,162**. Exact match. The
+declining per-day rate in v1 was seasonality — the −1mo sample landed in results
+season.
+
+**So backfill can use 180-day batches**: five years is ~10 calls, not hundreds.
+
+### ⚠ `hasXbrl` is TRUE on 100% of rows — treat as unverified
+
+Every one of 14,776 announcements carries `hasXbrl: true`, and no XBRL URL
+appears among the 20 keys. A flag that is universally true is more likely
+defaulted than meaningful. **Do not build on it until probe v3 confirms an XBRL
+document is actually retrievable and carries structured values.** If it does, it
+would address the numeric-extraction gap directly — which is exactly why it
+should be verified rather than assumed.
+
 ### Bulk deals: endpoint unresolved
 
-`/api/historical/bulk-deals` returned **503 on all three retries**. Alternatives
-are tried in `probe_nse_filings2.py` §C. Until one lands, Tier D is unscheduled —
-it does not block Tier A.
+All four candidates failed (probe v2 §C): `/api/historical/bulk-deals` with and
+without `optionType`, and `/api/historical/block-deals`, each **503 on all three
+retries**; `/api/snapshot-capital-market-largedeal` answered 200 with **zero
+rows**. The JSON API route appears dead — the remaining options are the
+report-detail CSV download or the daily archive file. **Tier D is unscheduled
+until one lands; it does not block Tier A.**
 
 ---
 
