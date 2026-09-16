@@ -48,7 +48,7 @@ MONTHLY_MAX_AGE_DAYS    = 40      # newest monthly bar older than this = missed 
 @dataclass
 class Finding:
     check_key: str
-    check_class: str            # reconciliation | invariant | staleness | step_failure
+    check_class: str            # reconciliation | invariant | staleness | step_failure | derivation
     severity: str               # critical | warning | info
     summary: str
     subject: Optional[str] = None
