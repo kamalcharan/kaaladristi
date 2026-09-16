@@ -1,7 +1,7 @@
 """
-Board-meeting ingest — the results rule and the link semantics
-==============================================================
-    python3 -m unittest test_board_meetings
+Filing intelligence — the results rule, the link semantics and post-result drift
+===============================================================================
+    python3 -m unittest test_filing_intelligence
 
 The classifier tests need nothing: no DB, no network, no model, same as the
 rest of the suites in this directory.
@@ -12,7 +12,7 @@ window, nearest-meeting wins) are invisible in any type signature and each one
 reads like a redundancy to anyone tidying the query later:
 
     createdb kd_test
-    KD_TEST_DSN=postgresql:///kd_test python3 -m unittest test_board_meetings
+    KD_TEST_DSN=postgresql:///kd_test python3 -m unittest test_filing_intelligence
 
 ⚠ THE TEST DATABASE IS TRUNCATED, so KD_TEST_DSN must never point at anything
 real. It refuses any DSN whose database name does not contain 'test'.
@@ -28,7 +28,8 @@ from scripts.ingest_nse_board_meetings import (
 
 DSN = os.environ.get('KD_TEST_DSN')
 MIGRATIONS = ('km_migration_212_filings_ingest.sql',
-              'km_migration_214_board_meetings.sql')
+              'km_migration_214_board_meetings.sql',
+              'km_migration_215_result_drift.sql')
 DB_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                       '..', 'DBscripts')
 
@@ -117,7 +118,8 @@ class LinkSemantics(unittest.TestCase):
                 DO $$ BEGIN CREATE ROLE kd_readonly; EXCEPTION WHEN
                   duplicate_object THEN NULL; END $$;
                 CREATE TABLE IF NOT EXISTS km_equity_eod
-                  (equity_id int, trade_date date);
+                  (equity_id int, trade_date date, close numeric,
+                   prev_close numeric);
                 CREATE TABLE IF NOT EXISTS km_equity_symbols
                   (id serial primary key, symbol text, isin text,
                    exchange text, is_active bool);
@@ -136,7 +138,7 @@ class LinkSemantics(unittest.TestCase):
     def setUp(self):
         with self.conn.cursor() as c:
             c.execute('TRUNCATE km_corporate_events, km_filings_raw, '
-                      'km_board_meetings, km_equity_symbols '
+                      'km_board_meetings, km_equity_symbols, km_equity_eod '
                       'RESTART IDENTITY CASCADE')
         self.conn.commit()
 
@@ -298,6 +300,163 @@ class LinkSemantics(unittest.TestCase):
         with self.conn.cursor() as c:
             c.execute('SELECT isin FROM km_board_meetings')
             self.assertEqual(c.fetchone()[0], 'INE00G')
+
+
+@unittest.skipUnless(DSN, 'set KD_TEST_DSN to a throwaway database')
+class ResultDrift(unittest.TestCase):
+    """kd_result_returns / v_result_drift (migration 215).
+
+    Everything here is derived — no table, no nightly job — so the only thing
+    standing between a wrong number and a published PEAD figure is this file.
+    """
+
+    setUpClass = LinkSemantics.__dict__['setUpClass']
+    tearDownClass = LinkSemantics.__dict__['tearDownClass']
+    setUp = LinkSemantics.__dict__['setUp']
+
+    def _stock(self, eid, symbol, isin, bars):
+        with self.conn.cursor() as c:
+            c.execute("INSERT INTO km_equity_symbols (id, symbol, isin, "
+                      "exchange, is_active) VALUES (%s,%s,%s,'NSE',true)",
+                      (eid, symbol, isin))
+            for d, close in bars:
+                c.execute('INSERT INTO km_equity_eod (equity_id, trade_date, '
+                          'close) VALUES (%s,%s,%s)', (eid, d, close))
+        self.conn.commit()
+
+    def _result(self, isin, name, day0, verdict=True):
+        with self.conn.cursor() as c:
+            c.execute("INSERT INTO km_filings_raw (source, source_ann_id, isin,"
+                      " disseminated_at, content_hash, payload) VALUES "
+                      "('NSE',%s,%s,%s,'h','{}') RETURNING id",
+                      (name + str(day0), isin, f'{day0} 10:00'))
+            rid = c.fetchone()[0]
+            c.execute("INSERT INTO km_corporate_events (isin, company_name, "
+                      "disseminated_at, day_0_trade_date, family, desc_raw, "
+                      "primary_raw_id, raw_ids, is_result_announcement) VALUES "
+                      "(%s,%s,%s,%s,'UNCLASSIFIED','Outcome of Board Meeting',"
+                      "%s,ARRAY[%s],%s)",
+                      (isin, name, f'{day0} 10:00', day0, rid, rid, verdict))
+        self.conn.commit()
+
+    def _rows(self, *args, view=False):
+        sql = ('SELECT symbol, base_trade_date, base_close, day_0_close, '
+               'end_trade_date, end_close, sessions_elapsed, reaction_pct, '
+               'drift_pct, suspect_corporate_action FROM ')
+        with self.conn.cursor() as c:
+            if view:
+                c.execute(sql + 'v_result_drift ORDER BY symbol')
+            else:
+                c.execute(sql + 'kd_result_returns(%s,%s,%s) ORDER BY symbol',
+                          args if args else (None, None, None))
+            cols = ('symbol', 'base_date', 'base_close', 'd0_close', 'end_date',
+                    'end_close', 'sessions', 'reaction', 'drift', 'suspect')
+            return {r[0]: dict(zip(cols, r)) for r in c.fetchall()}
+
+    def _clean_stock(self):
+        # Day -1 = 09-07 @100, Day 0 = 09-08 @110, latest 09-11 @121
+        self._stock(1, 'AAA', 'INE00A',
+                    [('2026-09-04', 98), ('2026-09-07', 100),
+                     ('2026-09-08', 110), ('2026-09-09', 112),
+                     ('2026-09-10', 115), ('2026-09-11', 121)])
+        self._result('INE00A', 'AAA', '2026-09-08')
+
+    # ── the property the whole metric turns on ────────────────────────────
+    def test_reaction_and_drift_have_different_bases(self):
+        """reaction is Day -1 -> Day 0; drift is Day 0 -> end.
+
+        Measuring drift from Day -1 folds the announcement jump into it and is
+        how a PEAD study reports an effect it never measured. The fixture is
+        built so a merged version cannot coincidentally pass: +10% jump then
+        +10% drift would read +33.1% off the wrong base.
+        """
+        self._clean_stock()
+        r = self._rows()['AAA']
+        self.assertEqual(float(r['reaction']), 10.00)   # 100 -> 110
+        self.assertEqual(float(r['drift']), 10.00)      # 110 -> 121
+        self.assertEqual(float(r['base_close']), 100)
+        self.assertEqual(float(r['d0_close']), 110)
+
+    def test_drift_is_never_measured_from_the_pre_announcement_close(self):
+        self._clean_stock()
+        r = self._rows()['AAA']
+        self.assertNotAlmostEqual(float(r['drift']), 21.00, places=1)
+
+    # ── unadjusted closes ─────────────────────────────────────────────────
+    def test_a_split_inside_the_span_is_flagged(self):
+        """km_corporate_actions is EMPTY, so a 1:2 split reads as a genuine
+        -50% drift. Results season is exactly when boards declare bonuses."""
+        self._stock(2, 'BBB', 'INE00B',
+                    [('2026-09-07', 200), ('2026-09-08', 210),
+                     ('2026-09-09', 220), ('2026-09-10', 105)])
+        self._result('INE00B', 'BBB', '2026-09-08')
+        r = self._rows()['BBB']
+        self.assertTrue(r['suspect'])
+        self.assertEqual(float(r['drift']), -50.00)
+
+    def test_an_ordinary_large_move_is_not_flagged(self):
+        """The gate is 0.55x / 1.80x — impossible under NSE's +/-20% bands. A
+        real 19% fall must stay usable, or the flag eats the population it was
+        meant to protect."""
+        self._stock(3, 'CCC', 'INE00C',
+                    [('2026-09-07', 100), ('2026-09-08', 100),
+                     ('2026-09-09', 81)])
+        self._result('INE00C', 'CCC', '2026-09-08')
+        self.assertFalse(self._rows()['CCC']['suspect'])
+
+    # ── bar selection ─────────────────────────────────────────────────────
+    def test_day_minus_one_is_the_stocks_own_last_traded_bar(self):
+        """A stock suspended into its result must compare against the last
+        price that actually existed, not a market-calendar date it did not
+        trade on."""
+        self._stock(4, 'DDD', 'INE00D',
+                    [('2026-08-28', 50), ('2026-09-08', 60),
+                     ('2026-09-09', 63)])
+        self._result('INE00D', 'DDD', '2026-09-08')
+        r = self._rows()['DDD']
+        self.assertEqual(str(r['base_date']), '2026-08-28')
+        self.assertEqual(float(r['reaction']), 20.00)
+
+    def test_a_horizon_the_stock_has_not_lived_returns_NULL(self):
+        """Not a shorter window silently labelled N. A 22-session drift column
+        quietly holding 3-session numbers is unfalsifiable once it is in a
+        study."""
+        self._clean_stock()
+        r = self._rows(None, None, 22)['AAA']
+        self.assertIsNone(r['end_date'])
+        self.assertIsNone(r['sessions'])
+        self.assertIsNone(r['drift'])
+
+    def test_a_horizon_picks_that_exact_session(self):
+        self._clean_stock()
+        r = self._rows(None, None, 2)['AAA']
+        self.assertEqual(str(r['end_date']), '2026-09-10')   # n=0,1,2
+        self.assertEqual(r['sessions'], 2)
+        self.assertEqual(float(r['drift']), 4.55)            # 110 -> 115
+
+    # ── which events count ────────────────────────────────────────────────
+    def test_unjudged_and_non_result_events_are_both_excluded(self):
+        """NULL is excluded because it is unknown, FALSE because it is not a
+        result. Admitting NULL would put every un-linked board-meeting outcome
+        into a results population."""
+        self._stock(5, 'EEE', 'INE00E',
+                    [('2026-09-07', 10), ('2026-09-08', 11)])
+        self._stock(6, 'FFF', 'INE00F',
+                    [('2026-09-07', 10), ('2026-09-08', 11)])
+        self._result('INE00E', 'EEE', '2026-09-08', verdict=None)
+        self._result('INE00F', 'FFF', '2026-09-08', verdict=False)
+        self.assertEqual(self._rows(), {})
+
+    def test_the_view_is_capped_but_the_function_is_not(self):
+        """A read path must not be able to walk every bar since every result
+        ever recorded. History stays reachable through the function, which is
+        a research call rather than a render."""
+        self._stock(7, 'GGG', 'INE00G',
+                    [('2026-01-05', 10), ('2026-01-06', 11),
+                     ('2026-09-11', 20)])
+        self._result('INE00G', 'GGG', '2026-01-06')
+        self.assertIn('GGG', self._rows())              # function sees it
+        self.assertNotIn('GGG', self._rows(view=True))  # view does not
 
 
 if __name__ == '__main__':

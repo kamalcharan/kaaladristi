@@ -477,8 +477,16 @@ It is structurally safe against the I/O problem above: ~300 rows per run,
 INSERT-only, new small table, touches `km_equity_eod` not at all, takes no step
 lock — against `daily_run`'s 7,496 rows × 147 columns of UPDATE.
 
-Two things stay in the daily run as `DIMENSION_DEPENDENTS` entries:
-`returns_since_result` (needs the day's close) and cache invalidation.
+~~Two things stay in the daily run as `DIMENSION_DEPENDENTS` entries:
+`returns_since_result` (needs the day's close) and cache invalidation.~~
+
+**⚠ CORRECTED ON BUILD (2026-09-16).** That sentence contradicts the bullet two
+paragraphs below it — *"`returns_since_result` derived, not stored"* — and both
+cannot hold: a `DIMENSION_DEPENDENTS` entry exists to be RECOMPUTED, which
+presupposes storage. **Derived won.** Migration 215 ships it as
+`kd_result_returns()` plus a `v_result_drift` view, with deliberately no
+dimension, no nightly job and no cascade edge. If a measured read cost later
+forces materialisation, that is a new decision with a number behind it.
 
 ### Also in this sprint
 
@@ -487,9 +495,74 @@ Two things stay in the daily run as `DIMENSION_DEPENDENTS` entries:
   documented institutional buy on a Waking Giants name, or on a stock that just
   entered Stage 2, is the strongest confirmation in the framework and we already
   hold both sides of that join.
-- **`returns_since_result`** derived, not stored.
+- **`returns_since_result`** derived, not stored. **SHIPPED** — migration 215.
 
 **Exit:** a queryable event history joined to the chain. No UI.
+
+---
+
+### Sprint 2 as built (2026-09-16)
+
+| Item | State |
+|---|---|
+| `km_filings_raw` + `km_corporate_events` + `kd_day_zero_trade_date` | migration 212, applied |
+| `filings_ingest` dimension, 5 slots outside 12:30–19:30 IST | shipped |
+| 12-month NSE backfill | run: **28,076 announcements → 28,363 events**, 0 deferred, 0 unresolvable |
+| `'derivation'` check class | migration 213, applied — 210 shipped a check the constraint rejected |
+| Results identification | migration 214 — **needed a second feed**, see below |
+| `returns_since_result` | migration 215, derived |
+| Bulk / block deals | **BLOCKED** — the NSE JSON endpoint returned 503/empty on all four candidates probed. Not abandoned; it needs its own probe session. |
+
+#### The finding that changed the shape: a result has no category
+
+The plan assumed the announcements stream could date a result. It cannot, and
+this was only visible once 28,076 real rows existed to measure:
+
+* There is **no `Financial Results` desc**. A result is filed as **`Outcome of
+  Board Meeting`** — 3,013 rows in one season — because legally that is what it
+  is: the board approves, the outcome is disclosed.
+* That same category carries dividends, fundraising and appointments, and its
+  `attchmntText` is boilerplate naming only the event type.
+* Three discriminators were tested and **all three failed**: the PDF filename
+  says 'result' on 13%, 'fin' on 16%, and `hasXbrl` is TRUE on **3,013 of
+  3,013** — confirming probe v2's suspicion that it is a defaulted flag.
+
+The fallback would have been fetching ~26,000 PDFs a year and reading them —
+Sprint 3 work, and a different shape of answer. Instead
+`/api/corporate-board-meetings` supplies the **prior intimation**: a company
+must declare in advance that it will meet and what for. So it stays a metadata
+join — no PDF, no classifier, no LLM.
+
+**⚠ And the meeting date is never Day 0.** The intimation names a date the
+market cannot act on. Day 0 stays with the outcome announcement's
+`exchdisstime`, through `kd_day_zero_trade_date`. Dating from the intimation
+would be the lookahead bias this plan keeps guarding against, arriving through
+a side door.
+
+#### Two calibration decisions worth not re-litigating
+
+1. **`is_result_announcement` FALSE is a measurement, not a default.** An
+   outcome whose company has no intimation of any kind in the tolerance window
+   is left **NULL** and counted as `no_meeting`. SEBI LODR requires prior
+   intimation for results, so that shape is far more likely a hole in our fetch
+   than a company meeting unannounced — and FALSE never corrects itself,
+   because the row stops being NULL and leaves the queue. Same rule as the
+   starved-derivation lesson in CLAUDE.md.
+2. **`reaction_pct` and `drift_pct` are never merged.** Reaction is Day −1 →
+   Day 0, the repricing; drift is Day 0 → end, which is the entire phenomenon.
+   Measuring drift from Day −1 folds the announcement jump into it and is how a
+   PEAD study reports an effect it never measured.
+
+#### ⚠ The blocker Sprint 3b now owns
+
+`km_corporate_actions` is **empty** (CLAUDE.md, D44), so closes are unadjusted
+and a split inside a drift span reads as a genuine −50% move. Results season is
+exactly when boards declare bonuses, so this is not a corner case for this
+metric. Every drift row carries `suspect_corporate_action` (the 0.55×/1.80×
+gate from `adjust_close_cliffs()`), which **must be filtered on in any study**
+until Sprint 3b populates the table. It flags rather than adjusts on purpose —
+back-adjusting here would be a third implementation of corporate-action
+handling, silently changing numbers a researcher is reading.
 
 ---
 
