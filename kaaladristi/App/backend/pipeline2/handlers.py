@@ -777,11 +777,30 @@ def _handle_period_aggregate(dim: str, conn, trade_date: date, force: bool,
     no-op and reports 'completed' rather than 'failed' — a Tuesday genuinely has
     no weekly bar to write, and marking it failed would have the 19:30 gap sweep
     re-enqueue it every single day.
+
+    ⚠ THE BOUNDARY CHECK IGNORES `force`, AND THAT IS THE POINT. It used to read
+    `if not is_boundary(trade_date) and not force`, which was correct until the
+    cascade went live on 2026-09-15 — the cascade forces every dependent, so
+    `force` began bypassing the guard on ordinary weekdays. The aggregate then
+    ran, wrote nothing (there is no period to write), and fell through to
+    `status = 'completed' if after >= 100.0 else 'failed'`, where a non-boundary
+    date's fill_rate is legitimately 0%. Result: 'failed', 0.0% -> 0.0%, no
+    exception and therefore NO ERROR MESSAGE — eight undiagnosable failures a
+    day across two dimensions and two dates.
+
+    `force` means "recompute even though it looks done". It cannot mean "write a
+    weekly bar onto a Wednesday": that is not an optimisation being skipped, it
+    is a statement about the calendar. Forcing on a real boundary still works,
+    which is the case force exists for.
+
+    Nothing is lost by the no-op. aggregate_*_bars rebuilds the whole period
+    from its start, so a daily bar repaired mid-week is picked up by that week's
+    Friday run regardless.
     """
     before = fill_rate(conn, dim, trade_date)
     on_progress(f'before fill_rate = {before:.1f}%', 5)
 
-    if not is_boundary(trade_date) and not force:
+    if not is_boundary(trade_date):
         on_progress(f'{trade_date} is not a {label} boundary — nothing to aggregate', 100)
         return HandlerResult('completed', before, before, 0)
 
