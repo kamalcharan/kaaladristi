@@ -897,6 +897,33 @@ def handle_filings_ingest(conn, trade_date: date, force: bool,
     return HandlerResult(status, 0.0, 100.0, rows)
 
 
+def handle_board_meetings_ingest(conn, trade_date: date, force: bool,
+                                exchange: Optional[str], on_progress: ProgressFn) -> HandlerResult:
+    """Fetch NSE board-meeting intimations and mark which announcements are results.
+
+    Same shape and the same reasoning as handle_filings_ingest: its own cadence,
+    a trailing window rather than a `trade_date` fetch key, and no place in
+    DIMENSION_DEPENDENTS because nothing in the EOD chain feeds it.
+
+    It reads km_corporate_events, which filings_ingest writes — but that is a
+    read, not a derivation: an unlinked event is left NULL and linked on the
+    next pass, so ordering between the two is a convenience, never a
+    correctness requirement. Declaring it a dependent would make every filings
+    fix drag a network fetch behind it.
+    """
+    from scripts.ingest_nse_board_meetings import ingest_board_meetings_for_pipeline
+    on_progress('fetching NSE board meetings', 20)
+    try:
+        rows, status = ingest_board_meetings_for_pipeline(conn, trade_date, force)
+    except Exception as e:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        return HandlerResult('failed', 0.0, 0.0, 0, error_msg=str(e)[:500])
+    return HandlerResult(status, 0.0, 100.0, rows)
+
+
 def handle_integrity_checks(conn, trade_date: date, force: bool,
                             exchange: Optional[str], on_progress: ProgressFn) -> HandlerResult:
     """Data-integrity sweep — reconciliation / invariant / staleness /
@@ -1197,6 +1224,8 @@ def handle(dimension: str, conn, trade_date: date, force: bool,
     """Dispatch a fix to the right per-dimension handler."""
     if dimension == 'filings_ingest':
         return handle_filings_ingest(conn, trade_date, force, exchange, on_progress)
+    if dimension == 'board_meetings_ingest':
+        return handle_board_meetings_ingest(conn, trade_date, force, exchange, on_progress)
     if dimension == 'index_eod_download':
         return handle_index_eod_download(conn, trade_date, force, exchange, on_progress)
     if dimension == 'nse_eod_download':

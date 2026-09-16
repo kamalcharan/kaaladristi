@@ -56,23 +56,27 @@ def _enqueue_daily_run(dsn: str) -> None:
         conn.close()
 
 
-def _enqueue_filings_ingest(dsn: str) -> None:
-    """Enqueue a filings_ingest job — NSE corporate announcements.
+def _enqueue_stream_ingest(dsn: str, dimension: str) -> None:
+    """Enqueue one of the continuous-stream ingests (filings / board meetings).
 
-    ⚠ NOT PART OF daily_run, and that is the whole point. Announcements are a
-    continuous stream that clusters AFTER the close: measured on the first live
-    run, 287 of 582 rows were disseminated between 15:30:11 and 22:55. Folding
-    this into the 18:00 daily_run would miss the larger half of every day's
-    filings, every night, silently — the row count would still look healthy.
+    ⚠ NEITHER IS PART OF daily_run, and that is the whole point. Announcements
+    are a continuous stream that clusters AFTER the close: measured on the first
+    live run, 287 of 582 rows were disseminated between 15:30:11 and 22:55.
+    Folding this into the 18:00 daily_run would miss the larger half of every
+    day's filings, every night, silently — the row count would still look
+    healthy. Board-meeting intimations are forward-looking for the same reason:
+    they are keyed to a FUTURE meeting, not to a bar that has closed.
 
-    Enqueued as job_type='fix' with dimension='filings_ingest' so the existing
-    worker dispatch, job record and status plumbing are reused unchanged. It is
-    NOT a fix in the repair sense; 'fix' is simply the queue's name for a
-    single-dimension job.
+    Enqueued as job_type='fix' so the existing worker dispatch, job record and
+    status plumbing are reused unchanged. It is NOT a fix in the repair sense;
+    'fix' is simply the queue's name for a single-dimension job.
 
     Runs every day, not just weekdays: companies file on weekends and holidays.
-    The handler sweeps a trailing window, so a missed slot self-heals on the
+    Each handler sweeps a trailing window, so a missed slot self-heals on the
     next one.
+
+    One function, two callers, because the two differed only in a string —
+    and a copy is how the queued/running guard ends up fixed in one of them.
     """
     target = _last_trading_day()
     conn = psycopg2.connect(dsn)
@@ -82,19 +86,20 @@ def _enqueue_filings_ingest(dsn: str) -> None:
             # not stack a second job on top of the first.
             cur.execute(
                 "SELECT id FROM km_jobs "
-                "WHERE job_type = 'fix' AND dimension = 'filings_ingest' "
-                "  AND status IN ('queued', 'running') LIMIT 1"
+                "WHERE job_type = 'fix' AND dimension = %s "
+                "  AND status IN ('queued', 'running') LIMIT 1",
+                [dimension],
             )
             if cur.fetchone():
-                log.info('filings_ingest already queued/running, skipping')
+                log.info(f'{dimension} already queued/running, skipping')
                 return
             cur.execute(
                 "INSERT INTO km_jobs (job_type, dimension, trade_date, created_by) "
-                "VALUES ('fix', 'filings_ingest', %s, 'scheduler')",
-                [str(target)],
+                "VALUES ('fix', %s, %s, 'scheduler')",
+                [dimension, str(target)],
             )
         conn.commit()
-        log.info(f'Enqueued filings_ingest (job trade_date {target})')
+        log.info(f'Enqueued {dimension} (job trade_date {target})')
     finally:
         conn.close()
 
@@ -395,11 +400,30 @@ def start_scheduler(dsn: str) -> BackgroundScheduler:
     # the weekday-only gap sweeps already left a weekend hole once (2026-08-14).
     for _hh in (6, 9, 12, 20, 23):
         sched.add_job(
-            _enqueue_filings_ingest,
+            _enqueue_stream_ingest,
             trigger=CronTrigger(hour=_hh, minute=10, day_of_week='*', timezone=IST),
             id=f'pipeline2_filings_ingest_{_hh:02d}',
             name=f'Pipeline v2 NSE filings ingest ({_hh:02d}:10 IST, daily)',
-            args=[dsn],
+            args=[dsn, 'filings_ingest'],
+            replace_existing=True,
+        )
+
+    # Board meetings — two slots, not five. The feed is ~16 rows a day against
+    # the announcements stream's ~600, and an intimation is filed DAYS before
+    # the meeting it announces, so nothing is time-critical here. 07:40 catches
+    # the previous evening's intimations before the day's first outcome can
+    # arrive; 21:40 catches the ones filed during business hours, ahead of the
+    # 23:10 filings sweep that will want to link against them.
+    #
+    # Offset from :10 on purpose — a board-meeting fetch and a filings fetch
+    # firing in the same minute would put two NSE sessions on the wire at once.
+    for _hh in (7, 21):
+        sched.add_job(
+            _enqueue_stream_ingest,
+            trigger=CronTrigger(hour=_hh, minute=40, day_of_week='*', timezone=IST),
+            id=f'pipeline2_board_meetings_ingest_{_hh:02d}',
+            name=f'Pipeline v2 NSE board meetings ({_hh:02d}:40 IST, daily)',
+            args=[dsn, 'board_meetings_ingest'],
             replace_existing=True,
         )
 
@@ -418,6 +442,7 @@ def start_scheduler(dsn: str) -> BackgroundScheduler:
     log.info('pipeline2 scheduler started (daily_run 18:00, transit_scoring 19:00, '
              'gap_sweep 19:30 + 21:30 IST Mon-Fri, 09:00 IST Sat; '
              'filings_ingest 06/09/12/20/23:10 IST daily; '
+             'board_meetings_ingest 07/21:40 IST daily; '
              'tier_expiry_sweep 00:15 IST daily)')
     return sched
 

@@ -131,3 +131,70 @@ def classify_desc(desc: str | None) -> tuple[str, str | None, str, float]:
 def needs_model(desc: str | None) -> bool:
     """True when the deterministic pass cannot place it."""
     return classify_desc(desc)[0] == UNCLASSIFIED
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Board-meeting PURPOSE → "did this meeting approve results?"
+# ═══════════════════════════════════════════════════════════════════════════
+# A SECOND FEED, and a different question. Everything above maps the
+# announcements stream's `desc`. This maps /api/corporate-board-meetings, the
+# PRIOR INTIMATION a company must file before it meets — the only NSE metadata
+# that says a result is coming, because the result itself is filed as the
+# generic 'Outcome of Board Meeting' (see migration 214's header).
+#
+# ⚠ THIS DOES NOT DATE ANYTHING. It answers which meetings are results
+# meetings. Day 0 still comes from the outcome announcement's exchdisstime via
+# kd_day_zero_trade_date. A meeting date is a date the market could not yet act
+# on, so dating from it would inject the exact lookahead bias the whole plan
+# guards against.
+#
+# Measured on the live feed, 481 meetings over 30 days (probe v3, 2026-09-16):
+#   bm_purpose names results outright on  45 (9.4%)
+#   bm_purpose is the generic 'Board Meeting Intimation' on 262 (54.5%)
+# So the free-text rule below is not a nicety — it is most of the coverage, and
+# its wording deserves the scrutiny a threshold gets. km_board_meetings stores
+# `results_basis` precisely so the purpose/desc split stays MEASURABLE instead
+# of assumed.
+
+# bm_purpose is a slash-joined set ('Financial Results/Fund Raising'), so a
+# substring test is the right shape here rather than an exact-value map.
+_PURPOSE_RESULTS_TOKEN = 'financial results'
+
+# Free text, lowercased and whitespace-collapsed before matching. Every phrase
+# ends at 'result' so the singular and plural both hit.
+#
+# Deliberately NOT included: 'financial statement'. An AGM notice adopting
+# audited financial STATEMENTS is not a results announcement, and it is common
+# enough that admitting it would quietly inflate the population every drift
+# number downstream is measured over.
+_DESC_RESULTS_PHRASES = (
+    'financial result',
+    'quarterly result',
+    'half yearly result',
+    'half-yearly result',
+    'annual result',
+    'audited result',      # covers 'unaudited result' by substring
+    'standalone result',
+    'consolidated result',
+)
+
+
+def _norm(text: str | None) -> str:
+    return ' '.join((text or '').lower().split())
+
+
+def classify_board_meeting(purpose: str | None,
+                           desc: str | None) -> tuple[bool, str | None]:
+    """(is_results, basis) for one board-meeting intimation.
+
+    basis is 'purpose' when bm_purpose named results outright, 'desc' when only
+    the free text did, and None when neither — which is a real FALSE, not a
+    gap: the company told the exchange what the meeting was for and it was not
+    results.
+    """
+    if _PURPOSE_RESULTS_TOKEN in _norm(purpose):
+        return True, 'purpose'
+    body = _norm(desc)
+    if any(p in body for p in _DESC_RESULTS_PHRASES):
+        return True, 'desc'
+    return False, None
