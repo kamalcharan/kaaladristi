@@ -46,6 +46,10 @@ ANN_URL = 'https://www.nseindia.com/api/corporate-announcements'
 ANN_REFERER = ('https://www.nseindia.com/companies-listing/'
                'corporate-filings-announcements')
 BACKFILL_WINDOW_DAYS = 90      # measured safe to 180; 90 keeps each call ~5s
+# Trailing sweep for the scheduled runs. Wider than the ~3h gap between slots on
+# purpose: a repeat fetch is free (UNIQUE makes it a DB no-op), a missed filing
+# is not. Also covers a weekend or a holiday with no run in between.
+PIPELINE_WINDOW_DAYS = 5
 REQUEST_DELAY_SEC = 2.0
 
 
@@ -277,6 +281,43 @@ def run(conn, session, start: date, end: date, dry_run=False) -> dict:
                         f'Inspect: SELECT source_symbol, company_name, desc_raw '
                         f'FROM km_filings_raw WHERE isin IS NULL LIMIT 20;')
     return stats
+
+
+# ── pipeline2 entry point ────────────────────────────────────────────────
+# (rows, status) shape — the bespoke-handler convention compute_dots_for_pipeline
+# and compute_wg_for_pipeline use. Bypasses _handle_script entirely: there is no
+# single fill-rate column to probe here, and nothing to nullify on force.
+
+def ingest_filings_for_pipeline(conn, trade_date, force: bool = False) -> tuple[int, str]:
+    """Fetch recent announcements and derive their events.
+
+    ⚠ `trade_date` IS DELIBERATELY IGNORED as a fetch key. Announcements are a
+    continuous stream, not a per-bar fact: a filing disseminated at 22:55 on a
+    Monday belongs to Tuesday's session, and several arrive on days that never
+    traded at all. So this always sweeps a small trailing WINDOW rather than
+    "the announcements for date X", which is not a thing NSE serves.
+
+    The window is deliberately wider than the gap between runs. Re-fetching is
+    free — UNIQUE (source, source_ann_id) makes a repeat a no-op in the DB — and
+    the cost of a too-narrow window is a filing lost for good.
+
+    Status is 'completed' when anything moved and 'partial' on a quiet sweep, so
+    a run that fetched and found nothing new does not read as a failure. Rows
+    that could not be dated yet (disseminated after the close, next session not
+    in km_equity_eod) are DEFERRED, not failed — they classify on a later pass.
+    """
+    from datetime import date as _date, timedelta as _td
+    end = _date.today()
+    start = end - _td(days=PIPELINE_WINDOW_DAYS)
+    stats = run(conn, NseSession(), start, end, dry_run=False)
+    moved = stats['inserted'] + stats['events']
+    if stats['deferred']:
+        log.info(f'[filings_ingest] {stats["deferred"]} deferred '
+                 f'(after the close; awaiting the next session)')
+    if stats['unresolvable']:
+        log.warning(f'[filings_ingest] {stats["unresolvable"]} rows have no '
+                    f'resolvable ISIN and produced no event')
+    return moved, ('completed' if moved else 'partial')
 
 
 def main():

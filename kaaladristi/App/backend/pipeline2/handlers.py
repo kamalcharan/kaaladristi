@@ -846,6 +846,38 @@ def handle_dots(conn, trade_date: date, force: bool,
     return HandlerResult(status, 0.0, 100.0, rows)
 
 
+def handle_filings_ingest(conn, trade_date: date, force: bool,
+                          exchange: Optional[str], on_progress: ProgressFn) -> HandlerResult:
+    """Fetch NSE corporate announcements and derive their events.
+
+    ⚠ NOT AN EOD DIMENSION, and not in DAILY_STEPS. Announcements arrive all day
+    and cluster AFTER the close — measured on the first live run, 287 of 582
+    rows were disseminated between 15:30:11 and 22:55. A dimension that only ran
+    inside the 18:00 daily_run would miss the larger half of every day's stream,
+    silently, while its row count still looked healthy.
+
+    So the scheduler enqueues this on its OWN cadence (06:00/09:00/12:00/20:00/
+    23:00 IST), outside the 12:30-19:30 window where daily_run and the gap sweep
+    live. `trade_date` is carried for the job record but is not a fetch key: the
+    handler sweeps a trailing window instead. See ingest_filings_for_pipeline.
+
+    Deliberately absent from DIMENSION_DEPENDENTS: it has no parent in the EOD
+    chain — nothing it reads is computed by another dimension — so a cascade
+    must never try to recompute it.
+    """
+    from scripts.ingest_nse_filings import ingest_filings_for_pipeline
+    on_progress('fetching NSE announcements', 20)
+    try:
+        rows, status = ingest_filings_for_pipeline(conn, trade_date, force)
+    except Exception as e:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        return HandlerResult('failed', 0.0, 0.0, 0, error_msg=str(e)[:500])
+    return HandlerResult(status, 0.0, 100.0, rows)
+
+
 def handle_integrity_checks(conn, trade_date: date, force: bool,
                             exchange: Optional[str], on_progress: ProgressFn) -> HandlerResult:
     """Data-integrity sweep — reconciliation / invariant / staleness /
@@ -1144,6 +1176,8 @@ def handle_bse_eod_download(conn, trade_date: date, force: bool,
 def handle(dimension: str, conn, trade_date: date, force: bool,
            exchange: Optional[str], on_progress: ProgressFn) -> HandlerResult:
     """Dispatch a fix to the right per-dimension handler."""
+    if dimension == 'filings_ingest':
+        return handle_filings_ingest(conn, trade_date, force, exchange, on_progress)
     if dimension == 'index_eod_download':
         return handle_index_eod_download(conn, trade_date, force, exchange, on_progress)
     if dimension == 'nse_eod_download':

@@ -56,6 +56,49 @@ def _enqueue_daily_run(dsn: str) -> None:
         conn.close()
 
 
+def _enqueue_filings_ingest(dsn: str) -> None:
+    """Enqueue a filings_ingest job — NSE corporate announcements.
+
+    ⚠ NOT PART OF daily_run, and that is the whole point. Announcements are a
+    continuous stream that clusters AFTER the close: measured on the first live
+    run, 287 of 582 rows were disseminated between 15:30:11 and 22:55. Folding
+    this into the 18:00 daily_run would miss the larger half of every day's
+    filings, every night, silently — the row count would still look healthy.
+
+    Enqueued as job_type='fix' with dimension='filings_ingest' so the existing
+    worker dispatch, job record and status plumbing are reused unchanged. It is
+    NOT a fix in the repair sense; 'fix' is simply the queue's name for a
+    single-dimension job.
+
+    Runs every day, not just weekdays: companies file on weekends and holidays.
+    The handler sweeps a trailing window, so a missed slot self-heals on the
+    next one.
+    """
+    target = _last_trading_day()
+    conn = psycopg2.connect(dsn)
+    try:
+        with conn.cursor() as cur:
+            # Same queued/running guard the gap sweep uses — a slow fetch must
+            # not stack a second job on top of the first.
+            cur.execute(
+                "SELECT id FROM km_jobs "
+                "WHERE job_type = 'fix' AND dimension = 'filings_ingest' "
+                "  AND status IN ('queued', 'running') LIMIT 1"
+            )
+            if cur.fetchone():
+                log.info('filings_ingest already queued/running, skipping')
+                return
+            cur.execute(
+                "INSERT INTO km_jobs (job_type, dimension, trade_date, created_by) "
+                "VALUES ('fix', 'filings_ingest', %s, 'scheduler')",
+                [str(target)],
+            )
+        conn.commit()
+        log.info(f'Enqueued filings_ingest (job trade_date {target})')
+    finally:
+        conn.close()
+
+
 def _score_recent_transits(dsn: str) -> None:
     """Runs at 19:00 IST — 60 min after the 18:00 daily run, so today's EOD
     close is already loaded. Scores every km_rule_transits window whose
@@ -339,6 +382,27 @@ def start_scheduler(dsn: str) -> BackgroundScheduler:
         replace_existing=True,
     )
 
+    # Filings ingest — five slots, deliberately OUTSIDE 12:30-19:30 IST where
+    # daily_run, the transit scoring and both gap sweeps live. CLAUDE.md records
+    # what collision costs: two pipelines on the step advisory lock, one waiting
+    # 600 s before recording `failed`.
+    #
+    # Weighted to when companies actually file rather than spread evenly: the
+    # 20:00 and 23:00 slots catch the post-close cluster that is the larger half
+    # of the day's stream, and 06:00 sweeps up anything filed overnight.
+    #
+    # EVERY DAY, not mon-fri: filings do not stop for weekends or holidays, and
+    # the weekday-only gap sweeps already left a weekend hole once (2026-08-14).
+    for _hh in (6, 9, 12, 20, 23):
+        sched.add_job(
+            _enqueue_filings_ingest,
+            trigger=CronTrigger(hour=_hh, minute=10, day_of_week='*', timezone=IST),
+            id=f'pipeline2_filings_ingest_{_hh:02d}',
+            name=f'Pipeline v2 NSE filings ingest ({_hh:02d}:10 IST, daily)',
+            args=[dsn],
+            replace_existing=True,
+        )
+
     # 00:15 every day (not market-day-bound — subscriptions lapse on weekends
     # too). Max grace after expiry is therefore ~24h.
     sched.add_job(
@@ -353,6 +417,7 @@ def start_scheduler(dsn: str) -> BackgroundScheduler:
     sched.start()
     log.info('pipeline2 scheduler started (daily_run 18:00, transit_scoring 19:00, '
              'gap_sweep 19:30 + 21:30 IST Mon-Fri, 09:00 IST Sat; '
+             'filings_ingest 06/09/12/20/23:10 IST daily; '
              'tier_expiry_sweep 00:15 IST daily)')
     return sched
 
