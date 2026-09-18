@@ -734,6 +734,42 @@ Base threshold: 6% with ATR adaptive factor.
 ## Current Plan
 
 
+### Filing Intelligence — Sprint 2 SHIPPED 2026-09-18 · ⏳ OWNER REVIEW PENDING
+
+**Handover: `docs/claude/filing-intelligence-handover.md`.**
+Plan of record: `docs/claude/filing-intelligence-poa.md`.
+
+The *why* layer behind the chain DristiQ already sees (Stirring → Waking Giants
+→ Volume Drive → Breakout Surge → Ascent). Live on the VPS: **28,363 filing
+events**, **2,719 result announcements** over 2,303 meetings, post-result drift
+derived on read, and **bulk deals with the buyer's name**. Migrations 212–217
+applied; three pipeline2 dimensions running (`filings_ingest` 06/09/12/20/23:10,
+`board_meetings_ingest` 07/21:40, `bulk_deals_ingest` 08/22:20 IST).
+60 tests in `test_filing_intelligence.py`.
+
+⚠ **NOTHING IS ON A SCREEN, and that is deliberate** — owner: *"POA focuses on
+making all things data-ready — UI layer mention it but we won't build it, it
+needs deep discussion and I have my own thoughts for it."*
+
+**⏳ THE OWNER WILL REVIEW THIS SESSION'S WORK LATER — for the UI layer and the
+other open activities.** Do not start any of it unprompted. What is waiting on
+that review, in full, is the *What needs your decision* section of the handover:
+where filings surface (NOT the Morning Brief — the pipeline runs several times a
+day and the brief would keep changing; the steer was "3–4 days of filing
+intelligence at any point in time"), the **Eagles** / **Spark** vocabulary
+(settled in principle, never rendered), what a user does with a bulk deal, and
+whether PEAD is its own scanner or a column on the existing ones. Plus the
+smaller open items: bulk-deal history (none exists — probe written, unrun),
+205 outcome announcements still NULL, Sprint 3 (document extraction via Qwen),
+Sprint 3b (populate `km_corporate_actions`), and BSE.
+
+⚠ Two rules any consumer of this data must keep: **Day 0 is when the market
+could ACT** (from `exchdisstime` via `kd_day_zero_trade_date`, never the filing
+time), and **`suspect_corporate_action` must be filtered on in any drift study**
+until `km_corporate_actions` is populated.
+
+---
+
 ### Thesis events — PARKED 2026-09-15, Phases 1–3 shipped
 
 `docs/claude/thesis-events-poa.md`. Phases 1c, 2, 3a and 3b are on
