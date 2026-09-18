@@ -1,4 +1,6 @@
 import ScannerCompanionDock from './VaNi/ScannerCompanionDock'
+import VaNiPanelRail from './VaNi/VaNiPanelRail'
+import { useVaNiPanelOpen } from '@/stores/vaniPanelStore'
 import { useState } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import { Menu } from 'lucide-react';
@@ -42,7 +44,27 @@ export default function Layout() {
   const scannerDocked = /^\/scanner\/(breakout_surge|weekly_movers|monthly_movers|weekly_decliners|monthly_decliners|breakdown_watch|gl_breakout|gl_retest|flower_pot_burst|stage_2_watch|stage_2_leaders|stage_3_watch|stage_4_leaders|vani_exit_watch|conviction_flow|power_buy|volume_drive|waking_giants|wg_ascent|wg_stirring|power_sell|smart_money|quiet_accumulation|distribution_warning)\/?$/.test(pathname);
   const sectorDocked = pathname.startsWith('/sector-rotation');
   const vaniDocked = pathname.startsWith('/workspace') || structureDocked || sectorDocked;
-  const railCollapsed = collapsed || vaniDocked || scannerDocked;
+
+  // The companion is collapsible from its own header and from Account →
+  // Appearance; both write one stored preference (constants/vaniPanel.ts).
+  // Every companion route funnels through the two slots below, so this is the
+  // only place that has to know about the closed state.
+  //
+  // `scannerDocked` decides who owns the COLUMN when open (only the 24 preset
+  // routes get one). The rail has to cover more than that: ScanView also
+  // renders on /scanner and /scanners/:presetId, where the companion falls
+  // back to rendering inline in the page, and ScannerCompanionShell returns
+  // null while the panel is closed. Without the wider test those two routes
+  // would lose VaNi with nothing to bring it back.
+  const scannerRoute = pathname.startsWith('/scanner');
+  const companionOpen = useVaNiPanelOpen();
+  const companionShown = (vaniDocked || scannerDocked) && companionOpen;
+  const railShown = (vaniDocked || scannerRoute) && !companionOpen;
+
+  // The nav rail is forced narrow only to make room for the companion. With
+  // the companion collapsed that justification is gone, so the user's own
+  // stored sidebar preference applies again.
+  const railCollapsed = collapsed || companionShown;
 
   return (
     <div
@@ -53,7 +75,7 @@ export default function Layout() {
         // On the wrapper, not on <main>: the docked pane is main's sibling and
         // has to read the rail width to sit beside it.
         '--sidebar-w': railCollapsed ? '52px' : '220px',
-        '--vani-w': vaniDocked ? '360px' : '0px',
+        '--vani-w': vaniDocked && companionOpen ? '360px' : '0px',
         '--topbar-h': '75px',
       } as React.CSSProperties}
     >
@@ -148,9 +170,10 @@ export default function Layout() {
         {/* Page content. The docked pane lives INSIDE this row, below the
             topbar — as a sibling of <main> it split the topbar in two and the
             screen read as two applications stitched together. */}
-        <div className={`relative z-10 flex gap-4 p-4 pb-8 ${sectorDocked || scannerDocked ? 'flex-col xl:flex-row' : structureDocked ? 'flex-col lg:flex-row' : ''}`}>
-          {scannerDocked && <ScannerCompanionDock presetId={pathname.split('/')[2]} />}
-          {vaniDocked && <VaNiChatPanel docked />}
+        <div className={`relative z-10 flex gap-4 p-4 pb-8 ${!companionShown ? '' : sectorDocked || scannerDocked ? 'flex-col xl:flex-row' : structureDocked ? 'flex-col lg:flex-row' : ''}`}>
+          {railShown && <VaNiPanelRail />}
+          {scannerDocked && companionOpen && <ScannerCompanionDock presetId={pathname.split('/')[2]} />}
+          {vaniDocked && companionOpen && <VaNiChatPanel docked />}
           <div className="flex-1 min-w-0">
             <Outlet />
           </div>

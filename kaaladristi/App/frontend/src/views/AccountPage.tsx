@@ -12,6 +12,7 @@ import { fmtDate } from '@/lib/dateUtils'
 import { isValidIndianMobile, normalizeIndianMobile } from '@/lib/phone'
 import { PageHeader, Tabs } from '@/components/ui'
 import ThemeSettings from '@/components/domain/ThemeSettings'
+import VaNiPanelSettings from '@/components/domain/VaNiPanelSettings'
 import HowYouInvestPanel from '@/components/domain/Onboarding/HowYouInvestPanel'
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -245,6 +246,7 @@ function AppearanceTab() {
       }}
     >
       <ThemeSettings />
+      <VaNiPanelSettings />
     </div>
   )
 }

@@ -141,7 +141,7 @@ function CurrentSectorCompanion() {
       <button ref={launcher} className={`${overview ? 'hidden' : 'sector-vani-launch'} sector-question mt-3`} onClick={() => { setOpen(true); setCycle(c=>c+1); }}>Help me read this page</button></header>
     <div className={overview ? "sector-vani-overview" : "sector-vani-desktop"}>{body}</div>
     <dialog ref={dialog} className="sector-vani-dialog" onCancel={() => setOpen(false)} onClose={() => { setOpen(false); launcher.current?.focus(); }}>
-      <header className="flex items-center justify-between p-4 border-b border-[var(--border)]"><VaNiBrand size={36} subtitle="Sector research" /><button autoFocus className="sector-question" onClick={() => setOpen(false)}>Close</button></header>{open && body}
+      <header className="flex items-center justify-between p-4 border-b border-[var(--border)]"><VaNiBrand size={36} subtitle="Sector research" collapsible={false} /><button autoFocus className="sector-question" onClick={() => setOpen(false)}>Close</button></header>{open && body}
     </dialog>
   </aside>;
 }

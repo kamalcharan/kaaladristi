@@ -104,6 +104,7 @@ node scripts/qa/check-scanner-introductions.mjs
 node scripts/qa/check-scanner-authority.mjs      # 40 DB-authority cases
 node scripts/qa/check-fpb-actions.mjs
 node scripts/qa/check-sector-ui.mjs              # needs Vite on loopback :4318
+node scripts/qa/check-vani-panel.mjs             # companion open/closed; needs Vite on :5174
 ```
 
 ⚠ **Only `check-theme-standard.mjs` and `check-persona.mjs` run inside
@@ -249,6 +250,31 @@ VITE_RAZORPAY_KEY_ID=...       # frontend public key
 - **Theme**: 3 themes in `src/config/theme/themes/`, user-switchable (Settings), server-persisted (`km_profiles.theme/mode`). **DARK-LOCKED FOR LAUNCH** — `LIGHT_MODE_ENABLED = false` in `src/stores/themeStore.ts` + a mirrored flag in `index.html` (sync pair; flip both to re-enable light). Light mode is fully built + owner-calibrated but not release-cleared.
 - **Theme/Glass-UX — READ BEFORE ANY THEME/UX WORK**: `kaaladristi/docs/claude/glass-ux-status.md` (canonical rules: settled header decisions, bug classes + gates, light composition rules) and `kaaladristi/docs/claude/theme-session-2026-07-12.md` (2026-07-12 session record: why light took 5 sessions, owner calibration picks, the dark-lock rationale, the two sanctioned paths for finishing light — do NOT resume light as another calibration loop). `npm run check:theme` gates (phantom vars, dark fills, literal ratchet) run inside `npm run build`. QA screenshot harness: `scripts/qa/` (`qa-screenshots.mjs` desktop, `qa-mobile.mjs` 390px phone pass, `qa-overflow.mjs`, `qa-diff.mjs`). The harness seeds a JWT-shaped auth token with a far-future `exp` — `services/auth.ts tokenExpired()` treats any unparseable token as expired and bounces to the landing page, which is why an opaque placeholder token silently captured the login screen for every route (fixed 2026-09-06).
 - **Onboarding (2026-09-07, agentic IX — plan + status: `docs/claude/onboarding-poa.md`)**: `/setup` is a six-step persona flow (What is VaNi + details → Personality → Scanners → How VaNi will guide → Plan → Look); persona vocabulary in `src/constants/personaConfig.ts` (mirrors migration 204 CHECKs, gated by `npm run check:persona`). **Derivation was simplified 2026-09-13** (`docs/icp-scanner-experience.md`): onboarding and Account now ask the same two plain-language questions — holding period and discovery preference. Holding period sets the starting persona; discovery preference covers "still exploring"; an explicit persona choice overrides both. The old weighted table is gone and exit preferences no longer classify (but still drive the breadth leg — see Critical Lessons). New workspace templates append that persona's four starter scanners below the template's other blocks; existing templates are never mutated, screens in `components/domain/Onboarding/`, `/guide` "How to use DristiQ" (Show me = real page + `?tour=1&guide=<key>`), Account → "How you invest" tab, Morning Brief `ContinuityLine`. Astro is deliberately absent from the flow.
+- **VaNi companion — collapsible, one preference (2026-09-18)**: the companion
+  column on Market Structure, both Sector Rotation modes, the sector detail
+  page, the scanner Studios, Flower Pot and the `/workspace` docked pane
+  collapses to a 52px rail, and the content column takes the freed ~300px.
+  There is exactly ONE stored value (`kd_vani_panel`, `constants/vaniPanel.ts`
+  + `stores/vaniPanelStore.ts`, localStorage like `kd_sidebar_collapsed`) —
+  the collapse control on the panel and the **Always open / Always closed**
+  switch in Account → Appearance write the same key, so a collapse is still in
+  force on the next page and after a reload. Read it through
+  `useVaNiPanelOpen()`, never by comparing `mode` to a string.
+  ⚠ Two things are load-bearing. **The collapse control lives in `VaNiBrand`**
+  (default `collapsible`, opt out with `collapsible={false}` — the mobile
+  sector dialog does, it already has a Close): that is what makes it one
+  implementation across six headers instead of six copies. And
+  **`ScannerCompanionShell` returns null when closed**, not just hidden by
+  `Layout` — the scanner companions are *portalled* into `#scanner-vani-host`
+  and a shell that finds no host falls back to rendering INLINE, so hiding the
+  column alone would move the panel into the results column instead of freeing
+  the width. `Layout` shows the rail on every `/scanner*` path, wider than the
+  24-preset `scannerDocked` regex, because `/scanner` and `/scanners/:presetId`
+  mount that shell with no dock. The nav rail also stops being force-collapsed
+  while the companion is closed — that forcing only existed to make room for
+  it. Guarded by `scripts/qa/check-vani-panel.mjs` (5 routes; asserts the
+  content actually widens, that the choice survives a reload, and no 390px
+  overflow), verified to fail against four sabotages.
 - **Routes/Views**: **Workspace (`/workspace`)**, **Guide (`/guide`)**, **Market Structure (`/market-structure`)**, **Sector Rotation (`/sector-rotation`, `/sector-rotation/:indexId`)**, Dashboard, Markets, Chart, DC Calendar, Inference, Rule Eval, Scanner (`/scan`), Settings, Visual Pulse (Index), Visual Pulse (Equity), **Intraday (`/intraday/:indexId`)**, Manipulation Watch, Industry Transition
 - **Research companions**: Market Structure, Sector Rotation (Current Flow · Longer-Term Leadership), the scanner Studios and Flower Pot each carry a persistent VaNi panel — see **VaNi Research Companions**. `/sector-rotation` historical views carry `?asof=YYYY-MM-DD`; Flower Pot cohort links carry `fpb_intent`/`fpb_group`/`fpb_asof`/`exchange`.
 - **Gemini**: `src/services/geminiService.ts` — secondary AI integration (alongside VaNi/Anthropic), currently limited use

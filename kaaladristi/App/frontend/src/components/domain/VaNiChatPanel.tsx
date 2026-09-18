@@ -10,6 +10,7 @@ import { VaNiAvatar } from './VaNi/VaNiBrand';
 import VaNiAutorunBrief from './VaNi/VaNiAutorunBrief';
 import VaNiIntentButton from './VaNi/VaNiIntentButton';
 import VaNiIntentTray from './VaNi/VaNiIntentTray';
+import VaNiPanelToggle from './VaNi/VaNiPanelToggle';
 import type { ChatMessage } from './VaNi/types';
 import { cn } from '@/lib/utils';
 import { usePageContext } from '@/hooks/usePageContext';
@@ -466,8 +467,10 @@ function ExistingVaNiChatPanel({ docked = false }: { docked?: boolean } = {}) {
               <RotateCcw className="w-3.5 h-3.5" />
             </button>
           )}
-          {/* Docked, there is nothing to close to — the column stays. */}
-          {!docked && (
+          {/* Docked there is nothing to CLOSE to — the column stays — but it
+              can be collapsed to the rail, which is a different affordance and
+              the same one every other companion header carries. */}
+          {docked ? <VaNiPanelToggle /> : (
             <button
               onClick={close}
               className="w-8 h-8 rounded-lg flex items-center justify-center text-white/30 hover:bg-white/10 hover:text-white/70 transition-colors"
