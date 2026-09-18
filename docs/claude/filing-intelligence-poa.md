@@ -512,7 +512,7 @@ forces materialisation, that is a new decision with a number behind it.
 | Results identification | migration 214 — **needed a second feed**, see below |
 | `returns_since_result` | migration 215, derived; **216** de-duplicates it per results meeting |
 | Board-meeting backfill 2026-06-01..09-16 | run: **11,183 meetings**, 0 skipped, 2,829 events judged |
-| Bulk / block deals | **UNBLOCKED 2026-09-18.** `historicalOR/bulk-block-short-deals?optionType=bulk_deals&from=&to=` serves a date window — 70 rows in 30 days, ~850/yr. The four earlier candidates that 503'd stay 503 (`historical/bulk-deals`, `historical/block-deals`), so the finding was the endpoint, not the gating. CSV archives also answer (bulk.csv 212 rows, block.csv 4) but are current-state, so the JSON window wins. Schema pending two measurements — see below. |
+| Bulk / block deals | **Endpoint found, VOLUME NOT YET TRUSTWORTHY (2026-09-18).** `historicalOR/bulk-block-short-deals?optionType=bulk_deals|block_deals` answers where the four `historical/*` candidates 503 — so the original block was the PATH, not NSE gating the data. ⚠ But a 30-day window, a 1-year window and `block_deals` each returned **exactly 70 rows**, while `bulk.csv` alone holds 212: 70 is a page cap, so the windowed fetch answers 200 with a silently short payload. An earlier reading of that 70 as "~850/yr" was wrong. Probe now confirms the cap per-day and measures the CSV's real span. |
 
 #### The finding that changed the shape: a result has no category
 
@@ -667,20 +667,42 @@ are read inside the transaction, so the report looks right in all three cases.
 names the buyer, which is what makes "a documented institutional buy on a
 Waking Giants name" a join we can actually perform.
 
-Two things are still unmeasured, and both change the schema rather than
-decorate it, so the probe now measures them instead of the design assuming
-them:
+**Both of my design assumptions were measured and both were wrong** — which is
+the entire argument for probing before writing a schema:
 
-1. **Which composed key is unique.** There is no `seq_id`. Too narrow and real
-   deals collapse into each other silently; too wide — qty and price inside the
-   key — and NSE correcting a quantity inserts a SECOND row instead of revising
-   the first, the same corruption wearing the opposite costume. `BD_TP_WATP` is
-   a weighted *average* price, which suggests NSE already aggregates per client
-   per side per day and the narrow key is right. *Suggests* is why it is
-   counted.
-2. **How far back it serves.** A row count that stops growing with the window,
-   or an earliest date that does not move, means a silent cap — the shape that
-   makes a backfill look complete when it is not.
+1. **The narrow key is NOT unique.** `BD_TP_WATP` is a weighted *average*
+   price, so I expected NSE to aggregate per client per side per day. It does
+   not: `19-AUG-2026 | ASTERDM | HDFC MUTUAL FUND | BUY` appears **twice** in
+   70 rows, almost certainly two schemes reported under one AMC name. A key of
+   (date, symbol, client, side) would silently collapse 1 deal in 70.
+2. **70 is a PAGE CAP, not a row count.** A 30-day window returned exactly 70;
+   a 1-year window returned exactly 70, every row dated on the range's first
+   day; `block_deals` returned exactly 70. `bulk.csv` alone holds 212 rows for
+   its span. Three unrelated queries landing on one round number is a limit,
+   and an earlier reading of that 70 as "~850/yr" was simply a truncated fetch
+   mistaken for the whole. 3- and 5-year windows return HTTP 500.
+
+A cap that answers **200 with a plausible short payload** is worse than an
+error: it is the shape that makes a backfill look finished when it is not — the
+same class as the universe gap that ran green for months because 1,334 rows
+arrived consistently. So the next probe run confirms the cap on SINGLE days and
+measures what span the CSV archives actually cover, because those two answers
+choose between three different ingests:
+
+* no day reaches 70 → per-day JSON fetch, ~250 calls a year, and any day that
+  *does* return 70 is reported as incomplete rather than stored as a full day;
+* every day returns 70 → the JSON endpoint cannot deliver even one complete day
+  and the CSV archives are the only viable source;
+* the CSV spans months → the CSV is the backfill and JSON is only the top-up.
+
+**Storage shape, decided by the cap answer rather than a natural key.** Bulk
+deals are an exchange-published *complete daily report*, not company-authored
+filings that get revised, so the right idempotency is **replace the day**: take
+whatever the fetch returns for a trade date and swap that date's rows wholesale.
+That needs no composed key at all, so it cannot collapse the ASTERDM pair, and a
+re-run is exactly idempotent. Its one risk is replacing a good day with a
+truncated one — which is precisely why the cap has to be established first, and
+why a per-day count that lands on the cap must refuse to store.
 
 Two rules are already settled and written into the probe so they are not
 re-derived later:

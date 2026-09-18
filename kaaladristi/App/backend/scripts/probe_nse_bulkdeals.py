@@ -191,6 +191,73 @@ def _depth(s, rows_label):
     counts, not just the fact that each call answered.""")
 
 
+def _cap_check(s):
+    """IS 70 A CAP OR A COINCIDENCE? Everything downstream turns on it.
+
+    Measured 2026-09-18: a 30-day window returned exactly 70, a 1-YEAR window
+    returned exactly 70 (all dated on the first day of the range), and
+    block_deals returned exactly 70 as well. Meanwhile bulk.csv alone holds 212
+    rows. Three unrelated queries landing on one round number is a page limit.
+
+    If it is a cap, a windowed fetch is WORSE THAN USELESS here: it answers 200
+    with a plausible-looking payload that is silently short, which is the exact
+    shape that makes a backfill look finished when it is not. The ingest then
+    has to be one call per TRADING DAY (~250/yr), and each day's count has to be
+    checked against the cap so a day that legitimately exceeds it is loud rather
+    than quietly truncated.
+    """
+    print('\n=== IS 70 A CAP? (single-day fetches) ===')
+    counts = []
+    for back in (1, 2, 3, 6, 7, 8):
+        d = date.today() - timedelta(days=back)
+        ds = d.strftime('%d-%m-%Y')
+        got = _try(s, f'{d} (single day)',
+                   'https://www.nseindia.com/api/historicalOR/'
+                   f'bulk-block-short-deals?optionType=bulk_deals'
+                   f'&from={ds}&to={ds}', REF_REPORT)
+        if got is not None:
+            dates = {r.get('BD_DT_DATE') for r in got}
+            counts.append(len(got))
+            print(f'        {len(got)} rows over {len(dates)} distinct date(s)'
+                  f'{"   <-- AT THE CAP" if len(got) == 70 else ""}')
+    if counts:
+        print(f'\n  single-day counts: {counts}')
+        if all(c == 70 for c in counts):
+            print('  ⚠ EVERY day returns exactly 70 — the cap bites even on one '
+                  'day, so this endpoint cannot deliver a complete day at all '
+                  'and the CSV archives are the only viable source.')
+        elif 70 in counts:
+            print('  ⚠ Some days hit exactly 70 — a cap that bites on busy days '
+                  'only. Per-day fetching works, but any day returning 70 must '
+                  'be treated as INCOMPLETE and reported, never stored as if it '
+                  'were the whole day.')
+        else:
+            print('  ✓ No day reaches 70, so per-day fetching returns complete '
+                  'days. The 70 seen over wider windows was the cap; the cap '
+                  'is the reason to fetch per day.')
+
+
+def _csv_coverage(rows, label):
+    """What span does the archive actually hold? 'Recent' is not a date range,
+    and the difference between one day and one financial year decides whether
+    the CSV is the backfill or only the daily top-up."""
+    key = next((k for k in rows[0] if 'date' in k.lower()), None)
+    print(f'\n=== CSV COVERAGE ({label}) ===')
+    print(f'  columns: {list(rows[0].keys())}')
+    if not key:
+        print('  no date-like column — cannot state a span')
+        return
+    ds = sorted({(r.get(key) or '').strip() for r in rows} - {''})
+    print(f'  {len(rows)} rows over {len(ds)} distinct dates in `{key}`')
+    print(f'  earliest {ds[0]}   latest {ds[-1]}')
+    if len(ds) == 1:
+        print('  -> ONE DAY. This is a daily top-up file, not a backfill: '
+              'history has to come from somewhere else.')
+    else:
+        print('  -> a real span. If it reaches back far enough this IS the '
+              'backfill, and the JSON endpoint is only for the current day.')
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--out', default=None)
@@ -238,9 +305,11 @@ def main():
         ('content/equities/block.csv',
          'https://nsearchives.nseindia.com/content/equities/block.csv', REF_REPORT),
     ]
+    csv_rows = {}
     for label, url, ref in csv_cands:
         got = _try(s, label, url, ref, want='csv')
         report['attempts'][label] = len(got) if got is not None else None
+        csv_rows[label] = got
         if got and rows is None:
             rows, chosen = got, label
 
@@ -264,6 +333,10 @@ def main():
     if rows and chosen and 'historicalOR' in chosen:
         _key_analysis(rows)
         _depth(s, chosen)
+        _cap_check(s)
+    for label, got in csv_rows.items():
+        if got:
+            _csv_coverage(got, label)
 
     if args.out:
         with open(args.out, 'w') as fh:
