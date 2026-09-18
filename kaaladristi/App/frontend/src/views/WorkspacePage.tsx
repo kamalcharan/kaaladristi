@@ -177,7 +177,7 @@ export default function WorkspacePage() {
 
   if (error && !framework) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center gap-3"
+      <div className="flex-1 flex flex-col items-center justify-center gap-3 px-4 text-center"
         style={{ background: 'var(--bg)' }}>
         <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>Failed to load framework.</span>
       </div>

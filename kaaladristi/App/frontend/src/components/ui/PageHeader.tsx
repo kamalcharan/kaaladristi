@@ -67,8 +67,12 @@ export function PageHeader({ eyebrow, title, titleEm, meta, actions, lead }: Pag
           </p>
         )}
       </div>
+      {/* min-w-0 + max-w-full so the cluster can shrink inside the wrapping
+          header; overflow-x-auto is the last resort for a single action wider
+          than the page (measured 453px against a 390px phone on
+          /astro-calendar, silently clipped and unreachable). */}
       {actions && (
-        <div className="ml-auto flex flex-wrap items-center gap-2">
+        <div className="ml-auto flex min-w-0 max-w-full flex-wrap items-center gap-2 overflow-x-auto">
           {actions}
         </div>
       )}

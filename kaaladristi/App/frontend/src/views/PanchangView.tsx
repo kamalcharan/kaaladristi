@@ -157,7 +157,10 @@ export default function PanchangView() {
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="flex items-center justify-between px-6 py-4 border-b border-white/5">
+      {/* flex-wrap: the month/year controls cannot shrink past the widest month
+          name, so at 390px this row measured 467px and the controls were clipped
+          off the page entirely. */}
+      <div className="flex flex-wrap items-center justify-between gap-2 px-6 py-4 border-b border-white/5">
         <div className="flex items-center gap-2">
           <Moon className="w-4 h-4 text-accent-indigo" />
           <h1 className="text-base font-semibold text-white">Panchang</h1>

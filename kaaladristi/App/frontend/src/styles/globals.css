@@ -238,9 +238,31 @@ body::before {
     --sidebar-width: 220px;
   }
 
+  /* ── Main-window scroll ─────────────────────────────────────────────────
+     `overflow-x: hidden` used to live here. On `body`, with `html` left at
+     `visible`, that value PROPAGATES TO THE VIEWPORT — so it did not merely
+     clip a stray element, it removed the window's horizontal scrollbar
+     entirely. Anything wider than the page was unreachable AND unannounced:
+     the worst shape a layout bug can take, and the same class as a derivation
+     reporting "none" when it could not look.
+
+     Measured across all 33 routes before removing it (scripts/qa/check-page-
+     overflow.mjs is that sweep, kept): at 1440px NOTHING overflowed, so the
+     rule was protecting nothing on desktop. At 390px exactly four routes did,
+     and every one was content a phone user could not get to —
+       /account        +233px  the whole tab strip past "Plan & Billing"
+       /panchang        +77px  the month/year controls
+       /astro-calendar  +63px  the header action cluster
+       /workspace       +34px  the failed-to-load message
+     All four are fixed at the source (Tabs, PageHeader, PanchangView,
+     WorkspacePage). With nothing left to clip, the only thing this rule could
+     still do was hide the NEXT regression, so it is gone and the sweep guards
+     the invariant instead.
+
+     ⚠ Do not reinstate it to silence an overflow. A page-wide horizontal
+     scrollbar is the symptom; the offending row is the bug. */
   body {
     @apply antialiased;
-    overflow-x: hidden;
   }
 
   /* ── Scrollbar ──────────────────────────────────────────────────────────

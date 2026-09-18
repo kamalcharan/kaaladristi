@@ -51,7 +51,12 @@ export function Tabs({ tabs, activeId, onChange, variant = 'underline' }: TabsPr
   }
 
   return (
-    <div role="tablist" className="flex gap-0.5 border-b border-[var(--border)]">
+    // `overflow-x-auto`, not `flex-wrap`: the active tab draws a 2px
+    // borderBottom that lines up with this container's border via `-mb-px`, so
+    // a wrapped first row would leave that underline floating in mid-air. The
+    // rail scrolls instead — measured: the Account strip is 623px wide against
+    // a 390px phone, i.e. "Plan & Billing" was unreachable, not just cramped.
+    <div role="tablist" className="flex gap-0.5 border-b border-[var(--border)] overflow-x-auto">
       {tabs.map((t) => {
         const isActive = t.id === activeId;
         return (
@@ -61,7 +66,7 @@ export function Tabs({ tabs, activeId, onChange, variant = 'underline' }: TabsPr
             role="tab"
             aria-selected={isActive}
             onClick={() => onChange(t.id)}
-            className="-mb-px px-4 py-2 text-[13px] font-semibold"
+            className="-mb-px shrink-0 whitespace-nowrap px-4 py-2 text-[13px] font-semibold"
             style={{
               fontFamily: 'var(--font-mono)',
               color: isActive ? 'var(--gold-soft)' : 'var(--text-muted)',

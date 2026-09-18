@@ -428,7 +428,9 @@ function ExistingVaNiChatPanel({ docked = false }: { docked?: boolean } = {}) {
             // and radius, sticky under the topbar. Not fixed and not
             // full-height — spanning the topbar row is what made the screen
             // look like two applications stitched together.
-            ? 'sticky self-start shrink-0 w-[var(--vani-w)] rounded-2xl border border-[var(--border)] overflow-hidden'
+            // w-full below lg, matching MarketStructureCompanion: stacked, a
+            // fixed 360px pane is 2px wider than a 390px phone's content box.
+            ? 'sticky self-start shrink-0 w-full lg:w-[var(--vani-w)] rounded-2xl border border-[var(--border)] overflow-hidden'
             : cn(
                 'fixed top-0 h-full z-[201] right-0',
                 'border-l-2 border-[var(--accent-indigo)]/30',

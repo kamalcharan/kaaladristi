@@ -170,7 +170,14 @@ export default function Layout() {
         {/* Page content. The docked pane lives INSIDE this row, below the
             topbar — as a sibling of <main> it split the topbar in two and the
             screen read as two applications stitched together. */}
-        <div className={`relative z-10 flex gap-4 p-4 pb-8 ${!companionShown ? '' : sectorDocked || scannerDocked ? 'flex-col xl:flex-row' : structureDocked ? 'flex-col lg:flex-row' : ''}`}>
+        {/* Every docked route stacks on a narrow screen — /workspace used to be
+            the exception (its branch was `''`, i.e. flex-row at every width).
+            With a fixed 360px pane and 32px of padding that needs 408px, so on
+            a 390px phone the workspace column was computed to width 0 and
+            pushed off the right edge: the page was a VaNi pane and nothing
+            else. `body { overflow-x: hidden }` is why nobody saw it — no
+            scrollbar, no clue, just a missing workspace. */}
+        <div className={`relative z-10 flex gap-4 p-4 pb-8 ${!companionShown ? '' : sectorDocked || scannerDocked ? 'flex-col xl:flex-row' : 'flex-col lg:flex-row'}`}>
           {railShown && <VaNiPanelRail />}
           {scannerDocked && companionOpen && <ScannerCompanionDock presetId={pathname.split('/')[2]} />}
           {vaniDocked && companionOpen && <VaNiChatPanel docked />}
