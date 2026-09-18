@@ -123,6 +123,7 @@ KD_DB_PASSWORD=... python rule_discovery.py             # all history
 KD_DB_PASSWORD=... python rule_discovery.py 2026        # single year
 KD_DB_PASSWORD=... python backfill_d365.py              # d365_pct_chng
 KD_DB_PASSWORD=... python backfill_supertrend.py        # supertrend_dir
+python scripts/backtest_rs_percentile.py               # READ-ONLY study, writes nothing
 ```
 
 ---
@@ -1924,6 +1925,40 @@ per-year coverage tables in the audit doc.
 
 ### 📋 FOR REVIEW (owner) — Astro-Technical Alignment hidden on Market Structure
 The **Astro-Technical Alignment** card (`MarketWeatherCard`) was **hidden** from the Market Structure page's *Today's Structure* tab (`views/MarketStructureView.tsx` → `TodayStructureTab`) at the owner's request (2026-07-09), pending a rework of the astro × breadth "confluence" UX. The proposed astro-confluence layer (breadth regime × astro window → historical positive-day frequency, + a forward 6-day strip) is designed but **not built** — it lands as Layer 4 of the Market Breadth page (mock reviewed). The **Historical Confluence** tab is untouched and keeps the existing breadth × ROC × nak-vara content. The component still renders on `/dashboard`; only the Market Structure usage was removed. Re-enable by restoring `<MarketWeatherCard date={date} />` in `TodayStructureTab`.
+
+### 📋 FOR REVIEW (owner) — Is an rs_percentile scanner worth building? (script written, NOT YET RUN)
+
+`scripts/backtest_rs_percentile.py` — read-only, writes nothing. Answers the
+question in three parts, because a result that answers only the first is noise:
+does the top bucket beat the **same-date universe median** (so market direction
+cancels); is the gradient **monotone** across six buckets (reported as Spearman
+rho + top−bottom spread, since strict monotonicity over six buckets fails on one
+inversion); and does it add anything **over the shipped scanners** (phase 3,
+overlap — not yet written).
+
+⚠ **It has NOT been run against the live DB.** The read-only `kaala-postgres`
+MCP was wedged when it was written — every tool on that server, including
+metadata calls, timed out at 60s while the host itself answered in ~1.2s. Run it
+and the numbers are real; until then there is no result, and no number in this
+entry.
+
+Five traps it handles, each one already recorded elsewhere in this file:
+**corporate actions** (`km_corporate_actions` is EMPTY — D44 — so any window
+containing a 0.55×/1.80× single-session cliff is DROPPED, not adjusted, and the
+count is printed); **survivorship** (a stock with no bar at t+h is counted and
+reported, because silently excluding delisted names biases the result upward);
+**overlapping windows** (sample dates are spaced ≥ horizon apart and the number
+of independent periods is printed, with a warning below 8); **median not mean**
+(one unadjusted split dominates a mean; both are shown and a wide gap is itself
+the signal); and **depth** — a pure RS screen needs neither `ema_20` nor
+delivery, so it can be tested EARLIER than any shipped scanner can run, and
+phase 0 measures that window rather than assuming it.
+
+Validated end-to-end against a throwaway PostgreSQL 16 cluster with a fixture
+carrying a known answer: it caught the engineered 1:2 split (1 cliff drop) and
+the engineered delisting (1 no-exit-bar), recovered the engineered gradient
+(rho +0.77, top−bottom +3.67 pts, 62% vs 28% hit rate), and correctly refused to
+call it strictly monotone.
 
 ### 📋 FOR REVIEW (owner) — RS-Rotation scanner spec
 `docs/claude/Rsspec.md` specs a **Relative-Strength Rotation scanner** (RRG-style: Magic RS × its momentum → Leading / Weakening / Lagging / Improving quadrants). Positions it as the leading-indicator complement to Stage 2 Leaders — it adds the **Improving** (early relative turn) and **Weakening** (relative fade) quadrants that none of the current 9 scanners surface — with SEBI-safe presets (`Rotating Into Strength`, `Leadership Fading`), a multi-timeframe "aligned rotation" confluence (Magic RS is native on daily `km_equity_eod` / weekly 075 / monthly 076), the one new data need (`magic_rs_roc`), and the 4-step scanner integration. **Not built** — Charan to review the open questions at the end. The RS-Rotation *chart* (daily, single stock) IS built and live: `components/domain/RotationGraph.tsx`, wired into `views/ChartView.tsx` under the Magic RS pills (`/chart/equity/:id`, daily; layout provisional, to realign).
