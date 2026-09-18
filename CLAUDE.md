@@ -273,9 +273,17 @@ VITE_RAZORPAY_KEY_ID=...       # frontend public key
   24-preset `scannerDocked` regex, because `/scanner` and `/scanners/:presetId`
   mount that shell with no dock. The nav rail also stops being force-collapsed
   while the companion is closed — that forcing only existed to make room for
-  it. Guarded by `scripts/qa/check-vani-panel.mjs` (5 routes; asserts the
-  content actually widens, that the choice survives a reload, and no 390px
-  overflow), verified to fail against four sabotages.
+  it. **Closed is not off**: the rail carries three ascending bars animating in
+  sequence ("chat is live") and is the one element on a collapsed page painted
+  in the theme accent — a neutral rail with a static chevron reads as a layout
+  control, not a companion waiting to be asked. Motion is on the bars, never on
+  VaNi's face (the `.vani-consulting` rule), and `prefers-reduced-motion`
+  **stops** it rather than slowing it, leaving the bars at full strength — the
+  honest resting state for a live indicator. Guarded by
+  `scripts/qa/check-vani-panel.mjs` (5 routes; asserts the content actually
+  widens, the choice survives a reload, no 390px overflow, the indicator is
+  present + animated + on `--accent`, and that reduced motion silences it),
+  verified to fail against eight sabotages.
 - **Routes/Views**: **Workspace (`/workspace`)**, **Guide (`/guide`)**, **Market Structure (`/market-structure`)**, **Sector Rotation (`/sector-rotation`, `/sector-rotation/:indexId`)**, Dashboard, Markets, Chart, DC Calendar, Inference, Rule Eval, Scanner (`/scan`), Settings, Visual Pulse (Index), Visual Pulse (Equity), **Intraday (`/intraday/:indexId`)**, Manipulation Watch, Industry Transition
 - **Research companions**: Market Structure, Sector Rotation (Current Flow · Longer-Term Leadership), the scanner Studios and Flower Pot each carry a persistent VaNi panel — see **VaNi Research Companions**. `/sector-rotation` historical views carry `?asof=YYYY-MM-DD`; Flower Pot cohort links carry `fpb_intent`/`fpb_group`/`fpb_asof`/`exchange`.
 - **Gemini**: `src/services/geminiService.ts` — secondary AI integration (alongside VaNi/Anthropic), currently limited use

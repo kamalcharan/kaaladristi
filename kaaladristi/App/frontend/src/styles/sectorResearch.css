@@ -129,7 +129,25 @@
    `flex-row` whenever the panel is closed, so a width that only applied at xl
    would leave a 52px column stranded above the content on a phone. */
 .vani-rail { width: 52px; flex-shrink: 0; align-self: flex-start; position: sticky; top: 90px; }
-.vani-rail-button { display: flex; flex-direction: column; align-items: center; gap: 8px; width: 100%; min-height: 44px; padding: 12px 6px; cursor: pointer; border: 1px solid var(--border); border-radius: 14px; background: var(--card); color: var(--text-secondary); transition: color .15s, border-color .15s; }
-.vani-rail-button:hover { color: var(--text-primary); border-color: var(--accent); }
+/* The collapsed rail is the one element on the page carrying the theme accent.
+   A neutral --card rail reads as a divider; the accent is what makes it read as
+   a companion that is still there. color-mix against --accent rather than
+   --accent-dim so the tint sits on the page surface at a strength we choose. */
+.vani-rail-button { display: flex; flex-direction: column; align-items: center; gap: 8px; width: 100%; min-height: 44px; padding: 12px 6px; cursor: pointer; border-radius: 14px; border: 1px solid color-mix(in srgb, var(--accent) 34%, transparent); background: color-mix(in srgb, var(--accent) 9%, var(--card)); color: var(--accent); transition: background .15s, border-color .15s; }
+.vani-rail-button:hover { background: color-mix(in srgb, var(--accent) 17%, var(--card)); border-color: var(--accent); }
 .vani-rail-button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .vani-rail-label { writing-mode: vertical-rl; transform: rotate(180deg); font-size: 11px; letter-spacing: .12em; text-transform: uppercase; }
+
+/* "Chat is live" — ascending bars filling in sequence. Motion on the bars,
+   never on VaNi's face (same rule as .vani-consulting). The cycle is slow and
+   the resting opacity high enough that the rail never flickers at the edge of
+   vision while someone is reading the table beside it. */
+.vani-rail-signal { display: flex; align-items: flex-end; gap: 2px; height: 14px; }
+.vani-rail-signal i { width: 3px; border-radius: 1px; background: currentColor; opacity: .28; animation: vani-signal 1.8s ease-in-out infinite; }
+.vani-rail-signal i:nth-child(1) { height: 5px; }
+.vani-rail-signal i:nth-child(2) { height: 9px;  animation-delay: .22s; }
+.vani-rail-signal i:nth-child(3) { height: 14px; animation-delay: .44s; }
+@keyframes vani-signal { 0%, 55%, 100% { opacity: .28; } 26% { opacity: 1; } }
+/* Stopped, not slowed — and left at full strength, which is the honest resting
+   state for a live indicator. */
+@media (prefers-reduced-motion: reduce) { .vani-rail-signal i { animation: none; opacity: .9; } }

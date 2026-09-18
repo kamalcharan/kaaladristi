@@ -94,6 +94,34 @@ try {
     const closedWidth = await widthOf(page);
     assert.ok(closedWidth > openWidth + 100, `${label}: content did not gain the space (${openWidth} -> ${closedWidth})`);
 
+    // 2b. Closed is not off: the rail carries a live indicator, on the theme
+    //     accent, and the motion stops under prefers-reduced-motion. A static
+    //     chevron on a neutral rail reads as a layout control, not a companion.
+    const signal = page.locator('.vani-rail-signal i');
+    assert.equal(await signal.count(), 3, `${label}: live indicator missing from the rail`);
+    const paint = await page.evaluate(() => {
+      const bar = document.querySelector('.vani-rail-signal i');
+      const btn = document.querySelector('.vani-rail-button');
+      const accentProbe = document.createElement('div');
+      accentProbe.style.backgroundColor = 'var(--accent)';
+      document.body.appendChild(accentProbe);
+      const accent = getComputedStyle(accentProbe).backgroundColor;
+      accentProbe.remove();
+      return {
+        animated: getComputedStyle(bar).animationName,
+        // currentColor on the bars, so the button's colour is what paints them.
+        colour: getComputedStyle(btn).color,
+        accent,
+      };
+    });
+    assert.equal(paint.animated, 'vani-signal', `${label}: indicator is not animated (${paint.animated})`);
+    assert.equal(paint.colour, paint.accent, `${label}: rail is not on the theme accent (${paint.colour} vs ${paint.accent})`);
+
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    const reduced = await page.evaluate(() => getComputedStyle(document.querySelector('.vani-rail-signal i')).animationName);
+    assert.equal(reduced, 'none', `${label}: indicator keeps animating under prefers-reduced-motion (${reduced})`);
+    await page.emulateMedia({ reducedMotion: 'no-preference' });
+
     // 3. The choice is the preference — a fresh load stays closed.
     await page.goto(`${base}/${html}?route=${encodeURIComponent(route)}`);
     await page.getByRole('button', { name: 'Show VaNi' }).waitFor({ timeout: 8000 });
