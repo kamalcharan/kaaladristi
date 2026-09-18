@@ -512,7 +512,7 @@ forces materialisation, that is a new decision with a number behind it.
 | Results identification | migration 214 — **needed a second feed**, see below |
 | `returns_since_result` | migration 215, derived; **216** de-duplicates it per results meeting |
 | Board-meeting backfill 2026-06-01..09-16 | run: **11,183 meetings**, 0 skipped, 2,829 events judged |
-| Bulk / block deals | **BLOCKED**, probe written — `scripts/probe_nse_bulkdeals.py`. The four JSON candidates returned 503/empty, but that was never separated from a wrong referer, a wrong parameter name or a moved path, so the probe tests each of those AND the static CSV archives (a different server, so an API 503 says nothing about them). It reports STATUS CODES, because "403 everywhere" and "answers but empty" are different findings and lead to different next steps. |
+| Bulk / block deals | **UNBLOCKED 2026-09-18.** `historicalOR/bulk-block-short-deals?optionType=bulk_deals&from=&to=` serves a date window — 70 rows in 30 days, ~850/yr. The four earlier candidates that 503'd stay 503 (`historical/bulk-deals`, `historical/block-deals`), so the finding was the endpoint, not the gating. CSV archives also answer (bulk.csv 212 rows, block.csv 4) but are current-state, so the JSON window wins. Schema pending two measurements — see below. |
 
 #### The finding that changed the shape: a result has no category
 
@@ -660,6 +660,43 @@ version makes the operation CHANGE something first: a relink that commits
 nothing rolls back to the old verdict, one that commits only its clear leaves
 NULL, and only a correct relink leaves the new answer. The in-function counts
 are read inside the transaction, so the report looks right in all three cases.
+
+#### Bulk deals: the endpoint is found, the schema waits on two numbers
+
+`BD_CLIENT_NAME` is the point — it is the only field in this whole plan that
+names the buyer, which is what makes "a documented institutional buy on a
+Waking Giants name" a join we can actually perform.
+
+Two things are still unmeasured, and both change the schema rather than
+decorate it, so the probe now measures them instead of the design assuming
+them:
+
+1. **Which composed key is unique.** There is no `seq_id`. Too narrow and real
+   deals collapse into each other silently; too wide — qty and price inside the
+   key — and NSE correcting a quantity inserts a SECOND row instead of revising
+   the first, the same corruption wearing the opposite costume. `BD_TP_WATP` is
+   a weighted *average* price, which suggests NSE already aggregates per client
+   per side per day and the narrow key is right. *Suggests* is why it is
+   counted.
+2. **How far back it serves.** A row count that stops growing with the window,
+   or an earliest date that does not move, means a silent cap — the shape that
+   makes a backfill look complete when it is not.
+
+Two rules are already settled and written into the probe so they are not
+re-derived later:
+
+* **⚠ Day 0 is NOT the deal date.** NSE publishes bulk deals after the close,
+  so a deal done on the 19th is public that evening and actionable on the 20th.
+  `kd_day_zero_trade_date` with a post-15:30 timestamp — one implementation of
+  the after-the-close rule, reused rather than rewritten. Dating a deal to its
+  own session credits the market with knowing something it could not see.
+* **⚠ `BD_DT_ORDER` is a sort key, not a time.** It reads
+  `2026-08-18T18:30:00.000Z` for a deal dated 19-AUG-2026 — IST midnight of the
+  deal date expressed in UTC. Read as a timestamp it moves every deal a day
+  earlier.
+
+And there is **no ISIN**, so these rows need symbol → `km_equity_symbols`
+resolution with the same counted-unresolvable tail the filings ingest reports.
 
 #### ⚠ The blocker Sprint 3b now owns
 

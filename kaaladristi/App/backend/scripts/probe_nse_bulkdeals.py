@@ -19,6 +19,19 @@ thing.
 
 ⚠ MUST RUN ON THE VPS — the cloud container gets 403 to CONNECT for nseindia.
 
+⚠ DAY 0 IS NOT THE DEAL DATE. NSE publishes bulk deals AFTER the close, so a
+deal done on the 19th is public that evening and actionable on the 20th. The
+same rule announcements already go through — `kd_day_zero_trade_date` with a
+post-15:30 timestamp — applies here, and reusing it keeps ONE implementation of
+the after-the-close rule. Dating a deal to its own session would credit the
+market with knowing something it could not yet see: the lookahead bias this
+plan keeps guarding against, arriving through a third door.
+
+⚠ `BD_DT_ORDER` IS A SORT KEY, NOT A TIME. It reads `2026-08-18T18:30:00.000Z`
+for a deal dated 19-AUG-2026 — that is IST midnight of the deal date expressed
+in UTC, not the moment of the trade. Treating it as a timestamp would move
+every deal a day earlier.
+
 THE DECISION IT MAKES:
   * A JSON endpoint answers with a date window  -> ingestion looks like
     ingest_nse_filings.py: a windowed fetch, a natural key, backfillable.
@@ -117,6 +130,67 @@ def _describe(rows, label):
           'collapses real deals.')
 
 
+def _key_analysis(rows):
+    """WHICH COMPOSED KEY IS ACTUALLY UNIQUE — measured, not assumed.
+
+    There is no seq_id, so the natural key has to come from the row. Get it too
+    narrow and real deals collapse into one another silently; get it too wide
+    (qty and price inside the key) and NSE correcting a quantity inserts a
+    SECOND row instead of revising the first, which is the same corruption
+    wearing the opposite costume.
+
+    BD_TP_WATP is a weighted AVERAGE trade price, which says NSE already
+    aggregates per client per side per day — so the narrow key is probably
+    right. `Probably` is why this counts instead of guessing.
+    """
+    print('\n=== NATURAL KEY: collisions in this window ===')
+    base = ('BD_DT_DATE', 'BD_SYMBOL', 'BD_CLIENT_NAME', 'BD_BUY_SELL')
+    cands = {
+        'date+symbol+client+side': base,
+        '  + qty': base + ('BD_QTY_TRD',),
+        '  + qty + price': base + ('BD_QTY_TRD', 'BD_TP_WATP'),
+    }
+    for name, keys in cands.items():
+        if not all(k in rows[0] for k in keys):
+            print(f'  {name:<26} field missing, skipped')
+            continue
+        c = Counter(tuple(str(r.get(k)) for k in keys) for r in rows)
+        dup = {k: v for k, v in c.items() if v > 1}
+        print(f'  {name:<26} {len(c)} distinct of {len(rows)} rows  '
+              f'-> {len(dup)} colliding')
+        for k, v in list(dup.items())[:3]:
+            print(f'      x{v}  {" | ".join(k)}')
+    print("""
+  ^ ZERO collisions on the narrow key means it IS the natural key, and qty /
+    price belong in the row as UPDATABLE columns behind a content hash -- the
+    same shape km_board_meetings uses, where a genuine correction is a revision
+    rather than a duplicate. Collisions mean the opposite and the key must
+    widen, accepting that corrections then arrive as new rows.""")
+
+
+def _depth(s, rows_label):
+    """How far back does it serve? This decides whether a backfill is one call
+    or a loop, and whether history exists at all."""
+    print('\n=== DEPTH (the same endpoint, wider windows) ===')
+    end = date.today()
+    for years in (1, 3, 5):
+        start = end - timedelta(days=365 * years)
+        f, t = start.strftime('%d-%m-%Y'), end.strftime('%d-%m-%Y')
+        got = _try(s, f'{years}y window',
+                   'https://www.nseindia.com/api/historicalOR/'
+                   f'bulk-block-short-deals?optionType=bulk_deals&from={f}&to={t}',
+                   REF_REPORT)
+        if got:
+            ds = [r.get('BD_DT_DATE') for r in got if r.get('BD_DT_DATE')]
+            print(f'        earliest {min(ds, default="?")}  '
+                  f'latest {max(ds, default="?")}')
+    print("""
+  ^ A row count that stops growing with the window, or an earliest date that
+    does not move, means the endpoint is CAPPED -- and a cap that is silent is
+    the shape that makes a backfill look complete when it is not. Compare the
+    counts, not just the fact that each call answered.""")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--out', default=None)
@@ -186,6 +260,10 @@ def main():
     windowed fetch, UNIQUE natural key, ON CONFLICT DO NOTHING, backfillable.
     If it is a single-day CSV, a backfill is ~250 requests a year and the
     natural key must be composed from the row.""")
+
+    if rows and chosen and 'historicalOR' in chosen:
+        _key_analysis(rows)
+        _depth(s, chosen)
 
     if args.out:
         with open(args.out, 'w') as fh:
