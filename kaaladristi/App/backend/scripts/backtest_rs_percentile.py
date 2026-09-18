@@ -65,9 +65,28 @@ import os
 import sys
 
 import psycopg2
+import psycopg2.extensions
 import psycopg2.extras
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+
+# ── Ctrl+C has to work, and the server has to stop ──────────────────────────
+# psycopg2 blocks inside libpq waiting on the socket, so Python cannot run its
+# SIGINT handler until the query returns: Ctrl+C is QUEUED, not delivered, and
+# the run appears frozen. Worse, killing the client does not stop the query —
+# PostgreSQL keeps executing it and typically only notices the dead connection
+# when it tries to return results, so a runaway SELECT can hold server
+# resources long after the terminal is closed. That is exactly how the first
+# live run of this script wedged the database for hours.
+#
+# wait_select puts psycopg2 in "green" mode: it polls instead of blocking, and
+# on KeyboardInterrupt it issues a real PQcancel to the backend. Ctrl+C then
+# stops BOTH sides. Green mode has limits (COPY, large objects) that a
+# read-only SELECT study never touches.
+try:
+    psycopg2.extensions.set_wait_callback(psycopg2.extras.wait_select)
+except Exception:                       # pragma: no cover - older psycopg2
+    pass
 
 CLIFF_LOW, CLIFF_HIGH = 0.55, 1.80     # adjust_close_cliffs(), lib/breadth_common.py
 BUCKETS = [(90, 100), (80, 90), (70, 80), (50, 70), (30, 50), (0, 30)]
@@ -83,6 +102,14 @@ def get_conn():
         raise SystemExit('Set DB_PRIMARY/DATABASE_URL in App/.env, or KD_DB_PASSWORD.')
     conn = psycopg2.connect(dsn, connect_timeout=30)
     conn.set_session(readonly=True)          # this study writes nothing, ever
+    # Session-level, so EVERY query is covered — including Phase 0 and the
+    # calendar lookup, which is where the first run actually hung. A per-
+    # statement SET LOCAL inside the sampling loop was not enough: the query
+    # that ran away was the one before the loop started.
+    with conn.cursor() as c:
+        c.execute("SET statement_timeout = '300s'")
+        c.execute("SET idle_in_transaction_session_timeout = '60s'")
+    conn.commit()
     return conn
 
 
@@ -225,7 +252,23 @@ def run(cur, dates, horizon, exchange):
         try:
             rows = q(cur, _STUDY, {'d': d, 'h': horizon, 'ex': exchange,
                                    'lo': CLIFF_LOW, 'hi': CLIFF_HIGH, 'buckets': buckets})
-        except Exception as exc:                      # one slow date must not lose the run
+        except psycopg2.errors.QueryCanceled as exc:
+            # Both a Ctrl+C and a statement_timeout arrive here as QueryCanceled,
+            # and they mean OPPOSITE things: skip this date, or stop everything.
+            # PostgreSQL distinguishes them in the message, and getting it wrong
+            # means Ctrl+C silently skips one date per press instead of exiting.
+            cur.connection.rollback()
+            if 'user request' in str(exc):
+                print('\n  interrupted — stopping. The server-side query was '
+                      'cancelled too, so nothing is left running on the database.')
+                raise KeyboardInterrupt from None
+            print(f"    [{i}/{len(dates)}] {d}  SKIPPED — statement timeout "
+                  f"(>{'300'}s); try a shorter --horizons or a narrower --from/--to")
+            continue
+        except KeyboardInterrupt:
+            print('\n  interrupted — stopping.')
+            raise
+        except Exception as exc:                      # one bad date must not lose the run
             print(f"    [{i}/{len(dates)}] {d}  SKIPPED — {str(exc).splitlines()[0][:70]}")
             cur.connection.rollback()
             continue
@@ -331,4 +374,9 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        # Exit quietly. wait_select has already issued a real PQcancel, so the
+        # backend is not still grinding away on a query nobody is waiting for.
+        sys.exit(130)

@@ -1954,6 +1954,22 @@ across the range, because sixty dates spread over twenty years is a better study
 than sixty consecutive recent ones; and every date prints progress with an ETA,
 since a study that is silent for 45 minutes cannot be told from a hung one.
 
+⚠ **Ctrl+C did not kill the first run, and killing the client did not stop the
+DATABASE.** psycopg2 blocks inside libpq, so SIGINT is queued rather than
+delivered until the query returns; and PostgreSQL keeps executing a query after
+its client dies, usually noticing only when it tries to return results. A
+runaway SELECT therefore holds server resources indefinitely — which is the most
+likely reason the read-only MCP timed out on everything for hours that day.
+Fixed in the script: `set_wait_callback(wait_select)` puts psycopg2 in green
+mode so Ctrl+C issues a real `PQcancel` and stops BOTH sides, plus a
+session-level `statement_timeout` (300s) that also covers Phase 0 and the
+calendar lookup, which a per-statement `SET LOCAL` inside the loop did not.
+⚠ A Ctrl+C and a `statement_timeout` BOTH arrive as `QueryCanceled` and mean
+opposite things (stop everything / skip this date); they are told apart by
+PostgreSQL's message, or Ctrl+C silently skips one date per press. **If a run is
+ever stuck again: `pg_cancel_backend(pid)` from `pg_stat_activity`, not just
+Ctrl+C.**
+
 ⚠ **The result is still NOT IN.** The read-only `kaala-postgres`
 MCP was wedged when it was written — every tool on that server, including
 metadata calls, timed out at 60s while the host itself answered in ~1.2s. Run it
