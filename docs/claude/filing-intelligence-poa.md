@@ -512,7 +512,7 @@ forces materialisation, that is a new decision with a number behind it.
 | Results identification | migration 214 — **needed a second feed**, see below |
 | `returns_since_result` | migration 215, derived; **216** de-duplicates it per results meeting |
 | Board-meeting backfill 2026-06-01..09-16 | run: **11,183 meetings**, 0 skipped, 2,829 events judged |
-| Bulk / block deals | **SHIPPED** — migration 217 + `scripts/ingest_nse_bulk_deals.py`, pipeline2 dimension `bulk_deals_ingest` (08:20 / 22:20 IST). Source is the daily CSV archive; the JSON API is capped at 70 rows per call and unusable. ⚠ **No backfill exists** — collection starts from the first run. |
+| Bulk / block deals | **SHIPPED + live 2026-09-18** — migration 217 + `scripts/ingest_nse_bulk_deals.py`, pipeline2 dimension `bulk_deals_ingest` (08:20/22:20 IST). First run stored **216 deals** (BULK 212 + BLOCK 4) for 17-SEP, day_0 filled on all 216, **0 unresolved ISINs**. Source is the daily CSV; the JSON API caps at 70 rows per call. ⚠ **No backfill exists** — collection starts here. |
 
 #### The finding that changed the shape: a result has no category
 
@@ -719,6 +719,33 @@ re-derived later:
 
 And there is **no ISIN**, so these rows need symbol → `km_equity_symbols`
 resolution with the same counted-unresolvable tail the filings ingest reports.
+
+#### The paging guard cried wolf on its first run
+
+The first live ingest stored cleanly — 216 deals, all dated, no unresolved
+ISINs — and printed:
+
+> ⚠ BULK 2026-09-17 returned exactly 212 rows — the API page cap.
+
+That was wrong twice over. 212 is a **complete** BULK session, and the check
+was comparing the CSV's row count against the *JSON API's* 70-row page size —
+two different sources. The message then printed the real count as though it
+were the cap, which is self-contradicting on its face.
+
+**A warning that fires on every healthy day is one nobody reads by the second
+week**, which is exactly how the real one gets missed. The same failure mode as
+a disclaimer that is always present.
+
+The replacement tests the thing that would actually reveal a cap: **a source
+that starts paging returns the same number every day.** `paging_suspected()`
+reads `km_bulk_deal_days` and warns only when the last three sessions share one
+`row_count` — impossible by chance when a real day varies (212, then some other
+number) — and only above 50, because BLOCK sessions hold single digits and
+4, 4, 4 across three days is ordinary. One day of history concludes nothing.
+
+That check is only possible because the coverage table exists. It was added for
+a different reason (telling a quiet session from an un-fetched one), and it is
+the only thing that can see this.
 
 #### ⚠ The blocker Sprint 3b now owns
 

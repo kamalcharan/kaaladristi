@@ -51,9 +51,25 @@ FEEDS = {
     'BLOCK': 'https://nsearchives.nseindia.com/content/equities/block.csv',
 }
 
-# The measured complete count for one BULK session was 212, so a day landing
-# on the API's 70 would mean the CSV had started paging too. Loud, not stored.
+# The JSON API's page size. Kept as the RECORDED REASON this ingest reads the
+# CSV at all — not as a threshold.
+#
+# ⚠ It was briefly used as one, and that was wrong in both directions. A 212-row
+# BULK session is a COMPLETE day; comparing it against a different source's
+# limit fired "returned exactly 212 rows — the API page cap" on the first live
+# run, which is both a false alarm and self-contradicting (it prints the real
+# count as though it were the cap). A warning that fires on every healthy day
+# stops being read by the second week, which is how the real one gets missed.
 API_PAGE_CAP = 70
+
+# What a cap on the CSV would actually look like: the same count, day after day.
+# A real session varies — 212 BULK deals one day, some other number the next —
+# so three identical counts in a row is effectively impossible by chance and is
+# the one shape worth alarming on. km_bulk_deal_days exists to make it visible.
+CAP_SUSPECT_RUN = 3
+# ...but only for counts big enough to BE a page size. BLOCK sessions hold
+# single digits (4 on 17-SEP), and 4, 4, 4 across three days is ordinary.
+CAP_SUSPECT_MIN = 50
 
 # CSV header -> our column. Kept as a map because NSE's headers carry spaces,
 # a slash and a full stop ("Trade Price / Wght. Avg. Price") that no amount of
@@ -219,18 +235,16 @@ def run(conn, session, dry_run=False) -> dict:
         for r in rows:
             by_day.setdefault(r['deal_date'], []).append(r)
         for d, drows in sorted(by_day.items()):
-            if len(drows) >= API_PAGE_CAP and len(by_day) == 1:
-                # The CSV measured 212 for one BULK session, so it is not
-                # paged today. If a day ever lands exactly on the API's cap,
-                # say so rather than storing a possibly-truncated session as
-                # if it were whole.
-                stats['at_cap'].append((deal_type, str(d), len(drows)))
             log.info(f'  {deal_type} {d}: {len(drows)} deals')
             stats['days'].append((deal_type, str(d), len(drows)))
             if not dry_run:
                 stats['stored'] += replace_day(conn, deal_type, d, drows)
 
     if not dry_run:
+        for deal_type in FEEDS:
+            flat = paging_suspected(conn, deal_type)
+            if flat:
+                stats['at_cap'].append((deal_type, flat[0], flat[1]))
         stats['deferred'] = backfill_day0(conn)
         stats['unresolvable'] = unresolved_count(conn)
         if stats['unresolvable']:
@@ -239,10 +253,36 @@ def run(conn, session, dry_run=False) -> dict:
             log.warning(f'  ⚠ {stats["unresolvable"]:,} rows have no ISIN '
                         f'(symbol not in km_equity_symbols). Inspect: SELECT '
                         f'DISTINCT symbol FROM km_bulk_deals WHERE isin IS NULL;')
-    for dt, d, n in stats['at_cap']:
-        log.warning(f'  ⚠ {dt} {d} returned exactly {n} rows — the API page cap. '
-                    f'Treat this session as INCOMPLETE until confirmed.')
+    for dt, since, n in stats['at_cap']:
+        log.warning(f'  ⚠ {dt}: the last {CAP_SUSPECT_RUN} sessions each hold '
+                    f'EXACTLY {n} rows (since {since}). Real sessions vary, so '
+                    f'this is what a page limit looks like — treat those days '
+                    f'as possibly truncated and check the raw CSV.')
     return stats
+
+
+def paging_suspected(conn, deal_type: str):
+    """(since_date, count) when the last CAP_SUSPECT_RUN sessions share one
+    row_count, else None.
+
+    This is the check the first version got wrong by measuring the CSV against
+    the JSON API's 70. A source that has started paging does not announce it —
+    it just returns the same number every day, which only the stored history
+    can show. Hence km_bulk_deal_days.
+    """
+    with conn.cursor() as cur:
+        cur.execute("""
+            SELECT deal_date, row_count FROM km_bulk_deal_days
+             WHERE source = 'NSE' AND deal_type = %s
+             ORDER BY deal_date DESC LIMIT %s
+        """, (deal_type, CAP_SUSPECT_RUN))
+        rows = cur.fetchall()
+    if len(rows) < CAP_SUSPECT_RUN:
+        return None                       # not enough history to say anything
+    counts = {r[1] for r in rows}
+    if len(counts) == 1 and rows[0][1] >= CAP_SUSPECT_MIN:
+        return str(rows[-1][0]), rows[0][1]
+    return None
 
 
 # ── pipeline2 entry point ────────────────────────────────────────────────

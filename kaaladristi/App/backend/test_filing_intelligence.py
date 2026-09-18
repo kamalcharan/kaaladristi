@@ -27,7 +27,8 @@ from scripts.ingest_nse_board_meetings import (
     MATCH_BACK_DAYS, MATCH_FWD_DAYS, link_result_announcements,
     relink_result_announcements, upsert_meetings, _material_diff)
 from scripts.ingest_nse_bulk_deals import (
-    parse_rows, replace_day, backfill_day0, unresolved_count)
+    parse_rows, replace_day, backfill_day0, unresolved_count,
+    paging_suspected, CAP_SUSPECT_RUN, CAP_SUSPECT_MIN)
 
 DSN = os.environ.get('KD_TEST_DSN')
 MIGRATIONS = ('km_migration_212_filings_ingest.sql',
@@ -964,6 +965,50 @@ class BulkDeals(unittest.TestCase):
         self.assertEqual(got['ASTERDM'], 'INE0AST01011')
         self.assertIsNone(got['NOSUCH'])
         self.assertEqual(unresolved_count(self.conn), 1)
+
+    # ── the paging guard, after it cried wolf on day one ──────────────────
+    def _day(self, deal_type, d, n):
+        with self.conn.cursor() as c:
+            c.execute("INSERT INTO km_bulk_deal_days (source, deal_type, "
+                      "deal_date, row_count) VALUES ('NSE',%s,%s,%s)",
+                      (deal_type, d, n))
+        self.conn.commit()
+
+    def test_a_complete_session_does_not_warn(self):
+        """212 BULK deals is a FULL day. The first version compared it against
+        the JSON API's 70-row page size and warned on every healthy session —
+        a warning that always fires is one nobody reads by the second week."""
+        self._day('BULK', '2026-09-17', 212)
+        self.assertIsNone(paging_suspected(self.conn, 'BULK'))
+
+    def test_one_day_of_history_cannot_conclude_anything(self):
+        self._day('BULK', '2026-09-17', 200)
+        self.assertIsNone(paging_suspected(self.conn, 'BULK'))
+
+    def test_identical_counts_across_sessions_is_what_a_cap_looks_like(self):
+        """A source that starts paging does not announce it — it returns the
+        same number every day. Only the stored history can show that, which is
+        why km_bulk_deal_days exists."""
+        # built from the constant, so tightening the run length cannot leave
+        # this test quietly asserting a different situation
+        for i in range(CAP_SUSPECT_RUN):
+            self._day('BULK', f'2026-09-{10 + i:02d}', 200)
+        got = paging_suspected(self.conn, 'BULK')
+        self.assertIsNotNone(got)
+        self.assertEqual(got[1], 200)
+
+    def test_varying_counts_never_warn(self):
+        for d, n in (('2026-09-15', 198), ('2026-09-16', 212), ('2026-09-17', 205)):
+            self._day('BULK', d, n)
+        self.assertIsNone(paging_suspected(self.conn, 'BULK'))
+
+    def test_small_repeated_counts_are_ordinary_not_a_cap(self):
+        """BLOCK sessions hold single digits — 4 on 17-SEP. Three days of
+        exactly 4 is unremarkable, and warning on it would retire the check."""
+        for d in ('2026-09-15', '2026-09-16', '2026-09-17'):
+            self._day('BLOCK', d, 4)
+        self.assertIsNone(paging_suspected(self.conn, 'BLOCK'))
+        self.assertLess(4, CAP_SUSPECT_MIN)
 
     # ── parsing ───────────────────────────────────────────────────────────
     def test_unparsable_rows_are_counted_not_dropped(self):
