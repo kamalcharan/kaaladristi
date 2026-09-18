@@ -106,23 +106,50 @@ def phase0_depth(cur, exchange):
     print(f"  ema_20 starts           : {ema['first_ema']}   ← every SHIPPED scanner is capped here")
     if rows['first_rs'] and ema['first_ema'] and rows['first_rs'] < ema['first_ema']:
         print("  → RS can be tested EARLIER than the shipped scanners can run.")
+        print()
+        print("  ⚠ DEPTH IS NOT THE SAME AS QUALITY. km_corporate_actions is EMPTY")
+        print("    (D44), so closes are raw bhavcopy over the whole window — and")
+        print("    magic_rs, which rs_percentile ranks, was itself computed on those")
+        print("    unadjusted closes. The cliff filter drops a window that CONTAINS a")
+        print("    split, but it cannot repair an rs_percentile that was distorted by")
+        print("    one before the window opened. Treat pre-2025 results as indicative")
+        print("    and compare them against a recent-only run (--from 2024-01-01)")
+        print("    before believing either.")
     print()
     return rows['first_rs'], rows['last_rs']
 
 
-def sample_dates(cur, start, end, horizon, exchange):
-    """Non-overlapping sample dates, ≥ horizon sessions apart (trap 3)."""
+def sample_dates(cur, start, end, horizon, max_dates):
+    """Non-overlapping sample dates (trap 3), spread across the whole window.
+
+    The trading calendar comes from km_index_eod — one row per index per date,
+    a few thousand rows — NOT from a DISTINCT over km_equity_eod, which is 13.2M
+    rows once rs_percentile reaches back to 2006 and was the original reason this
+    script appeared to hang. km_equity_eod is the fallback if the index table is
+    empty for the window.
+
+    With twenty years available, sixty dates SPREAD over the whole range is a
+    better study than sixty consecutive recent ones — more independent regimes,
+    same cost — so the sample is thinned evenly rather than truncated.
+    """
     rows = q(cur, """
-        WITH d AS (
-          SELECT DISTINCT e.trade_date
-          FROM km_equity_eod e JOIN km_equity_symbols s ON s.id = e.equity_id
-          WHERE e.rs_percentile IS NOT NULL
-            AND e.trade_date BETWEEN %(a)s AND %(b)s
-            AND (%(ex)s = 'BOTH' OR s.exchange = %(ex)s)
-        ), n AS (SELECT trade_date, row_number() OVER (ORDER BY trade_date) AS rn FROM d)
-        SELECT trade_date FROM n WHERE (rn - 1) %% %(h)s = 0 ORDER BY trade_date
-    """, {'a': start, 'b': end, 'h': horizon, 'ex': exchange})
-    return [r['trade_date'] for r in rows]
+        SELECT DISTINCT trade_date FROM km_index_eod
+        WHERE trade_date BETWEEN %(a)s AND %(b)s ORDER BY trade_date
+    """, {'a': start, 'b': end})
+    if not rows:
+        rows = q(cur, """
+            SELECT DISTINCT trade_date FROM km_equity_eod
+            WHERE trade_date BETWEEN %(a)s AND %(b)s ORDER BY trade_date
+        """, {'a': start, 'b': end})
+    days = [r['trade_date'] for r in rows]
+    # every horizon-th session keeps the windows non-overlapping ...
+    spaced = days[::horizon]
+    # ... and if that is still more than the budget, thin it evenly so the
+    # sample still spans the full history instead of clustering at one end.
+    if max_dates and len(spaced) > max_dates:
+        step = len(spaced) / float(max_dates)
+        spaced = [spaced[int(i * step)] for i in range(max_dates)]
+    return spaced
 
 
 _STUDY = """
@@ -139,7 +166,14 @@ fwd AS (
   SELECT e.equity_id, e.trade_date, e.close, e.prev_close,
          row_number() OVER (PARTITION BY e.equity_id ORDER BY e.trade_date) AS rn
   FROM km_equity_eod e
-  WHERE e.trade_date > %(d)s AND e.equity_id IN (SELECT equity_id FROM base)
+  WHERE e.trade_date > %(d)s
+    -- Bounded by CALENDAR date as well as by rn. Without this ceiling the CTE
+    -- ranks every future bar for ~5,000 stocks before filtering to the first h
+    -- — on twenty years of history that is the whole table, once per sample
+    -- date. `h` sessions can never span more than ~1.6*h calendar days plus a
+    -- holiday allowance, so this cannot truncate a real window.
+    AND e.trade_date <= (%(d)s::date + ((%(h)s * 1.8)::int + 21))
+    AND e.equity_id IN (SELECT equity_id FROM base)
 ),
 win AS (SELECT * FROM fwd WHERE rn <= %(h)s),
 -- Trap 1: any single-session cliff inside the window disqualifies the pair.
@@ -178,12 +212,26 @@ ORDER BY j.bucket_lo DESC;
 
 
 def run(cur, dates, horizon, exchange):
+    """One bounded query per sample date, with progress. A study that prints
+    nothing for 45 minutes is indistinguishable from a hung one — which is
+    exactly how the first version of this script failed."""
     buckets = psycopg2.extensions.AsIs(
         ','.join(f'({lo},{hi})' for lo, hi in BUCKETS))
     agg, meta = {}, {'universe': 0, 'cliff': 0, 'noexit': 0, 'dates': 0}
-    for d in dates:
-        rows = q(cur, _STUDY, {'d': d, 'h': horizon, 'ex': exchange,
-                               'lo': CLIFF_LOW, 'hi': CLIFF_HIGH, 'buckets': buckets})
+    import time
+    t0 = time.time()
+    for i, d in enumerate(dates, 1):
+        cur.execute("SET LOCAL statement_timeout = '180s'")
+        try:
+            rows = q(cur, _STUDY, {'d': d, 'h': horizon, 'ex': exchange,
+                                   'lo': CLIFF_LOW, 'hi': CLIFF_HIGH, 'buckets': buckets})
+        except Exception as exc:                      # one slow date must not lose the run
+            print(f"    [{i}/{len(dates)}] {d}  SKIPPED — {str(exc).splitlines()[0][:70]}")
+            cur.connection.rollback()
+            continue
+        el = time.time() - t0
+        print(f"    [{i}/{len(dates)}] {d}  {el:5.1f}s elapsed"
+              f"  (~{el / i * (len(dates) - i):.0f}s left)", flush=True)
         if not rows:
             continue
         meta['dates'] += 1
@@ -253,6 +301,10 @@ def main():
     ap.add_argument('--exchange', default='BOTH', choices=['BOTH', 'NSE', 'BSE'])
     ap.add_argument('--from', dest='start', default=None)
     ap.add_argument('--to', dest='end', default=None)
+    ap.add_argument('--max-dates', type=int, default=60,
+                    help='independent sample dates per horizon (default 60). '
+                         'Sixty spread across twenty years beats sixty consecutive '
+                         'recent ones — more regimes, same cost.')
     a = ap.parse_args()
 
     conn = get_conn()
@@ -264,7 +316,8 @@ def main():
     if not start:
         raise SystemExit('rs_percentile is not populated — run backfill_rs_percentile.py --all first.')
     for h in (int(x) for x in a.horizons.split(',')):
-        dates = sample_dates(cur, start, end, h, a.exchange)
+        print(f"  sampling up to {a.max_dates} dates for horizon {h} …", flush=True)
+        dates = sample_dates(cur, start, end, h, a.max_dates)
         # The last `h` sessions cannot have a forward window yet.
         dates = dates[:-1] if dates else dates
         agg, meta = run(cur, dates, h, a.exchange)

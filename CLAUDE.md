@@ -1936,7 +1936,25 @@ rho + top−bottom spread, since strict monotonicity over six buckets fails on o
 inversion); and does it add anything **over the shipped scanners** (phase 3,
 overlap — not yet written).
 
-⚠ **It has NOT been run against the live DB.** The read-only `kaala-postgres`
+**Phase 0, measured on the live DB 2026-09-18: `rs_percentile` reaches back to
+**2006-02-22** — **13.2 million bars**, twenty years — while `ema_20` starts
+2025-04-01. So a pure RS screen can be tested roughly twenty times deeper than
+any shipped scanner can run. ⚠ **Depth is not quality**: `km_corporate_actions`
+is EMPTY (D44), so `magic_rs` itself was computed on unadjusted closes over that
+whole window. The cliff filter drops a window that CONTAINS a split; it cannot
+repair an `rs_percentile` distorted by one beforehand. Always compare a deep run
+against `--from 2024-01-01` before believing either.
+
+⚠ **First live run HUNG** (45 min, no output past Phase 0) and the script was
+fixed: the calendar now comes from `km_index_eod` (a few thousand rows) instead
+of a `DISTINCT` over all 13.2M; the forward-window CTE is bounded by calendar
+date as well as by row number, so it no longer ranks every future bar for ~5,000
+stocks per sample date; `--max-dates` (default 60) thins the sample EVENLY
+across the range, because sixty dates spread over twenty years is a better study
+than sixty consecutive recent ones; and every date prints progress with an ETA,
+since a study that is silent for 45 minutes cannot be told from a hung one.
+
+⚠ **The result is still NOT IN.** The read-only `kaala-postgres`
 MCP was wedged when it was written — every tool on that server, including
 metadata calls, timed out at 60s while the host itself answered in ~1.2s. Run it
 and the numbers are real; until then there is no result, and no number in this
