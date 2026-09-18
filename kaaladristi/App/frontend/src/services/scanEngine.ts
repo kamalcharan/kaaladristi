@@ -62,8 +62,8 @@ export const SCAN_PRESETS: ScanDefinition[] = [
   { id: 'breakdown_watch',      name: 'Breakdown Surge',       description: 'NSE stocks closing below their 20-day low on a red day \u2014 ranked by depth below the level', limit: 500, universe: 'NSE_ONLY', category: 'price_action',  category_label: 'Price Action',  category_color: CAT_PRICE_ACTION, category_sort: 1, is_default_tab: false, timeframe: 'daily', vani_rule: 'is_vani_weakness' },
   { id: 'weekly_decliners',     name: 'Weekly Decliners',      description: 'NSE stocks trading below last week\u2019s close \u2014 ranked by week-to-date loss', limit: 500, universe: 'NSE_ONLY', category: 'price_action',  category_label: 'Price Action',  category_color: CAT_PRICE_ACTION, category_sort: 1, is_default_tab: false, timeframe: 'daily', vani_rule: 'is_vani_weakness' },
   { id: 'monthly_decliners',    name: 'Monthly Decliners',     description: 'NSE stocks trading below last month\u2019s close \u2014 ranked by month-to-date loss', limit: 500, universe: 'NSE_ONLY', category: 'price_action',  category_label: 'Price Action',  category_color: CAT_PRICE_ACTION, category_sort: 1, is_default_tab: false, timeframe: 'daily', vani_rule: 'is_vani_weakness' },
-  { id: 'gl_breakout',          name: 'Golden Line Breakout',  description: 'NSE stocks closing back above the 150-day Golden Line on a volume-drive or accumulation bar', limit: 200, universe: 'NSE_ONLY', category: 'price_action',  category_label: 'Price Action',  category_color: CAT_PRICE_ACTION, category_sort: 1, is_default_tab: false, timeframe: 'daily', vani_rule: 'gl_event_any' },
-  { id: 'gl_retest',            name: 'Golden Line Retest',    description: 'NSE stocks that came back to the Golden Line and held it on a volume-drive or accumulation bar', limit: 200, universe: 'NSE_ONLY', category: 'price_action',  category_label: 'Price Action',  category_color: CAT_PRICE_ACTION, category_sort: 1, is_default_tab: false, timeframe: 'daily', vani_rule: 'gl_event_any' },
+  { id: 'gl_breakout',          name: 'Golden Line Breakout',  description: 'Stocks closing back above the 150-day Golden Line on a volume-drive or accumulation bar', limit: 200, universe: 'NSE_BSE', category: 'price_action',  category_label: 'Price Action',  category_color: CAT_PRICE_ACTION, category_sort: 1, is_default_tab: false, timeframe: 'daily', vani_rule: 'gl_event_any' },
+  { id: 'gl_retest',            name: 'Golden Line Retest',    description: 'Stocks that came back to the Golden Line in the last 7 sessions and held it on a volume-drive or accumulation bar', limit: 200, universe: 'NSE_BSE', category: 'price_action',  category_label: 'Price Action',  category_color: CAT_PRICE_ACTION, category_sort: 1, is_default_tab: false, timeframe: 'daily', vani_rule: 'gl_event_any' },
   { id: 'volume_drive',         name: 'Volume Drive',          description: 'Stocks printing a volume-drive or accumulation bar — ranked by delivery conviction',                                limit: 60,  universe: 'NSE_BSE',  category: 'flow',          category_label: 'Flow',          category_color: CAT_FLOW, category_sort: 3, is_default_tab: false, timeframe: 'daily', vani_rule: 'svd_delivery_conviction' },
   { id: 'flower_pot_burst',     name: 'Flower Pot Burst',      description: 'Stocks coiling in tight compression — dying volume, contracting range — plus the rare session when a coil releases with an explosive volume-and-range expansion',  limit: 60,  universe: 'NSE_ONLY', category: 'price_action',  category_label: 'Price Action',  category_color: CAT_PRICE_ACTION, category_sort: 1, is_default_tab: false, timeframe: 'daily', vani_rule: null },
   { id: 'stage_2_leaders',      name: 'Stage 2 Leaders',       description: 'Stocks in confirmed Weinstein Stage 2 — SMA200 rising, proper 52-week position',          limit: 500, universe: 'NSE_ONLY', category: 'stage_analysis', category_label: 'Stage Analysis', category_color: CAT_STAGE, category_sort: 2, is_default_tab: false, timeframe: 'daily', vani_rule: 'is_vani_s2' },
@@ -1334,124 +1334,13 @@ async function fetchFlowerPotBurst(exchangeFilter: ExchangeFilter): Promise<Scan
   return rows;
 }
 
-/** Golden Line events (migration 194). Both presets are one stored-column
- *  filter — gl_event is computed nightly by the `gl_events` step, which runs
- *  after `dots` because the rules require the SVD/SBD bar. Doing this live
- *  would be impossible over PostgREST anyway: the retest precondition ("ten
- *  sessions above the line") is a window function, and PostgREST compares a
- *  column to a literal only.
- */
-async function fetchGlEvents(
-  presetId: 'gl_breakout' | 'gl_retest',
-  exchangeFilter: ExchangeFilter,
-): Promise<ScanStock[]> {
-  const completedDates = await fetchRecentDates(1);
-  const latestDate: string | null = completedDates[0] ?? null;
-  if (!latestDate) return [];
-
-  const event = presetId === 'gl_breakout' ? 'BREAKOUT' : 'RETEST';
-  const meta = getPresetMeta(presetId);
-  const lim = meta?.limit ?? 200;
-
-  const { data: rows } = await from('km_equity_eod')
-    .select([
-      'equity_id', 'trade_date', 'close', 'open', 'high', 'low',
-      'pct_chng', 'magic_rs', 'magic_rs_zone', 'rss_value',
-      'rsi_14', 'rvol', 'flow_type', 'supertrend_dir',
-      'sma_50', 'sma_150', 'sma_200', 'ema_20', 'atr_14',
-      'w52_high', 'w52_low', 'lifetime_high',
-      'avg_amt_5d', 'avg_amt_22d', 'delivery_surge_x',
-      'sniper_inst', 'sniper_hot', 'accum_distrib',
-      'volume_divergence_flag', 'delivery_pct', 'deliv_value_cr',
-      'dot_svd', 'dot_sbd', 'dot_syd', 'stage',
-      'score_5d', 'score_22d', 'ret_5d', 'ret_22d', 'ret_66d',
-      'pct_from_gl', 'gl_event', 'gl_days_above',
-      'breakout_level', 'pct_from_breakout', 'pct_below_52w_high',
-      'km_equity_symbols(id,symbol,company_name,exchange,industry,mcap_cr,isin)',
-    ].join(','))
-    .eq('trade_date', latestDate)
-    .eq('gl_event', event)
-    .limit(2000)
-    .execute();
-
-  const eodRows = (rows ?? []) as any[];
-  if (eodRows.length === 0) return [];
-
-  // NSE_ONLY is DECLARED on both presets, so it has to be ENFORCED. The
-  // universe field going unenforced is how quiet_accumulation ended up
-  // returning BSE rows against its own declaration.
-  const isinMap = new Map<string, any>();
-  for (const row of eodRows) {
-    const sym = row.km_equity_symbols;
-    if (!sym || !passesUniverse(sym.exchange, 'NSE_ONLY')) continue;
-    if (exchangeFilter === 'BSE') continue;
-    const isin = sym.isin;
-    if (!isin) { isinMap.set(`noisin:${row.equity_id}`, row); continue; }
-    const existing = isinMap.get(isin);
-    if (!existing || sym.exchange === 'NSE') isinMap.set(isin, row);
-  }
-
-  const results = Array.from(isinMap.values()).map((row): ScanStock => {
-    const sym = row.km_equity_symbols;
-    return {
-      equity_id: row.equity_id,
-      symbol: sym?.symbol ?? String(row.equity_id),
-      company_name: sym?.company_name ?? null,
-      industry: sym?.industry ?? null,
-      exchange: sym?.exchange ?? null,
-      mcap_cr: toNum(sym?.mcap_cr),
-      trade_date: row.trade_date,
-      close: Number(row.close),
-      open: toNum(row.open), high: toNum(row.high), low: toNum(row.low),
-      pct_chng: toNum(row.pct_chng),
-      magic_rs: toNum(row.magic_rs),
-      magic_rs_zone: row.magic_rs_zone ?? null,
-      rss_value: toNum(row.rss_value), rss_spread: null,
-      rsi_14: toNum(row.rsi_14), rvol: toNum(row.rvol),
-      flow_type: row.flow_type ?? null,
-      supertrend_dir: toNum(row.supertrend_dir),
-      sma_50: toNum(row.sma_50), sma_150: toNum(row.sma_150), sma_200: toNum(row.sma_200),
-      ema_20: toNum(row.ema_20), atr_14: toNum(row.atr_14),
-      w52_high: toNum(row.w52_high), w52_low: toNum(row.w52_low),
-      lifetime_high: toNum(row.lifetime_high),
-      avg_amt_5d: toNum(row.avg_amt_5d), avg_amt_22d: toNum(row.avg_amt_22d),
-      avg_amt_66d: null,
-      delivery_surge_x: toNum(row.delivery_surge_x),
-      sniper_inst: toNum(row.sniper_inst), sniper_hot: toNum(row.sniper_hot),
-      accum_distrib: row.accum_distrib ?? null,
-      volume_divergence_flag: row.volume_divergence_flag ?? null,
-      delivery_pct: toNum(row.delivery_pct),
-      deliv_value_cr: toNum(row.deliv_value_cr),
-      has_recent_svd: row.dot_svd === true,
-      has_recent_sbd: row.dot_sbd === true,
-      has_recent_syd: row.dot_syd === true,
-      dot_signal: row.dot_svd ? 'SVD' : row.dot_sbd ? 'SBD' : row.dot_syd ? 'SYD' : null,
-      stage: row.stage ?? null,
-      score_5d: toNum(row.score_5d), score_22d: toNum(row.score_22d),
-      ret_5d: toNum(row.ret_5d), ret_22d: toNum(row.ret_22d), ret_66d: toNum(row.ret_66d),
-      pct_from_gl: toNum(row.pct_from_gl),
-      gl_event: row.gl_event ?? null,
-      gl_days_above: toNum(row.gl_days_above),
-      breakout_level: toNum(row.breakout_level),
-      pct_from_breakout: toNum(row.pct_from_breakout),
-      pctBelow52wHigh: toNum(row.pct_below_52w_high),
-      xAmt: null,
-      rel_5d_n50: null, rel_22d_n50: null, rel_66d_n50: null,
-      rel_5d_n500: null, rel_22d_n500: null, rel_66d_n500: null,
-      magicRsTrend: [], reward: null, rewardPct: null,
-      // Every row here IS a Golden Line event with SVD/SBD behind it, which
-      // is exactly what the owner defined the highlight as.
-      vaniOpportunity: true,
-    };
-  });
-
-  // Breakouts lead with the freshest reclaim, retests with the longest hold —
-  // a line defended after forty sessions says more than one defended after ten.
-  results.sort((a, b) => presetId === 'gl_breakout'
-    ? (b.pct_from_gl ?? -999) - (a.pct_from_gl ?? -999)
-    : (b.gl_days_above ?? 0) - (a.gl_days_above ?? 0));
-  return results.slice(0, lim);
-}
+// migration 218 retired `fetchGlEvents`. It read km_equity_eod for ONE bar and
+// could not express a seven-session retest window, so once the matview owned
+// that window the fetcher was not a fallback but a second, older answer — and
+// `executeScan` reached it whenever the matview returned zero rows, which for
+// gl_retest was 20 of 40 sessions. "One eligibility rule, one implementation —
+// delete the loser": the Golden Line pair now fails visibly like the other
+// seven Price Action presets instead of quietly serving a different rule.
 
 // ── km_scan_results matview: the 6 bundle presets ─────────────────────────
 //
@@ -1808,6 +1697,11 @@ function scanRowToScanStock(r: any): ScanStock {
     pct_from_gl: num(r.pct_from_gl),
     gl_event: r.gl_event ?? null,
     gl_days_above: num(r.gl_days_above),
+    // migration 218. ⚠ gl_event_date is the RETEST bar; trade_date is TODAY.
+    // Every other column on the row is today's.
+    gl_event_date: r.gl_event_date ?? null,
+    gl_sessions_since: num(r.gl_sessions_since),
+    gl_move_since_pct: num(r.gl_move_since_pct),
     dot_signal: r.dot_svd ? 'SVD' : r.dot_sbd ? 'SBD' : r.dot_syd ? 'SYD' : null,
     // Preset-specific (populated where applicable, null elsewhere)
     ret_5d:  num(r.ret_5d),
@@ -1992,8 +1886,6 @@ export async function executeScan(
   // and a combined `a || b` condition reads as no route at all — the audit
   // reported both of these as orphans, i.e. presets whose tab would render
   // and then throw. Keep the shape.
-  if (scanId === 'gl_breakout')          return fetchGlEvents('gl_breakout', exchangeFilter);
-  if (scanId === 'gl_retest')            return fetchGlEvents('gl_retest', exchangeFilter);
 
   // The 6 daily bundle presets read from km_scan_results (Phase 3). The old
   // client-side bundle path was deleted in the follow-up cleanup — a matview

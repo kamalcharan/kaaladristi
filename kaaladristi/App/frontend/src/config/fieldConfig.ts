@@ -247,10 +247,41 @@ export const ALL_FIELDS: Record<string, FieldConfig> = {
   gl_days_above: {
     key: 'gl_days_above',
     label: 'Days Above GL',
-    tooltip: 'Consecutive sessions closed above the Golden Line, this session included. Zero means the close is at or below it.',
+    // migration 218: on a RETEST row this is the RETEST BAR's value — how long
+    // the line had been held when it was tested — not a live count as of
+    // today. That is the number the single-bar version returned, so the
+    // meaning is unchanged; it is simply anchored to a bar that may not be
+    // today. Read it next to "Retested".
+    tooltip: 'Consecutive sessions closed above the Golden Line. On a Golden Line Retest row this is measured on the retest bar itself, not today. Zero means the close is at or below the line.',
     type: 'number',
     width: 96,
     formatFn: (val: any) => (val == null ? '—' : String(Math.round(Number(val)))),
+  },
+
+  // ── Golden Line retest window (migration 218) ───────────────────────────
+
+  gl_sessions_since: {
+    key: 'gl_sessions_since',
+    label: 'Retested',
+    tooltip: 'How many trading sessions ago the stock came back to the Golden Line and held it. The screener looks back seven sessions, so 0 is today and 6 is the oldest row it will show.',
+    type: 'number',
+    width: 86,
+    // "Today" reads as a date, not a count of zero. Trading sessions, never
+    // calendar days — a "2 days ago" that spans a holiday is a different bar.
+    formatFn: (val: any) => (
+      val == null ? '—'
+        : Number(val) === 0 ? 'Today'
+        : Number(val) === 1 ? '1 session'
+        : `${Math.round(Number(val))} sessions`
+    ),
+  },
+
+  gl_move_since_pct: {
+    key: 'gl_move_since_pct',
+    label: 'Move Since',
+    tooltip: 'Percentage change from the retest bar\'s close to the latest close. Small means price is still around the level it was tested at; large means it has travelled since. Observational only.',
+    type: 'pct',
+    width: 92,
   },
 
   // ── Waking Giants clocks + turn (migrations 192/194) ────────────────────

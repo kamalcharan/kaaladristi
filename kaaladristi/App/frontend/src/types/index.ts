@@ -643,6 +643,10 @@ export interface ScanStock {
   pct_from_turn?: number | null;
   gl_event?: string | null;
   gl_event_date?: string | null;
+  /** migration 218 — how many TRADING sessions ago the retest bar was. 0 = today. */
+  gl_sessions_since?: number | null;
+  /** migration 218 — signed % from the retest bar's close to today's close. */
+  gl_move_since_pct?: number | null;
   gl_days_above?: number | null;
   pct_from_gl?: number | null;
   clocks?: string | null;

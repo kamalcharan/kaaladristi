@@ -37,8 +37,8 @@ import ScanStatTile from '@/components/domain/ScanStatTile'
 import { isPhoneNow } from '@/hooks/useMediaQuery'
 import type { ScanStock, ScanDefinition } from '@/types'
 
-type QuickFilterKey = 'ob' | 'watch'
-const DEFAULT_QUICK: Record<QuickFilterKey, boolean> = { ob: false, watch: false }
+type QuickFilterKey = 'ob' | 'watch' | 'extra'
+const DEFAULT_QUICK: Record<QuickFilterKey, boolean> = { ob: false, watch: false, extra: false }
 
 /**
  * The 7 predefined scanner-level VaNi questions from the "VaNi Two Levels"
@@ -183,6 +183,7 @@ export default function ScannerStudio({ presetId }: { presetId: string }) {
   // is_unusual applies no filter (mode: none, per the mockup) — the pill
   // still selects/narrates, the table below is untouched.
   if (quick.ob && descriptor) filtered = filtered.filter(descriptor.rsiQuick.test)
+  if (quick.extra && descriptor?.extraQuick) filtered = filtered.filter(descriptor.extraQuick.test)
   if (quick.watch) filtered = filtered.filter((r) => bookmarkedIds.has(r.equity_id))
 
   const toggleQuick = (key: QuickFilterKey) => setQuick((p) => ({ ...p, [key]: !p[key] }))
@@ -388,6 +389,13 @@ export default function ScannerStudio({ presetId }: { presetId: string }) {
               background: quick.ob ? 'var(--accent-glow)' : 'transparent',
               color: quick.ob ? 'var(--accent)' : 'var(--text-muted)',
             }}>{d.rsiQuick.label}</button>
+
+            {d.extraQuick && <button onClick={() => toggleQuick('extra')} style={{
+              padding: '6px 13px', borderRadius: 100, fontSize: 12.5, fontWeight: 500, cursor: 'pointer',
+              border: `1px solid ${quick.extra ? 'var(--accent)' : 'var(--border)'}`,
+              background: quick.extra ? 'var(--accent-glow)' : 'transparent',
+              color: quick.extra ? 'var(--accent)' : 'var(--text-muted)',
+            }}>{d.extraQuick.label}</button>}
 
             <ScanFilterBar presetId={presetId} stocks={all} filters={filters} onFiltersChange={setFilters} />
 

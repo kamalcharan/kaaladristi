@@ -87,6 +87,15 @@ export interface StudioDescriptor {
   rsiQuick: { label: string; test: (r: ScanStock) => boolean }
 
   /**
+   * One extra preset-specific quick toggle, rendered beside `rsiQuick`.
+   * Optional because only gl_retest has one: "the line was tested and price
+   * has not run away from it". It is a PREFERENCE, never a membership rule —
+   * the matview's job is "a retest happened in the window", which is a fact;
+   * whether 5% of drift since disqualifies it is the reader's call.
+   */
+  extraQuick?: { label: string; test: (r: ScanStock) => boolean }
+
+  /**
    * `rs_flip` question text and which direction counts as a flip. Null hides
    * the intent entirely for presets where a zone crossing says nothing.
    */
@@ -482,7 +491,7 @@ export const STUDIO_DESCRIPTORS: Record<string, StudioDescriptor> = {
     side: 'strength',
     // The gate: touched the line intraday, closed above it, after ≥ 10
     // sessions already above — a retest of an established reclaim.
-    countLabel: 'Held the Golden Line',
+    countLabel: 'Held the Golden Line (7 sessions)',
     ...STRENGTH_PACE,
     rsiQuick: STRENGTH_RSI_QUICK,
     highlight: glHighlight('RETEST'),
@@ -491,7 +500,20 @@ export const STUDIO_DESCRIPTORS: Record<string, StudioDescriptor> = {
     exportName: 'Golden_Line_Retest',
     source: 'matview',
     sort: { key: 'gl_days_above', dir: 'desc' },
-    tableColumns: ['symbol', 'close', 'pct_chng', 'gl_event', 'gl_days_above', 'pct_from_gl', 'dot_signal', 'delivery_pct', 'rvol', 'score_5d', 'score_22d', 'avg_amt_5d', 'avg_amt_22d', 'rsi_14', 'magic_rs', 'mcap_cr'],
+    // migration 218: the window is seven sessions, so "how long ago" is now the
+    // first thing a reader needs — a retest three sessions old is a different
+    // observation from one printed this morning, and without the column every
+    // row reads as today's.
+    // ⚠ delivery_pct is NULL on every BSE bar and BSE is now most of this
+    // list, so that column is blank far more often than it is populated.
+    // Blank means not measured on this exchange, never "no delivery".
+    tableColumns: ['symbol', 'close', 'pct_chng', 'gl_event', 'gl_sessions_since', 'gl_move_since_pct', 'gl_days_above', 'pct_from_gl', 'dot_signal', 'delivery_pct', 'rvol', 'score_5d', 'score_22d', 'avg_amt_5d', 'avg_amt_22d', 'rsi_14', 'magic_rs', 'mcap_cr'],
+    extraQuick: {
+      label: 'Still at the line',
+      // |move since the retest bar's close| < 5%. A row with no reading is
+      // NOT silently admitted: unmeasured is not "barely moved".
+      test: (r) => r.gl_move_since_pct != null && Math.abs(r.gl_move_since_pct) < 5,
+    },
     // A retest is about the hold, so the count of sessions above the line
     // leads and the distance takes the second level slot.
     cardHero: { key: 'gl_days_above', label: 'Sessions above GL', filterLabel: 'Held GL', kind: 'count', colorKey: 'gl_days_above' },
