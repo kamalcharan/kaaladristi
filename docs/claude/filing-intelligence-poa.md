@@ -611,6 +611,30 @@ Two properties the tests pin:
 
 Run it during a fetch: `--days 120 --explain-revisions`.
 
+**It answered on the first run, and the answer was not "an unstable field".**
+NSE **repeats an intimation inside one window** under two document URLs — MUNJAL
+SHOWA's 29-May meeting, identical in purpose, desc, dates and ISIN, differing
+only in `attachment` (a `PIBM_`-prefixed path vs a plain one) and `ixbrl` (a
+timestamp one second apart). The tell was A→B *and then* B→A in a single fetch:
+two rows, one natural key, so the loop upserted both and the last writer won.
+
+`_collapse_duplicates()` now keeps one row per natural key. Three properties:
+
+* **The pick is order-independent** (sorted by the differing fields, not
+  first-seen). NSE promises no order, and a rule that follows it rewrites the
+  row whenever the order moves — the same non-zero counter, reached a
+  different way.
+* **It is arbitrary between two equally valid URLs, and says so.** Nothing in
+  the payload names a canonical one, so the code does not pretend to know; the
+  collapse is counted and reported instead of absorbed.
+* **`attachment`/`ixbrl` stay in `_HASH_KEYS`.** A genuine re-upload of a
+  corrected document IS a revision worth recording. Dropping them would have
+  silenced this churn and that case together — a test pins it.
+
+Nothing downstream was ever at risk: every classifying field was identical in
+both copies, so `is_results` never moved.
+
+
 #### ⚠ A missing commit wiped the result population once (2026-09-18)
 
 Recorded because the test that should have caught it passed.

@@ -170,15 +170,60 @@ def fetch_window(session: NseSession, start: date, end: date) -> list[dict]:
     return data if isinstance(data, list) else data.get('data', [])
 
 
+def _collapse_duplicates(rows: list[dict]) -> tuple[list[dict], int]:
+    """One row per natural key. Returns (rows, collapsed).
+
+    ⚠ THE FEED REPEATS AN INTIMATION UNDER TWO DOCUMENT URLS. Measured live
+    2026-09-18 with --explain-revisions: MUNJAL SHOWA's 29-May meeting came back
+    twice in one window, identical in purpose, desc, dates and ISIN, differing
+    only in `attachment` (a PIBM_-prefixed path vs a plain one) and `ixbrl` (a
+    timestamp one second apart). Both describe the same filing.
+
+    Before this, the loop upserted both: two writes, two counted "revisions"
+    EVERY run, and whichever row came last decided the stored URL. That is how
+    the revised counter became noise — and a counter that is always non-zero
+    stops being read, which is the same failure as a disclaimer that is always
+    present.
+
+    The pick is deterministic and ORDER-INDEPENDENT (sorted by the differing
+    fields, not first-seen), because NSE does not promise an order and a pick
+    that follows it would rewrite the row whenever the order changed — the
+    exact churn this removes. It is arbitrary between two equally valid URLs,
+    and that is the honest position: nothing in the payload says which NSE
+    considers canonical, so this does not pretend to know. The collapse is
+    COUNTED and reported rather than absorbed silently.
+
+    Keeping `attachment`/`ixbrl` in _HASH_KEYS is deliberate: a genuine
+    re-upload of a corrected document IS a revision worth recording. Dropping
+    them would silence this churn too, and silence the real case with it.
+    """
+    seen: dict[tuple, dict] = {}
+    collapsed = 0
+    for r in rows:
+        key = ((r.get('bm_symbol') or '').strip(),
+               (r.get('bm_date') or '').strip(),
+               (r.get('bm_timestamp') or '').strip())
+        prior = seen.get(key)
+        if prior is None:
+            seen[key] = r
+            continue
+        collapsed += 1
+        pick = min(prior, r, key=lambda x: (str(x.get('attachment') or ''),
+                                            str(x.get('ixbrl') or '')))
+        seen[key] = pick
+    return list(seen.values()), collapsed
+
+
 def upsert_meetings(conn, rows: list[dict],
                     explain: bool = False) -> tuple[int, int, int]:
-    """Returns (inserted, updated, skipped).
+    """Returns (inserted, updated, skipped, duplicates).
 
     Skipped = missing symbol, meeting date or intimation timestamp. All three
     are part of the natural key, and a NULL in a UNIQUE column does not dedup —
     admitting such a row would let every re-fetch insert it again. Counted and
     returned rather than dropped quietly.
     """
+    rows, duplicates = _collapse_duplicates(rows)
     inserted = updated = skipped = 0
     with conn.cursor() as cur:
         for r in rows:
@@ -243,7 +288,7 @@ def upsert_meetings(conn, rows: list[dict],
                 updated += 0 if was_insert else 1
                 if explain and not was_insert:
                     _log_revision(symbol, mdate, prior, r)
-    return inserted, updated, skipped
+    return inserted, updated, skipped, duplicates
 
 
 def _log_revision(symbol, mdate, prior: dict | None, row: dict) -> None:
@@ -473,7 +518,7 @@ def run(conn, session, start: date, end: date, dry_run=False,
         explain=False) -> dict:
     stats = {'fetched': 0, 'calls': 0, 'inserted': 0, 'updated': 0,
              'skipped': 0, 'is_results': 0, 'by_purpose': 0, 'by_desc': 0,
-             'cov_start': None, 'cov_end': None, 'link': None,
+             'cov_start': None, 'cov_end': None, 'link': None, 'duplicates': 0,
              'outside_by_meeting': 0, 'outside_by_intimation': 0}
 
     fetch_from = start - timedelta(days=INTIMATION_LEAD_DAYS)
@@ -502,12 +547,14 @@ def run(conn, session, start: date, end: date, dry_run=False,
                 stats['by_purpose' if basis == 'purpose' else 'by_desc'] += 1
 
         if not dry_run:
-            ins, upd, skp = upsert_meetings(conn, rows, explain=explain)
+            ins, upd, skp, dup = upsert_meetings(conn, rows, explain=explain)
             conn.commit()
             stats['inserted'] += ins
             stats['updated'] += upd
             stats['skipped'] += skp
-            log.info(f'    -> {ins:,} new, {upd} revised, {skp} skipped')
+            stats['duplicates'] += dup
+            log.info(f'    -> {ins:,} new, {upd} revised, {skp} skipped'
+                     + (f', {dup} duplicate rows collapsed' if dup else ''))
         cur = win_end + timedelta(days=1)
 
     if stats['skipped']:
@@ -638,7 +685,8 @@ def main():
         pct = 100 * s['is_results'] / max(s['fetched'], 1)
         print(f'\nfetched {s["fetched"]:,} in {s["calls"]} calls  |  '
               f'new {s["inserted"]:,}  revised {s["updated"]:,}  '
-              f'skipped {s["skipped"]:,}')
+              f'skipped {s["skipped"]:,}  '
+              f'duplicate rows collapsed {s["duplicates"]:,}')
         print(f'results meetings {s["is_results"]:,} ({pct:.1f}%)  '
               f'— by purpose {s["by_purpose"]:,}, by desc {s["by_desc"]:,}')
         if s['link']:

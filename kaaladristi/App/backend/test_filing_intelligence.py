@@ -489,7 +489,7 @@ class LinkSemantics(unittest.TestCase):
                   'Fund Raising', 'brand new row')
         with self.assertNoLogs('scripts.ingest_nse_board_meetings',
                                level='INFO'):
-            ins, _, _ = upsert_meetings(self.conn, [row], explain=True)
+            ins, _, _, _ = upsert_meetings(self.conn, [row], explain=True)
         self.conn.commit()
         self.assertEqual(ins, 1)
 
@@ -511,7 +511,7 @@ class LinkSemantics(unittest.TestCase):
         """symbol / meeting_date / intimated_at are all natural-key columns, and
         a NULL in a UNIQUE column does not dedup — so such a row would be
         re-inserted on every single fetch."""
-        _, _, skipped = upsert_meetings(self.conn, [
+        _, _, skipped, _ = upsert_meetings(self.conn, [
             _bm(None, 'INE00F', '14-Sep-2026', '05-Sep-2026 09:00:00',
                 'Financial Results', 'no symbol'),
             _bm('JJJ', 'INE00J', None, '05-Sep-2026 09:00:00',
@@ -523,6 +523,67 @@ class LinkSemantics(unittest.TestCase):
         with self.conn.cursor() as c:
             c.execute('SELECT count(*) FROM km_board_meetings')
             self.assertEqual(c.fetchone()[0], 0)
+
+    def test_the_feed_repeats_an_intimation_under_two_urls(self):
+        """Measured live 2026-09-18. MUNJAL SHOWA's 29-May meeting came back
+        TWICE in one window — identical purpose, desc, dates and ISIN, differing
+        only in `attachment` and `ixbrl`. The loop upserted both, so every run
+        wrote the row twice and counted two "revisions" that were never changes.
+        """
+        a = _bm('AAA', 'INE00A', '29-May-2026', '25-May-2026 22:49:14',
+                'Financial Results', 'Q results')
+        b = dict(a)
+        a['attachment'] = 'https://x/xbrl/520043_PRIOR.xml'
+        a['ixbrl'] = 'https://x/ixbrl/PRIOR_224913_WEB.html'
+        b['attachment'] = 'https://x/xbrl/PIBM_520043_PRIOR.xml'
+        b['ixbrl'] = 'https://x/ixbrl/PRIOR_224912_WEB.html'
+
+        ins, upd, skp, dup = upsert_meetings(self.conn, [a, b])
+        self.conn.commit()
+        self.assertEqual((ins, upd, dup), (1, 0, 1))      # one row, one collapse
+        with self.conn.cursor() as c:
+            c.execute('SELECT count(*) FROM km_board_meetings')
+            self.assertEqual(c.fetchone()[0], 1)
+
+    def test_the_duplicate_pick_does_not_follow_feed_order(self):
+        """The churn came from the LAST row winning. NSE promises no order, so
+        a first-seen or last-seen rule rewrites the row whenever the order
+        moves — which is the same non-zero 'revised' counter, just arrived at
+        differently. A re-fetch in the opposite order must be a no-op.
+        """
+        a = _bm('AAA', 'INE00A', '29-May-2026', '25-May-2026 22:49:14',
+                'Financial Results', 'Q results')
+        b = dict(a)
+        a['attachment'], a['ixbrl'] = 'https://x/aaa.xml', 'https://x/aaa.html'
+        b['attachment'], b['ixbrl'] = 'https://x/zzz.xml', 'https://x/zzz.html'
+
+        upsert_meetings(self.conn, [a, b])
+        self.conn.commit()
+        with self.conn.cursor() as c:
+            c.execute('SELECT attachment_url FROM km_board_meetings')
+            first = c.fetchone()[0]
+
+        # same two rows, opposite order -> same stored row, NO revision
+        ins, upd, skp, dup = upsert_meetings(self.conn, [b, a])
+        self.conn.commit()
+        self.assertEqual((ins, upd), (0, 0), 'a re-fetch rewrote the row')
+        with self.conn.cursor() as c:
+            c.execute('SELECT attachment_url FROM km_board_meetings')
+            self.assertEqual(c.fetchone()[0], first)
+
+    def test_a_real_document_change_is_still_a_revision(self):
+        """attachment/ixbrl stay in _HASH_KEYS on purpose: a genuine re-upload
+        of a corrected document IS a revision worth recording. Dropping them
+        would have silenced the churn and this case with it."""
+        a = _bm('AAA', 'INE00A', '29-May-2026', '25-May-2026 22:49:14',
+                'Financial Results', 'Q results')
+        a['attachment'] = 'https://x/v1.xml'
+        upsert_meetings(self.conn, [a])
+        self.conn.commit()
+        a['attachment'] = 'https://x/v2-corrected.xml'
+        ins, upd, skp, dup = upsert_meetings(self.conn, [a])
+        self.conn.commit()
+        self.assertEqual((ins, upd, dup), (0, 1, 0))
 
     def test_missing_isin_resolves_from_the_symbol_master(self):
         with self.conn.cursor() as c:
