@@ -512,7 +512,7 @@ forces materialisation, that is a new decision with a number behind it.
 | Results identification | migration 214 — **needed a second feed**, see below |
 | `returns_since_result` | migration 215, derived; **216** de-duplicates it per results meeting |
 | Board-meeting backfill 2026-06-01..09-16 | run: **11,183 meetings**, 0 skipped, 2,829 events judged |
-| Bulk / block deals | **BLOCKED** — the NSE JSON endpoint returned 503/empty on all four candidates probed. Not abandoned; it needs its own probe session. |
+| Bulk / block deals | **BLOCKED**, probe written — `scripts/probe_nse_bulkdeals.py`. The four JSON candidates returned 503/empty, but that was never separated from a wrong referer, a wrong parameter name or a moved path, so the probe tests each of those AND the static CSV archives (a different server, so an API 503 says nothing about them). It reports STATUS CODES, because "403 everywhere" and "answers but empty" are different findings and lead to different next steps. |
 
 #### The finding that changed the shape: a result has no category
 
@@ -587,6 +587,29 @@ judged. Three guesses became numbers:
 
 One number did NOT come out clean, and migration 216 is the answer:
 **1.19 announcements per results meeting** — see the migration header.
+
+#### `--explain-revisions` — naming the field, not guessing it
+
+Two board meetings report as revised on **every** run, which makes the `revised`
+counter useless as a change signal and — if the moving field is `bm_desc` —
+could flip a results verdict run to run.
+
+`payload` is overwritten in place, so the prior value exists only *during* the
+upsert: the diagnostic cannot be asked afterwards. The upsert now returns it
+through a CTE, which shares the statement's snapshot and therefore sees the row
+before the UPDATE lands, and `--explain-revisions` prints `field: was -> now`.
+
+Two properties the tests pin:
+
+* **`_HASH_KEYS` is one declaration and the diff reads exactly it.** A diff over
+  a different set would report "nothing differs" on a real hash change — a
+  diagnostic that closes the question with a wrong answer, which is worse than
+  having none. A test walks every key and asserts each one moves the hash.
+* **It says nothing about a plain insert.** A new row has no prior, so the
+  "hash changed but nothing differs" warning would fire on all 11,183 rows of a
+  backfill — which is how a real warning stops being read.
+
+Run it during a fetch: `--days 120 --explain-revisions`.
 
 #### ⚠ A missing commit wiped the result population once (2026-09-18)
 

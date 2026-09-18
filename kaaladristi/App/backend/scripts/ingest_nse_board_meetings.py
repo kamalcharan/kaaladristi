@@ -9,6 +9,7 @@ and uses it to mark which 'Outcome of Board Meeting' announcements are RESULTS.
     python3 scripts/ingest_nse_board_meetings.py --from 2026-06-01 --to 2026-09-16
     python3 scripts/ingest_nse_board_meetings.py --days 7 --dry-run
     python3 scripts/ingest_nse_board_meetings.py --reclassify     # no fetch
+    python3 scripts/ingest_nse_board_meetings.py --days 120 --explain-revisions
     python3 scripts/ingest_nse_board_meetings.py --relink \
             --from 2026-06-01 --to 2026-09-16                    # no fetch
 
@@ -133,15 +134,31 @@ def _d(raw: str | None):
         return None
 
 
+# The fields that define a board-meeting intimation. `diff` and `sysTime` are
+# deliberately absent — NSE recomputes both, so including them would make every
+# re-fetch look like a revision.
+#
+# ⚠ ONE DECLARATION, because --explain-revisions diffs exactly this list. A diff
+# reading a different set than the hash would report "nothing changed" on a real
+# hash mismatch, which is worse than no diagnostic: it would close the question
+# with a wrong answer.
+_HASH_KEYS = ('bm_symbol', 'sm_isin', 'bm_date', 'bm_timestamp',
+              'bm_purpose', 'bm_desc', 'attachment', 'ixbrl',
+              'oriiginalMeetingDate', 'proposedMeetingDate')
+
+
 def _hash(row: dict) -> str:
-    """Excludes `diff` and `sysTime` — NSE recomputes both, so including them
-    would make every re-fetch look like a revision."""
-    material = {k: row.get(k) for k in
-                ('bm_symbol', 'sm_isin', 'bm_date', 'bm_timestamp',
-                 'bm_purpose', 'bm_desc', 'attachment', 'ixbrl',
-                 'oriiginalMeetingDate', 'proposedMeetingDate')}
+    material = {k: row.get(k) for k in _HASH_KEYS}
     return hashlib.sha256(
         json.dumps(material, sort_keys=True, default=str).encode()).hexdigest()
+
+
+def _material_diff(prior: dict | None, row: dict) -> list[tuple]:
+    """(key, was, now) for every hashed field whose value moved."""
+    if not prior:
+        return []
+    return [(k, prior.get(k), row.get(k))
+            for k in _HASH_KEYS if prior.get(k) != row.get(k)]
 
 
 def fetch_window(session: NseSession, start: date, end: date) -> list[dict]:
@@ -153,7 +170,8 @@ def fetch_window(session: NseSession, start: date, end: date) -> list[dict]:
     return data if isinstance(data, list) else data.get('data', [])
 
 
-def upsert_meetings(conn, rows: list[dict]) -> tuple[int, int, int]:
+def upsert_meetings(conn, rows: list[dict],
+                    explain: bool = False) -> tuple[int, int, int]:
     """Returns (inserted, updated, skipped).
 
     Skipped = missing symbol, meeting date or intimation timestamp. All three
@@ -176,6 +194,15 @@ def upsert_meetings(conn, rows: list[dict]) -> tuple[int, int, int]:
             is_results, basis = classify_board_meeting(purpose, desc)
 
             cur.execute("""
+                -- The pre-UPDATE payload. A CTE and the statement that follows
+                -- it share one snapshot, so `prior` is what was stored BEFORE
+                -- this upsert overwrote it — the only moment it still exists,
+                -- since payload is replaced in place.
+                WITH prior AS (
+                    SELECT payload FROM public.km_board_meetings
+                     WHERE symbol = %s AND meeting_date = %s
+                       AND intimated_at = %s
+                )
                 INSERT INTO km_board_meetings
                   (isin, symbol, company_name, meeting_date, intimated_at,
                    purpose_raw, desc_raw, is_results, results_basis,
@@ -200,8 +227,10 @@ def upsert_meetings(conn, rows: list[dict]) -> tuple[int, int, int]:
                        fetched_at     = now()
                  WHERE km_board_meetings.content_hash
                        IS DISTINCT FROM EXCLUDED.content_hash
-                RETURNING (xmax = 0) AS was_insert
-            """, ((r.get('sm_isin') or '').strip() or None, symbol,
+                RETURNING (xmax = 0) AS was_insert,
+                          (SELECT payload FROM prior) AS prior_payload
+            """, (symbol, mdate, intimated,
+                  (r.get('sm_isin') or '').strip() or None, symbol,
                   symbol, (r.get('sm_name') or '').strip() or None,
                   mdate, intimated, purpose, desc, is_results, basis,
                   (r.get('attachment') or '').strip() or None,
@@ -209,9 +238,29 @@ def upsert_meetings(conn, rows: list[dict]) -> tuple[int, int, int]:
                   json.dumps(r, default=str), _hash(r)))
             got = cur.fetchone()
             if got:                      # no row back = identical, a real no-op
-                inserted += 1 if got[0] else 0
-                updated += 0 if got[0] else 1
+                was_insert, prior = got[0], got[1]
+                inserted += 1 if was_insert else 0
+                updated += 0 if was_insert else 1
+                if explain and not was_insert:
+                    _log_revision(symbol, mdate, prior, r)
     return inserted, updated, skipped
+
+
+def _log_revision(symbol, mdate, prior: dict | None, row: dict) -> None:
+    changed = _material_diff(prior, row)
+    if not changed:
+        # The hash said this row moved and no hashed field did. That is the two
+        # going out of step — the only way it happens is a value that does not
+        # survive the JSON round trip — and it must be loud, because a silent
+        # "nothing changed" would close the question with a wrong answer.
+        log.warning(f'  ⚠ revision {symbol} {mdate}: content_hash changed but '
+                    f'NO hashed field differs. _HASH_KEYS and the stored '
+                    f'payload are out of step.')
+        return
+    for k, was, now in changed:
+        log.info(f'  revision {symbol} {mdate}  {k}:\n'
+                 f'      was: {str(was)[:110]}\n'
+                 f'      now: {str(now)[:110]}')
 
 
 def reclassify(conn) -> int:
@@ -420,7 +469,8 @@ def link_result_announcements(conn, cov_start: date, cov_end: date) -> dict:
             'window': (lo, hi)}
 
 
-def run(conn, session, start: date, end: date, dry_run=False) -> dict:
+def run(conn, session, start: date, end: date, dry_run=False,
+        explain=False) -> dict:
     stats = {'fetched': 0, 'calls': 0, 'inserted': 0, 'updated': 0,
              'skipped': 0, 'is_results': 0, 'by_purpose': 0, 'by_desc': 0,
              'cov_start': None, 'cov_end': None, 'link': None,
@@ -452,7 +502,7 @@ def run(conn, session, start: date, end: date, dry_run=False) -> dict:
                 stats['by_purpose' if basis == 'purpose' else 'by_desc'] += 1
 
         if not dry_run:
-            ins, upd, skp = upsert_meetings(conn, rows)
+            ins, upd, skp = upsert_meetings(conn, rows, explain=explain)
             conn.commit()
             stats['inserted'] += ins
             stats['updated'] += upd
@@ -533,6 +583,10 @@ def main():
                     help='fetch and report, write nothing')
     ap.add_argument('--reclassify', action='store_true',
                     help='re-run the results rule over stored text; no fetch')
+    ap.add_argument('--explain-revisions', dest='explain', action='store_true',
+                    help='name the field that changed on every revision. The '
+                         'prior payload exists only during the upsert, so this '
+                         'must run DURING a fetch -- it cannot be asked after.')
     ap.add_argument('--relink', action='store_true',
                     help='re-judge stored events against stored meetings after '
                          'a tolerance change; needs --from/--to, no fetch')
@@ -580,7 +634,7 @@ def main():
           f'{"  [DRY RUN]" if args.dry_run else ""}')
     conn = None if args.dry_run else get_conn()
     try:
-        s = run(conn, NseSession(), start, end, args.dry_run)
+        s = run(conn, NseSession(), start, end, args.dry_run, args.explain)
         pct = 100 * s['is_results'] / max(s['fetched'], 1)
         print(f'\nfetched {s["fetched"]:,} in {s["calls"]} calls  |  '
               f'new {s["inserted"]:,}  revised {s["updated"]:,}  '

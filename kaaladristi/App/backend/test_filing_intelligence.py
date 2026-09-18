@@ -25,7 +25,7 @@ from datetime import date
 from lib.filing_taxonomy import classify_board_meeting
 from scripts.ingest_nse_board_meetings import (
     MATCH_BACK_DAYS, MATCH_FWD_DAYS, link_result_announcements,
-    relink_result_announcements, upsert_meetings)
+    relink_result_announcements, upsert_meetings, _material_diff)
 
 DSN = os.environ.get('KD_TEST_DSN')
 MIGRATIONS = ('km_migration_212_filings_ingest.sql',
@@ -446,6 +446,66 @@ class LinkSemantics(unittest.TestCase):
         with self.conn.cursor() as c:
             c.execute('SELECT is_results, results_basis FROM km_board_meetings')
             self.assertEqual(c.fetchone(), (True, 'desc'))
+
+    def test_a_revision_names_the_field_that_moved(self):
+        """--explain-revisions. `payload` is overwritten in place, so the prior
+        value exists only DURING the upsert — the diagnostic has to run inside
+        the fetch, it cannot be asked afterwards. The upsert returns it through
+        a CTE, which shares the statement's snapshot and so sees the row before
+        the UPDATE lands.
+        """
+        row = _bm('AAA', 'INE00A', '10-Sep-2026', '01-Sep-2026 10:00:00',
+                  'Fund Raising', 'AAA to raise funds')
+        upsert_meetings(self.conn, [row])
+        self.conn.commit()
+
+        row['bm_desc'] = 'AAA to raise funds and approve Financial results'
+        with self.assertLogs('scripts.ingest_nse_board_meetings',
+                             level='INFO') as cm:
+            upsert_meetings(self.conn, [row], explain=True)
+        self.conn.commit()
+        joined = '\n'.join(cm.output)
+        self.assertIn('bm_desc', joined)
+        self.assertIn('AAA to raise funds', joined)      # the WAS value
+        # only the field that moved, not every hashed key
+        self.assertNotIn('bm_purpose', joined)
+
+    def test_explain_is_silent_when_nothing_is_revised(self):
+        row = _bm('AAA', 'INE00A', '10-Sep-2026', '01-Sep-2026 10:00:00',
+                  'Fund Raising', 'AAA to raise funds')
+        upsert_meetings(self.conn, [row])
+        self.conn.commit()
+        with self.assertNoLogs('scripts.ingest_nse_board_meetings',
+                               level='INFO'):
+            upsert_meetings(self.conn, [row], explain=True)   # identical
+        self.conn.commit()
+
+    def test_explain_says_nothing_about_a_plain_insert(self):
+        """A new row has no prior payload, so the diff finds nothing and the
+        'hash changed but no field differs' warning would fire on EVERY insert
+        — 11,183 false alarms on one backfill, which is exactly how a real one
+        stops being read."""
+        row = _bm('NEW', 'INE00N', '10-Sep-2026', '01-Sep-2026 10:00:00',
+                  'Fund Raising', 'brand new row')
+        with self.assertNoLogs('scripts.ingest_nse_board_meetings',
+                               level='INFO'):
+            ins, _, _ = upsert_meetings(self.conn, [row], explain=True)
+        self.conn.commit()
+        self.assertEqual(ins, 1)
+
+    def test_the_diff_reads_the_same_keys_the_hash_does(self):
+        """If the two lists diverge, a real hash change reports 'nothing
+        differs' — a diagnostic that closes the question with a wrong answer,
+        which is worse than having none. One declaration is what prevents it,
+        and this asserts the hash actually consumes it.
+        """
+        from scripts.ingest_nse_board_meetings import _HASH_KEYS, _hash
+        base = {k: 'x' for k in _HASH_KEYS}
+        for k in _HASH_KEYS:
+            moved = dict(base, **{k: 'y'})
+            self.assertNotEqual(_hash(base), _hash(moved),
+                                f'{k} is in _HASH_KEYS but does not move the hash')
+            self.assertEqual([d[0] for d in _material_diff(base, moved)], [k])
 
     def test_unkeyable_rows_are_counted_not_dropped(self):
         """symbol / meeting_date / intimated_at are all natural-key columns, and
