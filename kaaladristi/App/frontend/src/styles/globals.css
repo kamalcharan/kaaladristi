@@ -243,31 +243,92 @@ body::before {
     overflow-x: hidden;
   }
 
-  /* ── Scrollbar ── */
-  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  /* ── Scrollbar ──────────────────────────────────────────────────────────
+     The thumb was `rgba(255,255,255,0.22)` in BOTH modes — a dark-mode literal
+     with no `[data-mode="light"]` sibling, unlike every other mode-sensitive
+     value in this file. Composited over the light canvas (#eeebe3) it renders
+     #f2efe9: 1.03:1 against its own background, i.e. invisible. Dark measured
+     1.97:1, which is why it survived seven months — thin but perceptible there,
+     so nobody read it as broken. It was diagnosed twice and patched locally
+     instead (.market-structure-history-scroll below, .flow-scroll in
+     sectorResearch.css); both of those comments used to say "override the
+     global translucent-white scrollbar".
+
+     ⚠ TWO ENGINES, AND THE STANDARD PROPERTIES WIN. Chrome 121+ and Safari
+     18.4+ support `scrollbar-width`/`scrollbar-color`, and when either is set
+     on an element that element's `::-webkit-scrollbar` pseudo-element styles
+     are IGNORED. The `*` rule below sets both on every element, so on a current
+     browser the webkit block is dead and only `scrollbar-color` is doing the
+     work. The webkit block is kept for older Chrome and Safari < 18.4, where it
+     is the only path — do not "clean up" either half, and do not size a layout
+     against the webkit `width` (it does not apply where the `*` rule does).
+     `scrollbar-width` was ALREADY `thin` before this fix, so the bar's physical
+     width is unchanged and nothing reflows: the bug was the colour and only the
+     colour. It was never an overlay/"no gutter" problem — the gutter was always
+     reserved, which is why the scanner table clipped its last two columns with
+     no visible bar to drag.
+
+     ⚠ The thumb is derived from `--text-primary`, NOT `--text-muted`. Muted
+     looked right on Vikuna Black (3.48:1 light) and fails on Jade Thorn
+     (2.34:1) — the muted tokens are tuned per theme for body copy, not for a
+     4-combination UI-contrast floor. `--text-primary` is by definition the
+     highest-contrast ink in every palette, so a fixed alpha over it is
+     predictable everywhere. Alphas measured, not guessed, across
+     {Vikuna Black, Jade Thorn} × {light, dark} × {--bg, --card}:
+       light 0.55 → 3.6–3.8:1   ·   dark 0.42 → 3.5–3.8:1
+     Both clear the 3:1 non-text floor on every surface. Lower alphas were
+     measured too (light 0.42 → 2.5:1) and rejected.
+
+     The TRACK stays transparent on purpose: one fixed colour would be wrong on
+     at least one of --bg / --card / a dark panel, and a mistinted band down the
+     side of every white card reads worse than no track at all. */
+  :root {
+    --scrollbar-thumb:       color-mix(in srgb, var(--text-primary) 42%, transparent);
+    --scrollbar-thumb-hover: color-mix(in srgb, var(--text-primary) 62%, transparent);
+  }
+  :root[data-mode="light"] {
+    --scrollbar-thumb:       color-mix(in srgb, var(--text-primary) 55%, transparent);
+    --scrollbar-thumb-hover: color-mix(in srgb, var(--text-primary) 75%, transparent);
+  }
+
+  /* Standard properties — the live path on Chrome 121+, Firefox, Safari 18.4+ */
+  * { scrollbar-width: thin; scrollbar-color: var(--scrollbar-thumb) transparent; }
+
+  /* Legacy path — older Chrome and Safari < 18.4 only (see the note above) */
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
   ::-webkit-scrollbar-track { background: transparent; }
-  ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.22); border-radius: 10px; }
-  ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.38); }
-  /* Firefox */
-  * { scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.22) transparent; }
+  ::-webkit-scrollbar-corner { background: transparent; }
+  ::-webkit-scrollbar-thumb {
+    background: var(--scrollbar-thumb);
+    border-radius: 10px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--scrollbar-thumb-hover);
+    background-clip: padding-box;
+  }
 }
 
 @layer utilities {
-  /* History needs a visible horizontal thumb in both light and dark themes.
-     Override the global translucent-white scrollbar only for these tables. */
+  /* A deliberately FATTER horizontal bar for wide tables — 12px against the
+     global 10px, on an opaque track so the pannable extent is obvious.
+     NOTE: this is no longer a workaround. It used to override a hardcoded
+     translucent-white global thumb; that root bug is fixed above, and this
+     survives only for the extra weight. */
   .market-structure-history-scroll {
     scrollbar-width: auto;
-    scrollbar-color: var(--text-secondary) var(--card);
+    scrollbar-color: var(--scrollbar-thumb) var(--card);
     padding-bottom: 8px;
   }
   .market-structure-history-scroll::-webkit-scrollbar { height: 12px; }
   .market-structure-history-scroll::-webkit-scrollbar-track { background: var(--card); }
   .market-structure-history-scroll::-webkit-scrollbar-thumb {
-    background: var(--text-secondary);
+    background: var(--scrollbar-thumb);
     border: 2px solid var(--card);
     border-radius: 10px;
   }
-  .market-structure-history-scroll::-webkit-scrollbar-thumb:hover { background: var(--text-primary); }
+  .market-structure-history-scroll::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-thumb-hover); }
 
   .mono {
     font-family: var(--font-mono);

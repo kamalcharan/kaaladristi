@@ -13,9 +13,12 @@
 .sector-toolbar { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
 .sector-tabs { display: flex; flex-wrap: wrap; gap: 2px; }
 .sector-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,360px),1fr)); gap: 16px; }
-.flow-scroll { scrollbar-width: auto; scrollbar-color: var(--text-muted) var(--card); scrollbar-gutter: stable; overscroll-behavior-x: contain; }
+/* Same deliberate-fatter-bar exception as .market-structure-history-scroll in
+   globals.css: 12px on an opaque track for wide horizontal panning. Not a
+   workaround for the global thumb any more — that is token-driven now. */
+.flow-scroll { scrollbar-width: auto; scrollbar-color: var(--scrollbar-thumb) var(--card); scrollbar-gutter: stable; overscroll-behavior-x: contain; }
 .flow-scroll::-webkit-scrollbar { height: 12px; }
-.flow-scroll::-webkit-scrollbar-thumb { background: var(--text-muted); border-radius: 8px; border: 3px solid var(--card); }
+.flow-scroll::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 8px; border: 3px solid var(--card); }
 .flow-scroll::-webkit-scrollbar-track { background: var(--card); }
 @media(min-width:1280px) {
  .sector-vani { width: 320px; position: sticky; top: 90px; }
