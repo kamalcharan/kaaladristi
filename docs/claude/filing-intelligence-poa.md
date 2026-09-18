@@ -510,7 +510,8 @@ forces materialisation, that is a new decision with a number behind it.
 | 12-month NSE backfill | run: **28,076 announcements → 28,363 events**, 0 deferred, 0 unresolvable |
 | `'derivation'` check class | migration 213, applied — 210 shipped a check the constraint rejected |
 | Results identification | migration 214 — **needed a second feed**, see below |
-| `returns_since_result` | migration 215, derived |
+| `returns_since_result` | migration 215, derived; **216** de-duplicates it per results meeting |
+| Board-meeting backfill 2026-06-01..09-16 | run: **11,183 meetings**, 0 skipped, 2,829 events judged |
 | Bulk / block deals | **BLOCKED** — the NSE JSON endpoint returned 503/empty on all four candidates probed. Not abandoned; it needs its own probe session. |
 
 #### The finding that changed the shape: a result has no category
@@ -553,10 +554,44 @@ a side door.
    Measuring drift from Day −1 folds the announcement jump into it and is how a
    PEAD study reports an effect it never measured.
 
+#### What the first live backfill measured (2026-09-17)
+
+11,183 board meetings over 2026-06-01..09-16, 2,829 outcome announcements
+judged. Three guesses became numbers:
+
+1. **The feed filters on the MEETING date.** 0 rows fell outside the requested
+   window by `bm_date` against 2,149 by `bm_timestamp`. The 30-day intimation
+   lead buffer was therefore unnecessary and is now 7 — kept only as a hedge if
+   NSE ever switches the filter, since the coverage clip makes the extra rows
+   free.
+2. **The match tolerance was too loose.** Offsets of matched outcomes against
+   their meeting date: −1 → 5, **0 → 2,698 (98.7%)**, +1 → 14, +2 → 3, +3 → 8,
+   +4 → 5. SEBI LODR Reg 30 requires the outcome within 30 *minutes* of the
+   meeting concluding, so +1 is a meeting that ran into the next day and +2..+4
+   cannot be that meeting's outcome — 16 proximity mismatches. `MATCH_BACK_DAYS`
+   went from a guessed 4 to a measured 1, and `--relink` exists so a tolerance
+   change reaches history instead of applying only to future events.
+   **Consequence worth expecting:** those 16 now read NULL rather than FALSE,
+   because the coverage check shares the match window. That is the intended
+   asymmetry — we failed to *place* them, we did not measure them, and NULL is
+   the verdict that can still be corrected.
+3. **The free-text rule is sound.** It carries 5,457 of 9,969 results
+   classifications, and a random sample of ten was unambiguous in every case
+   ("Unaudited Financial results", "Yearly Audited", "Quarterly Unaudited").
+   So the headline **89.1% of board meetings are results meetings** is genuine
+   seasonality, not over-firing: between June and September nearly every board
+   meeting is convened to approve results.
+
+One number did NOT come out clean, and migration 216 is the answer:
+**1.19 announcements per results meeting** — see the migration header.
+
 #### ⚠ The blocker Sprint 3b now owns
 
 `km_corporate_actions` is **empty** (CLAUDE.md, D44), so closes are unadjusted
-and a split inside a drift span reads as a genuine −50% move. Results season is
+and a split inside a drift span reads as a genuine −50% move. Measured on the
+live population: **10 of 2,733 rows (0.4%)** are flagged — lower than feared,
+but `v_result_drift` only holds the last ~120 days, so these are short spans
+with few bars to contain a cliff and a full-history study will see more. Results season is
 exactly when boards declare bonuses, so this is not a corner case for this
 metric. Every drift row carries `suspect_corporate_action` (the 0.55×/1.80×
 gate from `adjust_close_cliffs()`), which **must be filtered on in any study**

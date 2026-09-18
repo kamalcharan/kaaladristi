@@ -9,6 +9,8 @@ and uses it to mark which 'Outcome of Board Meeting' announcements are RESULTS.
     python3 scripts/ingest_nse_board_meetings.py --from 2026-06-01 --to 2026-09-16
     python3 scripts/ingest_nse_board_meetings.py --days 7 --dry-run
     python3 scripts/ingest_nse_board_meetings.py --reclassify     # no fetch
+    python3 scripts/ingest_nse_board_meetings.py --relink \
+            --from 2026-06-01 --to 2026-09-16                    # no fetch
 
 WHY A SECOND FEED AT ALL. returns_since_result needs the date a company
 announced results, and the announcements stream cannot supply it: a result is
@@ -63,22 +65,38 @@ BACKFILL_WINDOW_DAYS = 90
 PIPELINE_WINDOW_DAYS = 14      # trailing sweep for the scheduled runs
 REQUEST_DELAY_SEC = 2.0
 
-# ── The two tolerances that decide a match ────────────────────────────────
-# An outcome is filed on the meeting day or shortly after; a meeting can also
-# conclude a day before the date it was intimated for. Both are UNMEASURED
-# guesses today — deliberately generous, because a missed match reads as
-# "not a result" and silently shrinks the population, while a loose one is
-# visible and correctable (the actual offset is inspectable at any time through
-# board_meeting_id; the verification query is at the foot of this file).
-MATCH_BACK_DAYS = 4
+# ── The two tolerances that decide a match — NOW MEASURED ─────────────────
+# Offsets of 2,733 matched outcome announcements against their meeting date,
+# over 2026-06-01..09-16 (the first live backfill, and the full range the
+# original ±4/+1 guess allowed):
+#
+#       -1 days     5
+#        0 days 2,698   <- 98.7%
+#       +1 days    14
+#       +2 days     3
+#       +3 days     8
+#       +4 days     5
+#
+# SEBI LODR Reg 30 requires the outcome within 30 MINUTES of the board meeting
+# concluding. So 0 is the rule, +1 is a meeting that ran into the next day, and
+# +2..+4 CANNOT be that meeting's outcome — those 16 are proximity mismatches,
+# not late filings. A reschedule does not need the slack either: it files its
+# own intimation row (the natural key admits one), so the real date matches at 0.
+#
+# The guess was 4. The measurement says 1, and the 16 it removes were wrong.
+MATCH_BACK_DAYS = 1
 MATCH_FWD_DAYS = 1
 
-# The feed's window may filter on the MEETING date or on the INTIMATION date —
-# the probe window could not separate them, since both fell inside it. Fetching
-# with this much lead makes the ingest correct under either reading, and costs
-# nothing at ~16 rows a day. `run` reports which one the data actually looks
-# like, so the next person does not have to re-derive it.
-INTIMATION_LEAD_DAYS = 30
+# MEASURED: the feed filters on the MEETING date. Over the same backfill, 0 of
+# 11,183 rows fell outside the requested window by bm_date against 2,149 by
+# bm_timestamp — so a lead buffer is not needed for correctness at all, and 30
+# days of it was fetching a month nobody asked for.
+#
+# Kept small rather than removed: it costs one call on a ~16-row-a-day feed, the
+# coverage clip in `run` makes the extra rows free (they are stored, never
+# treated as extending the judgeable span), and it is the one thing standing
+# between us and a silent hole if NSE ever switches the filter to bm_timestamp.
+INTIMATION_LEAD_DAYS = 7
 
 # The one desc a result is filed under. Measured: 'Outcome of Board Meeting'.
 # 'Clarification - Financial Results' is deliberately absent — it is a
@@ -220,6 +238,67 @@ def reclassify(conn) -> int:
     return changed
 
 
+def relink_result_announcements(conn, start: date, end: date) -> dict:
+    """Re-judge stored events against stored meetings. NO FETCH.
+
+    The counterpart of --reclassify, and it exists for the same reason: the
+    match tolerance is a calibrated number, and the first live backfill moved it
+    from a guess of 4 days to a measured 1. Without this, every event judged
+    under the old tolerance keeps its verdict forever — the linker only touches
+    rows where is_result_announcement IS NULL, so a tightened rule would apply
+    to future events and silently not to history.
+
+    ⚠ It clears ONLY the window it is about to re-judge. Clearing [start, end]
+    and then linking would demote every event in the shrunk edges from a verdict
+    to NULL — losing judgements that a wider earlier run had made correctly.
+
+    Coverage comes from the meetings ALREADY STORED, intersected with the range
+    asked for. Pass a range you actually fetched: this cannot tell a contiguous
+    fetch from two disjoint ones, and over-claiming coverage turns a hole into a
+    confident FALSE.
+    """
+    with conn.cursor() as cur:
+        cur.execute('SELECT min(meeting_date), max(meeting_date) '
+                    'FROM km_board_meetings')
+        first, last = cur.fetchone()
+    if first is None:
+        return {'cleared': 0, 'link': None}
+
+    cov_start, cov_end = max(first, start), min(last, end)
+    win = judge_window(cov_start, cov_end) if cov_start <= cov_end else None
+    if win is None:
+        return {'cleared': 0, 'link': None}
+
+    with conn.cursor() as cur:
+        cur.execute("""
+            UPDATE km_corporate_events
+               SET is_result_announcement = NULL,
+                   board_meeting_id       = NULL,
+                   updated_at             = now()
+             WHERE desc_raw = ANY(%s)
+               AND is_result_announcement IS NOT NULL
+               AND (disseminated_at AT TIME ZONE 'Asia/Kolkata')::date
+                     BETWEEN %s AND %s
+        """, (OUTCOME_DESCS, win[0], win[1]))
+        cleared = cur.rowcount
+    conn.commit()
+    return {'cleared': cleared,
+            'link': link_result_announcements(conn, cov_start, cov_end)}
+
+
+def judge_window(cov_start: date, cov_end: date) -> tuple[date, date] | None:
+    """Which events meeting coverage [cov_start, cov_end] can actually judge.
+
+    ONE implementation with two callers — the linker and the re-linker. If the
+    re-linker cleared a wider range than the linker re-judges, every event in
+    the difference would be silently demoted from a verdict to NULL, and the
+    two rules drifting apart is exactly how that happens.
+    """
+    lo = cov_start + timedelta(days=MATCH_BACK_DAYS)
+    hi = cov_end - timedelta(days=MATCH_FWD_DAYS)
+    return (lo, hi) if lo <= hi else None
+
+
 def link_result_announcements(conn, cov_start: date, cov_end: date) -> dict:
     """Mark km_corporate_events rows as results / not results.
 
@@ -249,11 +328,11 @@ def link_result_announcements(conn, cov_start: date, cov_end: date) -> dict:
     backfill lands the missing intimation and the NULL resolves on the next
     pass, which a wrong FALSE never would.
     """
-    lo = cov_start + timedelta(days=MATCH_BACK_DAYS)
-    hi = cov_end - timedelta(days=MATCH_FWD_DAYS)
-    if lo > hi:
+    win = judge_window(cov_start, cov_end)
+    if win is None:
         return {'evaluated': 0, 'results': 0, 'not_results': 0,
                 'no_meeting': 0, 'window': None}
+    lo, hi = win
 
     with conn.cursor() as cur:
         cur.execute("""
@@ -282,8 +361,17 @@ def link_result_announcements(conn, cov_start: date, cov_end: date) -> dict:
                         -- attach to the older
                         ORDER BY abs(c.diss_date - b.meeting_date), b.id
                         LIMIT 1) AS result_id,
-                      -- the company intimated SOMETHING in the window, which
-                      -- is what makes a FALSE a measurement rather than a hole
+                      -- The company intimated SOMETHING in the window, which
+                      -- is what makes a FALSE a measurement rather than a hole.
+                      --
+                      -- ⚠ SAME WINDOW AS THE MATCH ABOVE, deliberately. Since
+                      -- the tolerance tightened to +/-1 this decides real
+                      -- cases: an outcome filed 2+ days after a results meeting
+                      -- now reads NULL rather than FALSE. That is correct — we
+                      -- failed to PLACE it, we did not measure it — and NULL is
+                      -- recoverable where FALSE never corrects itself. Widening
+                      -- only this window would buy tidier counts by asserting
+                      -- something we did not check.
                       EXISTS (SELECT 1 FROM km_board_meetings b
                                WHERE b.isin = c.isin
                                  AND b.meeting_date BETWEEN c.diss_date - %s
@@ -425,8 +513,34 @@ def main():
                     help='fetch and report, write nothing')
     ap.add_argument('--reclassify', action='store_true',
                     help='re-run the results rule over stored text; no fetch')
+    ap.add_argument('--relink', action='store_true',
+                    help='re-judge stored events against stored meetings after '
+                         'a tolerance change; needs --from/--to, no fetch')
     args = ap.parse_args()
     logging.basicConfig(level=logging.INFO, format='%(message)s')
+
+    if args.relink:
+        if not (args.dfrom and args.dto):
+            ap.error('--relink needs --from and --to: the range you actually '
+                     'fetched meetings for. It cannot infer that, and claiming '
+                     'coverage you do not have turns a hole into a confident '
+                     'FALSE.')
+        conn = get_conn()
+        try:
+            st = relink_result_announcements(
+                conn, date.fromisoformat(args.dfrom), date.fromisoformat(args.dto))
+            lk = st['link']
+            if not lk or not lk['window']:
+                print('no stored meeting coverage overlaps that range — '
+                      'nothing re-judged')
+            else:
+                print(f'cleared {st["cleared"]:,} verdicts and re-judged '
+                      f'{lk["window"][0]}..{lk["window"][1]}: '
+                      f'{lk["results"]:,} results / {lk["not_results"]:,} not / '
+                      f'{lk["no_meeting"]:,} no coverage')
+        finally:
+            conn.close()
+        return
 
     if args.reclassify:
         conn = get_conn()

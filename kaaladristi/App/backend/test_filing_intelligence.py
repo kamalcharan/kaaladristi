@@ -24,14 +24,20 @@ from datetime import date
 
 from lib.filing_taxonomy import classify_board_meeting
 from scripts.ingest_nse_board_meetings import (
-    MATCH_BACK_DAYS, MATCH_FWD_DAYS, link_result_announcements, upsert_meetings)
+    MATCH_BACK_DAYS, MATCH_FWD_DAYS, link_result_announcements,
+    relink_result_announcements, upsert_meetings)
 
 DSN = os.environ.get('KD_TEST_DSN')
 MIGRATIONS = ('km_migration_212_filings_ingest.sql',
               'km_migration_214_board_meetings.sql',
-              'km_migration_215_result_drift.sql')
+              'km_migration_215_result_drift.sql',
+              'km_migration_216_result_drift_dedup.sql')
 DB_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                       '..', 'DBscripts')
+# Applied once per process. Two test classes share the fixture, and 215/216
+# are a DROP/CREATE pair — re-running 215 cannot widen 216's return type,
+# so a per-class apply fails on whichever class runs second.
+_SCHEMA_READY = False
 
 
 class ResultsRule(unittest.TestCase):
@@ -126,9 +132,20 @@ class LinkSemantics(unittest.TestCase):
             """)
             # Running the real migration files is itself the point: a schema
             # the tests invent cannot catch a migration that does not apply.
-            for name in MIGRATIONS:
-                with open(os.path.join(DB_DIR, name)) as fh:
-                    c.execute(fh.read())
+            global _SCHEMA_READY
+            if not _SCHEMA_READY:
+                # The test database survives between runs, so 215's
+                # CREATE OR REPLACE would meet 216's WIDER return type from the
+                # last run and refuse ("Row type defined by OUT parameters is
+                # different"). Dropping the pair first makes re-applying the
+                # real files reproducible. Nothing here holds data.
+                c.execute('DROP VIEW IF EXISTS v_result_drift; '
+                          'DROP FUNCTION IF EXISTS '
+                          'kd_result_returns(DATE, DATE, INTEGER);')
+                for name in MIGRATIONS:
+                    with open(os.path.join(DB_DIR, name)) as fh:
+                        c.execute(fh.read())
+                _SCHEMA_READY = True
         cls.conn.commit()
 
     @classmethod
@@ -224,8 +241,12 @@ class LinkSemantics(unittest.TestCase):
         self.assertIsNone(self._verdicts()['EEE'][0])
 
     def test_coverage_narrower_than_the_tolerance_judges_nothing(self):
+        # A single day of meeting coverage cannot judge anything while either
+        # tolerance is non-zero. Expressed as a zero-width span rather than a
+        # literal range, so tightening MATCH_BACK_DAYS does not turn this test
+        # into a passing statement about a different situation.
         stats = link_result_announcements(self.conn, date(2026, 9, 20),
-                                          date(2026, 9, 22))
+                                          date(2026, 9, 20))
         self.assertIsNone(stats['window'])
         self.assertEqual(stats['evaluated'], 0)
 
@@ -255,6 +276,99 @@ class LinkSemantics(unittest.TestCase):
         link_result_announcements(self.conn, date(2026, 9, 1), date(2026, 9, 20))
         self.conn.commit()
         self.assertEqual(self._verdicts()['AAA'], (None, None))
+
+    # ── the match tolerance, as measured ──────────────────────────────────
+    def test_an_outcome_filed_the_next_day_still_matches(self):
+        """A board meeting that ran into the next day. 14 of 2,733 on the
+        first live backfill."""
+        upsert_meetings(self.conn, [_bm('AAA', 'INE00A', '10-Sep-2026',
+                                        '01-Sep-2026 10:00:00',
+                                        'Financial Results', 'Q results')])
+        self.conn.commit()
+        self._event('INE00A', 'AAA', '2026-09-11 10:00:00')
+        link_result_announcements(self.conn, date(2026, 9, 1), date(2026, 9, 20))
+        self.conn.commit()
+        self.assertTrue(self._verdicts()['AAA'][0])
+
+    def test_an_outcome_two_days_later_is_not_matched(self):
+        """SEBI LODR Reg 30 requires the outcome within 30 MINUTES of the
+        meeting concluding, and 98.7% of them are filed on the meeting date
+        itself. So +2 is a proximity mismatch, not a late filing — the original
+        +4 tolerance was an unmeasured guess and admitted 16 of these."""
+        upsert_meetings(self.conn, [_bm('AAA', 'INE00A', '10-Sep-2026',
+                                        '01-Sep-2026 10:00:00',
+                                        'Financial Results', 'Q results')])
+        self.conn.commit()
+        self._event('INE00A', 'AAA', '2026-09-12 10:00:00')
+        link_result_announcements(self.conn, date(2026, 9, 1), date(2026, 9, 20))
+        self.conn.commit()
+        # NULL, not FALSE, and that asymmetry is deliberate. The coverage check
+        # uses the SAME window as the match, so a meeting outside it is not
+        # evidence of anything: we did not measure this announcement, we merely
+        # failed to place it. FALSE would assert it is not a result, which is
+        # the one verdict that never corrects itself.
+        self.assertEqual(self._verdicts()['AAA'], (None, None))
+
+    def test_a_meeting_dated_after_its_own_outcome_still_matches(self):
+        """The -1 bucket, 5 events on the first backfill: a board that met and
+        filed early against the date it had intimated. MATCH_FWD_DAYS exists
+        for exactly this and nothing else tests it."""
+        upsert_meetings(self.conn, [_bm('AAA', 'INE00A', '11-Sep-2026',
+                                        '01-Sep-2026 10:00:00',
+                                        'Financial Results', 'Q results')])
+        self.conn.commit()
+        self._event('INE00A', 'AAA', '2026-09-10 10:00:00')
+        link_result_announcements(self.conn, date(2026, 9, 1), date(2026, 9, 20))
+        self.conn.commit()
+        self.assertTrue(self._verdicts()['AAA'][0])
+
+    # ── re-judging history after a tolerance change ───────────────────────
+    def _relink_fixture(self):
+        upsert_meetings(self.conn, [
+            # span-setters: no events, they only widen stored coverage
+            _bm('SPAN1', 'INE0S1', '01-Sep-2026', '20-Aug-2026 10:00:00',
+                'Financial Results', 'x'),
+            _bm('SPAN2', 'INE0S2', '25-Sep-2026', '20-Aug-2026 10:00:00',
+                'Financial Results', 'x'),
+            _bm('AAA', 'INE00A', '10-Sep-2026', '01-Sep-2026 10:00:00',
+                'Financial Results', 'Q results'),
+            _bm('BBB', 'INE00B', '20-Sep-2026', '10-Sep-2026 10:00:00',
+                'Financial Results', 'Q results')])
+        self.conn.commit()
+        self._event('INE00A', 'AAA', '2026-09-10 10:00:00')
+        self._event('INE00B', 'BBB', '2026-09-20 10:00:00')
+        # No meeting of any kind -> stays NULL. It sits INSIDE the relink
+        # window, so it is what makes the cleared count discriminating.
+        self._event('INE00Z', 'ZZZ', '2026-09-12 10:00:00')
+        link_result_announcements(self.conn, date(2026, 9, 1), date(2026, 9, 25))
+        self.conn.commit()
+        self.assertTrue(self._verdicts()['AAA'][0])
+        self.assertTrue(self._verdicts()['BBB'][0])
+        self.assertIsNone(self._verdicts()['ZZZ'][0])
+
+    def test_relink_rejudges_inside_its_window(self):
+        self._relink_fixture()
+        stats = relink_result_announcements(self.conn, date(2026, 9, 1),
+                                            date(2026, 9, 20))
+        self.conn.commit()
+        # EXACTLY one: AAA, the only judged event inside [09-02, 09-19]. ZZZ is
+        # in there too but was never judged, so clearing it would be a no-op
+        # that still inflates the number an operator reads.
+        self.assertEqual(stats['cleared'], 1)
+        self.assertTrue(self._verdicts()['AAA'][0])
+
+    def test_relink_never_demotes_a_verdict_it_will_not_rejudge(self):
+        """Clearing [start, end] and then linking would NULL every event in the
+        shrunk edges — losing verdicts a wider earlier run had made correctly.
+        BBB sits at 2026-09-20, inside the cleared range but outside the
+        [09-02, 09-19] this relink can actually judge.
+        """
+        self._relink_fixture()
+        relink_result_announcements(self.conn, date(2026, 9, 1),
+                                    date(2026, 9, 20))
+        self.conn.commit()
+        self.assertTrue(self._verdicts()['BBB'][0],
+                        'BBB lost its verdict to a clear that did not re-judge it')
 
     # ── ingest hygiene ────────────────────────────────────────────────────
     def test_refetch_is_a_no_op_and_an_edit_is_a_revision(self):
@@ -324,25 +438,41 @@ class ResultDrift(unittest.TestCase):
                           'close) VALUES (%s,%s,%s)', (eid, d, close))
         self.conn.commit()
 
-    def _result(self, isin, name, day0, verdict=True):
+    def _meeting(self, symbol, isin, mdate):
+        """A stored intimation, so board_meeting_id has something to reference."""
+        with self.conn.cursor() as c:
+            c.execute("INSERT INTO km_board_meetings (isin, symbol, "
+                      "meeting_date, intimated_at, purpose_raw, is_results, "
+                      "results_basis, payload, content_hash) VALUES "
+                      "(%s,%s,%s,%s,'Financial Results',true,'purpose',"
+                      "'{}',%s) RETURNING id",
+                      (isin, symbol, mdate, f'{mdate} 09:00', symbol + mdate))
+            bm_id = c.fetchone()[0]
+        self.conn.commit()
+        return bm_id
+
+    def _result(self, isin, name, day0, verdict=True, bm_id=None, hhmm='10:00'):
         with self.conn.cursor() as c:
             c.execute("INSERT INTO km_filings_raw (source, source_ann_id, isin,"
                       " disseminated_at, content_hash, payload) VALUES "
                       "('NSE',%s,%s,%s,'h','{}') RETURNING id",
-                      (name + str(day0), isin, f'{day0} 10:00'))
+                      (name + str(day0) + hhmm, isin, f'{day0} {hhmm}'))
             rid = c.fetchone()[0]
             c.execute("INSERT INTO km_corporate_events (isin, company_name, "
                       "disseminated_at, day_0_trade_date, family, desc_raw, "
-                      "primary_raw_id, raw_ids, is_result_announcement) VALUES "
+                      "primary_raw_id, raw_ids, is_result_announcement, "
+                      "board_meeting_id) VALUES "
                       "(%s,%s,%s,%s,'UNCLASSIFIED','Outcome of Board Meeting',"
-                      "%s,ARRAY[%s],%s)",
-                      (isin, name, f'{day0} 10:00', day0, rid, rid, verdict))
+                      "%s,ARRAY[%s],%s,%s)",
+                      (isin, name, f'{day0} {hhmm}', day0, rid, rid, verdict,
+                       bm_id))
         self.conn.commit()
 
     def _rows(self, *args, view=False):
         sql = ('SELECT symbol, base_trade_date, base_close, day_0_close, '
                'end_trade_date, end_close, sessions_elapsed, reaction_pct, '
-               'drift_pct, suspect_corporate_action FROM ')
+               'drift_pct, suspect_corporate_action, board_meeting_id, '
+               'sibling_announcements FROM ')
         with self.conn.cursor() as c:
             if view:
                 c.execute(sql + 'v_result_drift ORDER BY symbol')
@@ -350,7 +480,8 @@ class ResultDrift(unittest.TestCase):
                 c.execute(sql + 'kd_result_returns(%s,%s,%s) ORDER BY symbol',
                           args if args else (None, None, None))
             cols = ('symbol', 'base_date', 'base_close', 'd0_close', 'end_date',
-                    'end_close', 'sessions', 'reaction', 'drift', 'suspect')
+                    'end_close', 'sessions', 'reaction', 'drift', 'suspect',
+                    'bm_id', 'siblings')
             return {r[0]: dict(zip(cols, r)) for r in c.fetchall()}
 
     def _clean_stock(self):
@@ -457,6 +588,71 @@ class ResultDrift(unittest.TestCase):
         self._result('INE00G', 'GGG', '2026-01-06')
         self.assertIn('GGG', self._rows())              # function sees it
         self.assertNotIn('GGG', self._rows(view=True))  # view does not
+
+
+    # ── one drift row per RESULT, not per announcement (migration 216) ────
+    def test_siblings_of_one_meeting_collapse_to_one_row(self):
+        """Measured 1.19 announcements per results meeting: one board meeting
+        approves results, declares a dividend and appoints an auditor, and each
+        outcome is filed separately. 427 of 2,733 rows were a second Day 0 for a
+        result already counted."""
+        self._stock(8, 'HHH', 'INE00H',
+                    [('2026-09-07', 100), ('2026-09-08', 110),
+                     ('2026-09-09', 121)])
+        bm = self._meeting('HHH', 'INE00H', '2026-09-08')
+        self._result('INE00H', 'HHH', '2026-09-08', bm_id=bm, hhmm='16:00')
+        self._result('INE00H', 'HHH', '2026-09-08', bm_id=bm, hhmm='18:30')
+        # ⚠ COUNT IN SQL. self._rows() keys a dict by symbol, so two rows for
+        # one stock collapse inside the HELPER — an assertion on len(rows)
+        # passes against a function that de-duplicates nothing.
+        with self.conn.cursor() as c:
+            c.execute('SELECT count(*) FROM kd_result_returns()')
+            self.assertEqual(c.fetchone()[0], 1)
+        self.assertEqual(self._rows()['HHH']['siblings'], 2)
+
+    def test_the_earliest_announcement_is_the_one_kept(self):
+        """It can never be later than the moment the market could first act on
+        the meeting's outcome, which is the only thing Day 0 may mean."""
+        self._stock(9, 'III', 'INE00I',
+                    [('2026-09-07', 100), ('2026-09-08', 110)])
+        bm = self._meeting('III', 'INE00I', '2026-09-08')
+        self._result('INE00I', 'III', '2026-09-08', bm_id=bm, hhmm='18:30')
+        self._result('INE00I', 'III', '2026-09-08', bm_id=bm, hhmm='16:00')
+        with self.conn.cursor() as c:
+            c.execute("SELECT id FROM km_corporate_events "
+                      "ORDER BY disseminated_at LIMIT 1")
+            earliest = c.fetchone()[0]
+            c.execute('SELECT event_id FROM kd_result_returns()')
+            self.assertEqual(c.fetchone()[0], earliest)
+
+    def test_two_meetings_stay_two_rows(self):
+        """Two quarters close together are two board meetings and must never
+        merge — the de-duplication is per meeting, not per company."""
+        self._stock(10, 'JJJ', 'INE00J',
+                    [('2026-09-01', 100), ('2026-09-02', 105),
+                     ('2026-09-08', 110), ('2026-09-09', 115)])
+        b1 = self._meeting('JJJ', 'INE00J', '2026-09-02')
+        b2 = self._meeting('JJJ', 'INE00J', '2026-09-08')
+        self._result('INE00J', 'JJJ', '2026-09-02', bm_id=b1)
+        self._result('INE00J', 'JJJ', '2026-09-08', bm_id=b2)
+        with self.conn.cursor() as c:
+            c.execute('SELECT count(*) FROM kd_result_returns()')
+            self.assertEqual(c.fetchone()[0], 2)
+
+    def test_events_without_a_meeting_id_do_not_collapse(self):
+        """DISTINCT ON treats every NULL as one group, so an un-keyed event
+        would swallow all the others. The linker cannot produce that today;
+        the guard is what stops a future path from doing it silently."""
+        self._stock(11, 'KKK', 'INE00K',
+                    [('2026-09-07', 100), ('2026-09-08', 110)])
+        self._stock(12, 'LLL', 'INE00L',
+                    [('2026-09-07', 100), ('2026-09-08', 110)])
+        self._result('INE00K', 'KKK', '2026-09-08', bm_id=None)
+        self._result('INE00L', 'LLL', '2026-09-08', bm_id=None)
+        with self.conn.cursor() as c:
+            c.execute('SELECT count(*) FROM kd_result_returns()')
+            self.assertEqual(c.fetchone()[0], 2)
+        self.assertEqual(self._rows()['KKK']['siblings'], 1)
 
 
 if __name__ == '__main__':
