@@ -571,6 +571,9 @@ judged. Three guesses became numbers:
    cannot be that meeting's outcome — 16 proximity mismatches. `MATCH_BACK_DAYS`
    went from a guessed 4 to a measured 1, and `--relink` exists so a tolerance
    change reaches history instead of applying only to future events.
+   **Confirmed live on 2026-09-18**: relinking 2,829 judged events moved
+   results 2,733 → 2,717 (−16) and not-results 96 → 95 (−1), with all 17
+   landing in no-coverage (188 → 205).
    **Consequence worth expecting:** those 16 now read NULL rather than FALSE,
    because the coverage check shares the match window. That is the intended
    asymmetry — we failed to *place* them, we did not measure them, and NULL is
@@ -584,6 +587,32 @@ judged. Three guesses became numbers:
 
 One number did NOT come out clean, and migration 216 is the answer:
 **1.19 announcements per results meeting** — see the migration header.
+
+#### ⚠ A missing commit wiped the result population once (2026-09-18)
+
+Recorded because the test that should have caught it passed.
+
+`--relink` committed its CLEAR and left the re-judgement's commit to a caller
+the CLI branch did not have. A live run reported *"cleared 2,829 verdicts and
+re-judged: 2,717 results / 95 not / 205 no coverage"* — and left **2**. The
+destructive half was durable; the restoring half rolled back at `conn.close()`.
+
+Two properties now prevent the shape, not just the instance:
+
+1. **`link_result_announcements` commits its own write.** No caller can forget.
+2. **Clear and re-judge are ONE transaction** — there is no commit between them,
+   so a crash cannot leave the population NULL with nothing to put back. That
+   state is also unrecoverable by re-running, because the linker only touches
+   rows that are still NULL, which by then is all of them.
+
+**The test lesson is the transferable part.** Every test here called the
+function and then committed *itself* — so it passed whether or not the code
+committed. A test that supplies what the caller forgot cannot see a missing
+commit. The shape that can is **write → roll back → read**, and the strongest
+version makes the operation CHANGE something first: a relink that commits
+nothing rolls back to the old verdict, one that commits only its clear leaves
+NULL, and only a correct relink leaves the new answer. The in-function counts
+are read inside the transaction, so the report looks right in all three cases.
 
 #### ⚠ The blocker Sprint 3b now owns
 

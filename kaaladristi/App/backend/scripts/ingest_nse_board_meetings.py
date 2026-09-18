@@ -269,6 +269,10 @@ def relink_result_announcements(conn, start: date, end: date) -> dict:
     if win is None:
         return {'cleared': 0, 'link': None}
 
+    # ⚠ NO COMMIT BETWEEN THE CLEAR AND THE RE-JUDGE. They are one transaction:
+    # committing the clear on its own is how a crash, or a caller that forgets
+    # to commit, leaves every verdict NULL with nothing to put back. That is
+    # exactly what happened live on 2026-09-18 — see link_result_announcements.
     with conn.cursor() as cur:
         cur.execute("""
             UPDATE km_corporate_events
@@ -281,9 +285,8 @@ def relink_result_announcements(conn, start: date, end: date) -> dict:
                      BETWEEN %s AND %s
         """, (OUTCOME_DESCS, win[0], win[1]))
         cleared = cur.rowcount
-    conn.commit()
-    return {'cleared': cleared,
-            'link': link_result_announcements(conn, cov_start, cov_end)}
+    link = link_result_announcements(conn, cov_start, cov_end)   # commits both
+    return {'cleared': cleared, 'link': link}
 
 
 def judge_window(cov_start: date, cov_end: date) -> tuple[date, date] | None:
@@ -330,6 +333,9 @@ def link_result_announcements(conn, cov_start: date, cov_end: date) -> dict:
     """
     win = judge_window(cov_start, cov_end)
     if win is None:
+        # Nothing judged, nothing written, nothing to commit. Unreachable from
+        # relink, which computes the same window first and returns before it
+        # clears anything.
         return {'evaluated': 0, 'results': 0, 'not_results': 0,
                 'no_meeting': 0, 'window': None}
     lo, hi = win
@@ -394,6 +400,20 @@ def link_result_announcements(conn, cov_start: date, cov_end: date) -> dict:
                      BETWEEN %s AND %s
         """, (OUTCOME_DESCS, lo, hi))
         results, not_results, no_meeting = cur.fetchone()
+
+    # ⚠ THIS FUNCTION COMMITS ITS OWN WRITE, and that is not tidiness.
+    #
+    # It used to leave the commit to the caller. `run()` did commit; the
+    # --relink path did NOT, and relink commits its CLEAR before calling this.
+    # So on 2026-09-18 a live --relink committed 2,829 cleared verdicts and then
+    # rolled back every re-judgement at conn.close(): 2,717 results became 2.
+    # The destructive half was durable and the restoring half was not.
+    #
+    # The tests did not catch it because they call this and then commit
+    # THEMSELVES — the test supplied the commit the CLI forgot. A durability
+    # test (write, roll back, read) is the only shape that can see this, and
+    # there is one now.
+    conn.commit()
 
     return {'evaluated': evaluated, 'results': results,
             'not_results': not_results, 'no_meeting': no_meeting,

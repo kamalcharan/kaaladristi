@@ -370,6 +370,68 @@ class LinkSemantics(unittest.TestCase):
         self.assertTrue(self._verdicts()['BBB'][0],
                         'BBB lost its verdict to a clear that did not re-judge it')
 
+    def test_relink_survives_a_rollback(self):
+        """THE SHAPE THAT CATCHES A MISSING COMMIT, and the only one that can.
+
+        Every other test here calls the function and then commits ITSELF, so it
+        passes whether or not the code committed — the test supplies what the
+        caller forgot. On 2026-09-18 that blind spot shipped: relink committed
+        its CLEAR and left the re-judgement to a caller that did not exist in
+        the --relink path, so a live run turned 2,717 verdicts into 2. The
+        destructive half was durable and the restoring half was not.
+
+        Writing, rolling back, and then reading is what proves the write landed.
+        """
+        self._relink_fixture()
+        relink_result_announcements(self.conn, date(2026, 9, 1),
+                                    date(2026, 9, 20))
+        self.conn.rollback()        # NOT commit — the caller does nothing
+        self.assertTrue(self._verdicts()['AAA'][0],
+                        'the re-judgement was rolled back: relink committed its '
+                        'clear but not its restore')
+
+    def test_relink_persists_a_CHANGED_verdict(self):
+        """Proves the work is DURABLE, not merely computed.
+
+        The two tests above cannot see a relink that commits NOTHING: the
+        rollback undoes both halves and the verdicts read unchanged, which is
+        what they assert. But that shape is its own failure — --relink prints a
+        full report (2,717 results / 95 not / 205 no coverage) about a
+        re-judgement the database never saw, because those counts are read
+        inside the same transaction and look right either way.
+
+        So make the relink CHANGE something, then roll back and demand the new
+        answer. This catches both shapes at once: no commit leaves TRUE, a
+        clear-only commit leaves NULL, and only a correct relink leaves FALSE.
+        """
+        self._relink_fixture()                       # AAA judged TRUE
+        with self.conn.cursor() as c:
+            # its meeting stops being a results meeting, so the only correct
+            # verdict after re-judging is FALSE (the meeting still EXISTS, so
+            # this is a measurement, not a coverage hole)
+            c.execute("UPDATE km_board_meetings SET is_results = false, "
+                      "results_basis = NULL WHERE symbol = 'AAA'")
+        self.conn.commit()
+
+        relink_result_announcements(self.conn, date(2026, 9, 1),
+                                    date(2026, 9, 20))
+        self.conn.rollback()
+        self.assertIs(self._verdicts()['AAA'][0], False)
+
+    def test_a_relink_never_leaves_the_population_cleared(self):
+        """Clear and re-judge are ONE transaction. Any shape where the clear is
+        durable and the restore is not wipes the result population with nothing
+        to put back — and the re-judge cannot be replayed, because the linker
+        only touches rows that are still NULL... which by then is all of them.
+        """
+        self._relink_fixture()
+        before = sum(1 for v in self._verdicts().values() if v[0] is True)
+        relink_result_announcements(self.conn, date(2026, 9, 1),
+                                    date(2026, 9, 20))
+        self.conn.rollback()
+        after = sum(1 for v in self._verdicts().values() if v[0] is True)
+        self.assertEqual(after, before)
+
     # ── ingest hygiene ────────────────────────────────────────────────────
     def test_refetch_is_a_no_op_and_an_edit_is_a_revision(self):
         row = _bm('AAA', 'INE00A', '10-Sep-2026', '01-Sep-2026 10:00:00',
