@@ -427,6 +427,23 @@ def start_scheduler(dsn: str) -> BackgroundScheduler:
             replace_existing=True,
         )
 
+    # Bulk/block deals — the archive publishes one session and lags, so two
+    # slots a day is plenty: 08:20 picks up the session NSE has published by
+    # morning, 22:20 catches it if the file lands the same evening (which the
+    # probe could not settle — it saw 17-SEP content on the 18th, consistent
+    # with either). Re-fetching is free: replace-the-day is exactly idempotent.
+    #
+    # :20 rather than :10 or :40 — three NSE fetchers must never share a minute.
+    for _hh in (8, 22):
+        sched.add_job(
+            _enqueue_stream_ingest,
+            trigger=CronTrigger(hour=_hh, minute=20, day_of_week='*', timezone=IST),
+            id=f'pipeline2_bulk_deals_ingest_{_hh:02d}',
+            name=f'Pipeline v2 NSE bulk/block deals ({_hh:02d}:20 IST, daily)',
+            args=[dsn, 'bulk_deals_ingest'],
+            replace_existing=True,
+        )
+
     # 00:15 every day (not market-day-bound — subscriptions lapse on weekends
     # too). Max grace after expiry is therefore ~24h.
     sched.add_job(
@@ -443,6 +460,7 @@ def start_scheduler(dsn: str) -> BackgroundScheduler:
              'gap_sweep 19:30 + 21:30 IST Mon-Fri, 09:00 IST Sat; '
              'filings_ingest 06/09/12/20/23:10 IST daily; '
              'board_meetings_ingest 07/21:40 IST daily; '
+             'bulk_deals_ingest 08/22:20 IST daily; '
              'tier_expiry_sweep 00:15 IST daily)')
     return sched
 

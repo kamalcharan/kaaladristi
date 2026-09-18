@@ -924,6 +924,28 @@ def handle_board_meetings_ingest(conn, trade_date: date, force: bool,
     return HandlerResult(status, 0.0, 100.0, rows)
 
 
+def handle_bulk_deals_ingest(conn, trade_date: date, force: bool,
+                            exchange: Optional[str], on_progress: ProgressFn) -> HandlerResult:
+    """Fetch the daily bulk/block deal archive.
+
+    Same cadence reasoning as filings_ingest and board_meetings_ingest: its own
+    schedule, no place in DAILY_STEPS, and no DIMENSION_DEPENDENTS entry because
+    nothing in the EOD chain feeds it. `trade_date` is ignored — the archive
+    serves whatever session it currently publishes, not one we pick.
+    """
+    from scripts.ingest_nse_bulk_deals import ingest_bulk_deals_for_pipeline
+    on_progress('fetching NSE bulk/block deals', 20)
+    try:
+        rows, status = ingest_bulk_deals_for_pipeline(conn, trade_date, force)
+    except Exception as e:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        return HandlerResult('failed', 0.0, 0.0, 0, error_msg=str(e)[:500])
+    return HandlerResult(status, 0.0, 100.0, rows)
+
+
 def handle_integrity_checks(conn, trade_date: date, force: bool,
                             exchange: Optional[str], on_progress: ProgressFn) -> HandlerResult:
     """Data-integrity sweep — reconciliation / invariant / staleness /
@@ -1226,6 +1248,8 @@ def handle(dimension: str, conn, trade_date: date, force: bool,
         return handle_filings_ingest(conn, trade_date, force, exchange, on_progress)
     if dimension == 'board_meetings_ingest':
         return handle_board_meetings_ingest(conn, trade_date, force, exchange, on_progress)
+    if dimension == 'bulk_deals_ingest':
+        return handle_bulk_deals_ingest(conn, trade_date, force, exchange, on_progress)
     if dimension == 'index_eod_download':
         return handle_index_eod_download(conn, trade_date, force, exchange, on_progress)
     if dimension == 'nse_eod_download':

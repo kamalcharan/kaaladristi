@@ -258,6 +258,41 @@ def _csv_coverage(rows, label):
               'backfill, and the JSON endpoint is only for the current day.')
 
 
+def _dated_archives(s, day: date):
+    """DOES HISTORY EXIST ANYWHERE? The daily CSV is one day and the JSON caps
+    at 70, so neither can backfill. If a per-date archive exists the whole
+    history is ~250 small files a year; if not, bulk deals start from the day
+    we begin collecting and PEAD work has no pre-history for them.
+
+    Tried against a day that definitely traded, so a 404 means the PATTERN is
+    wrong or absent — not that the day was quiet.
+    """
+    print(f'\n=== DATED ARCHIVES (probing {day}) ===')
+    d1 = day.strftime('%d%m%Y')
+    d2 = day.strftime('%d-%m-%Y')
+    pats = [
+        f'https://nsearchives.nseindia.com/archives/equities/bulk/bulk_{d1}.csv',
+        f'https://nsearchives.nseindia.com/content/equities/bulk_{d1}.csv',
+        f'https://nsearchives.nseindia.com/archives/equities/bulkdeals/bulk_{d1}.csv',
+        f'https://nsearchives.nseindia.com/content/historical/EQUITIES/bulk_{d2}.csv',
+    ]
+    hit = False
+    for u in pats:
+        got = _try(s, u.rsplit('/', 2)[-2] + '/' + u.rsplit('/', 1)[-1],
+                   u, REF_REPORT, want='csv')
+        if got:
+            hit = True
+            _csv_coverage(got, u.rsplit('/', 1)[-1])
+    if not hit:
+        print("""
+  NO DATED ARCHIVE ANSWERED. Then bulk deals have NO backfill: the daily CSV is
+  one day and the JSON endpoint caps at 70 rows even for a single session. That
+  is a real limit to record, not a gap to paper over — collection starts from
+  today, and any PEAD or J-curve work that wants deal history before that date
+  has to source it elsewhere. Say so plainly rather than letting a thin early
+  table read as a quiet market.""")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--out', default=None)
@@ -337,6 +372,7 @@ def main():
     for label, got in csv_rows.items():
         if got:
             _csv_coverage(got, label)
+    _dated_archives(s, date.today() - timedelta(days=1))
 
     if args.out:
         with open(args.out, 'w') as fh:

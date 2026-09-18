@@ -512,7 +512,7 @@ forces materialisation, that is a new decision with a number behind it.
 | Results identification | migration 214 — **needed a second feed**, see below |
 | `returns_since_result` | migration 215, derived; **216** de-duplicates it per results meeting |
 | Board-meeting backfill 2026-06-01..09-16 | run: **11,183 meetings**, 0 skipped, 2,829 events judged |
-| Bulk / block deals | **Endpoint found, VOLUME NOT YET TRUSTWORTHY (2026-09-18).** `historicalOR/bulk-block-short-deals?optionType=bulk_deals|block_deals` answers where the four `historical/*` candidates 503 — so the original block was the PATH, not NSE gating the data. ⚠ But a 30-day window, a 1-year window and `block_deals` each returned **exactly 70 rows**, while `bulk.csv` alone holds 212: 70 is a page cap, so the windowed fetch answers 200 with a silently short payload. An earlier reading of that 70 as "~850/yr" was wrong. Probe now confirms the cap per-day and measures the CSV's real span. |
+| Bulk / block deals | **SHIPPED** — migration 217 + `scripts/ingest_nse_bulk_deals.py`, pipeline2 dimension `bulk_deals_ingest` (08:20 / 22:20 IST). Source is the daily CSV archive; the JSON API is capped at 70 rows per call and unusable. ⚠ **No backfill exists** — collection starts from the first run. |
 
 #### The finding that changed the shape: a result has no category
 

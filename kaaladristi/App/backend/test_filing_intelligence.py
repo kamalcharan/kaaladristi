@@ -26,12 +26,15 @@ from lib.filing_taxonomy import classify_board_meeting
 from scripts.ingest_nse_board_meetings import (
     MATCH_BACK_DAYS, MATCH_FWD_DAYS, link_result_announcements,
     relink_result_announcements, upsert_meetings, _material_diff)
+from scripts.ingest_nse_bulk_deals import (
+    parse_rows, replace_day, backfill_day0, unresolved_count)
 
 DSN = os.environ.get('KD_TEST_DSN')
 MIGRATIONS = ('km_migration_212_filings_ingest.sql',
               'km_migration_214_board_meetings.sql',
               'km_migration_215_result_drift.sql',
-              'km_migration_216_result_drift_dedup.sql')
+              'km_migration_216_result_drift_dedup.sql',
+              'km_migration_217_bulk_deals.sql')
 DB_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                       '..', 'DBscripts')
 # Applied once per process. Two test classes share the fixture, and 215/216
@@ -836,6 +839,150 @@ class ResultDrift(unittest.TestCase):
             c.execute('SELECT count(*) FROM kd_result_returns()')
             self.assertEqual(c.fetchone()[0], 2)
         self.assertEqual(self._rows()['KKK']['siblings'], 1)
+
+
+@unittest.skipUnless(DSN, 'set KD_TEST_DSN to a throwaway database')
+class BulkDeals(unittest.TestCase):
+    """migration 217 + the CSV ingest. No natural key, so the idempotency IS
+    replace-the-day and these tests are the only thing holding it."""
+
+    setUpClass = LinkSemantics.__dict__['setUpClass']
+    tearDownClass = LinkSemantics.__dict__['tearDownClass']
+
+    def setUp(self):
+        with self.conn.cursor() as c:
+            c.execute('TRUNCATE km_bulk_deals, km_bulk_deal_days, '
+                      'km_equity_symbols, km_equity_eod RESTART IDENTITY CASCADE')
+            c.execute("INSERT INTO km_equity_symbols (symbol, isin, exchange, "
+                      "is_active) VALUES ('ASTERDM','INE0AST01011','NSE',true)")
+            # two sessions exist, so 17-Sep's Day 0 resolves to 18-Sep
+            for d in ('2026-09-17', '2026-09-18'):
+                c.execute('INSERT INTO km_equity_eod (equity_id, trade_date, '
+                          'close) VALUES (1,%s,100)', (d,))
+        self.conn.commit()
+
+    def _csv(self, *lines, block=False):
+        head = ('Date,Symbol,Security Name,Client Name,Buy/Sell,'
+                'Quantity Traded,Trade Price / Wght. Avg. Price'
+                + ('' if block else ',Remarks'))
+        return list(__import__('csv').DictReader(
+            __import__('io').StringIO('\n'.join([head, *lines]))))
+
+    def _rows(self):
+        with self.conn.cursor() as c:
+            c.execute('SELECT symbol, client_name, buy_sell, quantity, price, '
+                      'isin, equity_id, deal_date, day_0_trade_date '
+                      'FROM km_bulk_deals ORDER BY id')
+            return c.fetchall()
+
+    # ── the measured reason there is no natural key ───────────────────────
+    def test_one_client_buying_twice_in_a_day_stays_two_rows(self):
+        """Measured in the probe: HDFC MUTUAL FUND bought ASTERDM twice on
+        19-AUG — two schemes under one AMC name. Any key of
+        (date, symbol, client, side) collapses that into one deal, silently."""
+        raw = self._csv(
+            '17-SEP-2026,ASTERDM,Aster DM,HDFC MUTUAL FUND,BUY,1000,500.25,-',
+            '17-SEP-2026,ASTERDM,Aster DM,HDFC MUTUAL FUND,BUY,2000,501.75,-')
+        rows, bad = parse_rows(raw, 'BULK')
+        replace_day(self.conn, 'BULK', date(2026, 9, 17), rows)
+        self.assertEqual(len(self._rows()), 2)
+
+    def test_two_identical_deals_both_survive(self):
+        """Even the WIDE key (adding qty and price) would merge these. Nothing
+        is de-duplicated, so a genuine identical pair is kept as a pair."""
+        line = '17-SEP-2026,ASTERDM,Aster DM,SOME FUND,BUY,1000,500.25,-'
+        rows, _ = parse_rows(self._csv(line, line), 'BULK')
+        replace_day(self.conn, 'BULK', date(2026, 9, 17), rows)
+        self.assertEqual(len(self._rows()), 2)
+
+    # ── replace-the-day ───────────────────────────────────────────────────
+    def test_refetching_a_day_is_exactly_idempotent(self):
+        raw = self._csv(
+            '17-SEP-2026,ASTERDM,Aster DM,FUND A,BUY,1000,500.25,-',
+            '17-SEP-2026,ASTERDM,Aster DM,FUND B,SELL,500,499.00,-')
+        rows, _ = parse_rows(raw, 'BULK')
+        for _ in range(3):
+            replace_day(self.conn, 'BULK', date(2026, 9, 17), rows)
+        self.assertEqual(len(self._rows()), 2)
+
+    def test_replacing_one_day_leaves_other_days_and_types_alone(self):
+        a, _ = parse_rows(self._csv(
+            '17-SEP-2026,ASTERDM,Aster DM,FUND A,BUY,1000,500.25,-'), 'BULK')
+        b, _ = parse_rows(self._csv(
+            '16-SEP-2026,ASTERDM,Aster DM,FUND B,BUY,10,1.5,-'), 'BULK')
+        k, _ = parse_rows(self._csv(
+            '17-SEP-2026,ASTERDM,Aster DM,FUND C,BUY,99,2.5', block=True), 'BLOCK')
+        replace_day(self.conn, 'BULK', date(2026, 9, 17), a)
+        replace_day(self.conn, 'BULK', date(2026, 9, 16), b)
+        replace_day(self.conn, 'BLOCK', date(2026, 9, 17), k)
+        replace_day(self.conn, 'BULK', date(2026, 9, 17), a)   # again
+        self.assertEqual(len(self._rows()), 3)
+
+    def test_a_quiet_day_is_recorded_as_fetched(self):
+        """row_count = 0 means 'we looked and found nothing'; an ABSENT row
+        means never fetched. With no backfill for this feed, collapsing the two
+        would make an un-collected past read as a quiet market."""
+        replace_day(self.conn, 'BULK', date(2026, 9, 17), [])
+        with self.conn.cursor() as c:
+            c.execute('SELECT row_count FROM km_bulk_deal_days')
+            self.assertEqual(c.fetchone()[0], 0)
+
+    # ── derived fields ────────────────────────────────────────────────────
+    def test_day_0_is_the_NEXT_session_not_the_deal_date(self):
+        """NSE publishes after the close, so a 17-Sep deal is actionable on the
+        18th. Dating it to its own session credits the market with knowing
+        something it could not yet see."""
+        rows, _ = parse_rows(self._csv(
+            '17-SEP-2026,ASTERDM,Aster DM,FUND A,BUY,1000,500.25,-'), 'BULK')
+        replace_day(self.conn, 'BULK', date(2026, 9, 17), rows)
+        r = self._rows()[0]
+        self.assertEqual(str(r[7]), '2026-09-17')      # deal_date
+        self.assertEqual(str(r[8]), '2026-09-18')      # day_0
+
+    def test_day_0_defers_when_the_next_session_does_not_exist(self):
+        with self.conn.cursor() as c:
+            c.execute("DELETE FROM km_equity_eod WHERE trade_date='2026-09-18'")
+        self.conn.commit()
+        rows, _ = parse_rows(self._csv(
+            '17-SEP-2026,ASTERDM,Aster DM,FUND A,BUY,1000,500.25,-'), 'BULK')
+        replace_day(self.conn, 'BULK', date(2026, 9, 17), rows)
+        self.assertIsNone(self._rows()[0][8])
+        # ...and is filled once that bar lands, with no bookkeeping
+        with self.conn.cursor() as c:
+            c.execute('INSERT INTO km_equity_eod (equity_id, trade_date, close)'
+                      " VALUES (1,'2026-09-18',100)")
+        self.conn.commit()
+        self.assertEqual(backfill_day0(self.conn), 1)
+        self.assertEqual(str(self._rows()[0][8]), '2026-09-18')
+
+    def test_isin_resolves_from_the_symbol_and_an_unknown_stays_null(self):
+        rows, _ = parse_rows(self._csv(
+            '17-SEP-2026,ASTERDM,Aster DM,FUND A,BUY,1000,500.25,-',
+            '17-SEP-2026,NOSUCH,Who,FUND B,BUY,5,1.0,-'), 'BULK')
+        replace_day(self.conn, 'BULK', date(2026, 9, 17), rows)
+        got = {r[0]: r[5] for r in self._rows()}
+        self.assertEqual(got['ASTERDM'], 'INE0AST01011')
+        self.assertIsNone(got['NOSUCH'])
+        self.assertEqual(unresolved_count(self.conn), 1)
+
+    # ── parsing ───────────────────────────────────────────────────────────
+    def test_unparsable_rows_are_counted_not_dropped(self):
+        rows, bad = parse_rows(self._csv(
+            '17-SEP-2026,ASTERDM,Aster DM,FUND A,BUY,1000,500.25,-',
+            ',ASTERDM,Aster DM,FUND B,BUY,10,1.0,-',          # no date
+            '17-SEP-2026,,Aster DM,FUND C,BUY,10,1.0,-',      # no symbol
+            '17-SEP-2026,ASTERDM,Aster DM,,BUY,10,1.0,-',     # no client
+            '17-SEP-2026,ASTERDM,Aster DM,FUND E,HOLD,10,1.0,-'), 'BULK')
+        self.assertEqual((len(rows), bad), (1, 4))
+
+    def test_thousands_separators_and_a_missing_remarks_column(self):
+        """BLOCK has no Remarks column at all, and NSE writes 10,899,248."""
+        rows, bad = parse_rows(self._csv(
+            '17-SEP-2026,ASTERDM,Aster DM,FUND A,BUY,"10,899,248",13.42',
+            block=True), 'BLOCK')
+        self.assertEqual(bad, 0)
+        self.assertEqual(rows[0]['quantity'], 10899248)
+        self.assertIsNone(rows[0]['remarks'])
 
 
 if __name__ == '__main__':
