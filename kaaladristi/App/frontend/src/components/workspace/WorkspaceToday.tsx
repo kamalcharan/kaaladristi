@@ -10,10 +10,9 @@ import { useBookmarkStore } from '@/stores/bookmarkStore';
 import { useBookmarkMarketData } from '@/hooks/useBookmarks';
 import { momentumLabel } from '@/lib/structureStates';
 import { participationBand, rocMomentumReading } from '@/lib/heatmapReading';
-import type { BookmarkMarketData } from '@/services/bookmarks';
+import { bookmarkSignalState, type BookmarkSignalStateKey } from '@/lib/bookmarkState';
 import './workspaceToday.css';
 
-type Alignment = 'aligned' | 'selective' | 'vulnerable';
 
 const fmt = (value: number | null | undefined, digits = 1) =>
   value == null || !Number.isFinite(value) ? '—' : value.toFixed(digits);
