@@ -45,6 +45,19 @@ interface MagicRsSubchartProps {
   variant?: 'long' | 'short';
   /** Caller can supply cadence-specific facts for weekly/monthly data. */
   showStats?: boolean;
+  /** The UNCLIPPED series, when `data` has been narrowed to a visible range.
+   *
+   *  Every backward-looking number here — the 5/22/66 changes and "held N
+   *  bars" — counts ROWS OF THE ARRAY IT IS GIVEN. Handing it a zoomed window
+   *  silently redefines what a bar is: the same stock on the same day read
+   *  differently depending on where the chart was panned, and the "66" pill
+   *  went blank whenever fewer than 67 bars were in view. Rendering still uses
+   *  `data`; only the lookback reads this, matched by DATE (positions do not
+   *  carry across two arrays of different length). */
+  lookbackData?: MagicRsDataPoint[];
+  /** What one bar IS, for labelling. Daily bars make the pills 5D/22D/66D;
+   *  weekly/monthly data must not borrow the 'D'. */
+  cadence?: 'D' | 'W' | 'M';
 }
 
 function getCssVar(name: string, fallback: string): string {
@@ -84,7 +97,8 @@ function zoneColor(zone: string | null, green: string, red: string, neutral: str
   return neutral;
 }
 
-export default function MagicRsSubchart({ data, activeIndex, benchmarkLabel, variant = 'long', showStats = true }: MagicRsSubchartProps) {
+export default function MagicRsSubchart({ data, activeIndex, benchmarkLabel, variant = 'long',
+  showStats = true, lookbackData, cadence = 'D' }: MagicRsSubchartProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -298,7 +312,8 @@ export default function MagicRsSubchart({ data, activeIndex, benchmarkLabel, var
   return (
     <div ref={containerRef} style={{ borderRadius: 6, overflow: 'hidden' }}>
       <canvas ref={canvasRef} style={{ display: 'block', width: '100%' }} />
-      {showStats && <MagicRsStats data={data} activeIndex={activeIndex} benchmarkLabel={benchmarkLabel} variant={variant} />}
+      {showStats && <MagicRsStats data={data} activeIndex={activeIndex} benchmarkLabel={benchmarkLabel}
+                                 variant={variant} lookbackData={lookbackData} cadence={cadence} />}
     </div>
   );
 }
@@ -311,7 +326,8 @@ export default function MagicRsSubchart({ data, activeIndex, benchmarkLabel, var
  *  what they meant. A subchart that needs arithmetic to interpret is not
  *  helping anyone decide anything.
  */
-function MagicRsStats({ data, activeIndex, benchmarkLabel, variant = 'long' }: MagicRsSubchartProps) {
+function MagicRsStats({ data, activeIndex, benchmarkLabel, variant = 'long',
+  lookbackData, cadence = 'D' }: MagicRsSubchartProps) {
   const idx = Math.min(activeIndex, data.length - 1);
   const cur = data[idx];
   if (!cur) return null;
@@ -321,29 +337,50 @@ function MagicRsStats({ data, activeIndex, benchmarkLabel, variant = 'long' }: M
   const diff = rs != null && ma != null ? rs - ma : null;
   const zone = cur.magic_rs_zone;
 
+  // Everything below counts BARS BACKWARDS, so it must run over the full
+  // series, not a zoomed window. `data` may be clipped to the visible range;
+  // positions do not carry between two arrays, so the active bar is re-found
+  // by DATE — the same rule ChartView already uses for activeIndex. Falls back
+  // to `data` when no unclipped series was supplied (three of four call sites).
+  const back$ = lookbackData && lookbackData.length ? lookbackData : data;
+  const backIdx = back$ === data
+    ? idx
+    : back$.findIndex((x: MagicRsDataPoint) => x.trade_date === cur.trade_date);
+  const bars = backIdx >= 0 ? back$ : data;
+  const bi = backIdx >= 0 ? backIdx : idx;
+
   // Consecutive bars on the current side of the MA — Pine's "Trend Duration".
   let held = 0;
   if (rs != null && ma != null) {
     const above = rs > ma;
-    for (let i = idx; i >= 0; i--) {
-      const d = data[i];
+    for (let i = bi; i >= 0; i--) {
+      const d = bars[i];
       if (d.magic_rs == null || d.magic_ma == null) break;
       if (d.magic_rs > d.magic_ma !== above) break;
       held += 1;
     }
   }
 
-  // 1D / 1W / 1M — change in Magic RS over 1, 5 and 20 BARS. Not true weekly or
-  // monthly series: long MagicRS needs 145 bars, which weekly and monthly
-  // histories never reach (the migration-169 lesson), so a bar-count lookback
-  // is the honest form of the same question.
+  // Change in Magic RS over 5 / 22 / 66 BARS — the house clock. Every other
+  // horizon in this product is 5/22/66 (ret_5d/22d/66d, avg_amt_*, rel_*_n500,
+  // score_5d/22d); MagicRS was the one measure speaking 1/5/20 while labelled
+  // "1D/1W/1M". Point differences, never percent: magic_rs is already a
+  // percentage deviation from its own 144-bar mean.
+  //
+  // The unit follows `cadence`, because `variant='short'` data is weekly or
+  // monthly bars — 66 of those is five and a half years, not three months, and
+  // borrowing the 'D' would be the same class of mislabel as calling a 21-bar
+  // RS a 144-bar one. A horizon the series is too short to reach reads blank,
+  // which is the honest answer rather than a number from the wrong bar.
   const chg = (back: number): number | null => {
-    const a = data[idx - back]?.magic_rs;
+    const a = bars[bi - back]?.magic_rs;
     const b = rs;
     return a != null && b != null ? b - a : null;
   };
   const frames: { label: string; v: number | null }[] = [
-    { label: '1D', v: chg(1) }, { label: '1W', v: chg(5) }, { label: '1M', v: chg(20) },
+    { label: `5${cadence}`, v: chg(5) },
+    { label: `22${cadence}`, v: chg(22) },
+    { label: `66${cadence}`, v: chg(66) },
   ];
 
   // D39: 'Strong Bull' / 'Strong Bear' are DB values, never display text. The
@@ -427,7 +464,7 @@ function MagicRsStats({ data, activeIndex, benchmarkLabel, variant = 'long' }: M
       </div>
 
       <div className="px-3 pb-2 text-[9px] font-mono text-[var(--text-faint)] leading-relaxed">
-        {variant === 'short' ? 'SHORT 21-bar RS, 10-bar average — the only series weekly/monthly carry' : '144-bar RS, 60-bar average'} · 1D/1W/1M are 1, 5 and 20-bar changes
+        {variant === 'short' ? 'SHORT 21-bar RS, 10-bar average — the only series weekly/monthly carry' : '144-bar RS, 60-bar average'} · changes are over 5, 22 and 66 bars
         {short && ` · series starts ${withRs[0].trade_date} (${withRs.length} of ${data.length} bars)`}
       </div>
     </div>

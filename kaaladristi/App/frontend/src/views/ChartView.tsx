@@ -965,6 +965,13 @@ export default function ChartView() {
                   activeIndex={magicRsActiveIdx}
                   benchmarkLabel="NIFTY 500"
                   variant={usingShortRs ? 'short' : 'long'}
+                  // magicRsVisible is clipped to the zoom; the backward-looking
+                  // numbers must not be. Without this the 66-bar pill goes
+                  // blank on any window under 67 bars and "held N bars" is
+                  // capped by the pan position — the same stock reading
+                  // differently depending on where the chart sits.
+                  lookbackData={magicRsData}
+                  cadence={tf === 'weekly' ? 'W' : tf === 'monthly' ? 'M' : 'D'}
                 />}
               chart={
                 <SignalLineChart

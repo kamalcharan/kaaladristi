@@ -52,6 +52,7 @@ DAILY_STEPS: list[tuple[str, Optional[str]]] = [
     ('nse_magic_rs',          'NSE'),
     ('bse_magic_rs',          'BSE'),
     ('rs_percentile',         None),   # ranks by magic_rs — must run after magic_rs, before vani_flags
+    ('magic_rs_momentum',     None),   # magic_rs 5/22/66-bar changes + align (migration 219) — LAGs magic_rs, so after it
     ('supertrend',            None),
     ('rolling_metrics',       None),
     ('d365',                  None),
@@ -124,9 +125,9 @@ DIMENSION_DEPENDENTS: dict[str, list[str]] = {
 
     # 'rs_percentile ranks by magic_rs - must run after magic_rs, before
     # vani_flags'; wg_journeys reads the final daily zones.
-    'nse_magic_rs':           ['rs_percentile', 'dots', 'industry_composites',
-                               'wg_journeys'],
-    'bse_magic_rs':           ['rs_percentile', 'dots'],
+    'nse_magic_rs':           ['rs_percentile', 'magic_rs_momentum', 'dots',
+                               'industry_composites', 'wg_journeys'],
+    'bse_magic_rs':           ['rs_percentile', 'magic_rs_momentum', 'dots'],
     'index_magic_rs':         ['index_returns'],
     'rs_percentile':          ['vani_flags'],
 

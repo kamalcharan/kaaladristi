@@ -164,7 +164,7 @@ export const ALL_FIELDS: Record<string, FieldConfig> = {
     key: 'magic_rs',
     label: 'MagicRS vs N500',
     shortLabel: 'MRS',
-    tooltip: 'MagicRS — Relative Strength benchmarked against NIFTY 500 (CNX500). Proprietary 144-bar momentum oscillator: positive = outperforming NIFTY 500, negative = underperforming. Color reflects zone: Strong Uptrend (green) → Strong Downtrend (red).',
+    tooltip: 'MagicRS — Relative Strength vs NIFTY 500 (CNX500): the stock/index price ratio measured against its OWN 144-bar average of that ratio. Positive means the ratio sits above its own recent norm — NOT that the stock is outperforming the index outright, which is a different and much stronger claim. Colour reflects the stored zone.',
     type: 'zone',
     width: 72,
     colorFn: (_val: any, row?: any) => {
@@ -194,6 +194,45 @@ export const ALL_FIELDS: Record<string, FieldConfig> = {
       lowMax:  40,
       highMin: 70,
     },
+  },
+
+  // MagicRS momentum on the house clock (migration 219). POINT differences,
+  // not percentages — magic_rs is already a percentage deviation, so a percent
+  // change of a percent is not a readable quantity.
+  magic_rs_chg_5d: {
+    key: 'magic_rs_chg_5d',
+    label: 'MRS 5D',
+    shortLabel: 'M5',
+    tooltip: 'Change in MagicRS over the last 5 bars, in points. Positive = relative strength rising. Blank when the stock has no MagicRS reading 5 bars back — a gap, never zero.',
+    type: 'number',
+    width: 62,
+  },
+
+  magic_rs_chg_22d: {
+    key: 'magic_rs_chg_22d',
+    label: 'MRS 22D',
+    shortLabel: 'M22',
+    tooltip: 'Change in MagicRS over the last 22 bars, in points. Positive = relative strength rising.',
+    type: 'number',
+    width: 62,
+  },
+
+  magic_rs_chg_66d: {
+    key: 'magic_rs_chg_66d',
+    label: 'MRS 66D',
+    shortLabel: 'M66',
+    tooltip: 'Change in MagicRS over the last 66 bars, in points. Positive = relative strength rising.',
+    type: 'number',
+    width: 62,
+  },
+
+  magic_rs_align: {
+    key: 'magic_rs_align',
+    label: 'RS Align',
+    shortLabel: 'ALN',
+    tooltip: 'How many of the 5/22/66-bar MagicRS changes are rising, 0–3. Blank unless all three are measurable — a stock without 66 bars of MagicRS history is not scored rather than scored on a partial set. Observational only: it describes measured relative strength across three horizons, not a view on price.',
+    type: 'number',
+    width: 58,
   },
 
   dot_signal: {

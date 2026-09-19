@@ -76,6 +76,12 @@ DIMENSION_HEALTH: dict[str, tuple[str, str | None, list[str] | None, float | Non
     # split). Threshold 0.90 leaves margin below that ~95% ceiling while still
     # catching the 0% regression that occurred when this step went unwired.
     'rs_percentile':         ('km_equity_eod',    'equity_id', ['rs_percentile'],                                          0.90),
+    # magic_rs_chg_5d/22d/66d + magic_rs_align (migration 219). Health is read
+    # off chg_5d, NOT chg_66d: chg_66d needs 66 magic_rs bars on top of the 145
+    # magic_rs itself needs, so a legitimately young listing drags that column's
+    # fill rate down and would make the dimension read unhealthy for a reason
+    # that is not a fault. chg_5d tracks rs_percentile's own rate closely.
+    'magic_rs_momentum':     ('km_equity_eod',    'equity_id', ['magic_rs_chg_5d'],                                       0.88),
     'supertrend':            ('km_equity_eod',    'equity_id', ['supertrend_dir'],                                         0.90),
     'rolling_metrics':       ('km_equity_eod',    'equity_id', ['w52_high', 'w52_low', 'lifetime_high'],                   0.95),
     'd365':                  ('km_equity_eod',    'equity_id', ['d365_pct_chng'],                                          0.85),
@@ -145,6 +151,7 @@ LABELS: dict[str, str] = {
     'nse_magic_rs':          'NSE Magic RS',
     'bse_magic_rs':          'BSE Magic RS',
     'rs_percentile':         'RS Percentile',
+    'magic_rs_momentum':     'Magic RS Momentum',
     'supertrend':            'SuperTrend',
     'rolling_metrics':       'Rolling Metrics',
     'd365':                  'D365 % Change',
@@ -702,6 +709,7 @@ DIMENSION_ORDER = [
     'nse_magic_rs',
     'bse_magic_rs',
     'rs_percentile',
+    'magic_rs_momentum',
     'supertrend',
     'rolling_metrics',
     'd365',

@@ -46,6 +46,7 @@ FIXABLE_DIMENSIONS = frozenset({
     'index_indicators', 'nse_equity_indicators', 'bse_equity_indicators',
     'index_flow', 'nse_flow', 'bse_flow',
     'index_magic_rs', 'nse_magic_rs', 'bse_magic_rs', 'rs_percentile',
+    'magic_rs_momentum',
     'supertrend', 'rolling_metrics', 'd365', 'stage_classification', 'vani_flags',
     'equity_weekly', 'equity_monthly',
     'index_returns', 'industry_composites', 'market_breadth', 'breadth_roc', 'index_breadth',
@@ -407,6 +408,19 @@ def handle_rs_percentile(conn, trade_date: date, force: bool,
     from scripts.backfill_rs_percentile import compute_rs_percentile_for_date
     return _handle_script('rs_percentile', conn, trade_date, force, on_progress,
                           compute_rs_percentile_for_date)
+
+
+def handle_magic_rs_momentum(conn, trade_date: date, force: bool,
+                             exchange: Optional[str], on_progress: ProgressFn) -> HandlerResult:
+    # magic_rs_chg_5d/22d/66d + magic_rs_align (migration 219). MagicRS momentum
+    # on the house clock, which until now existed only as a client-side
+    # derivation inside one chart widget — invisible to every scanner, every
+    # SQL filter and VaNi. Runs after magic_rs (both exchanges) because it
+    # LAGs that column; DIMENSION_DEPENDENTS carries the edge so a magic_rs fix
+    # recomputes momentum instead of leaving it derived from superseded values.
+    from scripts.compute_magic_rs_momentum import compute_magic_rs_momentum_for_date
+    return _handle_script('magic_rs_momentum', conn, trade_date, force, on_progress,
+                          compute_magic_rs_momentum_for_date)
 
 
 def handle_d365(conn, trade_date: date, force: bool,
@@ -1274,6 +1288,8 @@ def handle(dimension: str, conn, trade_date: date, force: bool,
         return handle_equity_monthly(conn, trade_date, force, exchange, on_progress)
     if dimension == 'rs_percentile':
         return handle_rs_percentile(conn, trade_date, force, exchange, on_progress)
+    if dimension == 'magic_rs_momentum':
+        return handle_magic_rs_momentum(conn, trade_date, force, exchange, on_progress)
     if dimension == 'd365':
         return handle_d365(conn, trade_date, force, exchange, on_progress)
     if dimension == 'gl_events':
@@ -1322,6 +1338,7 @@ KNOWN_DIMENSIONS = [
     'nse_magic_rs',
     'bse_magic_rs',
     'rs_percentile',
+    'magic_rs_momentum',
     'supertrend',
     'rolling_metrics',
     'd365',
