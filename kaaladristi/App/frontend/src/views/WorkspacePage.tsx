@@ -7,8 +7,7 @@ import { useFrameworkStore } from '@/stores/frameworkStore'
 import WorkspaceToday from '@/components/workspace/WorkspaceToday'
 import WorkspaceMarketMetrics from '@/components/workspace/WorkspaceMarketMetrics'
 import PipelineHealthBar from '@/components/workspace/PipelineHealthBar'
-import SectorPulse from '@/components/domain/DashboardV3/SectorPulse'
-import VaNiHighlightsBoard from '@/components/domain/VaNiHighlightsBoard'
+import WorkspaceDiscovery from '@/components/workspace/WorkspaceDiscovery'
 import AtmosphericBadge from '@/components/domain/AtmosphericBadge'
 import MyBookmarksPanel from '@/components/domain/MyBookmarksPanel'
 import TourLauncher from '@/components/ui/TourLauncher'
@@ -222,18 +221,8 @@ export default function WorkspacePage() {
       )}
 
       {activeTab === 'discovery' && (
-        <div style={{ flex: 1, overflowY: 'auto' }}>
-          {/* Sector Pulse — score-framework rotation verdict (replaced the old
-              industry-rank panel, owner decision 2026-07-06; per-scan preview
-              widgets remain available in their dedicated scanner views) */}
-          <div data-tour="sector-pulse" style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)' }}>
-            <SectorPulse />
-          </div>
-
-          {/* VaNi Highlights — union of ✦ across all scanners, both sides open */}
-          <div data-tour="vani-highlights" style={{ padding: '16px 20px' }}>
-            <VaNiHighlightsBoard />
-          </div>
+        <div style={{ flex: 1, minWidth: 0, overflowY: 'auto' }}>
+          <WorkspaceDiscovery />
         </div>
       )}
 
