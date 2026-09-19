@@ -80,7 +80,7 @@ export default function WorkspaceToday() {
       <div><p>YOUR DECISION WORKSPACE</p><h1>Today</h1><span>All NSE · data through {data.breadthDate ?? 'unavailable'}</span></div>
     </header>
 
-    <section className={`wt-posture wt-${state.tone}`}>
+    <section className={`wt-posture wt-${state.tone}`} data-tour="today-posture">
       <div className="wt-posture-copy">
         <div className="wt-kicker"><i /> Market posture <b>{direction === 'Improving' ? '↑' : direction === 'Deteriorating' ? '↓' : '→'} {direction}</b></div>
         <h2>{state.label}</h2>
@@ -99,14 +99,14 @@ export default function WorkspaceToday() {
       </div>
     </section>
 
-    <section className="wt-evidence" aria-label="Evidence behind today's posture">
+    <section className="wt-evidence" data-tour="today-evidence" aria-label="Evidence behind today's posture">
       <article><header>Participation <b className="bad">{participationBand(latest?.pct_above_20, 20)}</b></header><strong>{fmt(latest?.pct_above_20)}%</strong><span>above 20 EMA</span><div className="wt-horizons"><i style={{ width: `${latest?.pct_above_20 ?? 0}%` }}/><i style={{ width: `${latest?.pct_above_50 ?? 0}%` }}/><i style={{ width: `${latest?.pct_above_150 ?? 0}%` }}/></div><p>{fmt(latest?.pct_above_50)}% above 50 EMA · {fmt(latest?.pct_above_150)}% above 150 EMA</p></article>
       <article><header>Breadth momentum <b className="good">{rocReading.shortLabel}</b></header><strong>{fmt(latestRoc?.roc_13, 4)}</strong><span>ROC 13</span><div className="wt-roc-lines"><i/><b/></div><p>Signal {fmt(latestRoc?.sma_breadth, 4)} · ROC 55 {fmt(latestRoc?.roc_55, 4)}</p></article>
       <article><header>Daily pressure <b className={dailyBuyer ? 'good' : 'bad'}>{dailyBuyer ? 'Buyers' : 'Sellers'}</b></header><div className="wt-pair"><strong>{latest?.up_5pct ?? '—'}<span>Up &gt;5%</span></strong><strong>{latest?.down_5pct ?? '—'}<span>Down &gt;5%</span></strong></div><p>{dailyBuyer ? 'Buying pressure improved this session.' : 'Selling pressure dominated this session.'}</p></article>
       <article><header>Five-day extremes <b>{fiveDayBuyer ? 'Positive' : 'Defensive'}</b></header><div className="wt-pair"><strong>{latest?.up_20pct_5d ?? '—'}<span>Up &gt;20%</span></strong><strong>{latest?.down_20pct_5d ?? '—'}<span>Down &gt;20%</span></strong></div><p>Shows whether the move is broadening into an extreme cluster.</p></article>
     </section>
 
-    <section className="wt-bookmarks">
+    <section className="wt-bookmarks" data-tour="today-bookmarks">
       <header><div><p>PERSONAL RELEVANCE</p><h2>Your stocks in today’s environment</h2><span>MagicRS and 5D/22D flow assessed against the current market posture.</span></div><button onClick={() => navigate('/bookmarks')}>View all {bookmarks.length} bookmarks →</button></header>
       {bookmarks.length === 0 ? <div className="wt-empty">Bookmark stocks from Discovery to see how they fit today’s environment.</div> : <>
         <div className="wt-counts"><span><b>{counts.aligned}</b> Aligned</span><span><b>{counts.selective}</b> Selective</span><span><b>{counts.vulnerable}</b> Vulnerable</span></div>
@@ -122,7 +122,7 @@ export default function WorkspaceToday() {
       <article className="risk"><h3>↓ Renewed deterioration</h3><ul><li>Buying pressure reverses sharply</li><li>Above-50-EMA participation breaks lower</li><li>ROC 13 falls back below its signal</li></ul></article>
     </section>
 
-    <section id="workspace-market-structure" className="wt-structure">
+    <section id="workspace-market-structure" className="wt-structure" data-tour="today-market-structure">
       <header><div><p>SUPPORTING EVIDENCE</p><h2>Market Structure</h2><span>The full participation and momentum evidence behind today’s posture.</span></div><div>{([22, 44, 66] as const).map(period => <button key={period} className={data.period === period ? 'active' : ''} onClick={() => setPeriod(period)}>{period}D</button>)}</div></header>
       <div className="wt-structure-block"><h3>Participation</h3><MarketBreadthChart data={data.breadth} niftyData={data.niftyData} isLoading={data.isLoading} isError={data.isError} indexName="All NSE" maBasis="market" researchMode periodDays={data.period} onPeriodChange={setPeriod}/><MarketStructureHistory breadth={data.breadth} roc={data.roc} mode="breadth" onSelectDate={setDate} coverageContext={data.coverageContext} rocCoverageContext={data.rocCoverageContext}/></div>
       <div className="wt-structure-block"><h3>Momentum</h3><BreadthRocChart data={data.roc} isLoading={data.isLoading} isError={data.isError} researchMode periodDays={data.period} onPeriodChange={setPeriod}/><MarketStructureHistory breadth={data.breadth} roc={data.roc} mode="roc" onSelectDate={setDate} coverageContext={data.coverageContext} rocCoverageContext={data.rocCoverageContext}/></div>

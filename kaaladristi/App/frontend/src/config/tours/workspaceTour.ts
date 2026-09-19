@@ -1,104 +1,53 @@
 // Workspace explainer walk — step definitions (data only, no engine logic).
-//
-// Each step anchors to a `data-tour="<target>"` attribute in WorkspacePage.
-// `tab` tells the tour engine which Workspace tab must be active before the
-// element can exist — the engine switches tabs and waits for the element to
-// mount. A step whose element never appears (widget removed, slow data) is
-// skipped, never breaks the walk.
-//
-// Copy rules (D39 / SEBI): observational voice only — describe what a widget
-// SHOWS, never what to buy/sell or where price is headed.
+// Copy is observational: describe what each view shows without issuing calls.
 
-export type WorkspaceTab = 'today' | 'discovery' | 'myspace' | 'bookmarks'
+export type WorkspaceTab = 'today' | 'discovery' | 'metrics' | 'bookmarks'
 
 export interface TourStep {
-  /** data-tour anchor value. Omit for a centered (element-less) step. */
   target?: string
-  /** Workspace tab that must be active for the target to exist. */
   tab?: WorkspaceTab
   title: string
   body: string
-  /** Preferred popover side (driver.js auto-repositions if it doesn't fit). */
   side?: 'top' | 'bottom' | 'left' | 'right'
 }
 
-export function buildWorkspaceTourSteps(opts: { astro: boolean }): TourStep[] {
-  const steps: TourStep[] = [
+export function buildWorkspaceTourSteps(_opts: { astro: boolean }): TourStep[] {
+  return [
     {
-      // centered welcome — no element
       title: 'Welcome to your Workspace',
-      body: 'This is your daily starting point — market weather, breadth, and the astro layer in one place. A 60-second walk through what each panel shows. You can skip anytime and replay it later from the ? button.',
+      body: 'This is your daily decision starting point: market posture, supporting evidence, and what it means for your bookmarked stocks. You can skip anytime and replay it later from the ? button.',
     },
     {
-      target: 'ticker-rail',
-      tab: 'today',
-      title: 'Index cards',
-      body: 'NIFTY 50, BANK, 500 and India VIX at a glance — last close, day change, and a micro-trend. The quickest read of how the broad market closed.',
-      side: 'bottom',
+      target: 'today-posture', tab: 'today', title: 'Today’s market posture', side: 'bottom',
+      body: 'The breadth gauge turns the market-wide evidence into a clear operating posture. Its direction and score show whether conditions are broadening, selective, or defensive.',
     },
     {
-      target: 'breadth-controls',
-      tab: 'today',
-      title: 'One selector, three views',
-      body: 'This switch drives everything below it — breadth rotation, the breadth chart, and momentum — for NIFTY 50, 500 or BANK. "Open Market Breadth" goes to the full structure page.',
-      side: 'bottom',
+      target: 'today-evidence', tab: 'today', title: 'Evidence behind the posture', side: 'top',
+      body: 'Participation, breadth momentum, daily pressure and five-day extremes explain why the current posture was assigned.',
     },
     {
-      target: 'breadth-rotation',
-      tab: 'today',
-      title: 'How breadth is moving',
-      body: 'A read on participation: how many stocks in the chosen index are trading above their key averages, and which way that count has been rotating recently.',
-      side: 'top',
+      target: 'today-bookmarks', tab: 'today', title: 'Your stocks in context', side: 'top',
+      body: 'Your bookmarked stocks are assessed against today’s market environment using MagicRS and short- versus longer-term flow.',
     },
     {
-      target: 'breadth-charts',
-      tab: 'today',
-      title: 'Breadth & momentum',
-      body: 'Left: the breadth series itself with its historical zone. Right: its rate of change — whether participation is expanding, slowing or contracting. These describe conditions, not predictions.',
-      side: 'top',
+      target: 'today-market-structure', tab: 'today', title: 'Full market evidence', side: 'top',
+      body: 'The participation and momentum histories support the summary above and let you inspect how the current condition developed.',
+    },
+    {
+      target: 'sector-pulse', tab: 'discovery', title: 'Discovery · Sector Pulse', side: 'bottom',
+      body: 'See where short-term flow and longer-term strength are concentrated across sectors and industries.',
+    },
+    {
+      target: 'vani-highlights', tab: 'discovery', title: 'VaNi Highlights', side: 'top',
+      body: 'Stocks where multiple scanner conditions align, presented as observations for further research.',
+    },
+    {
+      target: 'market-metrics', tab: 'metrics', title: 'Market Metrics', side: 'bottom',
+      body: 'Use the headline indices and India VIX as context after Today has established the broader market posture. Astro context will join this view when it is ready.',
+    },
+    {
+      target: 'tour-launcher', title: 'Replay anytime', side: 'bottom',
+      body: 'Use this ? button whenever you want to walk through the Workspace again.',
     },
   ]
-
-  if (opts.astro) {
-    // insert the astro row between rotation and the charts (matches page order)
-    steps.splice(4, 0, {
-      target: 'astro-row',
-      tab: 'today',
-      title: 'The astro layer',
-      body: 'Today’s Panchangam alongside the current planetary regime. Kāla-Drishti pairs this layer with market data so you can see when astronomical windows and market conditions have historically coincided.',
-      side: 'top',
-    })
-  }
-
-  steps.push(
-    {
-      target: 'sector-pulse',
-      tab: 'discovery',
-      title: 'Discovery · Sector Pulse',
-      body: 'Where money has been rotating — sectors ranked by the score framework, with rotation verdicts. A map of participation across the market, updated daily.',
-      side: 'bottom',
-    },
-    {
-      target: 'vani-highlights',
-      tab: 'discovery',
-      title: 'VaNi Highlights',
-      body: 'Stocks flagged ✦ across all scanners in one board. VaNi is the AI layer — it explains conditions in plain language, and never issues trade calls.',
-      side: 'top',
-    },
-    {
-      target: 'workspace-canvas',
-      tab: 'myspace',
-      title: 'My Space — yours to build',
-      body: 'A grid you compose yourself: add or remove blocks, widgets and astro overlays from the Catalog. What you save here becomes your personal framework.',
-      side: 'bottom',
-    },
-    {
-      target: 'tour-launcher',
-      title: 'Replay anytime',
-      body: 'That’s the walk. This ? button replays it whenever you want a refresher. Explore at your own pace.',
-      side: 'bottom',
-    },
-  )
-
-  return steps
 }

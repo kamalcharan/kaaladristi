@@ -1,11 +1,11 @@
-import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
+import { useEffect, useState, useMemo, useRef } from 'react'
 import { Navigate } from 'react-router-dom'
 import { useVaNiStore } from '@/stores/vaniStore'
 import { Loader2, X } from 'lucide-react'
 import { useAuthStore } from '@/stores/authStore'
 import { useFrameworkStore } from '@/stores/frameworkStore'
-import WorkspaceCanvas from '@/components/domain/Workspace/WorkspaceCanvas'
 import WorkspaceToday from '@/components/workspace/WorkspaceToday'
+import WorkspaceMarketMetrics from '@/components/workspace/WorkspaceMarketMetrics'
 import PipelineHealthBar from '@/components/workspace/PipelineHealthBar'
 import SectorPulse from '@/components/domain/DashboardV3/SectorPulse'
 import VaNiHighlightsBoard from '@/components/domain/VaNiHighlightsBoard'
@@ -18,7 +18,7 @@ import { markGuideWalked, tourRequest } from '@/services/guideProgress'
 import { maybeRecordDay2Return } from '@/services/uxEvents'
 import { buildWorkspaceTourSteps } from '@/config/tours/workspaceTour'
 
-type ActiveTab = 'today' | 'discovery' | 'myspace' | 'bookmarks'
+type ActiveTab = 'today' | 'discovery' | 'metrics' | 'bookmarks'
 
 const _MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
 function fmtDateChip(d: Date): string {
@@ -30,28 +30,26 @@ export default function WorkspacePage() {
   const { framework, isLoading, error, loadFramework } = useFrameworkStore()
 
   const icpMode = profile?.icp_mode ?? 'astro'
-  const [activeTab, setActiveTab] = useState<ActiveTab>(icpMode === 'technical' ? 'discovery' : 'today')
+  const [activeTab, setActiveTab] = useState<ActiveTab>('today')
 
   // Tell VaNi which page it is on. /workspace is one route over four tabs, and
   // usePageContext maps by route alone — so every tab inherited `index_vp`,
-  // whose single Mercury intent was chosen for My Space's ribbon (owner
-  // 2026-07-22). On Today that meant one irrelevant question beside breadth,
-  // ROC, the ticker rail and panchang — exactly the eight `dashboard` intents.
-  // My Space and Bookmarks keep index_vp, so nothing regresses there.
+  // which was designed for the former personal canvas. Today now uses the
+  // market-structure context, while the other tabs receive matching intents.
+  // Bookmarks retains its stock-level context; Market Metrics uses the broad
+  // dashboard context for index and volatility questions.
   const setPageOverride = useVaNiStore((s) => s.setPageOverride)
   useEffect(() => {
     const byTab: Record<ActiveTab, 'dashboard' | 'index_vp' | 'market_structure'> = {
       today: 'market_structure',
       discovery: 'dashboard',   // SectorPulse — dashboard.rotation_overview
-      myspace: 'index_vp',
+      metrics: 'dashboard',
       bookmarks: 'index_vp',
     }
     setPageOverride(byTab[activeTab])
     return () => setPageOverride(null)
   }, [activeTab, setPageOverride])
 
-  const [drawerOpen, setDrawerOpen]             = useState(false)
-  const [activePairKey, setActivePairKey]       = useState<string | null>(null)
   const [betaBarDismissed, setBetaBarDismissed] = useState(false)
 
   const isBeta = profile?.tier === 'beta'
@@ -66,11 +64,6 @@ export default function WorkspacePage() {
       localStorage.setItem(key, '1')
     }
   }, [profile?.id, today])
-
-  const openDrawer = useCallback((key: string | null) => {
-    setActivePairKey(key)
-    setDrawerOpen(true)
-  }, [])
 
   // ── Explainer walk — auto-starts on first visit (after welcome-modal ack),
   //    replayable via the ? launcher in the tab bar ──
@@ -182,9 +175,9 @@ export default function WorkspacePage() {
         background: 'var(--card-soft)', borderBottom: '1px solid var(--border)',
         padding: '0 20px', position: 'sticky', top: 48, zIndex: 39,
       }}>
-        {(['today', 'discovery', 'myspace', 'bookmarks'] as const).map((tab) => {
-          const labels: Record<ActiveTab, string> = { today: 'Today', discovery: 'Discovery', myspace: 'My Space', bookmarks: 'My Bookmarks' }
-          const icons:  Record<ActiveTab, string> = { today: '◐', discovery: '⊙', myspace: '⊞', bookmarks: '☆' }
+        {(['today', 'discovery', 'metrics', 'bookmarks'] as const).map((tab) => {
+          const labels: Record<ActiveTab, string> = { today: 'Today', discovery: 'Discovery', metrics: 'Market Metrics', bookmarks: 'My Bookmarks' }
+          const icons:  Record<ActiveTab, string> = { today: '◐', discovery: '⊙', metrics: '◈', bookmarks: '☆' }
           const active = activeTab === tab
           return (
             <button
@@ -232,7 +225,7 @@ export default function WorkspacePage() {
         <div style={{ flex: 1, overflowY: 'auto' }}>
           {/* Sector Pulse — score-framework rotation verdict (replaced the old
               industry-rank panel, owner decision 2026-07-06; per-scan preview
-              widgets remain available as My Space catalog widgets) */}
+              widgets remain available in their dedicated scanner views) */}
           <div data-tour="sector-pulse" style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)' }}>
             <SectorPulse />
           </div>
@@ -244,14 +237,9 @@ export default function WorkspacePage() {
         </div>
       )}
 
-      {activeTab === 'myspace' && (
-        <div data-tour="workspace-canvas" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-          <WorkspaceCanvas
-            framework={framework!}
-            onOpenDrawer={openDrawer}
-            onMorningBrief={() => setActiveTab('today')}
-            islandOffset={isBeta && !betaBarDismissed ? 36 : 0}
-          />
+      {activeTab === 'metrics' && (
+        <div style={{ flex: 1, overflowY: 'auto' }}>
+          <WorkspaceMarketMetrics />
         </div>
       )}
 
@@ -262,12 +250,6 @@ export default function WorkspacePage() {
           </div>
         </div>
       )}
-
-      {/* Correlation Drawer — HIDDEN (owner 2026-07-22): unpolished/broken
-          (known cache-clear bug) and, for astro pairs, showed unvetted
-          directional stats with no base rate. Component + state kept intact
-          (drawerOpen/activePairKey/openDrawer) so this is a one-line revert
-          if the engine is rebuilt. See POA-astro-layer-mercury-launch.md. */}
 
       {/* Beta footer bar — fixed to bottom, session-dismissable, beta tier only */}
       {isBeta && !betaBarDismissed && (
