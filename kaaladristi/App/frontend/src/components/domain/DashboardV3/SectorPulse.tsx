@@ -136,12 +136,15 @@ export function SectorPulseContent({ data, isLoading = false, embedded = false }
               color: BUCKET_META[bucket].color, fontSize: 9, textTransform: 'uppercase', letterSpacing: '.06em',
             }}><b style={{ fontSize: 14 }}>{buckets[bucket].length}</b>{BUCKET_META[bucket].title}</span>)}
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.65fr) minmax(280px, .85fr)', gridTemplateRows: 'auto auto', gap: 12 }}>
+          <div className="sector-pulse-layout" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 12 }}>
           {(Object.keys(BUCKET_META) as Bucket[]).map((bucket) => {
             const meta = BUCKET_META[bucket];
             const rows = buckets[bucket];
             const all = expanded.includes(bucket);
             const overflow = rows.length - MAX_PER_BUCKET;
+            const shown = rows.slice(0, all ? rows.length : MAX_PER_BUCKET);
+            const splitAt = bucket === 'entering' ? Math.ceil(shown.length / 2) : shown.length;
+            const columns = bucket === 'entering' ? [shown.slice(0, splitAt), shown.slice(splitAt)] : [shown];
             return (
               <div
                 key={bucket}
@@ -151,9 +154,7 @@ export function SectorPulseContent({ data, isLoading = false, embedded = false }
                   borderTop: `2px solid ${meta.color}`,
                   borderRadius: 12,
                   padding: bucket === 'entering' ? '16px 16px 12px' : '12px 12px 10px',
-                  gridColumn: bucket === 'entering' ? '1' : '2',
-                  gridRow: bucket === 'entering' ? '1 / span 2' : undefined,
-                  minHeight: bucket === 'entering' ? 300 : undefined,
+                  gridColumn: bucket === 'entering' ? '1 / -1' : undefined,
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
@@ -165,32 +166,27 @@ export function SectorPulseContent({ data, isLoading = false, embedded = false }
                     {rows.length}
                   </span>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0 6px 4px', borderBottom: '1px solid var(--border)', marginBottom: 2 }}>
-                  <span style={{ ...MONO, fontSize: 9, letterSpacing: '.07em', textTransform: 'uppercase', color: 'var(--text-faint)', flex: 1 }}>Sector</span>
-                  <span style={{ ...MONO, fontSize: 9, letterSpacing: '.07em', textTransform: 'uppercase', color: 'var(--text-faint)', width: 28, textAlign: 'right', flexShrink: 0 }}>5D</span>
-                  <span style={{ ...MONO, fontSize: 9, letterSpacing: '.07em', textTransform: 'uppercase', color: 'var(--text-faint)', width: 28, textAlign: 'right', flexShrink: 0 }}>22D</span>
-                  <span style={{ ...MONO, fontSize: 9, letterSpacing: '.07em', textTransform: 'uppercase', color: 'var(--text-faint)', width: 72, flexShrink: 0 }}>Trend</span>
-                </div>
                 {rows.length === 0 ? (
-                  <div style={{ ...MONO, fontSize: 10, color: 'var(--text-faint)', padding: '6px 6px 8px' }}>
-                    none today
-                  </div>
+                  <div style={{ ...MONO, fontSize: 10, color: 'var(--text-faint)', padding: '6px 6px 8px' }}>none today</div>
                 ) : (
                   <>
-                    {rows.slice(0, all ? rows.length : MAX_PER_BUCKET).map((row) => (
-                      <PulseRow key={row.id} row={row} onClick={() => navigate(`/sector-rotation/${row.id}`)} />
-                    ))}
+                    <div className={bucket === 'entering' ? 'sector-pulse-entering-grid' : undefined} style={{ display: 'grid', gridTemplateColumns: bucket === 'entering' ? 'repeat(2, minmax(0, 1fr))' : '1fr', gap: bucket === 'entering' ? 18 : 0 }}>
+                      {columns.map((column, columnIndex) => <div key={columnIndex}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0 6px 4px', borderBottom: '1px solid var(--border)', marginBottom: 2 }}>
+                          <span style={{ ...MONO, fontSize: 9, letterSpacing: '.07em', textTransform: 'uppercase', color: 'var(--text-faint)', flex: 1 }}>Sector</span>
+                          <span style={{ ...MONO, fontSize: 9, letterSpacing: '.07em', textTransform: 'uppercase', color: 'var(--text-faint)', width: 28, textAlign: 'right', flexShrink: 0 }}>5D</span>
+                          <span style={{ ...MONO, fontSize: 9, letterSpacing: '.07em', textTransform: 'uppercase', color: 'var(--text-faint)', width: 28, textAlign: 'right', flexShrink: 0 }}>22D</span>
+                          <span style={{ ...MONO, fontSize: 9, letterSpacing: '.07em', textTransform: 'uppercase', color: 'var(--text-faint)', width: 72, flexShrink: 0 }}>Trend</span>
+                        </div>
+                        {column.map((row) => <PulseRow key={row.id} row={row} onClick={() => navigate(`/sector-rotation/${row.id}`)} />)}
+                      </div>)}
+                    </div>
                     {overflow > 0 && (
                       <button
                         onClick={() => embedded ? setExpanded(current => all ? current.filter(b => b !== bucket) : [...current, bucket]) : navigate('/sector-rotation')}
                         aria-expanded={embedded ? all : undefined}
-                        style={{
-                          ...MONO, fontSize: 10, color: 'var(--text-muted)', background: 'none',
-                          border: 'none', cursor: 'pointer', padding: '4px 6px',
-                        }}
-                      >
-                        {all ? 'Show fewer' : `+${overflow} more →`}
-                      </button>
+                        style={{ ...MONO, fontSize: 10, color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer', padding: '7px 6px 2px' }}
+                      >{all ? 'Show fewer' : `+${overflow} more →`}</button>
                     )}
                   </>
                 )}
