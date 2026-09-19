@@ -65,10 +65,9 @@ try {
     assert.equal(await firstRow.locator('.heatmap-cell').count(),66);
     const latest=firstRow.locator('[data-date="2026-09-18"]');
     assert.match(await latest.getAttribute('aria-label'),/36.3%/);
-    assert.equal(await latest.locator('.heatmap-marker').textContent(),'↑');
+    assert.equal(await latest.locator('.heatmap-marker').count(),0);
     assert.equal(await firstRow.locator('[data-date="2026-09-15"]').getAttribute('data-warning'),'true');
-    assert.equal(await firstRow.locator('[data-date="2026-09-16"] .heatmap-marker').textContent(),'');
-    assert.equal(await latest.locator('.heatmap-marker').evaluate(e=>getComputedStyle(e).animationName),'none');
+    assert.equal(await firstRow.locator('[data-date="2026-09-16"] .heatmap-marker').count(),0);
     await latest.click();
     await page.getByText('Linked date: 2026-09-18',{exact:false}).waitFor();
     assert.equal(await page.locator('.heatmap-cell[data-date="2026-09-18"][data-highlighted="true"]').count(),10);
@@ -77,12 +76,10 @@ try {
     await page.waitForFunction(() => [...document.querySelectorAll('.recharts-label')].filter(n=>n.textContent==='18 Sep').length===2);
     const colors=await firstRow.locator('.heatmap-fill').evaluateAll(nodes=>nodes.slice(0,3).map(n=>getComputedStyle(n).backgroundColor));
     assert.notEqual(colors[0],colors[1]);
-    await heatmap.getByLabel('Show values').check();
     assert.equal(await latest.locator('.heatmap-fill').textContent(),'36.3%');
     await latest.focus();
     await page.keyboard.press('Enter');
     assert.equal(await latest.getAttribute('data-highlighted'),'true');
-    await heatmap.getByLabel('Show values').uncheck();
     assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+2),'No document overflow on phone or desktop');
     await heatmap.screenshot({path:path.join(output,`breadth-${theme}-${mode}-${width}.png`)});
     const momentum=page.getByRole('region',{name:'Momentum heatmap'});
@@ -106,7 +103,7 @@ try {
       assert(highlighted<'2026-09-10');
     }
     assert.deepEqual(errors,[]);
-    console.log(`PASS UI ${theme} ${mode} ${width}: shades, date order/linking, arrows, coverage, reduced motion, values, keyboard, overflow`);
+    console.log(`PASS UI ${theme} ${mode} ${width}: fixed bands, date order/linking, no arrows, coverage, visible values, keyboard, overflow`);
     await context.close();
   }
   console.log('Screenshots:',output);

@@ -6,7 +6,6 @@ import { participationColor, magnitudeColor, rocColor, coverageWarnings, partici
   rocTransition, participationChange, countContext, type HeatmapTransition } from '@/lib/heatmapReading';
 import '@/styles/structureHeatmap.css';
 
-const seenTransitions = new Set<string>();
 const sessionDate = (iso: string) => {
   const [, month, day] = iso.split('-');
   return `${Number(day)} ${MONTH_FULL[Number(month) - 1]} ${iso.slice(0, 4)}`;
@@ -16,7 +15,7 @@ type Row = { label: string; values: (number | null)[]; digits: number; suffix: s
   windowWarning?: (i: number) => string | undefined };
 
 export default function MarketStructureHistory({ breadth, roc, mode, onSelectDate, maBasis = 'market',
-  focusedDate, onDateFocus, onInspectDate, animateLatest = false, coverageContext, rocCoverageContext,
+  focusedDate, onDateFocus, onInspectDate, coverageContext, rocCoverageContext,
 }: {
   maBasis?: 'market' | 'index'; breadth: MarketBreadthDay[]; roc: BreadthRocDay[]; mode: 'breadth' | 'roc';
   onSelectDate: (date: string) => void; focusedDate?: string | null;
@@ -25,11 +24,8 @@ export default function MarketStructureHistory({ breadth, roc, mode, onSelectDat
 }) {
   const detailId = useId();
   const scrollRef = useRef<HTMLDivElement>(null);
-  const [showValues, setShowValues] = useState(false);
   const [activeCell, setActiveCell] = useState<{ date: string; row: string } | null>(null);
   const [localDate, setLocalDate] = useState<string | null>(null);
-  const [pulsing, setPulsing] = useState<string[]>([]);
-  const ownedPulses = useRef<string[]>([]);
   const [scrollable, setScrollable] = useState({ newer: false, older: false });
   const updateScroll = useCallback(() => {
     const element = scrollRef.current;
@@ -46,7 +42,7 @@ export default function MarketStructureHistory({ breadth, roc, mode, onSelectDat
     return () => observer.disconnect();
   }, [updateScroll]);
   const dates = (mode === 'breadth' ? breadth : roc).map(r => r.trade_date);
-  useEffect(updateScroll, [dates.length, showValues, updateScroll]);
+  useEffect(updateScroll, [dates.length, updateScroll]);
   const scrollSessions = (direction: number) => {
     const element = scrollRef.current;
     if (!element) return;
@@ -88,20 +84,6 @@ export default function MarketStructureHistory({ breadth, roc, mode, onSelectDat
         windowWarning: i => blocked(i, leg < 2 ? 1 : 5) ? 'Return window includes reduced or missing coverage. The mover count may include stale prices.' : undefined });
     });
   }
-  const latestIndex = dates.length - 1;
-  const freshKeys = animateLatest && latestIndex >= 0 ? rows.flatMap(row => {
-    const event = row.transition(latestIndex);
-    return event ? [`${mode}:${dates[latestIndex]}:${row.label}:${event.direction}`] : [];
-  }).join('|') : '';
-  useEffect(() => {
-    const keys = freshKeys.split('|').filter(key => key && (!seenTransitions.has(key) || ownedPulses.current.includes(key)));
-    ownedPulses.current = keys;
-    keys.forEach(key => seenTransitions.add(key));
-    if (seenTransitions.size > 512) Array.from(seenTransitions).slice(0, 256).forEach(key => seenTransitions.delete(key));
-    setPulsing(keys);
-    const timer = setTimeout(() => setPulsing([]), 2700);
-    return () => clearTimeout(timer);
-  }, [freshKeys]);
   const selectedDate = focusedDate === undefined ? localDate : focusedDate;
   const inspectDate = selectedDate ?? activeCell?.date;
   const inspectedIndex = dates.indexOf(inspectDate ?? '');
@@ -118,10 +100,9 @@ export default function MarketStructureHistory({ breadth, roc, mode, onSelectDat
   return <section className="structure-heatmap glass-card rounded-xl p-4" aria-label={`${mode === 'breadth' ? 'Participation' : 'Momentum'} heatmap`}>
     <div className="flex flex-wrap items-center justify-between gap-3">
       <h3 className="text-sm font-semibold">{mode === 'breadth' ? 'Participation' : 'Momentum'} heatmap</h3>
-      <label className="text-xs flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={showValues} onChange={e => setShowValues(e.target.checked)} /> Show values</label>
     </div>
     <p className="text-xs text-muted my-3">Latest on the left ← · {dates.length} sessions · Hover, focus or tap a cell to inspect. Charts keep latest on the right.</p>
-    {Array.from(warnings.keys()).some(date => dates.includes(date)) && <p role="status" className="text-xs text-muted mb-3">⚠ Striped cells have missing or sharply reduced coverage. Their change arrows are suppressed.</p>}
+    {Array.from(warnings.keys()).some(date => dates.includes(date)) && <p role="status" className="text-xs text-muted mb-3">⚠ Striped cells have missing or sharply reduced coverage. Treat their values cautiously.</p>}
     <div className="flex flex-wrap items-center justify-between gap-3 mb-2 text-[11px] text-muted">
       <span>Latest {dates.at(-1) ? sessionDate(dates.at(-1)!) : '—'}</span>
       {(scrollable.newer || scrollable.older) && <nav aria-label={`${mode} history navigation`} className="flex gap-2">
@@ -131,15 +112,14 @@ export default function MarketStructureHistory({ breadth, roc, mode, onSelectDat
       <span>Oldest {dates[0] ? sessionDate(dates[0]) : '—'}</span>
     </div>
     <div ref={scrollRef} onScroll={updateScroll} className="market-structure-history-scroll overflow-x-auto" tabIndex={0} aria-label="Scrollable historical readings" onMouseLeave={() => onDateFocus?.(null)}>
-      <table className={showValues ? 'heatmap-values' : 'heatmap-compact'} style={{ minWidth: 144 + dates.length * (showValues ? 90 : 14), '--heatmap-session-count': dates.length } as CSSProperties}>
+      <table className="heatmap-values" style={{ minWidth: 144 + dates.length * 58, '--heatmap-session-count': dates.length } as CSSProperties}>
         <caption className="sr-only">{mode} historical values, latest session first</caption>
         <thead><tr><th className="heatmap-label text-xs">Measure</th>{displayOrder.map(i => <th key={dates[i]} className="text-[10px] font-normal">
-          {showValues ? <button type="button" className="text-accent-indigo underline" onClick={() => selectCell(dates[i], rows[0].label, true)}>{dates[i].slice(8)} {MONTH_FULL[Number(dates[i].slice(5, 7)) - 1].slice(0, 3)}</button> : <span className="sr-only">{sessionDate(dates[i])}</span>}
+          <button type="button" className="text-accent-indigo underline" onClick={() => selectCell(dates[i], rows[0].label, true)}>{dates[i].slice(8)} {MONTH_FULL[Number(dates[i].slice(5, 7)) - 1].slice(0, 3)}</button>
         </th>)}</tr></thead>
         <tbody>{rows.map(row => <tr key={row.label}><th scope="row" className="heatmap-label text-[11px] text-[var(--text-secondary)]">{row.label}</th>{displayOrder.map(i => {
           const value = row.values[i]; const missing = value == null || !Number.isFinite(value);
           const warning = warnings.get(dates[i]) ?? row.windowWarning?.(i); const transition = row.transition(i);
-          const eventKey = `${mode}:${dates[i]}:${row.label}:${transition?.direction}`;
           const description = `${sessionDate(dates[i])} · ${row.label}: ${formatted(row, i)}. ${row.detail(i)} ${warning ?? transition?.description ?? ''}`;
           const fill = row.fill(value);
           return <td key={dates[i]} className="heatmap-slot"><button type="button" className="heatmap-cell"
@@ -147,8 +127,7 @@ export default function MarketStructureHistory({ breadth, roc, mode, onSelectDat
             aria-label={description} aria-describedby={detailId} title={description}
             onMouseEnter={() => selectCell(dates[i], row.label)} onFocus={() => selectCell(dates[i], row.label)}
             onBlur={() => onDateFocus?.(null)} onClick={() => selectCell(dates[i], row.label, true)}>
-            <span aria-hidden="true" className={`heatmap-marker ${pulsing.includes(eventKey) ? 'heatmap-pulse' : ''}`}>{warning ? '!' : transition ? transition.direction === 'up' ? '↑' : '↓' : ''}</span>
-            <span className="heatmap-fill" style={{ background: showValues ? `color-mix(in srgb, ${fill} 16%, var(--card))` : fill, borderTopColor: showValues ? fill : undefined }}>{showValues ? formatted(row, i) : missing ? '—' : null}</span>
+            <span className="heatmap-fill" style={{ background: warning ? undefined : fill }}>{formatted(row, i)}</span>
           </button></td>;
         })}</tr>)}</tbody>
       </table>
@@ -163,14 +142,14 @@ export default function MarketStructureHistory({ breadth, roc, mode, onSelectDat
     </div>
     <div className="mt-3 text-[11px] text-muted space-y-2">
       {mode === 'breadth' ? <>
-        <div className="flex flex-wrap items-center gap-2"><span>Participation: 0%</span><span className="heatmap-gradient" /><span>100% · midpoint 50%</span></div>
-        <p>Red = fewer stocks above their average; green = more. Shades show the level, not whether it rose today. ↑ / ↓ marks a change of at least 5 percentage points.</p>
+        <div className="flex flex-wrap items-center gap-2"><span className="heatmap-band bg-[var(--risk-red)]" /><span>Below 35%</span><span className="heatmap-band bg-[var(--risk-amber)]" /><span>35–55%</span><span className="heatmap-band bg-[var(--risk-green)]" /><span>Above 55%</span></div>
+        <p>These are participation bands for each EMA reading. Fear / Neutral / Greed applies only to the weighted score in the chart above, not to an individual EMA percentage.</p>
         <p>Mover rows: green = up, red = down; intensity reaches full color at 10% of stocks for daily moves and 5% for five-session moves.</p>
       </> : <>
         <p>ROC shades: red below zero, neutral at zero, green above zero; full intensity at ±0.25. A negative reading recovering above its signal stays red.</p>
-        <p>ROC 13 arrows mark a new side of the signal held for two sessions, with a gap of at least 0.02. ROC 55 and Signal (5) show signed magnitude only.</p>
+        <p>Select a ROC 13 cell to read whether it has held on a new side of the signal for two sessions. ROC 55 and Signal (5) show signed magnitude only.</p>
       </>}
-      <p>Scales are fixed across windows. Arrows highlight observations, not forecasts. New latest-session arrows pulse briefly; historical arrows stay still. Stripes = coverage warning; a dash = missing value.</p>
+      <p>Scales are fixed across windows. Exact values stay inside each cell. Stripes = coverage warning; a dash = missing value.</p>
     </div>
   </section>;
 }

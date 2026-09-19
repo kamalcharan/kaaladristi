@@ -4,17 +4,17 @@ import type { MarketBreadthDay, BreadthRocDay } from '@/types';
 export const PARTICIPATION_CHANGE_POINTS = 5;
 export const ROC_SIGNAL_GAP = 0.02;
 const finite = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
-const mix = (a: string, b: string, weight: number) =>
-  `color-mix(in srgb, ${a} ${Math.round(Math.max(0, Math.min(100, weight)))}%, ${b})`;
 export function participationColor(value: number | null | undefined): string {
   if (!finite(value)) return 'var(--card)';
   const p = Math.max(0, Math.min(100, value));
-  return p <= 50 ? mix('var(--risk-amber)', 'var(--risk-red)', p * 2)
-    : mix('var(--risk-green)', 'var(--risk-amber)', (p - 50) * 2);
+  if (p < 35) return 'var(--risk-red)';
+  if (p <= 55) return 'var(--risk-amber)';
+  return 'var(--risk-green)';
 }
 export function magnitudeColor(value: number | null | undefined, scale: number, positive = true): string {
   if (!finite(value)) return 'var(--card)';
-  return mix(positive ? 'var(--risk-green)' : 'var(--risk-red)', 'var(--card)', Math.min(1, Math.abs(value) / scale) * 100);
+  const strength = Math.min(1, Math.abs(value) / scale);
+  return `color-mix(in srgb, ${positive ? 'var(--risk-green)' : 'var(--risk-red)'} ${strength >= .66 ? 100 : strength >= .33 ? 65 : 35}%, var(--card))`;
 }
 export function rocColor(value: number | null | undefined): string { return magnitudeColor(value, 0.25, (value ?? 0) >= 0); }
 type Sample = { trade_date: string; stock_count?: number | null; universe_count?: number | null };

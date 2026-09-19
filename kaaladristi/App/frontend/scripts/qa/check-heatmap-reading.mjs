@@ -29,4 +29,4 @@ assert.equal(rocTransition([{roc_13:null,sma_breadth:0},...roc.slice(1)],2),null
 assert.equal(chartReadingDate({activeLabel:'2026-09-18'}),'2026-09-18');
 assert.equal(chartReadingDate({activeLabel:65}),null);
 assert.match(countContext({above_20:1056,universe_count:2924},'above_20'),/eligibility may differ/);
-console.log('PASS: graduated level scales, negative recovery, non-noisy transitions, coverage gating, date-based linking and honest denominators');
+console.log('PASS: fixed participation bands, signed ROC levels, coverage gating, date-based linking and honest denominators');
