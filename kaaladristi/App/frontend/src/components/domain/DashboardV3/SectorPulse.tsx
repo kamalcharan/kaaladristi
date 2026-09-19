@@ -128,7 +128,15 @@ export function SectorPulseContent({ data, isLoading = false, embedded = false }
       {isLoading ? (
         <div style={{ ...MONO, fontSize: 11, color: 'var(--text-faint)', padding: '12px 0' }}>Loading sector pulse…</div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 240px), 1fr))', gap: 12 }}>
+        <>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
+            {(Object.keys(BUCKET_META) as Bucket[]).map((bucket) => <span key={bucket} style={{
+              ...MONO, display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 9px',
+              borderRadius: 999, border: '1px solid var(--border)', background: 'var(--card)',
+              color: BUCKET_META[bucket].color, fontSize: 9, textTransform: 'uppercase', letterSpacing: '.06em',
+            }}><b style={{ fontSize: 14 }}>{buckets[bucket].length}</b>{BUCKET_META[bucket].title}</span>)}
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.65fr) minmax(280px, .85fr)', gridTemplateRows: 'auto auto', gap: 12 }}>
           {(Object.keys(BUCKET_META) as Bucket[]).map((bucket) => {
             const meta = BUCKET_META[bucket];
             const rows = buckets[bucket];
@@ -141,8 +149,11 @@ export function SectorPulseContent({ data, isLoading = false, embedded = false }
                   background: 'var(--card)',
                   border: '1px solid var(--border)',
                   borderTop: `2px solid ${meta.color}`,
-                  borderRadius: 8,
-                  padding: '10px 10px 8px',
+                  borderRadius: 12,
+                  padding: bucket === 'entering' ? '16px 16px 12px' : '12px 12px 10px',
+                  gridColumn: bucket === 'entering' ? '1' : '2',
+                  gridRow: bucket === 'entering' ? '1 / span 2' : undefined,
+                  minHeight: bucket === 'entering' ? 300 : undefined,
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
@@ -186,7 +197,8 @@ export function SectorPulseContent({ data, isLoading = false, embedded = false }
               </div>
             );
           })}
-        </div>
+          </div>
+        </>
       )}
     </div>
   );

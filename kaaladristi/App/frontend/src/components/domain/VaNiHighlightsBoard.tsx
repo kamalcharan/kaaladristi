@@ -150,7 +150,7 @@ function HighlightRow({
 }
 
 function HighlightCard({
-  title, color, rows, total, metricOf, metricLabel, viewAllPreset, emptyText, newIds,
+  title, color, rows, total, metricOf, metricLabel, viewAllPreset, emptyText, newIds, emphasis = false,
 }: {
   title: string;
   color: string;
@@ -161,6 +161,7 @@ function HighlightCard({
   viewAllPreset: string;
   emptyText: string;
   newIds: Set<number>;
+  emphasis?: boolean;
 }) {
   const navigate = useNavigate();
   return (
@@ -169,8 +170,9 @@ function HighlightCard({
         background: 'var(--card)',
         border: '1px solid var(--border)',
         borderTop: `2px solid ${color}`,
-        borderRadius: 8,
-        padding: '10px 10px 8px',
+        borderRadius: 12,
+        padding: emphasis ? '16px 16px 12px' : '12px 12px 10px',
+        minHeight: emphasis ? 300 : undefined,
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
@@ -243,9 +245,10 @@ export default function VaNiHighlightsBoard() {
           Running scanners…
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 12 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.45fr) minmax(300px, .75fr)', gap: 12 }}>
           <HighlightCard
-            title="Strength"
+            title="Confirming Strength"
+            emphasis
             color="var(--bull)"
             rows={data?.strength ?? []}
             total={data?.strengthTotal ?? 0}
@@ -256,7 +259,7 @@ export default function VaNiHighlightsBoard() {
             newIds={newIds.strength}
           />
           <HighlightCard
-            title="Caution"
+            title="Caution / Weakening"
             color="var(--bear)"
             rows={data?.caution ?? []}
             total={data?.cautionTotal ?? 0}

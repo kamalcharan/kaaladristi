@@ -11,11 +11,6 @@ export default function WorkspaceDiscovery() {
         <button disabled aria-disabled="true"><i />Longer-term strength<small>Next · sustained structure</small></button>
       </div>
     </header>
-    <section className="wd-guide" aria-label="Short-term discovery sequence">
-      <article><b>1</b><div><strong>Locate flow</strong><span>Find sectors where recent money flow is entering, fading or leaving.</span></div></article><i aria-hidden="true">→</i>
-      <article><b>2</b><div><strong>Find confirmation</strong><span>Inspect stocks where multiple scanner observations align.</span></div></article><i aria-hidden="true">→</i>
-      <article><b>3</b><div><strong>Research the chart</strong><span>Open the stock or sector to validate price, flow and relative strength.</span></div></article>
-    </section>
     <section className="wd-section" data-tour="sector-pulse">
       <header className="wd-section-heading"><div><span>STEP 1 · SECTORS</span><h2>Short-term sector flow</h2><p>5D activity is foregrounded; 22D is retained as context so a recent move is not read in isolation.</p></div><em>Observation window · 5 sessions</em></header>
       <div className="wd-panel"><SectorPulse /></div>
