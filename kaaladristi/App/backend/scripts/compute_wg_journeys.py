@@ -365,6 +365,10 @@ def load_display(conn, ids: list[int]) -> dict[int, dict]:
         'score_5d', 'score_22d', 'rvol',
         'dot_svd', 'dot_sbd', 'dot_syd',
         'gl_days_above',
+        # migration 219 — MagicRS momentum on the house clock. The Discovery
+        # tabs read km_wg_journeys directly, never the matview, so without this
+        # copy they are the one scanner family that cannot see it.
+        'magic_rs_chg_5d', 'magic_rs_chg_22d', 'magic_rs_chg_66d', 'magic_rs_align',
     ])
     sql = f"""
         SELECT DISTINCT ON (equity_id) {', '.join(base + extra)}
@@ -775,6 +779,7 @@ CURRENT_COLS = [
     'wake_close', 'pct_from_wake',
     'symbol', 'company_name', 'industry', 'exchange', 'isin', 'mcap_cr', 'close', 'pct_chng',
     'delivery_pct', 'magic_rs', 'magic_rs_zone', 'listing_age_years', 'trade_date',
+    'magic_rs_chg_5d', 'magic_rs_chg_22d', 'magic_rs_chg_66d', 'magic_rs_align',
     'score_5d', 'score_22d', 'rvol', 'dot_svd', 'dot_sbd', 'dot_syd',
     'gl_event', 'gl_event_date', 'gl_days_above', 'turn_date', 'turn_close', 'pct_from_turn',
 ]
@@ -977,6 +982,10 @@ def run(dry_run: bool):
             'dot_syd': disp.get('dot_syd'),
             'gl_event': disp.get('gl_event'), 'gl_event_date': disp.get('gl_event_date'),
             'gl_days_above': disp.get('gl_days_above'),
+            'magic_rs_chg_5d': disp.get('magic_rs_chg_5d'),
+            'magic_rs_chg_22d': disp.get('magic_rs_chg_22d'),
+            'magic_rs_chg_66d': disp.get('magic_rs_chg_66d'),
+            'magic_rs_align': disp.get('magic_rs_align'),
         }
         row = {**{c: None for c in CURRENT_COLS}, **base,
                **{k: v for k, v in cur_state.items() if k in CURRENT_COLS}}

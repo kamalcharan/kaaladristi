@@ -32,6 +32,15 @@ export interface MagicRsDataPoint {
   magic_rs: number | null;
   magic_ma: number | null;
   magic_rs_zone: string | null;
+  /** STORED momentum (migration 219), never derived here. The caller maps the
+   *  long columns on a daily series and the short ones on weekly/monthly —
+   *  whichever series `magic_rs` above was filled from, so the pair always
+   *  describes the same measure. Undefined = caller supplied none; null = the
+   *  pipeline has no reading for that bar. Both render as "—". */
+  chg5?: number | null;
+  chg22?: number | null;
+  chg66?: number | null;
+  align?: number | null;
 }
 
 interface MagicRsSubchartProps {
@@ -337,8 +346,8 @@ function MagicRsStats({ data, activeIndex, benchmarkLabel, variant = 'long',
   const diff = rs != null && ma != null ? rs - ma : null;
   const zone = cur.magic_rs_zone;
 
-  // Everything below counts BARS BACKWARDS, so it must run over the full
-  // series, not a zoomed window. `data` may be clipped to the visible range;
+  // `held` counts BARS BACKWARDS, so it must run over the full series, not a
+  // zoomed window. (Momentum no longer does — it is read from the DB below.) `data` may be clipped to the visible range;
   // positions do not carry between two arrays, so the active bar is re-found
   // by DATE — the same rule ChartView already uses for activeIndex. Falls back
   // to `data` when no unclipped series was supplied (three of four call sites).
@@ -361,26 +370,26 @@ function MagicRsStats({ data, activeIndex, benchmarkLabel, variant = 'long',
     }
   }
 
-  // Change in Magic RS over 5 / 22 / 66 BARS — the house clock. Every other
-  // horizon in this product is 5/22/66 (ret_5d/22d/66d, avg_amt_*, rel_*_n500,
-  // score_5d/22d); MagicRS was the one measure speaking 1/5/20 while labelled
-  // "1D/1W/1M". Point differences, never percent: magic_rs is already a
-  // percentage deviation from its own 144-bar mean.
+  // ── Momentum: READ FROM THE DATABASE, never computed here ─────────────
   //
-  // The unit follows `cadence`, because `variant='short'` data is weekly or
-  // monthly bars — 66 of those is five and a half years, not three months, and
-  // borrowing the 'D' would be the same class of mislabel as calling a 21-bar
-  // RS a 144-bar one. A horizon the series is too short to reach reads blank,
-  // which is the honest answer rather than a number from the wrong bar.
-  const chg = (back: number): number | null => {
-    const a = bars[bi - back]?.magic_rs;
-    const b = rs;
-    return a != null && b != null ? b - a : null;
-  };
+  // These used to be a browser subtraction over whatever bars the chart had
+  // loaded, which made the same stock read differently at different zoom
+  // levels and left every scanner, every SQL filter and VaNi unable to see the
+  // number at all. They are stored columns now (migration 219) on all four
+  // tables that carry a MagicRS series, so the pill, the scanner row and a
+  // VaNi fact are literally the same value.
+  //
+  // ⚠ Do NOT reintroduce a fallback subtraction for the window where the
+  // backfill has not run. A blank says "the pipeline has not computed this";
+  // a locally-derived number that disagrees with every other surface says
+  // nothing at all, and hides the gap instead of showing it.
+  //
+  // The unit follows `cadence`: `variant='short'` data is weekly or monthly
+  // bars, where 66 is five and a half years, not three months.
   const frames: { label: string; v: number | null }[] = [
-    { label: `5${cadence}`, v: chg(5) },
-    { label: `22${cadence}`, v: chg(22) },
-    { label: `66${cadence}`, v: chg(66) },
+    { label: `5${cadence}`,  v: cur.chg5  ?? null },
+    { label: `22${cadence}`, v: cur.chg22 ?? null },
+    { label: `66${cadence}`, v: cur.chg66 ?? null },
   ];
 
   // D39: 'Strong Bull' / 'Strong Bear' are DB values, never display text. The
@@ -464,7 +473,7 @@ function MagicRsStats({ data, activeIndex, benchmarkLabel, variant = 'long',
       </div>
 
       <div className="px-3 pb-2 text-[9px] font-mono text-[var(--text-faint)] leading-relaxed">
-        {variant === 'short' ? 'SHORT 21-bar RS, 10-bar average — the only series weekly/monthly carry' : '144-bar RS, 60-bar average'} · changes are over 5, 22 and 66 bars
+        {variant === 'short' ? 'SHORT 21-bar RS, 10-bar average — the only series weekly/monthly carry' : '144-bar RS, 60-bar average'} · 5/22/66-bar changes, computed by the pipeline
         {short && ` · series starts ${withRs[0].trade_date} (${withRs.length} of ${data.length} bars)`}
       </div>
     </div>

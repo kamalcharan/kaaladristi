@@ -529,6 +529,15 @@ export default function ChartView() {
       magic_rs: (usingShortRs ? b.magic_rs_short : b.magic_rs) ?? null,
       magic_ma: (usingShortRs ? b.magic_rs_short_ma : b.magic_ma) ?? null,
       magic_rs_zone: (usingShortRs ? b.magic_rs_short_zone : b.magic_rs_zone) ?? null,
+      // Stored momentum (migration 219). The short columns ride with the short
+      // series and the long with the long, so the pair can never describe two
+      // different measures — the 21-bar RS mislabelled as the 144-bar one is
+      // exactly the confusion this file's `usingShortRs` switch exists to keep
+      // straight.
+      chg5:  (usingShortRs ? b.magic_rs_short_chg_5d  : b.magic_rs_chg_5d)  ?? null,
+      chg22: (usingShortRs ? b.magic_rs_short_chg_22d : b.magic_rs_chg_22d) ?? null,
+      chg66: (usingShortRs ? b.magic_rs_short_chg_66d : b.magic_rs_chg_66d) ?? null,
+      align: (usingShortRs ? b.magic_rs_short_align   : b.magic_rs_align)   ?? null,
     })),
     [rows, usingShortRs],
   );

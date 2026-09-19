@@ -31,6 +31,11 @@ const INDICATOR_COLS = [
   'atr_10', 'atr_14', 'supertrend', 'supertrend_dir',
   'obv', 'obv_sma_20', 'rvol', 'tvol',
   'magic_rs', 'magic_rs_sma144', 'magic_ma', 'magic_rs_zone',
+  // migration 219 — MagicRS momentum, STORED. The widget used to subtract
+  // these in the browser from whatever bars happened to be loaded, so the
+  // same stock read differently at different zoom levels and no scanner
+  // could see the number at all. Read, never recompute.
+  'magic_rs_chg_5d', 'magic_rs_chg_22d', 'magic_rs_chg_66d', 'magic_rs_align',
   'sniper_inst', 'sniper_hot', 'sniper_rsi',
   'rss_value', 'rss_rsi', 'rss_spread',
   'pivot_pp', 'pivot_r1', 'pivot_r2', 'pivot_r3', 'pivot_s1', 'pivot_s2', 'pivot_s3',
@@ -79,6 +84,10 @@ export interface IndicatorRow {
   magic_rs_sma144: number | null;
   magic_ma: number | null;
   magic_rs_zone: string | null;
+  magic_rs_chg_5d: number | null;
+  magic_rs_chg_22d: number | null;
+  magic_rs_chg_66d: number | null;
+  magic_rs_align: number | null;
   // Sniper Dragon
   sniper_inst: number | null;
   sniper_hot: number | null;
@@ -157,6 +166,10 @@ export interface IndicatorRow {
   magic_rs_short?: number | null;
   magic_rs_short_ma?: number | null;
   magic_rs_short_zone?: string | null;
+  magic_rs_short_chg_5d?: number | null;
+  magic_rs_short_chg_22d?: number | null;
+  magic_rs_short_chg_66d?: number | null;
+  magic_rs_short_align?: number | null;
 }
 
 export async function fetchIndicatorData(
@@ -241,7 +254,9 @@ export async function fetchEquityTimeframeById(
     // is structurally impossible there (the migration-169 lesson). Selecting
     // OHLCV alone is why the Magic RS pane went blank on W/M.
     .select('trade_date,open,high,low,close,volume,avg_deliv_pct,'
-      + 'magic_rs_short,magic_rs_short_ma,magic_rs_short_zone')
+      + 'magic_rs_short,magic_rs_short_ma,magic_rs_short_zone,'
+      + 'magic_rs_short_chg_5d,magic_rs_short_chg_22d,'
+      + 'magic_rs_short_chg_66d,magic_rs_short_align')
     .eq('equity_id', equityId)
     .order('trade_date', { ascending: true })
     .limit(3000)

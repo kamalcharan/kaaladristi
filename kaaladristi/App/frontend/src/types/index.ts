@@ -507,6 +507,12 @@ export interface ScanStock {
   rsi_14: number | null;
   magic_rs: number | null;
   magic_rs_zone: string | null;
+  // migration 219 — MagicRS momentum on the house clock (5/22/66 bars),
+  // stored, never derived in the browser. Present on every scanner row.
+  magic_rs_chg_5d?: number | null;
+  magic_rs_chg_22d?: number | null;
+  magic_rs_chg_66d?: number | null;
+  magic_rs_align?: number | null;
   flow_type: string | null;
   rvol: number | null;
   sniper_inst: number | null;

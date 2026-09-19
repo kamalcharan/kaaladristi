@@ -65,6 +65,8 @@ function mockBars(): IndicatorRow[] {
         swing_high: false, swing_low: false,
         flow_type: null, vacuum_flag: null, accum_distrib: null, volume_divergence_flag: null,
         score_5d: null, score_22d: null,
+        magic_rs_chg_5d: null, magic_rs_chg_22d: null,
+        magic_rs_chg_66d: null, magic_rs_align: null,
       });
       i++;
     }
