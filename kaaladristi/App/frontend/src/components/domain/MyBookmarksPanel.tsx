@@ -12,6 +12,7 @@ import { useSectorPulse } from '@/hooks/useSectorRotation';
 import { flowSignal, STRONG_SCORE_CUT_INDEX, type FlowSignal } from '@/components/domain/FlowIntensityMap';
 import type { BookmarkRow, BookmarkMarketData, BookmarkSector } from '@/services/bookmarks';
 import type { MatchedScan } from '@/hooks/useScanPresence';
+import { bookmarkSignalState, type BookmarkSignalStateKey } from '@/lib/bookmarkState';
 
 // Sector money-flow signal → rotation vocabulary (same 5 states the Sector
 // Rotation heatmap uses; this is the solidified path, unlike industry).
@@ -40,19 +41,7 @@ const W = {
   rsi: 46, rs: 58, s5: 56, s22: 58, scanners: 150, state: 116,
 } as const;
 
-// Watchlist State chip (Phase 2a, additive) — reads the TURN from the row's own
-// signals: is relative strength + money-flow conviction building or fading?
-function watchlistState(m: BookmarkMarketData | undefined): { label: string; color: string } {
-  if (!m || m.magic_rs == null || m.score_5d == null || m.score_22d == null) {
-    return { label: 'Watch', color: 'var(--text-faint)' };
-  }
-  const rsUp = m.magic_rs > 0;
-  const scoreUp = m.score_5d > m.score_22d;
-  if (rsUp && scoreUp) return { label: '▲ Improving', color: 'var(--risk-green)' };
-  if (!rsUp && scoreUp) return { label: '▲ Turning', color: 'color-mix(in srgb, var(--risk-green) 72%, transparent)' };
-  if (rsUp && !scoreUp) return { label: '~ Cooling', color: 'var(--risk-amber)' };
-  return { label: '▼ Fading', color: 'var(--risk-red)' };
-}
+// Watchlist state is shared with Today so labels and colours remain consistent.
 
 function num(v: number | null | undefined, digits = 1): string {
   return v == null ? '—' : v.toFixed(digits);
@@ -79,6 +68,7 @@ function HeaderRow() {
     <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '0 12px 6px', minWidth: 'max-content' }}>
       <div style={{ width: W.star, flexShrink: 0 }} />
       <div style={{ ...HEAD, width: W.stock }}>Stock</div>
+      <div style={{ ...HEAD, width: W.state, color: 'var(--accent, var(--gold-soft))' }}>State</div>
       <div style={{ ...HEAD, width: W.price }}>Price</div>
       <div style={{ ...HEAD, width: W.sector }}>Sector / Industry</div>
       <div style={{ ...HEAD, width: W.rsi, textAlign: 'right' }}>RSI</div>
@@ -86,7 +76,6 @@ function HeaderRow() {
       <div style={{ ...HEAD, width: W.s5, textAlign: 'right' }}>Flow 5D</div>
       <div style={{ ...HEAD, width: W.s22, textAlign: 'right' }}>Flow 22D</div>
       <div style={{ ...HEAD, width: W.scanners }}>Scanners</div>
-      <div style={{ ...HEAD, width: W.state, color: 'var(--accent, var(--gold-soft))' }}>State</div>
       <div style={{ ...HEAD, flex: 1, minWidth: 200 }}>5D Money Flow</div>
       <div style={{ width: 76, flexShrink: 0 }} />
     </div>
@@ -154,6 +143,19 @@ function BookmarkRowCard({
               {subName}
             </div>
           )}
+        </div>
+
+        {/* State — shared with Today */}
+        <div style={{ width: W.state, flexShrink: 0 }}>
+          {(() => {
+            const st = bookmarkSignalState(market);
+            return <span title={st.explanation} style={{
+              fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 600, whiteSpace: 'nowrap',
+              padding: '3px 8px', borderRadius: 100, color: st.color,
+              background: `color-mix(in srgb, ${st.color} 12%, transparent)`,
+              border: `1px solid color-mix(in srgb, ${st.color} 32%, transparent)`,
+            }}>{st.label}</span>;
+          })()}
         </div>
 
         {/* Price */}
@@ -240,23 +242,6 @@ function BookmarkRowCard({
           ))}
         </div>
 
-        {/* State — the turn (additive; Option B) */}
-        <div style={{ width: W.state, flexShrink: 0 }}>
-          {(() => {
-            const st = watchlistState(market);
-            return (
-              <span style={{
-                fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 600, whiteSpace: 'nowrap',
-                padding: '2px 8px', borderRadius: 100, color: st.color,
-                background: `color-mix(in srgb, ${st.color} 12%, transparent)`,
-                border: `1px solid color-mix(in srgb, ${st.color} 32%, transparent)`,
-              }}>
-                {st.label}
-              </span>
-            );
-          })()}
-        </div>
-
         {/* 5D flow heatmap */}
         <div style={{ flex: 1, minWidth: 200 }}>
           {last5.length > 0 ? (
@@ -291,6 +276,7 @@ function BookmarkRowCard({
 /** Watchlist tab body — the original bookmarks table (now + a State chip). */
 function WatchlistBody() {
   const { bookmarks, isLoading, hasLoaded, load, toggle } = useBookmarkStore();
+  const [stateFilter, setStateFilter] = useState<BookmarkSignalStateKey | 'all'>('all');
 
   // Reload from the server on every mount — a bookmark added elsewhere (scanner
   // row, chart page) must show up when you open this tab without a hard refresh.
@@ -303,6 +289,17 @@ function WatchlistBody() {
   const { matchedByEquity, isLoading: scanLoading } = useScanPresenceForMany(equityIds);
   const { sectorByEquity, isLoading: sectorLoading } = useBookmarkSectors(equityIds);
   const { data: sectorPulse = [] } = useSectorPulse();
+
+  const stateCounts = useMemo(() => {
+    const counts: Record<BookmarkSignalStateKey, number> = { improving: 0, turning: 0, cooling: 0, fading: 0, watch: 0 };
+    for (const b of bookmarks) counts[bookmarkSignalState(dataByEquity.get(b.equity_id)).key] += 1;
+    return counts;
+  }, [bookmarks, dataByEquity]);
+  const visibleBookmarks = useMemo(() => bookmarks
+    .map((bookmark) => ({ bookmark, state: bookmarkSignalState(dataByEquity.get(bookmark.equity_id)) }))
+    .filter((row) => stateFilter === 'all' || row.state.key === stateFilter)
+    .sort((a, b) => a.state.priority - b.state.priority)
+    .map((row) => row.bookmark), [bookmarks, dataByEquity, stateFilter]);
 
   // sector index name → live money-flow signal (latest cell), the solidified
   // Sector Rotation verdict.
@@ -346,11 +343,29 @@ function WatchlistBody() {
     return <DristiQLoader message="Loading bookmarks…" />;
   }
 
+  const filters: Array<{ key: BookmarkSignalStateKey | 'all'; label: string; count: number }> = [
+    { key: 'all', label: 'All', count: bookmarks.length },
+    { key: 'fading', label: 'Fading', count: stateCounts.fading },
+    { key: 'cooling', label: 'Cooling', count: stateCounts.cooling },
+    { key: 'turning', label: 'Turning', count: stateCounts.turning },
+    { key: 'improving', label: 'Improving', count: stateCounts.improving },
+    ...(stateCounts.watch ? [{ key: 'watch' as const, label: 'Watch', count: stateCounts.watch }] : []),
+  ];
+
   return (
-    <div style={{ overflowX: 'auto' }}>
+    <div>
+      <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap', marginBottom: 14 }}>
+        {filters.map((filter) => <button key={filter.key} onClick={() => setStateFilter(filter.key)} style={{
+          border: `1px solid ${stateFilter === filter.key ? 'var(--accent)' : 'var(--border)'}`,
+          background: stateFilter === filter.key ? 'color-mix(in srgb, var(--accent) 12%, transparent)' : 'var(--card)',
+          color: stateFilter === filter.key ? 'var(--text-primary)' : 'var(--text-muted)',
+          borderRadius: 999, padding: '6px 10px', fontSize: 11, cursor: 'pointer',
+        }}>{filter.label} <b style={{ marginLeft: 4, fontFamily: 'var(--font-mono)' }}>{filter.count}</b></button>)}
+      </div>
+      <div style={{ overflowX: 'auto' }}>
       <HeaderRow />
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {bookmarks.map((b) => {
+        {visibleBookmarks.map((b) => {
           const sectors: SectorChip[] = (sectorByEquity.get(b.equity_id) ?? [])
             .map((s) => ({ ...s, signal: sectorSignalByName.get(s.name.toUpperCase()) ?? null }))
             .sort((a, x) => (a.signal?.rank ?? 9) - (x.signal?.rank ?? 9) || a.name.localeCompare(x.name));
@@ -367,6 +382,7 @@ function WatchlistBody() {
           );
         })}
       </div>
+      </div>
     </div>
   );
 }
@@ -374,7 +390,15 @@ function WatchlistBody() {
 // ── Positions tab body (Phase 2a) ───────────────────────────────────────────
 // Held stocks = bookmarks WITH an entry (migration 153). Entry · now · P&L ·
 // State; row → the stock's Thesis tab (the full cockpit). Symbol/company come
-// straight off the bookmark row — no extra fetch. State chip reuses watchlistState.
+// straight off the bookmark row — no extra fetch. The existing position presentation is intentionally unchanged.
+
+function legacyPositionLabel(key: BookmarkSignalStateKey): string {
+  if (key === 'improving') return '▲ Improving';
+  if (key === 'turning') return '▲ Turning';
+  if (key === 'cooling') return '~ Cooling';
+  if (key === 'fading') return '▼ Fading';
+  return 'Watch';
+}
 
 function PosKv({ label, value, color, big }: { label: string; value: string; color?: string; big?: boolean }) {
   return (
@@ -413,7 +437,7 @@ function PositionsBody() {
         const close = m?.close ?? null;
         const entry = b.entry_price ?? 0;
         const pnl = close != null && entry > 0 ? ((close - entry) / entry) * 100 : null;
-        const st = watchlistState(m);
+        const st = bookmarkSignalState(m);
         const openThesis = () => navigate(`/chart/equity/${b.equity_id}?name=${encodeURIComponent(toNavName(b))}&tab=thesis`);
         return (
           <Card key={b.id} rounded="xl" className="px-3 py-2.5">
@@ -433,7 +457,7 @@ function PositionsBody() {
                 padding: '2px 8px', borderRadius: 100, color: st.color,
                 background: `color-mix(in srgb, ${st.color} 12%, transparent)`,
                 border: `1px solid color-mix(in srgb, ${st.color} 32%, transparent)`,
-              }}>{st.label}</span>
+              }}>{legacyPositionLabel(st.key)}</span>
               <button onClick={openThesis} style={{ marginLeft: 'auto', fontSize: 11, padding: '5px 12px', borderRadius: 6, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer' }}>
                 Study ›
               </button>

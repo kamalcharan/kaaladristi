@@ -31,15 +31,6 @@ function posture(score: number | null | undefined, scoreDelta: number, roc13: nu
   return { label: 'Selective market', exposure: 'Measured', note: 'Focus on confirmed leaders', tone: 'amber' };
 }
 
-function bookmarkAlignment(market: BookmarkMarketData | undefined): Alignment {
-  if (!market) return 'selective';
-  const rsPositive = market.magic_rs != null && market.magic_rs > 0;
-  const flowImproving = market.score_5d != null && market.score_22d != null && market.score_5d > market.score_22d;
-  if (rsPositive && flowImproving) return 'aligned';
-  if (!rsPositive && !flowImproving) return 'vulnerable';
-  return 'selective';
-}
-
 export default function WorkspaceToday() {
   const navigate = useNavigate();
   const data = useMarketStructureReading();
@@ -65,12 +56,14 @@ export default function WorkspaceToday() {
   const breadthImproving = latest?.breadth_score != null && previous?.breadth_score != null && latest.breadth_score > previous.breadth_score;
   const agreement = [breadthImproving, rocImproving, dailyBuyer, fiveDayBuyer].filter(Boolean).length;
   const direction = scoreDelta > 1 ? 'Improving' : scoreDelta < -1 ? 'Deteriorating' : 'Stable';
-  const visibleBookmarks = bookmarks.slice(0, 4).map(bookmark => ({
-    bookmark,
-    market: bookmarkMarket.dataByEquity.get(bookmark.equity_id),
-    alignment: bookmarkAlignment(bookmarkMarket.dataByEquity.get(bookmark.equity_id)),
-  }));
-  const counts = visibleBookmarks.reduce((acc, row) => { acc[row.alignment] += 1; return acc; }, { aligned: 0, selective: 0, vulnerable: 0 });
+  const rankedBookmarks = bookmarks.map(bookmark => {
+    const market = bookmarkMarket.dataByEquity.get(bookmark.equity_id);
+    return { bookmark, market, state: bookmarkSignalState(market) };
+  }).sort((a, b) => a.state.priority - b.state.priority);
+  const visibleBookmarks = rankedBookmarks.slice(0, 4);
+  const counts = rankedBookmarks.reduce((acc, row) => { acc[row.state.key] += 1; return acc; },
+    { improving: 0, turning: 0, cooling: 0, fading: 0, watch: 0 } as Record<BookmarkSignalStateKey, number>);
+  const attentionCount = counts.fading + counts.cooling;
   const rocReading = rocMomentumReading(latestRoc?.roc_13, latestRoc?.sma_breadth);
 
   if (data.isLoading && !latest) return <DristiQLoader message="Reading market structure…" />;
@@ -107,11 +100,11 @@ export default function WorkspaceToday() {
     </section>
 
     <section className="wt-bookmarks" data-tour="today-bookmarks">
-      <header><div><p>PERSONAL RELEVANCE</p><h2>Your stocks in today’s environment</h2><span>MagicRS and 5D/22D flow assessed against the current market posture.</span></div><button onClick={() => navigate('/bookmarks')}>View all {bookmarks.length} bookmarks →</button></header>
+      <header><div><p>PERSONAL RELEVANCE</p><h2>Your stocks today</h2><span>MagicRS and short-term versus longer-term flow across your saved stocks.</span></div><button onClick={() => navigate('/bookmarks')}>View all {bookmarks.length} stocks →</button></header>
       {bookmarks.length === 0 ? <div className="wt-empty">Bookmark stocks from Discovery to see how they fit today’s environment.</div> : <>
-        <div className="wt-counts"><span><b>{counts.aligned}</b> Aligned</span><span><b>{counts.selective}</b> Selective</span><span><b>{counts.vulnerable}</b> Vulnerable</span></div>
-        <div className="wt-bookmark-list">{visibleBookmarks.map(({ bookmark, market, alignment }) => <button key={bookmark.equity_id} onClick={() => navigate(`/chart/equity/${bookmark.equity_id}?name=${encodeURIComponent(bookmark.symbol)}`)}>
-          <strong>{bookmark.symbol}<small>{bookmark.industry ?? 'Stock'}</small></strong><span className={alignment}>{alignment}</span><em>MagicRS {fmt(market?.magic_rs)} · Flow 5D {fmt(market?.score_5d, 0)} / 22D {fmt(market?.score_22d, 0)}</em><i>→</i>
+        <div className="wt-stock-summary"><strong>{attentionCount > 0 ? `${attentionCount} need attention` : 'No cooling or fading stocks'}</strong><div className="wt-counts"><span className="fading"><b>{counts.fading}</b> Fading</span><span className="cooling"><b>{counts.cooling}</b> Cooling</span><span className="turning"><b>{counts.turning}</b> Turning</span><span className="improving"><b>{counts.improving}</b> Improving</span>{counts.watch > 0 && <span><b>{counts.watch}</b> Watch</span>}</div></div>
+        <div className="wt-bookmark-list">{visibleBookmarks.map(({ bookmark, market, state }) => <button key={bookmark.equity_id} onClick={() => navigate(`/chart/equity/${bookmark.equity_id}?name=${encodeURIComponent(bookmark.symbol)}`)}>
+          <strong>{bookmark.symbol}<small>{bookmark.industry ?? 'Stock'}</small></strong><span className={state.key}>{state.label}</span><em title={state.explanation}>MagicRS {fmt(market?.magic_rs)} · Flow 5D {fmt(market?.score_5d, 0)} / 22D {fmt(market?.score_22d, 0)}</em><i>→</i>
         </button>)}</div>
       </>}
     </section>
