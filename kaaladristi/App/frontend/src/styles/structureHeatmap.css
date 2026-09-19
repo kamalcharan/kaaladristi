@@ -1,7 +1,7 @@
 .structure-heatmap { --heatmap-label-width: 144px; }
 .structure-heatmap table { width: 100%; border-collapse: separate; border-spacing: 2px 3px; table-layout: fixed; }
 .structure-heatmap .heatmap-label { width: var(--heatmap-label-width); position: sticky; left: 0; z-index: 2; background: var(--card); text-align: left; padding-right: 8px; font-weight: 400; }
-.structure-heatmap .heatmap-slot { padding: 0; vertical-align: bottom; min-width: 52px; }
+.structure-heatmap .heatmap-slot { padding: 0; vertical-align: bottom; min-width: 66px; }
 .structure-heatmap .heatmap-cell { width: 100%; display: flex; flex-direction: column; align-items: center; border: 0; padding: 0; background: transparent; border-radius: 4px; color: var(--text-primary); cursor: pointer; }
 .structure-heatmap .heatmap-marker { display: none; }
 .structure-heatmap .heatmap-fill { display: flex; width: 100%; height: 34px; border-radius: 4px; align-items: center; justify-content: center; border: 1px solid var(--border); font-family: var(--font-mono); font-size: 10px; font-weight: 650; color: var(--text-primary); }
@@ -10,7 +10,8 @@
 .structure-heatmap .heatmap-cell[data-warning='true'] .heatmap-fill { background: repeating-linear-gradient(135deg, var(--card) 0 4px, var(--border) 4px 7px) !important; }
 .structure-heatmap .heatmap-cell[data-missing='true'] .heatmap-fill { border-style: dashed; }
 .structure-heatmap .heatmap-values .heatmap-fill { height: 36px; font-size: 11px; }
+.structure-heatmap .heatmap-event { background: transparent !important; border-color: transparent; font-size: 18px; }
 .structure-heatmap .heatmap-inspection { height: 128px; overflow-y: auto; }
 .structure-heatmap .heatmap-band { display: inline-block; width: 28px; height: 10px; border-radius: 3px; border: 1px solid var(--border); }
 @media (max-width: 640px) { .structure-heatmap { --heatmap-label-width: 110px; } .structure-heatmap .heatmap-inspection { height: 192px; } }
-@media (pointer: coarse) { .structure-heatmap table { min-width: calc(var(--heatmap-label-width) + var(--heatmap-session-count) * 54px) !important; } .structure-heatmap .heatmap-cell { min-height: 48px; } }
+@media (pointer: coarse) { .structure-heatmap table { min-width: calc(var(--heatmap-label-width) + var(--heatmap-session-count) * 68px) !important; } .structure-heatmap .heatmap-cell { min-height: 48px; } }

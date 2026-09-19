@@ -33,6 +33,7 @@ for (const row of breadth) {
 }
 const roc=dates.map((trade_date,i)=>({trade_date,roc_13:.3-i*.005+Math.sin(i/3)*.04,roc_55:.35-i*.004,sma_breadth:.28-i*.004,stock_count:trade_date==='2026-09-15'?911:3073}));
 Object.assign(roc.at(-1),{roc_13:-.0511,roc_55:.0298,sma_breadth:-.1013});
+const nifty=dates.map((trade_date,i)=>({id:i+1,index_id:1,trade_date,open:24000+i*8,high:24100+i*8,low:23900+i*8,close:24050+i*8,prev_close:i?24050+(i-1)*8:null,chng:i?8:null,pct_chng:i?8/(24050+(i-1)*8)*100:null,volume:null}));
 const server=await createServer({configFile:false,root,cacheDir:path.join(output,'vite-cache'),
   plugins:[react({exclude:/node_modules|vite-cache/}),{name:'heatmap-offline-fixture',configureServer(server){server.middlewares.use('/__heatmap_qa.html',async(req,res,next)=>{
     try {const html=await server.transformIndexHtml('/__heatmap_qa.html','<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1"></head><body><div id="root"></div><script type="module" src="/scripts/qa/fixtures/heatmap-reading.tsx"></script></body></html>');res.setHeader('Content-Type','text/html');res.end(html)} catch(error){next(error)}
@@ -50,7 +51,10 @@ try {
       const url=new URL(route.request().url());
       if(route.request().method()!=='GET') return route.abort();
       if(url.pathname.startsWith('/db/')) {
-        let data=url.pathname.includes('km_market_breadth')?[...breadth].reverse():url.pathname.includes('km_breadth_roc')?[...roc].reverse():[{trade_date:'2026-09-18'}];
+        let data=url.pathname.includes('km_market_breadth')?[...breadth].reverse()
+          :url.pathname.includes('km_breadth_roc')?[...roc].reverse()
+          :url.pathname.includes('km_index_symbols')?[{id:1,name:'NIFTY 50',category:'Broad Market'}]
+          :url.pathname.includes('km_index_eod')?nifty:[{trade_date:'2026-09-18'}];
         return route.fulfill({json:data});
       }
       if(url.origin==='http://127.0.0.1:4329')return route.continue();
@@ -59,8 +63,9 @@ try {
     await page.goto(`http://127.0.0.1:4329/__heatmap_qa.html?mode=${mode}&theme=${theme}`);
     const heatmap=page.getByRole('region',{name:'Participation heatmap'});
     await heatmap.locator('.heatmap-cell').first().waitFor();
-    assert.equal(await heatmap.locator('tbody tr').count(),7);
-    const firstRow=heatmap.locator('tbody tr').first();
+    assert.equal(await heatmap.locator('tbody tr').count(),6);
+    const firstRow=heatmap.locator('tbody tr').nth(1);
+    assert(await heatmap.locator('.heatmap-event').filter({hasText:'●'}).count() >= 1,'Zone-entry row should contain at least one confirmed crossing');
     assert.equal(await firstRow.locator('.heatmap-cell').first().getAttribute('data-date'),'2026-09-18');
     assert.equal(await firstRow.locator('.heatmap-cell').count(),66);
     const latest=firstRow.locator('[data-date="2026-09-18"]');
@@ -70,7 +75,8 @@ try {
     assert.equal(await firstRow.locator('[data-date="2026-09-16"] .heatmap-marker').count(),0);
     await latest.click();
     await page.getByText('Linked date: 2026-09-18',{exact:false}).waitFor();
-    assert.equal(await page.locator('.heatmap-cell[data-date="2026-09-18"][data-highlighted="true"]').count(),10);
+    assert.equal(await page.locator('.heatmap-cell[data-date="2026-09-18"][data-highlighted="true"]').count(),9);
+    assert.match(await heatmap.getByRole('row',{name:/Daily pressure/}).textContent(),/U\d+.*D\d+/);
     await page.screenshot({path:path.join(output,`linked-${theme}-${mode}-${width}.png`),fullPage:true});
     console.log('Linked chart labels:', await page.locator('.recharts-label').allTextContents());
     await page.waitForFunction(() => [...document.querySelectorAll('.recharts-label')].filter(n=>n.textContent==='18 Sep').length===2);
@@ -98,6 +104,8 @@ try {
       const box=await chart.boundingBox();
       await page.mouse.move(box.x+80,box.y+100);
       await page.waitForTimeout(100);
+      await page.getByText('NIFTY 50',{exact:true}).last().waitFor();
+      assert.equal(await page.getByText('Unavailable',{exact:true}).count(),0);
       const highlighted=await firstRow.locator('[data-highlighted="true"]').getAttribute('data-date');
       assert.notEqual(highlighted,'2026-09-18');
       assert(highlighted<'2026-09-10');

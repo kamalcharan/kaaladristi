@@ -6,7 +6,7 @@ import {
 import { useMarketBreadth } from '@/hooks';
 import { Loader2, AlertCircle, TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import type { MarketBreadthDay } from '@/types';
+import type { MarketBreadthDay, ChartDataPoint } from '@/types';
 import { chartReadingDate } from '@/lib/heatmapReading';
 
 // ── Config ────────────────────────────────────────────────────────────────────
@@ -50,6 +50,8 @@ export interface MarketBreadthChartProps {
   onPeriodChange?: (days: 22 | 44 | 66) => void;
   /** External data. When provided, the internal hook fetch is ignored. */
   data?: MarketBreadthDay[];
+  /** Exact-date NIFTY closes for tooltip context; missing dates are never forward-filled. */
+  niftyData?: Pick<ChartDataPoint, 'date' | 'close'>[];
   isLoading?: boolean;
   isError?: boolean;
   /** Display name shown in the header instead of "Market Breadth". */
@@ -138,7 +140,7 @@ function EmaStat({ label, value, prev }: { label: string; value: number | null; 
 
 // ── Custom tooltip ────────────────────────────────────────────────────────────
 
-function BreadthTooltip({ active, payload, ma, researchMode, relative }: any) {
+function BreadthTooltip({ active, payload, ma, researchMode, relative, niftyByDate }: any) {
   if (!active || !payload?.length) return null;
   const d = payload[0]?.payload as MarketBreadthDay;
   if (!d) return null;
@@ -162,6 +164,14 @@ function BreadthTooltip({ active, payload, ma, researchMode, relative }: any) {
         <span className="text-muted">Above {ma.m150}</span>
         <span className="mono text-[var(--text-secondary)]">{fmtPct(d.pct_above_150)}</span>
       </div>
+      <div className="border-t border-kd-border mt-2 pt-2 flex justify-between gap-4">
+        <span className="text-muted">NIFTY 50</span>
+        <span className="mono text-[var(--text-secondary)]">{niftyByDate.get(d.trade_date)?.close?.toLocaleString('en-IN', { maximumFractionDigits: 2 }) ?? 'Unavailable'}</span>
+      </div>
+      {niftyByDate.get(d.trade_date)?.changePct != null && <div className="flex justify-between gap-4 mt-0.5">
+        <span className="text-muted">NIFTY change</span>
+        <span className="mono text-[var(--text-secondary)]">{niftyByDate.get(d.trade_date).changePct >= 0 ? '+' : ''}{niftyByDate.get(d.trade_date).changePct.toFixed(2)}%</span>
+      </div>}
     </div>
   );
 }
@@ -170,6 +180,7 @@ function BreadthTooltip({ active, payload, ma, researchMode, relative }: any) {
 
 export default function MarketBreadthChart({
   data: dataProp,
+  niftyData = [],
   isLoading: isLoadingProp,
   isError: isErrorProp,
   indexName,
@@ -203,6 +214,15 @@ export default function MarketBreadthChart({
 
   const source    = dataProp     ?? (internal.data    ?? []);
   const data      = useMemo(() => source.slice(-days), [source, days]);
+  const niftyByDate = useMemo(() => {
+    const result = new Map<string, { close: number; changePct: number | null }>();
+    niftyData.forEach((row, i) => {
+      if (!Number.isFinite(row.close) || row.close <= 0) return;
+      const previous = niftyData[i - 1]?.close;
+      result.set(row.date, { close: row.close, changePct: Number.isFinite(previous) && previous! > 0 ? (row.close - previous!) / previous! * 100 : null });
+    });
+    return result;
+  }, [niftyData]);
   const isLoading = isLoadingProp ?? internal.isLoading;
   const isError   = isErrorProp   ?? internal.isError;
 
@@ -299,30 +319,30 @@ export default function MarketBreadthChart({
 
       {/* ── Chart ── */}
       {tooSmall ? (
-        <div className="flex flex-col items-center justify-center h-[200px] gap-1">
+        <div className="flex flex-col items-center justify-center h-[320px] gap-1">
           <AlertCircle className="w-4 h-4 text-muted" />
           <p className="text-xs text-muted text-center">
             Insufficient constituents ({displayStockCount}) — breadth requires ≥ 5 stocks
           </p>
         </div>
       ) : isLoading ? (
-        <div className="flex items-center justify-center h-[200px] gap-2">
+        <div className="flex items-center justify-center h-[320px] gap-2">
           <Loader2 className="w-4 h-4 text-accent-indigo animate-spin" />
           <span className="text-sm text-muted">Loading...</span>
         </div>
       ) : isError ? (
-        <div className="flex flex-col items-center justify-center h-[200px] gap-2">
+        <div className="flex flex-col items-center justify-center h-[320px] gap-2">
           <AlertCircle className="w-5 h-5 text-risk-red" />
           <p className="text-xs text-muted">Failed to load breadth data</p>
         </div>
       ) : data.length === 0 ? (
-        <div className="flex items-center justify-center h-[200px]">
+        <div className="flex items-center justify-center h-[320px]">
           <p className="text-xs text-muted text-center">
             No breadth data is available for this selection.
           </p>
         </div>
       ) : (
-        <ResponsiveContainer width="100%" height={200}>
+        <ResponsiveContainer width="100%" height={320}>
           <AreaChart data={data} margin={{ top: 4, right: 70, left: -20, bottom: 0 }}
             onMouseMove={event => onDateFocus?.(chartReadingDate(event))}
             onMouseLeave={() => onDateFocus?.(null)}
@@ -374,7 +394,7 @@ export default function MarketBreadthChart({
             />
 
             </>}
-            <Tooltip content={<BreadthTooltip ma={ma} researchMode={researchMode} relative={relative} />} />
+            <Tooltip content={<BreadthTooltip ma={ma} researchMode={researchMode} relative={relative} niftyByDate={niftyByDate} />} />
             {focusedDate && data.some(row => row.trade_date === focusedDate) && <ReferenceLine
               x={focusedDate} stroke="var(--text-primary)" strokeWidth={2} strokeDasharray="3 3"
               label={{ value: fmtDate(focusedDate), position: 'insideTopRight', fill: 'var(--text-primary)', fontSize: 10 }} />}

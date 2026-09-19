@@ -479,7 +479,7 @@ function TodayStructureTab({ date: _date }: { date: string }) {
     <section id="structure-participation" className="scroll-mt-24 space-y-4">
       <h2 className="text-lg font-semibold">1. How widely is the market participating?</h2>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">{(['pct_above_20', 'pct_above_50', 'pct_above_150'] as const).map((key, i) => <div key={key} className="glass-card rounded-xl p-4"><p className="text-xs text-muted">Stocks above {[20, 50, 150][i]} EMA</p><p className="text-3xl font-semibold mt-2">{latest?.[key] == null ? '—' : `${latest[key].toFixed(1)}%`}</p><p className="text-xs text-muted mt-1">{['Short', 'Medium', 'Long'][i]} horizon</p></div>)}</div>
-      <MarketBreadthChart data={data.breadth} isLoading={data.isLoading} isError={data.isError} indexName="All NSE" maBasis="market" researchMode periodDays={data.period} onPeriodChange={setPeriod} {...dateLink} />
+      <MarketBreadthChart data={data.breadth} niftyData={data.niftyData} isLoading={data.isLoading} isError={data.isError} indexName="All NSE" maBasis="market" researchMode periodDays={data.period} onPeriodChange={setPeriod} {...dateLink} />
       <MarketStructureHistory breadth={data.breadth} roc={data.roc} mode="breadth" onSelectDate={setDate} {...dateLink} {...historyContext} />
     </section>
     <section id="structure-momentum" className="scroll-mt-24 space-y-4">

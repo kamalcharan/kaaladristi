@@ -2,8 +2,9 @@ import type { MarketBreadthDay, BreadthRocDay } from '@/types';
 import { useCallback, useEffect, useId, useRef, useState, type CSSProperties } from 'react';
 import { MONTH_FULL } from '@/lib/dateUtils';
 import { momentumLabel } from '@/lib/structureStates';
-import { participationColor, magnitudeColor, rocColor, coverageWarnings, participationTransition,
-  rocTransition, participationChange, countContext, type HeatmapTransition } from '@/lib/heatmapReading';
+import { participationColor, participationBand, rocColor, coverageWarnings,
+  rocTransition, participationChange, countContext, pressureReading, breadthZoneEntry,
+  type ParticipationHorizon, type PressureKind, type HeatmapTransition } from '@/lib/heatmapReading';
 import '@/styles/structureHeatmap.css';
 
 const sessionDate = (iso: string) => {
@@ -11,8 +12,8 @@ const sessionDate = (iso: string) => {
   return `${Number(day)} ${MONTH_FULL[Number(month) - 1]} ${iso.slice(0, 4)}`;
 };
 type Row = { label: string; values: (number | null)[]; digits: number; suffix: string;
-  fill: (value: number | null) => string; detail: (i: number) => string; transition: (i: number) => HeatmapTransition | null;
-  windowWarning?: (i: number) => string | undefined };
+  fill: (value: number | null, i: number) => string; detail: (i: number) => string; transition: (i: number) => HeatmapTransition | null;
+  display?: (i: number) => string; kind?: 'reading' | 'event'; windowWarning?: (i: number) => string | undefined };
 
 export default function MarketStructureHistory({ breadth, roc, mode, onSelectDate, maBasis = 'market',
   focusedDate, onDateFocus, onInspectDate, coverageContext, rocCoverageContext,
@@ -61,27 +62,44 @@ export default function MarketStructureHistory({ breadth, roc, mode, onSelectDat
     return historyDates.slice(Math.max(0, fullIndex - lookback), fullIndex + 1).some(d => warnings.has(d));
   };
   const previousBreadth = (i: number) => fullBreadth[fullBreadth.findIndex(r => r.trade_date === dates[i]) - 1];
+  const zoneEvent = (i: number) => breadthZoneEntry(breadth[i]?.breadth_score, previousBreadth(i)?.breadth_score, blocked(i));
   const rows: Row[] = mode === 'breadth'
-    ? (['pct_above_20', 'pct_above_50', 'pct_above_150'] as const).map((key, leg) => ({
+    ? [{ label: 'Score zone entry', values: breadth.map(r => r.breadth_score), digits: 1, suffix: '', kind: 'event' as const,
+      fill: (_value: number | null, i: number) => zoneEvent(i)?.direction === 'down' ? 'var(--risk-red)' : zoneEvent(i)?.direction === 'up' ? 'var(--risk-green)' : 'transparent',
+      display: i => zoneEvent(i) ? '●' : '',
+      detail: i => zoneEvent(i)?.description ?? `Breadth score ${breadth[i]?.breadth_score?.toFixed(1) ?? 'unavailable'}; no new Fear or Greed entry on this session.`,
+      transition: zoneEvent,
+    }, ...(['pct_above_20', 'pct_above_50', 'pct_above_150'] as const).map((key, leg) => {
+      const horizon = [20, 50, 150][leg] as ParticipationHorizon;
+      return {
       label: `Above ${[20, 50, 150][leg]} ${maBasis === 'index' && leg > 0 ? 'SMA' : 'EMA'}`,
-      values: breadth.map(r => r[key]), digits: 1, suffix: '%', fill: participationColor,
-      detail: i => `${participationChange(breadth[i][key], previousBreadth(i)?.[key])}. ${countContext(breadth[i], (['above_20', 'above_50', 'above_150'] as const)[leg])}`,
-      transition: i => participationTransition(breadth[i][key], previousBreadth(i)?.[key], blocked(i)),
-    }))
+      values: breadth.map(r => r[key]), digits: 1, suffix: '%', fill: (value: number | null) => participationColor(value, horizon),
+      detail: (i: number) => `${participationBand(breadth[i][key], horizon)}. ${participationChange(breadth[i][key], previousBreadth(i)?.[key])}. ${countContext(breadth[i], (['above_20', 'above_50', 'above_150'] as const)[leg])}`,
+      transition: () => null,
+    }; })]
     : (['roc_13', 'roc_55', 'sma_breadth'] as const).map((key, leg) => ({
       label: ['ROC 13', 'ROC 55', 'Signal (5)'][leg], values: roc.map(r => r[key]), digits: 4, suffix: '', fill: rocColor,
       detail: i => `${key === 'roc_13' ? momentumLabel(roc[i].roc_13, roc[i].sma_breadth) + '. ' : ''}Color shows signed magnitude, not the direction of its latest change.`,
       transition: i => leg === 0 ? rocTransition(fullRoc, fullRoc.findIndex(r => r.trade_date === dates[i]), blocked(i, 2)) : null,
     }));
   if (mode === 'breadth') {
-    (['up_5pct', 'down_5pct', 'up_20pct_5d', 'down_20pct_5d'] as const).forEach((key, leg) => {
-      if (!breadth.some(r => r[key] != null && (r.universe_count ?? 0) > 0)) return;
-      rows.push({ label: ['Up >5% (session)', 'Down >5% (session)', 'Up >20% (5D)', 'Down >20% (5D)'][leg],
-        values: breadth.map(r => r[key] != null && (r.universe_count ?? 0) > 0 ? r[key]! / r.universe_count! * 100 : null),
-        digits: 1, suffix: '%', fill: v => magnitudeColor(v, leg < 2 ? 10 : 5, leg % 2 === 0),
-        detail: i => `${breadth[i][key]?.toLocaleString() ?? 'Unavailable'} stocks; shared count universe ${breadth[i].universe_count?.toLocaleString() ?? 'unavailable'}.`,
+    ([{ label: 'Daily pressure', up: 'up_5pct', down: 'down_5pct', kind: 'daily', lookback: 1 },
+      { label: 'Five-day extremes', up: 'up_20pct_5d', down: 'down_20pct_5d', kind: 'fiveDay', lookback: 5 }] as const).forEach(config => {
+      if (!breadth.some(r => r[config.up] != null && r[config.down] != null && (r.universe_count ?? 0) > 0)) return;
+      const readings = breadth.map((row, i) => {
+        const fullIndex = fullBreadth.findIndex(r => r.trade_date === row.trade_date);
+        const prior = fullBreadth.slice(Math.max(0, fullIndex - 22), fullIndex).map(priorRow => {
+          const n = priorRow.universe_count;
+          return n && priorRow[config.up] != null && priorRow[config.down] != null ? Math.abs((priorRow[config.up]! - priorRow[config.down]!) / n * 100) : NaN;
+        });
+        return pressureReading(row[config.up], row[config.down], row.universe_count, prior, config.kind as PressureKind);
+      });
+      rows.push({ label: config.label,
+        values: readings.map(r => r.net), digits: 1, suffix: '%', fill: (_v, i) => readings[i].color,
+        display: i => breadth[i][config.up] == null || breadth[i][config.down] == null ? '—' : `U${breadth[i][config.up]} · D${breadth[i][config.down]}`,
+        detail: i => readings[i].description,
         transition: () => null,
-        windowWarning: i => blocked(i, leg < 2 ? 1 : 5) ? 'Return window includes reduced or missing coverage. The mover count may include stale prices.' : undefined });
+        windowWarning: i => blocked(i, config.lookback) ? 'Return window includes reduced or missing coverage. The pressure reading may include stale prices.' : undefined });
     });
   }
   const selectedDate = focusedDate === undefined ? localDate : focusedDate;
@@ -89,6 +107,7 @@ export default function MarketStructureHistory({ breadth, roc, mode, onSelectDat
   const inspectedIndex = dates.indexOf(inspectDate ?? '');
   const inspectedRow = rows.find(row => row.label === activeCell?.row) ?? rows[0];
   const formatted = (row: Row, i: number) => {
+    if (row.display) return row.display(i);
     const value = row.values[i];
     return value == null || !Number.isFinite(value) ? '—' : `${value.toFixed(row.digits)}${row.suffix}`;
   };
@@ -112,7 +131,7 @@ export default function MarketStructureHistory({ breadth, roc, mode, onSelectDat
       <span>Oldest {dates[0] ? sessionDate(dates[0]) : '—'}</span>
     </div>
     <div ref={scrollRef} onScroll={updateScroll} className="market-structure-history-scroll overflow-x-auto" tabIndex={0} aria-label="Scrollable historical readings" onMouseLeave={() => onDateFocus?.(null)}>
-      <table className="heatmap-values" style={{ minWidth: 144 + dates.length * 58, '--heatmap-session-count': dates.length } as CSSProperties}>
+      <table className="heatmap-values" style={{ minWidth: 144 + dates.length * 68, '--heatmap-session-count': dates.length } as CSSProperties}>
         <caption className="sr-only">{mode} historical values, latest session first</caption>
         <thead><tr><th className="heatmap-label text-xs">Measure</th>{displayOrder.map(i => <th key={dates[i]} className="text-[10px] font-normal">
           <button type="button" className="text-accent-indigo underline" onClick={() => selectCell(dates[i], rows[0].label, true)}>{dates[i].slice(8)} {MONTH_FULL[Number(dates[i].slice(5, 7)) - 1].slice(0, 3)}</button>
@@ -121,13 +140,13 @@ export default function MarketStructureHistory({ breadth, roc, mode, onSelectDat
           const value = row.values[i]; const missing = value == null || !Number.isFinite(value);
           const warning = warnings.get(dates[i]) ?? row.windowWarning?.(i); const transition = row.transition(i);
           const description = `${sessionDate(dates[i])} · ${row.label}: ${formatted(row, i)}. ${row.detail(i)} ${warning ?? transition?.description ?? ''}`;
-          const fill = row.fill(value);
+          const fill = row.fill(value, i);
           return <td key={dates[i]} className="heatmap-slot"><button type="button" className="heatmap-cell"
             data-date={dates[i]} data-highlighted={selectedDate === dates[i]} data-warning={!!warning} data-missing={missing}
             aria-label={description} aria-describedby={detailId} title={description}
             onMouseEnter={() => selectCell(dates[i], row.label)} onFocus={() => selectCell(dates[i], row.label)}
             onBlur={() => onDateFocus?.(null)} onClick={() => selectCell(dates[i], row.label, true)}>
-            <span className="heatmap-fill" style={{ background: warning ? undefined : fill }}>{formatted(row, i)}</span>
+            <span className={`heatmap-fill ${row.kind === 'event' ? 'heatmap-event' : ''}`} style={{ background: row.kind === 'event' || warning ? undefined : fill, color: row.kind === 'event' ? fill : undefined }}>{formatted(row, i)}</span>
           </button></td>;
         })}</tr>)}</tbody>
       </table>
@@ -142,9 +161,9 @@ export default function MarketStructureHistory({ breadth, roc, mode, onSelectDat
     </div>
     <div className="mt-3 text-[11px] text-muted space-y-2">
       {mode === 'breadth' ? <>
-        <div className="flex flex-wrap items-center gap-2"><span className="heatmap-band bg-[var(--risk-red)]" /><span>Below 35%</span><span className="heatmap-band bg-[var(--risk-amber)]" /><span>35–55%</span><span className="heatmap-band bg-[var(--risk-green)]" /><span>Above 55%</span></div>
-        <p>These are participation bands for each EMA reading. Fear / Neutral / Greed applies only to the weighted score in the chart above, not to an individual EMA percentage.</p>
-        <p>Mover rows: green = up, red = down; intensity reaches full color at 10% of stocks for daily moves and 5% for five-session moves.</p>
+        <p><span className="text-risk-red">●</span> Entered Greed (score crossed above 55) · <span className="text-risk-green">●</span> Entered Fear (score crossed below 35). Dots mark zone entry, not buy or sell confirmation.</p>
+        <p>EMA bands become stricter with horizon. Red = extended, light red = elevated, amber = transition, dark green = opportunity watch, light green = extreme fear. Select a cell for its band and exact change.</p>
+        <p>Daily pressure pairs Up &gt;5% with Down &gt;5%. Five-day extremes pair Up &gt;20% with Down &gt;20%. Green favours buyers, red favours sellers, and stronger colour means an unusually large imbalance versus the preceding 22 sessions.</p>
       </> : <>
         <p>ROC shades: red below zero, neutral at zero, green above zero; full intensity at ±0.25. A negative reading recovering above its signal stays red.</p>
         <p>Select a ROC 13 cell to read whether it has held on a new side of the signal for two sessions. ROC 55 and Signal (5) show signed magnitude only.</p>

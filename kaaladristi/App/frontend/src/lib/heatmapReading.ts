@@ -4,12 +4,61 @@ import type { MarketBreadthDay, BreadthRocDay } from '@/types';
 export const PARTICIPATION_CHANGE_POINTS = 5;
 export const ROC_SIGNAL_GAP = 0.02;
 const finite = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
-export function participationColor(value: number | null | undefined): string {
+export type ParticipationHorizon = 20 | 50 | 150;
+export const PARTICIPATION_BANDS: Record<ParticipationHorizon, { extremeHigh: number; high: number; neutral: number; opportunity: number }> = {
+  20: { extremeHigh: 55, high: 45, neutral: 38, opportunity: 32 },
+  50: { extremeHigh: 60, high: 50, neutral: 35, opportunity: 25 },
+  150: { extremeHigh: 65, high: 55, neutral: 30, opportunity: 20 },
+};
+export function participationBand(value: number | null | undefined, horizon: ParticipationHorizon): string {
+  if (!finite(value)) return 'Unavailable';
+  const b = PARTICIPATION_BANDS[horizon];
+  if (value > b.extremeHigh) return 'Extended';
+  if (value > b.high) return 'Elevated';
+  if (value > b.neutral) return 'Neutral / transition';
+  if (value >= b.opportunity) return 'Opportunity watch';
+  return 'Extreme fear';
+}
+export function participationColor(value: number | null | undefined, horizon: ParticipationHorizon = 20): string {
   if (!finite(value)) return 'var(--card)';
-  const p = Math.max(0, Math.min(100, value));
-  if (p < 35) return 'var(--risk-red)';
-  if (p <= 55) return 'var(--risk-amber)';
-  return 'var(--risk-green)';
+  const band = participationBand(value, horizon);
+  if (band === 'Extended') return 'var(--risk-red)';
+  if (band === 'Elevated') return 'color-mix(in srgb, var(--risk-red) 58%, var(--card))';
+  if (band === 'Neutral / transition') return 'var(--risk-amber)';
+  if (band === 'Opportunity watch') return 'var(--risk-green)';
+  return 'color-mix(in srgb, var(--risk-green) 46%, var(--card))';
+}
+
+export type PressureKind = 'daily' | 'fiveDay';
+export type PressureReading = { net: number | null; label: string; color: string; description: string };
+export function pressureReading(up: number | null | undefined, down: number | null | undefined,
+  universe: number | null | undefined, priorAbsoluteNets: number[], kind: PressureKind): PressureReading {
+  if (!finite(up) || !finite(down) || !finite(universe) || universe <= 0) {
+    return { net: null, label: 'Unavailable', color: 'var(--card)', description: 'Pressure comparison unavailable.' };
+  }
+  const net = (up - down) / universe * 100;
+  const floor = kind === 'daily' ? 0.5 : 0.1;
+  const strongFloor = kind === 'daily' ? 1.5 : 0.3;
+  const sorted = priorAbsoluteNets.filter(finite).sort((a, b) => a - b);
+  const unusual = sorted.length >= 5 ? sorted[Math.floor((sorted.length - 1) * .8)] : Infinity;
+  const strong = Math.abs(net) >= strongFloor && Math.abs(net) >= unusual;
+  const balanced = Math.abs(net) < floor;
+  const positive = net > 0;
+  const label = balanced ? (kind === 'daily' ? 'Balanced' : 'Normal')
+    : strong ? (positive ? (kind === 'daily' ? 'Buying thrust' : 'Explosive expansion') : (kind === 'daily' ? 'Panic selling' : 'Capitulation cluster'))
+    : positive ? (kind === 'daily' ? 'Buyers dominant' : 'Winners dominant') : (kind === 'daily' ? 'Sellers dominant' : 'Breakdown pressure');
+  const color = balanced ? 'var(--risk-amber)'
+    : positive ? (strong ? 'var(--risk-green)' : 'color-mix(in srgb, var(--risk-green) 55%, var(--card))')
+      : strong ? 'var(--risk-red)' : 'color-mix(in srgb, var(--risk-red) 55%, var(--card))';
+  const evidence = `${up.toLocaleString()} up versus ${down.toLocaleString()} down; net ${net >= 0 ? '+' : ''}${net.toFixed(1)}% of the ${universe.toLocaleString()}-stock universe.`;
+  return { net, label, color, description: `${label}. ${evidence}${strong ? ' The imbalance is also unusually large versus the preceding 22 sessions.' : ''}` };
+}
+
+export function breadthZoneEntry(current: number | null | undefined, previous: number | null | undefined, blocked = false): HeatmapTransition | null {
+  if (blocked || !finite(current) || !finite(previous)) return null;
+  if (previous <= 55 && current > 55) return { direction: 'down', description: 'Entered Greed: the composite breadth score crossed above 55.' };
+  if (previous >= 35 && current < 35) return { direction: 'up', description: 'Entered Fear: the composite breadth score crossed below 35.' };
+  return null;
 }
 export function magnitudeColor(value: number | null | undefined, scale: number, positive = true): string {
   if (!finite(value)) return 'var(--card)';

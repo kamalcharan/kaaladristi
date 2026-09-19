@@ -4,12 +4,20 @@ import ts from 'typescript';
 const source = fs.readFileSync(new URL('../../src/lib/heatmapReading.ts', import.meta.url), 'utf8');
 const exports = {};
 new Function('exports', ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText)(exports);
-const { participationColor, rocColor, participationTransition, rocTransition, coverageWarnings, chartReadingDate, countContext } = exports;
+const { participationColor, participationBand, pressureReading, breadthZoneEntry, rocColor, participationTransition, rocTransition, coverageWarnings, chartReadingDate, countContext } = exports;
 assert.notEqual(participationColor(28.1), participationColor(36.3));
 assert.equal(participationColor(-10), participationColor(0));
 assert.equal(participationColor(110), participationColor(100));
 assert.equal(participationColor(null), 'var(--card)');
 assert.equal(participationColor(NaN), 'var(--card)');
+assert.equal(participationBand(56,20),'Extended');
+assert.equal(participationBand(34,50),'Opportunity watch');
+assert.equal(participationBand(29,150),'Opportunity watch');
+assert.equal(breadthZoneEntry(56,54)?.description.startsWith('Entered Greed'),true);
+assert.equal(breadthZoneEntry(34,36)?.description.startsWith('Entered Fear'),true);
+assert.equal(breadthZoneEntry(34,36,true),null);
+assert.equal(pressureReading(90,13,3000,[.2,.3,.4,.5,.6,.7], 'daily').label,'Buying thrust');
+assert.equal(pressureReading(13,90,3000,[.2,.3,.4,.5,.6,.7], 'daily').label,'Panic selling');
 assert.match(rocColor(-.0511), /risk-red/); // Recovering but negative must stay red.
 assert.equal(participationTransition(50.1, 49.9), null); // No boundary flicker.
 assert.equal(participationTransition(36.3, 28.1).direction, 'up');
