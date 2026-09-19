@@ -65,7 +65,9 @@ try {
     await heatmap.locator('.heatmap-cell').first().waitFor();
     assert.equal(await heatmap.locator('tbody tr').count(),6);
     const firstRow=heatmap.locator('tbody tr').nth(1);
-    assert(await heatmap.locator('.heatmap-event').filter({hasText:'●'}).count() >= 1,'Zone-entry row should contain at least one confirmed crossing');
+    assert(await heatmap.locator('.zone-entry-dot:not(.provisional)').count() >= 1,'Zone-entry row should contain at least one confirmed crossing');
+    const warningEvent=heatmap.locator('tbody tr').first().locator('[data-date="2026-09-15"] .heatmap-event');
+    assert.equal(await warningEvent.evaluate(e=>getComputedStyle(e).backgroundColor),'rgba(0, 0, 0, 0)');
     assert.equal(await firstRow.locator('.heatmap-cell').first().getAttribute('data-date'),'2026-09-18');
     assert.equal(await firstRow.locator('.heatmap-cell').count(),66);
     const latest=firstRow.locator('[data-date="2026-09-18"]');

@@ -62,12 +62,12 @@ export default function MarketStructureHistory({ breadth, roc, mode, onSelectDat
     return historyDates.slice(Math.max(0, fullIndex - lookback), fullIndex + 1).some(d => warnings.has(d));
   };
   const previousBreadth = (i: number) => fullBreadth[fullBreadth.findIndex(r => r.trade_date === dates[i]) - 1];
-  const zoneEvent = (i: number) => breadthZoneEntry(breadth[i]?.breadth_score, previousBreadth(i)?.breadth_score, blocked(i));
+  const zoneEvent = (i: number) => breadthZoneEntry(breadth[i]?.breadth_score, previousBreadth(i)?.breadth_score);
   const rows: Row[] = mode === 'breadth'
     ? [{ label: 'Score zone entry', values: breadth.map(r => r.breadth_score), digits: 1, suffix: '', kind: 'event' as const,
       fill: (_value: number | null, i: number) => zoneEvent(i)?.direction === 'down' ? 'var(--risk-red)' : zoneEvent(i)?.direction === 'up' ? 'var(--risk-green)' : 'transparent',
-      display: i => zoneEvent(i) ? '●' : '',
-      detail: i => zoneEvent(i)?.description ?? `Breadth score ${breadth[i]?.breadth_score?.toFixed(1) ?? 'unavailable'}; no new Fear or Greed entry on this session.`,
+      display: i => zoneEvent(i)?.direction === 'down' ? 'Greed' : zoneEvent(i)?.direction === 'up' ? 'Fear' : '',
+      detail: i => zoneEvent(i) ? `${zoneEvent(i)!.description}${blocked(i) ? ' Coverage is reduced, so this entry is provisional.' : ''}` : `Breadth score ${breadth[i]?.breadth_score?.toFixed(1) ?? 'unavailable'}; no new Fear or Greed entry on this session.`,
       transition: zoneEvent,
     }, ...(['pct_above_20', 'pct_above_50', 'pct_above_150'] as const).map((key, leg) => {
       const horizon = [20, 50, 150][leg] as ParticipationHorizon;
@@ -146,7 +146,9 @@ export default function MarketStructureHistory({ breadth, roc, mode, onSelectDat
             aria-label={description} aria-describedby={detailId} title={description}
             onMouseEnter={() => selectCell(dates[i], row.label)} onFocus={() => selectCell(dates[i], row.label)}
             onBlur={() => onDateFocus?.(null)} onClick={() => selectCell(dates[i], row.label, true)}>
-            <span className={`heatmap-fill ${row.kind === 'event' ? 'heatmap-event' : ''}`} style={{ background: row.kind === 'event' || warning ? undefined : fill, color: row.kind === 'event' ? fill : undefined }}>{formatted(row, i)}</span>
+            <span className={`heatmap-fill ${row.kind === 'event' ? 'heatmap-event' : ''}`} style={{ background: row.kind === 'event' || warning ? undefined : fill }}>
+              {row.kind === 'event' ? transition && <span aria-hidden="true" className={`zone-entry-dot ${warning ? 'provisional' : ''}`} style={{ '--event-color': fill } as CSSProperties} /> : formatted(row, i)}
+            </span>
           </button></td>;
         })}</tr>)}</tbody>
       </table>
@@ -161,7 +163,7 @@ export default function MarketStructureHistory({ breadth, roc, mode, onSelectDat
     </div>
     <div className="mt-3 text-[11px] text-muted space-y-2">
       {mode === 'breadth' ? <>
-        <p><span className="text-risk-red">●</span> Entered Greed (score crossed above 55) · <span className="text-risk-green">●</span> Entered Fear (score crossed below 35). Dots mark zone entry, not buy or sell confirmation.</p>
+        <p><span className="text-risk-red">●</span> Entered Greed (score crossed above 55) · <span className="text-risk-green">●</span> Entered Fear (score crossed below 35). A hollow dot means reduced coverage makes the crossing provisional. Dots are observations, not buy or sell confirmation.</p>
         <p>EMA bands become stricter with horizon. Red = extended, light red = elevated, amber = transition, dark green = opportunity watch, light green = extreme fear. Select a cell for its band and exact change.</p>
         <p>Daily pressure pairs Up &gt;5% with Down &gt;5%. Five-day extremes pair Up &gt;20% with Down &gt;20%. Green favours buyers, red favours sellers, and stronger colour means an unusually large imbalance versus the preceding 22 sessions.</p>
       </> : <>
