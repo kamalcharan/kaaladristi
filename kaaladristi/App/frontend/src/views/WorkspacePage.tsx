@@ -216,7 +216,7 @@ export default function WorkspacePage() {
       {/* ── Tab panels ── */}
 
       {activeTab === 'today' && (
-        <div style={{ flex: 1, overflowY: 'auto' }}>
+        <div style={{ flex: 1, minWidth: 0, overflowX: 'hidden', overflowY: 'auto' }}>
           <WorkspaceToday />
         </div>
       )}
