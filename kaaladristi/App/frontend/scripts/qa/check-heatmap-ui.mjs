@@ -93,9 +93,11 @@ try {
     assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+2),'No document overflow on phone or desktop');
     await heatmap.screenshot({path:path.join(output,`breadth-${theme}-${mode}-${width}.png`)});
     const momentum=page.getByRole('region',{name:'Momentum heatmap'});
-    await momentum.locator('tbody tr').first().locator('[data-date="2026-09-18"]').click();
-    assert.match(await momentum.textContent(),/Recovering relative to signal/);
+    await momentum.locator('tbody tr').nth(1).locator('[data-date="2026-09-18"]').click();
+    assert.match(await momentum.textContent(),/Negative but recovering/);
     await momentum.screenshot({path:path.join(output,`roc-${theme}-${mode}-${width}.png`)});
+    await momentum.locator('tbody tr').nth(2).locator('[data-date="2026-09-18"]').click();
+    assert.match(await momentum.textContent(),/Fast momentum lagging/);
     // Changing the window must preserve the date's shade.
     await page.getByRole('button',{name:'22D',exact:true}).first().click();
     assert.equal(await firstRow.locator('.heatmap-cell').count(),22);

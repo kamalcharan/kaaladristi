@@ -1,10 +1,9 @@
 import type { MarketBreadthDay, BreadthRocDay } from '@/types';
 import { useCallback, useEffect, useId, useRef, useState, type CSSProperties } from 'react';
 import { MONTH_FULL } from '@/lib/dateUtils';
-import { momentumLabel } from '@/lib/structureStates';
-import { participationColor, participationBand, rocColor, coverageWarnings,
+import { participationColor, participationBand, coverageWarnings,
   rocTransition, participationChange, countContext, pressureReading, breadthZoneEntry,
-  type ParticipationHorizon, type PressureKind, type HeatmapTransition } from '@/lib/heatmapReading';
+  rocMomentumReading, rocAlignmentReading, type ParticipationHorizon, type PressureKind, type HeatmapTransition } from '@/lib/heatmapReading';
 import '@/styles/structureHeatmap.css';
 
 const sessionDate = (iso: string) => {
@@ -77,11 +76,25 @@ export default function MarketStructureHistory({ breadth, roc, mode, onSelectDat
       detail: (i: number) => `${participationBand(breadth[i][key], horizon)}. ${participationChange(breadth[i][key], previousBreadth(i)?.[key])}. ${countContext(breadth[i], (['above_20', 'above_50', 'above_150'] as const)[leg])}`,
       transition: () => null,
     }; })]
-    : (['roc_13', 'roc_55', 'sma_breadth'] as const).map((key, leg) => ({
-      label: ['ROC 13', 'ROC 55', 'Signal (5)'][leg], values: roc.map(r => r[key]), digits: 4, suffix: '', fill: rocColor,
-      detail: i => `${key === 'roc_13' ? momentumLabel(roc[i].roc_13, roc[i].sma_breadth) + '. ' : ''}Color shows signed magnitude, not the direction of its latest change.`,
-      transition: i => leg === 0 ? rocTransition(fullRoc, fullRoc.findIndex(r => r.trade_date === dates[i]), blocked(i, 2)) : null,
-    }));
+    : (() => {
+      const states = roc.map(r => rocMomentumReading(r.roc_13, r.sma_breadth));
+      const alignments = roc.map(r => rocAlignmentReading(r.roc_13, r.roc_55));
+      const event = (i: number) => rocTransition(fullRoc, fullRoc.findIndex(r => r.trade_date === dates[i]));
+      const evidence = (i: number) => `ROC 13 ${roc[i].roc_13?.toFixed(4) ?? '—'} · Signal ${roc[i].sma_breadth?.toFixed(4) ?? '—'} · ROC 55 ${roc[i].roc_55?.toFixed(4) ?? '—'}.`;
+      return [
+        { label: 'Momentum event', values: roc.map(r => r.roc_13), digits: 4, suffix: '', kind: 'event' as const,
+          fill: (_value: number | null, i: number) => event(i)?.direction === 'up' ? 'var(--risk-green)' : event(i)?.direction === 'down' ? 'var(--risk-red)' : 'transparent',
+          display: (i: number) => event(i)?.direction === 'up' ? 'Recovery' : event(i)?.direction === 'down' ? 'Fading' : '',
+          detail: (i: number) => `${event(i)?.description ?? 'No new confirmed momentum event on this session.'} ${evidence(i)}`,
+          transition: event },
+        { label: 'Momentum state', values: roc.map(r => r.roc_13), digits: 4, suffix: '',
+          fill: (_value: number | null, i: number) => states[i].color, display: (i: number) => states[i].shortLabel,
+          detail: (i: number) => `${states[i].label}. ${states[i].description} ${evidence(i)}`, transition: () => null },
+        { label: 'Horizon alignment', values: roc.map(r => r.roc_13 != null && r.roc_55 != null ? r.roc_13 - r.roc_55 : null), digits: 4, suffix: '',
+          fill: (_value: number | null, i: number) => alignments[i].color, display: (i: number) => alignments[i].shortLabel,
+          detail: (i: number) => `${alignments[i].label}. ${alignments[i].description} ${evidence(i)}`, transition: () => null },
+      ];
+    })();
   if (mode === 'breadth') {
     ([{ label: 'Daily pressure', up: 'up_5pct', down: 'down_5pct', kind: 'daily', lookback: 1 },
       { label: 'Five-day extremes', up: 'up_20pct_5d', down: 'down_20pct_5d', kind: 'fiveDay', lookback: 5 }] as const).forEach(config => {
@@ -105,7 +118,10 @@ export default function MarketStructureHistory({ breadth, roc, mode, onSelectDat
   const selectedDate = focusedDate === undefined ? localDate : focusedDate;
   const inspectDate = selectedDate ?? activeCell?.date;
   const inspectedIndex = dates.indexOf(inspectDate ?? '');
-  const inspectedRow = rows.find(row => row.label === activeCell?.row) ?? rows[0];
+  const inspectedRow = rows.find(row => row.label === activeCell?.row) ?? rows.find(row => row.kind !== 'event') ?? rows[0];
+  const inspectedNote = inspectedIndex >= 0 && inspectedRow
+    ? warnings.get(dates[inspectedIndex]) ?? inspectedRow.windowWarning?.(inspectedIndex) ?? (inspectedRow.kind === 'event' ? undefined : inspectedRow.transition(inspectedIndex)?.description)
+    : undefined;
   const formatted = (row: Row, i: number) => {
     if (row.display) return row.display(i);
     const value = row.values[i];
@@ -157,7 +173,7 @@ export default function MarketStructureHistory({ breadth, roc, mode, onSelectDat
       {inspectedIndex >= 0 && inspectedRow ? <>
         <p className="font-semibold">{sessionDate(dates[inspectedIndex])} · {inspectedRow.label}: {formatted(inspectedRow, inspectedIndex)}</p>
         <p className="text-muted mt-1">{inspectedRow.detail(inspectedIndex)}</p>
-        <p className="text-muted mt-1">{warnings.get(dates[inspectedIndex]) ?? inspectedRow.windowWarning?.(inspectedIndex) ?? inspectedRow.transition(inspectedIndex)?.description}</p>
+        {inspectedNote && <p className="text-muted mt-1">{inspectedNote}</p>}
         <button type="button" className="text-accent-indigo underline mt-2" onClick={() => onSelectDate(dates[inspectedIndex])}>Read this session with VaNi →</button>
       </> : <p className="text-muted">{selectedDate ? `No ${mode === 'breadth' ? 'participation' : 'momentum'} observation for ${sessionDate(selectedDate)} in this window.` : 'Point to a cell to see its exact value and change. Tap to keep that date highlighted on both charts.'}</p>}
     </div>
@@ -167,8 +183,8 @@ export default function MarketStructureHistory({ breadth, roc, mode, onSelectDat
         <p>EMA bands become stricter with horizon. Red = extended, light red = elevated, amber = transition, dark green = opportunity watch, light green = extreme fear. Select a cell for its band and exact change.</p>
         <p>Daily pressure pairs Up &gt;5% with Down &gt;5%. Five-day extremes pair Up &gt;20% with Down &gt;20%. Green favours buyers, red favours sellers, and stronger colour means an unusually large imbalance versus the preceding 22 sessions.</p>
       </> : <>
-        <p>ROC shades: red below zero, neutral at zero, green above zero; full intensity at ±0.25. A negative reading recovering above its signal stays red.</p>
-        <p>Select a ROC 13 cell to read whether it has held on a new side of the signal for two sessions. ROC 55 and Signal (5) show signed magnitude only.</p>
+        <p><span className="text-risk-green">●</span> Recovery attempt: negative ROC 13 held above its signal for two sessions · <span className="text-risk-red">●</span> Fading warning: positive ROC 13 held below its signal for two sessions. An amber ring means reduced coverage.</p>
+        <p>Momentum state combines ROC 13 with its signal: expansion, fading, recovery, weakness or flat. Horizon alignment compares ROC 13 with ROC 55: leading, aligned or lagging. The minimum meaningful gap is 0.02.</p>
       </>}
       <p>Scales are fixed across windows. Exact values stay inside each cell. Stripes = coverage warning; a dash = missing value.</p>
     </div>

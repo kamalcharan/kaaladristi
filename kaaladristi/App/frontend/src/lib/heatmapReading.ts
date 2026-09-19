@@ -66,6 +66,23 @@ export function magnitudeColor(value: number | null | undefined, scale: number, 
   return `color-mix(in srgb, ${positive ? 'var(--risk-green)' : 'var(--risk-red)'} ${strength >= .66 ? 100 : strength >= .33 ? 65 : 35}%, var(--card))`;
 }
 export function rocColor(value: number | null | undefined): string { return magnitudeColor(value, 0.25, (value ?? 0) >= 0); }
+export type RocReading = { label: string; shortLabel: string; color: string; description: string };
+export function rocMomentumReading(roc13: number | null | undefined, signal: number | null | undefined): RocReading {
+  if (!finite(roc13) || !finite(signal)) return { label: 'Unavailable', shortLabel: '—', color: 'var(--card)', description: 'Momentum state unavailable.' };
+  const gap = roc13 - signal;
+  if (Math.abs(gap) < ROC_SIGNAL_GAP) return { label: 'Indecisive / flat', shortLabel: 'FLAT', color: 'var(--risk-amber)', description: `ROC 13 is within ${ROC_SIGNAL_GAP.toFixed(2)} of its signal.` };
+  if (roc13 > 0 && gap > 0) return { label: 'Positive expansion', shortLabel: 'EXPAND', color: 'var(--risk-green)', description: 'ROC 13 is positive and above its signal.' };
+  if (roc13 > 0) return { label: 'Positive but fading', shortLabel: 'FADING', color: 'color-mix(in srgb, var(--risk-red) 58%, var(--card))', description: 'ROC 13 remains positive but has fallen below its signal.' };
+  if (gap > 0) return { label: 'Negative but recovering', shortLabel: 'RECOVER', color: 'var(--risk-green)', description: 'ROC 13 remains negative but has risen above its signal.' };
+  return { label: 'Negative and weakening', shortLabel: 'WEAK', color: 'var(--risk-red)', description: 'ROC 13 is negative and below its signal.' };
+}
+export function rocAlignmentReading(roc13: number | null | undefined, roc55: number | null | undefined): RocReading {
+  if (!finite(roc13) || !finite(roc55)) return { label: 'Unavailable', shortLabel: '—', color: 'var(--card)', description: 'Fast/slow alignment unavailable.' };
+  const gap = roc13 - roc55;
+  if (Math.abs(gap) < ROC_SIGNAL_GAP) return { label: 'Fast and slow aligned', shortLabel: 'ALIGNED', color: 'var(--risk-amber)', description: `ROC 13 is within ${ROC_SIGNAL_GAP.toFixed(2)} of ROC 55.` };
+  if (gap > 0) return { label: 'Fast momentum leading', shortLabel: 'LEADING', color: 'var(--risk-green)', description: 'ROC 13 is meaningfully above ROC 55.' };
+  return { label: 'Fast momentum lagging', shortLabel: 'LAGGING', color: 'var(--risk-red)', description: 'ROC 13 is meaningfully below ROC 55.' };
+}
 type Sample = { trade_date: string; stock_count?: number | null; universe_count?: number | null };
 const population = (row: Sample) => row.universe_count ?? row.stock_count;
 /** Observable anomaly, not proof that unflagged populations are complete. */
@@ -99,8 +116,8 @@ export function rocTransition(rows: BreadthRocDay[], i: number, blocked = false)
   if (!gaps.every(finite)) return null;
   const [before, previous, current] = gaps as number[];
   if (Math.abs(current) < ROC_SIGNAL_GAP || Math.sign(previous) !== Math.sign(current)) return null;
-  if (current > 0 && before <= 0) return { direction: 'up', description: 'ROC 13 held above its signal for two sessions. It may still be below zero.' };
-  if (current < 0 && before >= 0) return { direction: 'down', description: 'ROC 13 held below its signal for two sessions. It may still be above zero.' };
+  if (current > 0 && before <= 0 && rows[i].roc_13! < 0) return { direction: 'up', description: 'Recovery attempt: negative ROC 13 held above its signal for two sessions.' };
+  if (current < 0 && before >= 0 && rows[i].roc_13! > 0) return { direction: 'down', description: 'Fading warning: positive ROC 13 held below its signal for two sessions.' };
   return null;
 }
 export function participationChange(current: number | null | undefined, previous: number | null | undefined): string {

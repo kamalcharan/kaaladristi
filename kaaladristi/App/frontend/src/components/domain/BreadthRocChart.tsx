@@ -9,7 +9,7 @@ import { useBreadthRoc } from '@/hooks';
 import { Loader2, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { BreadthRocDay } from '@/types';
-import { chartReadingDate } from '@/lib/heatmapReading';
+import { chartReadingDate, rocMomentumReading, rocAlignmentReading } from '@/lib/heatmapReading';
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
@@ -91,6 +91,8 @@ function RocTooltip({ active, payload, researchMode }: any) {
 
   const bias13 = (d.roc_13 ?? 0) >= 0;
   const bias55 = (d.roc_55 ?? 0) >= 0;
+  const state = rocMomentumReading(d.roc_13, d.sma_breadth);
+  const alignment = rocAlignmentReading(d.roc_13, d.roc_55);
 
   return (
     <div className="glass-card rounded-xl p-3 text-[11px] border border-kd-border min-w-[170px]">
@@ -110,6 +112,10 @@ function RocTooltip({ active, payload, researchMode }: any) {
       <div className="flex justify-between gap-4">
         <span className="text-muted">SMA (5)</span>
         <span className="mono text-[var(--text-secondary)]">{fmtRoc(d.sma_breadth)}</span>
+      </div>
+      <div className="border-t border-kd-border mt-2 pt-2">
+        <div className="flex justify-between gap-4"><span className="text-muted">State</span><span className="font-semibold text-[var(--text-secondary)]">{state.label}</span></div>
+        <div className="flex justify-between gap-4 mt-0.5"><span className="text-muted">Alignment</span><span className="font-semibold text-[var(--text-secondary)]">{alignment.label}</span></div>
       </div>
     </div>
   );
@@ -239,23 +245,23 @@ export default function BreadthRocChart({
 
       {/* ── Chart ── */}
       {isLoading ? (
-        <div className="flex items-center justify-center h-[200px] gap-2">
+        <div className="flex items-center justify-center h-[320px] gap-2">
           <Loader2 className="w-4 h-4 text-accent-indigo animate-spin" />
           <span className="text-sm text-muted">Loading...</span>
         </div>
       ) : isError ? (
-        <div className="flex flex-col items-center justify-center h-[200px] gap-2">
+        <div className="flex flex-col items-center justify-center h-[320px] gap-2">
           <AlertCircle className="w-5 h-5 text-risk-red" />
           <p className="text-xs text-muted">Failed to load ROC data</p>
         </div>
       ) : data.length === 0 ? (
-        <div className="flex items-center justify-center h-[200px]">
+        <div className="flex items-center justify-center h-[320px]">
           <p className="text-xs text-muted text-center">
             No momentum data is available for this selection.
           </p>
         </div>
       ) : (
-        <ResponsiveContainer width="100%" height={200}>
+        <ResponsiveContainer width="100%" height={320}>
           <ComposedChart data={data} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}
             onMouseMove={event => onDateFocus?.(chartReadingDate(event))}
             onMouseLeave={() => onDateFocus?.(null)}
