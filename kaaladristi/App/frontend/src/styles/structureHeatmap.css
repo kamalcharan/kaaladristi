@@ -11,8 +11,8 @@
 .structure-heatmap .heatmap-cell[data-missing='true'] .heatmap-fill { border-style: dashed; }
 .structure-heatmap .heatmap-values .heatmap-fill { height: 36px; font-size: 11px; }
 .structure-heatmap .heatmap-event { background: transparent !important; border-color: transparent; font-size: 18px; }
-.structure-heatmap .zone-entry-dot { display: block; width: 13px; height: 13px; border-radius: 999px; background: var(--event-color); box-shadow: 0 0 0 3px color-mix(in srgb, var(--event-color) 18%, transparent); }
-.structure-heatmap .zone-entry-dot.provisional { background: transparent; border: 2px solid var(--event-color); box-shadow: none; }
+.structure-heatmap .zone-entry-dot { display: block; width: 15px; height: 15px; border-radius: 999px; background: radial-gradient(circle at 35% 28%, color-mix(in srgb, var(--text-primary) 45%, var(--event-color)) 0 12%, var(--event-color) 38% 100%); box-shadow: 0 4px 7px color-mix(in srgb, var(--event-color) 48%, transparent), 0 0 0 3px color-mix(in srgb, var(--event-color) 18%, transparent); transform: translateY(-1px); }
+.structure-heatmap .zone-entry-dot.provisional { outline: 2px solid var(--risk-amber); outline-offset: 3px; }
 .structure-heatmap .heatmap-cell[data-warning='true'] .heatmap-event,
 .structure-heatmap .heatmap-cell[data-highlighted='true'] .heatmap-event { background: transparent !important; outline: none; color: inherit; }
 .structure-heatmap .heatmap-inspection { height: 128px; overflow-y: auto; }

@@ -163,7 +163,7 @@ export default function MarketStructureHistory({ breadth, roc, mode, onSelectDat
     </div>
     <div className="mt-3 text-[11px] text-muted space-y-2">
       {mode === 'breadth' ? <>
-        <p><span className="text-risk-red">●</span> Entered Greed (score crossed above 55) · <span className="text-risk-green">●</span> Entered Fear (score crossed below 35). A hollow dot means reduced coverage makes the crossing provisional. Dots are observations, not buy or sell confirmation.</p>
+        <p><span className="text-risk-red">●</span> Entered Greed (score crossed above 55) · <span className="text-risk-green">●</span> Entered Fear (score crossed below 35). An amber ring means reduced coverage makes the crossing provisional. Balls are observations, not buy or sell confirmation.</p>
         <p>EMA bands become stricter with horizon. Red = extended, light red = elevated, amber = transition, dark green = opportunity watch, light green = extreme fear. Select a cell for its band and exact change.</p>
         <p>Daily pressure pairs Up &gt;5% with Down &gt;5%. Five-day extremes pair Up &gt;20% with Down &gt;20%. Green favours buyers, red favours sellers, and stronger colour means an unusually large imbalance versus the preceding 22 sessions.</p>
       </> : <>

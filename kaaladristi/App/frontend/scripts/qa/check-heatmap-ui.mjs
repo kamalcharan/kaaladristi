@@ -68,6 +68,8 @@ try {
     assert(await heatmap.locator('.zone-entry-dot:not(.provisional)').count() >= 1,'Zone-entry row should contain at least one confirmed crossing');
     const warningEvent=heatmap.locator('tbody tr').first().locator('[data-date="2026-09-15"] .heatmap-event');
     assert.equal(await warningEvent.evaluate(e=>getComputedStyle(e).backgroundColor),'rgba(0, 0, 0, 0)');
+    const provisionalBall=warningEvent.locator('.zone-entry-dot.provisional');
+    assert.notEqual(await provisionalBall.evaluate(e=>getComputedStyle(e).backgroundImage),'none');
     assert.equal(await firstRow.locator('.heatmap-cell').first().getAttribute('data-date'),'2026-09-18');
     assert.equal(await firstRow.locator('.heatmap-cell').count(),66);
     const latest=firstRow.locator('[data-date="2026-09-18"]');
