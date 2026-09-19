@@ -7,6 +7,7 @@ import { useMarketBreadth } from '@/hooks';
 import { Loader2, AlertCircle, TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { MarketBreadthDay } from '@/types';
+import { chartReadingDate } from '@/lib/heatmapReading';
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
@@ -41,6 +42,9 @@ type MaLabels = typeof MA_LABELS[MaBasis];
 // ── Props ─────────────────────────────────────────────────────────────────────
 
 export interface MarketBreadthChartProps {
+  focusedDate?: string | null;
+  onDateFocus?: (date: string | null) => void;
+  onInspectDate?: (date: string | null) => void;
   researchMode?: boolean;
   periodDays?: 22 | 44 | 66;
   onPeriodChange?: (days: 22 | 44 | 66) => void;
@@ -174,6 +178,7 @@ export default function MarketBreadthChart({
   percentileRank,
   maBasis: maBasisProp,
   periodDays, onPeriodChange, researchMode = false,
+  focusedDate, onDateFocus, onInspectDate,
 }: MarketBreadthChartProps = {}) {
   const [localPeriod, setPeriod] = useState<PeriodLabel>('66D');
   const period = periodDays ? `${periodDays}D` : localPeriod;
@@ -318,7 +323,10 @@ export default function MarketBreadthChart({
         </div>
       ) : (
         <ResponsiveContainer width="100%" height={200}>
-          <AreaChart data={data} margin={{ top: 4, right: 70, left: -20, bottom: 0 }}>
+          <AreaChart data={data} margin={{ top: 4, right: 70, left: -20, bottom: 0 }}
+            onMouseMove={event => onDateFocus?.(chartReadingDate(event))}
+            onMouseLeave={() => onDateFocus?.(null)}
+            onClick={event => { const date = chartReadingDate(event); if (date) onInspectDate?.(date); }}>
             <defs>
               <linearGradient id="breadthGrad" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="5%"  stopColor="var(--accent)" stopOpacity={0.35} />
@@ -367,6 +375,9 @@ export default function MarketBreadthChart({
 
             </>}
             <Tooltip content={<BreadthTooltip ma={ma} researchMode={researchMode} relative={relative} />} />
+            {focusedDate && data.some(row => row.trade_date === focusedDate) && <ReferenceLine
+              x={focusedDate} stroke="var(--text-primary)" strokeWidth={2} strokeDasharray="3 3"
+              label={{ value: fmtDate(focusedDate), position: 'insideTopRight', fill: 'var(--text-primary)', fontSize: 10 }} />}
 
             <Area
               dataKey="breadth_score"
@@ -381,6 +392,7 @@ export default function MarketBreadthChart({
       )}
 
       {/* ── Legend ── */}
+      {onDateFocus && <p className="text-[11px] text-muted mt-2">Oldest → latest on the right · Hover or tap to link the date with the heatmaps.</p>}
       {!tooSmall && <p className="text-xs text-muted mt-3">{relative ? `Zone uses this index’s own history: ${(percentileRank! * 100).toFixed(0)}% of recorded scores were lower. Greed ≥70%; Fear ≤30%.${zoneMode==='provisional'?' Provisional: fewer than 252 readings.':''}` : 'Zone uses fixed breadth-score thresholds: Greed >55; Fear <35.'}</p>}
       {!tooSmall && r?.label.startsWith('Greed') && <p className="vani-evidence-caution text-xs mt-2">Greed is a caution context alongside flow strength, not a reversal signal.</p>}
       {!tooSmall && !relative && (

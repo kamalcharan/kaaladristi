@@ -9,6 +9,7 @@ import { useBreadthRoc } from '@/hooks';
 import { Loader2, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { BreadthRocDay } from '@/types';
+import { chartReadingDate } from '@/lib/heatmapReading';
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
@@ -25,6 +26,9 @@ const MAX_PERIOD_DAYS = Math.max(...PERIODS.map(p => p.days));
 export type RocBadge = 'expanding' | 'slowing' | 'turning' | 'contracting' | 'warming_up';
 
 export interface BreadthRocChartProps {
+  focusedDate?: string | null;
+  onDateFocus?: (date: string | null) => void;
+  onInspectDate?: (date: string | null) => void;
   researchMode?: boolean;
   periodDays?: 22 | 44 | 66;
   onPeriodChange?: (days: 22 | 44 | 66) => void;
@@ -121,6 +125,7 @@ export default function BreadthRocChart({
   stockCount: stockCountProp,
   rocBadge: rocBadgeProp,
   periodDays, onPeriodChange, researchMode = false,
+  focusedDate, onDateFocus, onInspectDate,
 }: BreadthRocChartProps = {}) {
   const [localPeriod, setPeriod] = useState<PeriodLabel>('66D');
   const period = periodDays ? `${periodDays}D` : localPeriod;
@@ -251,7 +256,10 @@ export default function BreadthRocChart({
         </div>
       ) : (
         <ResponsiveContainer width="100%" height={200}>
-          <ComposedChart data={data} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
+          <ComposedChart data={data} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}
+            onMouseMove={event => onDateFocus?.(chartReadingDate(event))}
+            onMouseLeave={() => onDateFocus?.(null)}
+            onClick={event => { const date = chartReadingDate(event); if (date) onInspectDate?.(date); }}>
             <defs>
               <linearGradient id="rocBullGrad" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="5%"  stopColor="var(--bull)" stopOpacity={0.30} />
@@ -292,6 +300,9 @@ export default function BreadthRocChart({
             />
 
             <Tooltip content={<RocTooltip researchMode={researchMode} />} />
+            {focusedDate && data.some(row => row.trade_date === focusedDate) && <ReferenceLine
+              x={focusedDate} stroke="var(--text-primary)" strokeWidth={2} strokeDasharray="3 3"
+              label={{ value: fmtDate(focusedDate), position: 'insideTopRight', fill: 'var(--text-primary)', fontSize: 10 }} />}
 
             {/* ROC 55 — slow structural line */}
             <Line
@@ -328,6 +339,7 @@ export default function BreadthRocChart({
       )}
 
       {/* ── Legend ── */}
+      {onDateFocus && <p className="text-[11px] text-muted mt-2">Oldest → latest on the right · Hover or tap to link the date with the heatmaps.</p>}
       <div className="flex items-center justify-center gap-5 mt-2">
         {[
           { color: 'bg-accent-indigo',  label: 'ROC 13 (fast)'    },

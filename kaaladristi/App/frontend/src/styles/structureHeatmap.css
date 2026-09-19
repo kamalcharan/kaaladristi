@@ -1,0 +1,19 @@
+.structure-heatmap { --heatmap-label-width: 144px; }
+.structure-heatmap table { width: 100%; border-collapse: separate; border-spacing: 2px 3px; table-layout: fixed; }
+.structure-heatmap .heatmap-label { width: var(--heatmap-label-width); position: sticky; left: 0; z-index: 2; background: var(--card); text-align: left; padding-right: 8px; font-weight: 400; }
+.structure-heatmap .heatmap-slot { padding: 0; vertical-align: bottom; min-width: 12px; }
+.structure-heatmap .heatmap-cell { width: 100%; display: flex; flex-direction: column; align-items: center; border: 0; padding: 0; background: transparent; border-radius: 4px; color: var(--text-primary); cursor: pointer; }
+.structure-heatmap .heatmap-marker { display: block; height: 16px; line-height: 16px; font-size: 12px; font-weight: 700; }
+.structure-heatmap .heatmap-fill { display: flex; width: 100%; height: 28px; border-radius: 3px; align-items: center; justify-content: center; border: 1px solid var(--border); }
+.structure-heatmap .heatmap-cell:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.structure-heatmap .heatmap-cell[data-highlighted='true'] .heatmap-fill { outline: 2px solid var(--text-primary); outline-offset: 1px; }
+.structure-heatmap .heatmap-cell[data-warning='true'] .heatmap-fill { background: repeating-linear-gradient(135deg, var(--card) 0 4px, var(--border) 4px 7px) !important; }
+.structure-heatmap .heatmap-cell[data-missing='true'] .heatmap-fill { border-style: dashed; }
+.structure-heatmap .heatmap-values .heatmap-fill { height: 32px; font-family: var(--font-mono); font-size: 11px; border-top-width: 4px; }
+.structure-heatmap .heatmap-pulse { animation: structure-change-pulse 850ms ease-in-out 3; }
+.structure-heatmap .heatmap-inspection { height: 128px; overflow-y: auto; }
+.structure-heatmap .heatmap-gradient { height: 8px; width: 140px; border-radius: 4px; background: linear-gradient(to right, var(--risk-red), var(--risk-amber), var(--risk-green)); }
+@keyframes structure-change-pulse { 0%, 100% { transform: translateY(0); opacity: 1; } 50% { transform: translateY(-3px); opacity: .45; } }
+@media (prefers-reduced-motion: reduce) { .structure-heatmap .heatmap-pulse { animation: none; } }
+@media (max-width: 640px) { .structure-heatmap { --heatmap-label-width: 110px; } .structure-heatmap .heatmap-inspection { height: 192px; } }
+@media (pointer: coarse) { .structure-heatmap .heatmap-compact { min-width: calc(var(--heatmap-label-width) + var(--heatmap-session-count) * 32px) !important; } .structure-heatmap .heatmap-cell { min-height: 48px; } }

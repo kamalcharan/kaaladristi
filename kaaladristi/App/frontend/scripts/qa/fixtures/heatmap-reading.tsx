@@ -1,0 +1,13 @@
+import React from 'react';
+import { createRoot } from 'react-dom/client';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { MemoryRouter } from 'react-router-dom';
+import MarketStructureView from '../../../src/views/MarketStructureView';
+import { initTheme, useThemeStore } from '../../../src/stores/themeStore';
+import '../../../src/styles/globals.css';
+initTheme();
+const query = new URLSearchParams(location.search);
+useThemeStore.getState().setTheme(query.get('theme') === 'jade-thorn' ? 'jade-thorn' : 'kaaladristi');
+useThemeStore.getState().setMode(query.get('mode') === 'light' ? 'light' : 'dark');
+const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+createRoot(document.getElementById('root')!).render(<React.StrictMode><QueryClientProvider client={client}><MemoryRouter><main style={{ height: '100dvh', overflow: 'auto' }}><MarketStructureView /></main></MemoryRouter></QueryClientProvider></React.StrictMode>);

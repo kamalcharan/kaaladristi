@@ -461,6 +461,12 @@ function TodayStructureTab({ date: _date }: { date: string }) {
   const { setPeriod, setDate } = useMarketStructureStore();
   const latest = data.breadth.at(-1);
   const roc = data.roc.at(-1);
+  const [hoverDate, setHoverDate] = useState<string | null>(null);
+  const [pinnedDate, setPinnedDate] = useState<string | null>(null);
+  const candidateDate = hoverDate ?? pinnedDate;
+  const focusedDate = candidateDate && (data.breadth.some(r => r.trade_date === candidateDate) || data.roc.some(r => r.trade_date === candidateDate)) ? candidateDate : null;
+  const dateLink = { focusedDate, onDateFocus: setHoverDate, onInspectDate: setPinnedDate };
+  const historyContext = { coverageContext: data.coverageContext, rocCoverageContext: data.rocCoverageContext, animateLatest: !data.selectedDate };
   return <div className="flex flex-col gap-5">
     <div className="glass-card rounded-xl p-5">
       <h2 className="text-lg font-semibold">Understand participation, then momentum</h2>
@@ -468,23 +474,24 @@ function TodayStructureTab({ date: _date }: { date: string }) {
       <p className="text-xs text-muted mt-3">All NSE · Breadth: {data.breadthDate ?? 'unavailable'} · ROC: {data.rocDate ?? 'unavailable'} · {data.period} sessions</p>
       {data.breadthDate && data.rocDate && data.breadthDate !== data.rocDate && <p role="status" className="text-sm text-risk-amber mt-2">The series have different latest dates. Read them separately.</p>}
       {data.selectedDate && <button className="text-sm text-accent-indigo mt-2" onClick={() => setDate(null)}>Return to latest data →</button>}
+      <div className="text-xs text-muted mt-2 min-h-[48px]" aria-live="off">{focusedDate ? <>Linked date: {focusedDate} · Charts and heatmaps highlight the same session. <button type="button" className="text-accent-indigo underline" onClick={() => { setHoverDate(null); setPinnedDate(null); }}>Clear highlight</button></> : 'Hover or tap a heatmap cell or chart to compare the same session.'}</div>
     </div>
     <section id="structure-participation" className="scroll-mt-24 space-y-4">
       <h2 className="text-lg font-semibold">1. How widely is the market participating?</h2>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">{(['pct_above_20', 'pct_above_50', 'pct_above_150'] as const).map((key, i) => <div key={key} className="glass-card rounded-xl p-4"><p className="text-xs text-muted">Stocks above {[20, 50, 150][i]} EMA</p><p className="text-3xl font-semibold mt-2">{latest?.[key] == null ? '—' : `${latest[key].toFixed(1)}%`}</p><p className="text-xs text-muted mt-1">{['Short', 'Medium', 'Long'][i]} horizon</p></div>)}</div>
-      <MarketBreadthChart data={data.breadth} isLoading={data.isLoading} isError={data.isError} indexName="All NSE" maBasis="market" researchMode periodDays={data.period} onPeriodChange={setPeriod} />
-      <MarketStructureHistory breadth={data.breadth} roc={data.roc} mode="breadth" onSelectDate={setDate} />
+      <MarketBreadthChart data={data.breadth} isLoading={data.isLoading} isError={data.isError} indexName="All NSE" maBasis="market" researchMode periodDays={data.period} onPeriodChange={setPeriod} {...dateLink} />
+      <MarketStructureHistory breadth={data.breadth} roc={data.roc} mode="breadth" onSelectDate={setDate} {...dateLink} {...historyContext} />
     </section>
     <section id="structure-momentum" className="scroll-mt-24 space-y-4">
       <h2 className="text-lg font-semibold">2. Is momentum building or fading?</h2>
       <p className="text-sm text-muted">{momentumLabel(roc?.roc_13, roc?.sma_breadth)}. Positive ROC and strengthening momentum are different observations.</p>
-      <BreadthRocChart data={data.roc} isLoading={data.isLoading} isError={data.isError} researchMode periodDays={data.period} onPeriodChange={setPeriod} />
-      <MarketStructureHistory breadth={data.breadth} roc={data.roc} mode="roc" onSelectDate={setDate} />
+      <BreadthRocChart data={data.roc} isLoading={data.isLoading} isError={data.isError} researchMode periodDays={data.period} onPeriodChange={setPeriod} {...dateLink} />
+      <MarketStructureHistory breadth={data.breadth} roc={data.roc} mode="roc" onSelectDate={setDate} {...dateLink} {...historyContext} />
     </section>
     <section id="structure-framework" className="glass-card rounded-xl p-5 scroll-mt-24">
       <h2 className="text-lg font-semibold">3. Apply the Fear / Greed lens</h2>
       <p className="text-sm text-muted mt-2">Fear below 35 and Greed above 55 describe the weighted breadth score. They are framework labels, not measurements of investor emotions.</p>
-      <p className="text-sm text-muted mt-2">In Fear, investigate whether participation is rebuilding. In Greed, investigate whether participation is fading. Neither zone establishes a reversal. Fear / Greed zones are neutral on the chart; history colors describe measured comparisons using the Flowmap palette.</p>
+      <p className="text-sm text-muted mt-2">In Fear, investigate whether participation is rebuilding. In Greed, investigate whether participation is fading. Neither zone establishes a reversal. Fear / Greed zones are neutral on the chart; heatmap shades show participation level or signed ROC magnitude, while arrows mark substantial changes.</p>
     </section>
   </div>;
 }
