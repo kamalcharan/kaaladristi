@@ -14,12 +14,19 @@ from datetime import date
 
 from .vani_cache import get_cached, make_cache_key, set_cached
 
-VERSION = 2
+VERSION = 3
+ROC_SIGNAL_GAP = 0.02
+PARTICIPATION_BANDS = {
+    20: (55, 45, 38, 32),
+    50: (60, 50, 35, 25),
+    150: (65, 55, 30, 20),
+}
 INTENTS = {
-    'structure.read': ('Read this market snapshot', 'participation', 'live'),
-    'structure.participation': ('Compare the three participation horizons', 'participation', 'live'),
-    'structure.momentum': ('Why can positive ROC still be fading?', 'momentum', 'live'),
-    'structure.synthesis': ('Bring participation and momentum together', 'framework', 'live'),
+    'structure.read': ('Read the complete market structure', 'participation', 'live'),
+    'structure.participation': ('Explain the three participation horizons', 'participation', 'live'),
+    'structure.pressure': ('Explain daily pressure and five-day extremes', 'participation', 'live'),
+    'structure.momentum': ('Explain momentum state and alignment', 'momentum', 'live'),
+    'structure.synthesis': ('Bring breadth, pressure and momentum together', 'framework', 'live'),
     'structure.ema': ('What does above 20 EMA mean?', 'participation', 'static'),
     'structure.score_date': ('Why do the score and heatmap differ?', 'participation', 'static'),
     'structure.fear_greed': ('Understand Fear and Greed', 'framework', 'static'),
@@ -27,12 +34,14 @@ INTENTS = {
 }
 STATIC = {
     'structure.score_date': 'The large breadth score and an individual heatmap cell measure different things. Each EMA row shows the percentage of eligible stocks above that moving average. The score blends the 20 EMA, 50 EMA and 150 EMA percentages with weights of 50%, 30% and 20%. It uses the stored values before display rounding, so it need not match any single cell. The date labels identify the source trading session: 11 September represents that session’s closing data, even if you read it the following morning. Before a new session is processed, the latest available reading may still be from the preceding trading session, which can be more than one calendar day earlier. The pipeline does not automatically relabel 10 September as 11 September. A suspected source-date error needs verification rather than assuming a fixed one-day delay.',
-    'structure.ema': 'EMA means exponential moving average. Breadth counts stocks closing above their own average and expresses that count as a percentage of the eligible universe. Above 20, 50 and 150 EMA are three different horizons. The breadth score combines these percentages with weights of 50%, 30% and 20%; it is not itself a count of stocks.',
-    'structure.fear_greed': 'DristiQ labels a breadth score below 35 as Fear and above 55 as Greed. These describe the framework’s participation zones, not measured emotions. The contrarian lens asks whether low participation is beginning to rebuild, and whether high participation is beginning to fade. Neither threshold establishes a reversal or an instruction to trade.',
+    'structure.ema': 'EMA means exponential moving average. Breadth counts stocks closing above their own average and expresses that count as a percentage of the eligible universe. The 20, 50 and 150 EMA rows use progressively stricter fixed bands because they describe different horizons. Red means participation is extended, amber is transition, dark green is an opportunity-watch area and light green is extreme fear. Green is a contrarian research area, not an entry signal. The breadth score combines the three percentages with weights of 50%, 30% and 20%.',
+    'structure.fear_greed': 'DristiQ labels a breadth score below 35 as Fear and above 55 as Greed. A filled green ball marks a confirmed crossing into Fear; a filled red ball marks a confirmed crossing into Greed. A ringed marker is provisional because the stock sample fell sharply. These are participation events, not measured emotions, reversal calls or instructions to trade.',
     'structure.next': 'Sector rotation lets you compare individual sectors with the broader market. Compare each sector’s 5D flow score with its 22D baseline, then inspect the constituents behind a difference. Flow scores and breadth ROC have different formulas; their numerical values are not interchangeable. Keep the original research question when moving to a stock chart.',
 }
 FIELDS = (
-    ('trade_date', 'pct_above_20', 'pct_above_50', 'pct_above_150', 'breadth_score', 'stock_count'),
+    ('trade_date', 'pct_above_20', 'pct_above_50', 'pct_above_150', 'breadth_score', 'stock_count',
+     'universe_count', 'above_20', 'above_50', 'above_150', 'up_5pct', 'down_5pct',
+     'up_20pct_5d', 'down_20pct_5d'),
     ('trade_date', 'roc_13', 'roc_55', 'sma_breadth', 'stock_count'),
 )
 _locks = [threading.Lock() for _ in range(64)]
@@ -61,65 +70,169 @@ def snapshot(breadth, roc):
 def load_rows(db, target, period):
     result = []
     for table, fields in zip(('km_market_breadth', 'km_breadth_roc'), FIELDS):
-        rows = db.select(table, ','.join(fields), order='trade_date.desc', limit=66)
+        rows = db.select(table, ','.join(fields), order='trade_date.desc', limit=period + 5)
         rows = [{**r, 'trade_date': str(r['trade_date'])[:10]} for r in rows]
         result.append(sorted((r for r in rows if not target or r['trade_date'] <= target),
-                             key=lambda r: r['trade_date'])[-period:])
+                             key=lambda r: r['trade_date'])[-(period + 5):])
     return result
+
+
+def participation_band(value, horizon):
+    if value is None:
+        return 'Unavailable'
+    extreme_high, high, neutral, opportunity = PARTICIPATION_BANDS[horizon]
+    if value > extreme_high:
+        return 'Extended'
+    if value > high:
+        return 'Elevated'
+    if value > neutral:
+        return 'Neutral / transition'
+    if value >= opportunity:
+        return 'Opportunity watch'
+    return 'Extreme fear'
+
+
+def population(row):
+    universe = number(row.get('universe_count'))
+    return universe if universe is not None else number(row.get('stock_count'))
+
+
+def coverage_warning(rows, index):
+    current = population(rows[index])
+    prior = sorted(v for v in (population(r) for r in rows[max(0, index - 5):index]) if v and v > 0)
+    if current is None or current <= 0:
+        return 'Coverage unavailable; participation cannot be validated.'
+    if not prior:
+        return None
+    mid = len(prior) // 2
+    baseline = prior[mid] if len(prior) % 2 else (prior[mid - 1] + prior[mid]) / 2
+    if current < baseline * .8:
+        return f'Coverage warning: {current:,.0f} stocks versus a recent median of {baseline:,.0f}. The sample fell more than 20%; this may reflect missing data.'
+    return None
+
+
+def pressure_reading(rows, index, up_key, down_key, kind):
+    row = rows[index]
+    up, down, universe = number(row.get(up_key)), number(row.get(down_key)), number(row.get('universe_count'))
+    if up is None or down is None or universe is None or universe <= 0:
+        return None
+    net = (up - down) / universe * 100
+    prior = []
+    for old in rows[max(0, index - 22):index]:
+        old_up, old_down, old_u = number(old.get(up_key)), number(old.get(down_key)), number(old.get('universe_count'))
+        if old_up is not None and old_down is not None and old_u and old_u > 0:
+            prior.append(abs((old_up - old_down) / old_u * 100))
+    prior.sort()
+    unusual = prior[int((len(prior) - 1) * .8)] if len(prior) >= 5 else math.inf
+    floor, strong_floor = ((.5, 1.5) if kind == 'daily' else (.1, .3))
+    strong = abs(net) >= strong_floor and abs(net) >= unusual
+    balanced, positive = abs(net) < floor, net > 0
+    if balanced:
+        label = 'Balanced' if kind == 'daily' else 'Normal'
+    elif strong:
+        label = ('Buying thrust' if positive else 'Panic selling') if kind == 'daily' else ('Explosive expansion' if positive else 'Capitulation cluster')
+    else:
+        label = ('Buyers dominant' if positive else 'Sellers dominant') if kind == 'daily' else ('Winners dominant' if positive else 'Breakdown pressure')
+    suffix = ' The imbalance is also unusually large versus the preceding 22 sessions.' if strong else ''
+    return f'{label}: {up:,.0f} up versus {down:,.0f} down; net {net:+.1f}% of the {universe:,.0f}-stock universe.{suffix}'
+
+
+def roc_state(fast, signal):
+    if fast is None or signal is None:
+        return 'Unavailable'
+    gap = fast - signal
+    if abs(gap) < ROC_SIGNAL_GAP:
+        return 'FLAT: indecisive because ROC 13 is within 0.02 of its signal'
+    if fast > 0 and gap > 0:
+        return 'EXPAND: positive expansion'
+    if fast > 0:
+        return 'FADING: positive but fading'
+    if gap > 0:
+        return 'RECOVER: negative but recovering'
+    return 'WEAK: negative and weakening'
+
+
+def roc_alignment(fast, slow):
+    if fast is None or slow is None:
+        return 'Unavailable'
+    gap = fast - slow
+    if abs(gap) < ROC_SIGNAL_GAP:
+        return 'ALIGNED: ROC 13 is within 0.02 of ROC 55'
+    return 'LEADING: fast momentum is meaningfully above ROC 55' if gap > 0 else 'LAGGING: fast momentum is meaningfully below ROC 55'
+
+
+def roc_event(rows, index):
+    if index < 2:
+        return None
+    sample = rows[index - 2:index + 1]
+    gaps = [number(r.get('roc_13')) - number(r.get('sma_breadth'))
+            if number(r.get('roc_13')) is not None and number(r.get('sma_breadth')) is not None else None for r in sample]
+    sign = lambda value: 1 if value > 0 else -1 if value < 0 else 0
+    if any(g is None for g in gaps) or abs(gaps[2]) < ROC_SIGNAL_GAP or sign(gaps[1]) != sign(gaps[2]):
+        return None
+    fast = number(rows[index].get('roc_13'))
+    if gaps[2] > 0 and gaps[0] <= 0 and fast < 0:
+        return 'Confirmed recovery event: negative ROC 13 held above its signal for two sessions.'
+    if gaps[2] < 0 and gaps[0] >= 0 and fast > 0:
+        return 'Confirmed fading event: positive ROC 13 held below its signal for two sessions.'
+    return None
 
 
 def derive_facts(breadth, roc):
     facts = []
     if breadth:
-        latest = breadth[-1]
-        facts.append(f"Participation data date: {latest['trade_date']}.")
-        facts.append('The participation data date identifies the source trading session and its closing data, not the date the page is viewed. Do not shift it back one day or infer a fixed reporting lag.')
-        for key, name in [('pct_above_20', '20 EMA'), ('pct_above_50', '50 EMA'), ('pct_above_150', '150 EMA')]:
-            value = number(latest.get(key))
+        i, latest = len(breadth) - 1, breadth[-1]
+        warning = coverage_warning(breadth, i)
+        facts += [f"Participation data date: {latest['trade_date']}.",
+                  'The date identifies the source closing session. Do not shift it or infer a fixed reporting lag.']
+        if warning:
+            facts.append(warning + ' Treat zone entries and participation changes on this session as provisional.')
+        for horizon in (20, 50, 150):
+            key, value = f'pct_above_{horizon}', number(latest.get(f'pct_above_{horizon}'))
             if value is None:
-                facts.append(f'Above {name}: unavailable.')
+                facts.append(f'Above {horizon} EMA: unavailable.')
                 continue
-            text = f'{value:.1f}% of eligible stocks are above their {name}.'
-            prev = number(breadth[-2].get(key)) if len(breadth) > 1 else None
-            if prev is not None:
-                delta = value - prev
-                direction = 'higher' if delta > 0 else 'lower' if delta < 0 else 'unchanged'
-                text += f' {abs(delta):.1f} percentage points {direction} than the previous available session ({breadth[-2]["trade_date"]}).'
+            text = f'{value:.1f}% are above their {horizon} EMA; fixed {horizon} EMA band: {participation_band(value, horizon)}.'
+            previous = number(breadth[i - 1].get(key)) if i else None
+            if previous is not None:
+                delta = value - previous
+                comparison = f'{abs(delta):.1f} percentage points higher than' if delta > 0 else f'{abs(delta):.1f} percentage points lower than' if delta < 0 else 'unchanged from'
+                text += f' {comparison} {breadth[i - 1]["trade_date"]}.'
             facts.append(text)
-        score = number(latest.get('breadth_score'))
-        for left, right in [('20', '50'), ('20', '150'), ('50', '150')]:
-            a, b = number(latest.get('pct_above_' + left)), number(latest.get('pct_above_' + right))
+        for left, right in ((20, 50), (20, 150), (50, 150)):
+            a, b = number(latest.get(f'pct_above_{left}')), number(latest.get(f'pct_above_{right}'))
             if a is not None and b is not None:
-                relation = 'HIGHER THAN' if a > b else 'LOWER THAN' if a < b else 'EQUAL TO'
-                facts.append(f'Participation above {left} EMA is {relation} participation above {right} EMA.')
+                relation = 'higher than' if a > b else 'lower than' if a < b else 'equal to'
+                facts.append(f'{left} EMA participation is {relation} {right} EMA participation.')
+        score, previous_score = number(latest.get('breadth_score')), number(breadth[i - 1].get('breadth_score')) if i else None
         if score is not None:
             zone = 'Fear' if score < 35 else 'Greed' if score > 55 else 'Neutral'
-            facts.append(f'Weighted breadth score: {score:.1f} out of 100, in the {zone} framework zone.')
-            facts.append('This score combines the same-session percentages above 20 EMA, 50 EMA and 150 EMA with weights of 50%, 30% and 20%. It is not the 20 EMA percentage. Stored precision is used before display rounding.')
+            facts.append(f'Weighted breadth score: {score:.1f}, in the {zone} framework zone.')
+            if previous_score is not None:
+                event = 'Entered Greed by crossing above 55.' if previous_score <= 55 < score else 'Entered Fear by crossing below 35.' if previous_score >= 35 > score else None
+                if event:
+                    facts.append(('Provisional zone entry: ' if warning else 'Confirmed zone entry: ') + event)
+        daily = pressure_reading(breadth, i, 'up_5pct', 'down_5pct', 'daily')
+        extremes = pressure_reading(breadth, i, 'up_20pct_5d', 'down_20pct_5d', 'five_day')
+        facts.append('Daily pressure: ' + daily if daily else 'Daily pressure is unavailable.')
+        facts.append('Five-day extremes: ' + extremes if extremes else 'Five-day extremes are unavailable.')
+        facts.append('Green participation bands and Fear entries are contrarian watch areas, not reversal confirmations or entry signals.')
     else:
         facts.append('Participation data is unavailable.')
     if roc:
-        r = roc[-1]
-        facts.append(f"Momentum data date: {r['trade_date']}.")
-        fast, slow, signal = [number(r.get(k)) for k in ('roc_13', 'roc_55', 'sma_breadth')]
-        if fast is not None:
-            sign = 'positive' if fast > 0 else 'negative' if fast < 0 else 'zero'
-            facts.append(f'ROC 13 is {fast:+.4f}, a {sign} reading. Its sign alone does not establish acceleration.')
-            for label, value in [('ROC 55', slow), ('five-session signal', signal)]:
-                if value is None:
-                    facts.append(f'{label} is unavailable; that comparison cannot be made.')
-                else:
-                    relation = 'ABOVE' if fast > value else 'BELOW' if fast < value else 'EQUAL TO'
-                    facts.append(f'ROC 13 ({fast:+.4f}) is {relation} the {label} ({value:+.4f}).')
-            if signal is not None:
-                state = ('quiet relative to signal' if fast == 0 or fast == signal
-                         else 'building relative to signal' if fast > 0 and fast > signal
-                         else 'recovering relative to signal, while still negative' if fast < 0 and fast > signal
-                         else 'fading relative to signal, while still positive' if fast > 0
-                         else 'contracting relative to signal')
-                facts.append(f'Framework momentum condition: {state}. This comparison does not establish a future move.')
-        else:
+        i, row = len(roc) - 1, roc[-1]
+        fast, slow, signal = [number(row.get(k)) for k in ('roc_13', 'roc_55', 'sma_breadth')]
+        facts.append(f"Momentum data date: {row['trade_date']}.")
+        if fast is None:
             facts.append('ROC 13 is unavailable; momentum cannot be classified.')
+        else:
+            facts.append(f'ROC 13 {fast:+.4f}; ROC 55 {slow:+.4f}.' if slow is not None else f'ROC 13 {fast:+.4f}; ROC 55 unavailable.')
+            facts.append(f'Five-session signal: {signal:+.4f}.' if signal is not None else 'Five-session signal unavailable.')
+            facts.append('Momentum state: ' + roc_state(fast, signal) + '.')
+            facts.append('Horizon alignment: ' + roc_alignment(fast, slow) + '.')
+            event = roc_event(roc, i)
+            facts.append(event if event else 'No new confirmed two-session ROC recovery or fading event on this session.')
+            facts.append('Momentum state and alignment are observations; neither predicts the next market move.')
     else:
         facts.append('Momentum data is unavailable.')
     if breadth and roc and breadth[-1]['trade_date'] != roc[-1]['trade_date']:
@@ -203,10 +316,12 @@ def answer(req, db, complete, post_filter, log_interaction, model):
                 else:
                     system = (
                         'You are VaNi, a factual research educator. Explain only the supplied statements. '
-                        'All comparisons are already calculated: preserve ABOVE/BELOW exactly. '
+                        'All bands, pressure labels, event confirmations, momentum states and alignments '
+                        'are already calculated: preserve them exactly and do not reclassify them. '
                         'Do not calculate, invent causes, infer money flow, predict reversals, or provide '
                         'buy/sell recommendations, targets or trade instructions. Fear/Greed are framework '
-                        'labels, not emotions. A positive ROC is not necessarily acceleration. '
+                        'labels, not emotions. Green is a contrarian watch area, not an entry signal. '
+                        'A positive ROC is not necessarily acceleration. '
                         'Mention different data dates if present. Plain English, no markdown headings. '
                         + ('At most 180 words, explain definitions where useful.' if depth == 'detailed'
                            else 'At most 70 words. ' + ('Use everyday language and explain terms.' if depth == 'simple' else 'Lead with one clear observation.'))

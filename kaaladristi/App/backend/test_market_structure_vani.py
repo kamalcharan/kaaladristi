@@ -13,10 +13,12 @@ from lib import market_structure_vani as v
 
 class MarketStructureTests(unittest.TestCase):
     def setUp(self):
+        movers = dict(universe_count=3000, above_20=1200, above_50=1500, above_150=1800,
+                      up_5pct=60, down_5pct=20, up_20pct_5d=12, down_20pct_5d=3)
         self.breadth = [dict(trade_date='2026-09-10', pct_above_20=40, pct_above_50=50,
-                             pct_above_150=60, breadth_score=47, stock_count=3000),
+                             pct_above_150=60, breadth_score=47, stock_count=3000, **movers),
                         dict(trade_date='2026-09-11', pct_above_20=36, pct_above_50=50,
-                             pct_above_150=62, breadth_score=44.8, stock_count=3000)]
+                             pct_above_150=62, breadth_score=44.8, stock_count=3000, **movers)]
         self.roc = [dict(trade_date='2026-09-11', roc_13=.0235, roc_55=.0596,
                          sma_breadth=.0700, stock_count=3069)]
         self.cache, self.logs, self.calls = {}, [], []
@@ -82,12 +84,13 @@ class MarketStructureTests(unittest.TestCase):
             self.assertEqual(ai_client.complete_with_source('s', 'u', prefer_local=True, allow_cloud_fallback=True), ('local explanation', 'qwen-local'))
             cloud_mock.assert_not_called()
 
-    def test_precomputed_comparisons_match_fading_positive_example(self):
+    def test_precomputed_states_match_fading_and_lagging_example(self):
         facts = '\n'.join(self.answer()['facts'])
-        self.assertIn('BELOW the five-session signal', facts)
-        self.assertIn('fading relative to signal, while still positive', facts)
+        self.assertIn('Momentum state: FADING: positive but fading', facts)
+        self.assertIn('Horizon alignment: LAGGING', facts)
         self.assertIn('4.0 percentage points lower', facts)
-        self.assertIn('20 EMA is LOWER THAN participation above 50 EMA', facts)
+        self.assertIn('fixed 20 EMA band: Opportunity watch', facts)
+        self.assertIn('20 EMA participation is lower than 50 EMA participation', facts)
 
     def test_same_date_correction_rejects_old_snapshot_before_model(self):
         self.answer()
@@ -124,19 +127,45 @@ class MarketStructureTests(unittest.TestCase):
         self.assertEqual(self.calls, [])
         facts = '\n'.join(v.derive_facts(self.breadth, self.roc))
         self.assertIn('Participation data date: 2026-09-11', facts)
-        self.assertIn('Do not shift it back one day', facts)
-        self.assertIn('It is not the 20 EMA percentage', facts)
+        self.assertIn('Do not shift it', facts)
 
     def test_mismatch_dates_missing_zero_and_negative_recovery(self):
-        self.roc[0].update(trade_date='2026-09-10', roc_13=-.01, sma_breadth=-.02, roc_55=None)
+        self.roc[0].update(trade_date='2026-09-10', roc_13=-.01, sma_breadth=-.04, roc_55=None)
         facts = '\n'.join(v.derive_facts(self.breadth, self.roc))
-        self.assertIn('recovering relative to signal, while still negative', facts)
+        self.assertIn('RECOVER: negative but recovering', facts)
         self.assertIn('different latest dates', facts)
-        self.assertIn('ROC 55 is unavailable', facts)
+        self.assertIn('ROC 55 unavailable', facts)
         self.roc[0]['roc_13'] = 0
-        self.assertIn('quiet relative to signal', '\n'.join(v.derive_facts([], self.roc)))
+        self.roc[0]['sma_breadth'] = 0
+        self.assertIn('FLAT: indecisive', '\n'.join(v.derive_facts([], self.roc)))
         self.roc[0]['roc_13'] = None
         self.assertIn('momentum cannot be classified', '\n'.join(v.derive_facts([], self.roc)))
+
+    def test_small_roc_gaps_are_flat_and_aligned(self):
+        self.roc[0].update(roc_13=.105, sma_breadth=.100, roc_55=.110)
+        facts = '\n'.join(v.derive_facts([], self.roc))
+        self.assertIn('Momentum state: FLAT', facts)
+        self.assertIn('Horizon alignment: ALIGNED', facts)
+
+    def test_coverage_drop_makes_fear_entry_provisional(self):
+        history = []
+        for day in range(1, 7):
+            history.append(dict(self.breadth[0], trade_date=f'2026-09-0{day}',
+                                breadth_score=40, stock_count=1500, universe_count=1500))
+        history.append(dict(self.breadth[1], trade_date='2026-09-07', breadth_score=30,
+                            stock_count=200, universe_count=200))
+        facts = '\n'.join(v.derive_facts(history, []))
+        self.assertIn('sample fell more than 20%', facts)
+        self.assertIn('Provisional zone entry: Entered Fear', facts)
+
+    def test_two_session_negative_recovery_event(self):
+        rows = [dict(trade_date='2026-09-16', roc_13=-.16, roc_55=.02, sma_breadth=-.14, stock_count=1000),
+                dict(trade_date='2026-09-17', roc_13=-.12, roc_55=.02, sma_breadth=-.15, stock_count=1000),
+                dict(trade_date='2026-09-18', roc_13=-.05, roc_55=.03, sma_breadth=-.10, stock_count=1000)]
+        facts = '\n'.join(v.derive_facts([], rows))
+        self.assertIn('Momentum state: RECOVER', facts)
+        self.assertIn('Horizon alignment: LAGGING', facts)
+        self.assertIn('Confirmed recovery event', facts)
 
     def test_rejected_or_failed_model_does_not_populate_cache(self):
         result = self.answer(post_filter=lambda text: (None, True))

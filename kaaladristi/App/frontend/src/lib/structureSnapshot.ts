@@ -12,6 +12,7 @@ export function structureSnapshot(breadth: MarketBreadthDay[], roc: BreadthRocDa
     const v = (row as Record<string, unknown>)[k];
     return k === 'trade_date' ? String(v).slice(0, 10) : numeric(v);
   }).join(',')).join(';');
-  return encode(breadth, ['trade_date', 'pct_above_20', 'pct_above_50', 'pct_above_150', 'breadth_score', 'stock_count'])
+  return encode(breadth, ['trade_date', 'pct_above_20', 'pct_above_50', 'pct_above_150', 'breadth_score', 'stock_count',
+    'universe_count', 'above_20', 'above_50', 'above_150', 'up_5pct', 'down_5pct', 'up_20pct_5d', 'down_20pct_5d'])
     + '|' + encode(roc, ['trade_date', 'roc_13', 'roc_55', 'sma_breadth', 'stock_count']);
 }
