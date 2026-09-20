@@ -1,0 +1,23 @@
+.stock-story{color:var(--text-primary);max-width:1600px;margin:auto}
+.stock-story .story-preview-bar{display:flex;justify-content:space-between;flex-wrap:wrap;gap:12px;border-bottom:1px solid var(--border);padding:10px 0;font-size:12px;color:var(--text-muted)}
+.stock-story a{color:var(--accent)}
+.stock-story .story-identity{display:flex;justify-content:space-between;align-items:center;gap:16px;padding:22px 0;flex-wrap:wrap}
+.stock-story h1{font-size:28px;font-weight:650;margin:3px 0}
+.stock-story h2{font-family:var(--font-serif);font-size:24px;line-height:1.3;margin:5px 0 10px}
+.stock-story p{font-size:14px;line-height:1.6;margin:4px 0}
+.stock-story .story-kicker{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--accent)}
+.stock-story .story-muted{font-size:12px;color:var(--text-muted)}
+.stock-story .story-price{font-family:var(--font-mono);font-size:25px;font-weight:600}
+.stock-story .story-actions{display:flex;align-items:center;gap:12px;margin-top:8px}
+.stock-story .story-facts{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;padding:16px;background:var(--card);border:1px solid var(--border);border-radius:12px}
+.stock-story .story-facts span{display:block;color:var(--text-muted);font-size:11px}
+.stock-story .story-facts strong{display:block;font-family:var(--font-mono);font-size:16px;margin-top:4px;overflow-wrap:anywhere}
+.stock-story .story-context{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:12px}
+.stock-story .story-context>*{min-width:0}
+.stock-story .story-jumps{display:flex;flex-wrap:wrap;gap:16px;padding:18px 0;font-size:13px}
+.stock-story .story-intro{padding:22px;border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:12px;background:var(--card)}
+.stock-story .story-warning{padding:12px 16px;border:1px solid var(--risk-amber);color:var(--text-primary);border-radius:8px;margin-bottom:12px;font-size:13px}
+.stock-story .story-section{padding-top:28px;scroll-margin-top:100px}
+.stock-story .story-section-heading{max-width:940px;padding-bottom:14px}
+.stock-story .story-section-heading p{color:var(--text-secondary)}
+@media(max-width:900px){.stock-story .story-context{grid-template-columns:1fr}.stock-story .story-facts{grid-template-columns:repeat(2,minmax(0,1fr))}.stock-story h2{font-size:21px}}
