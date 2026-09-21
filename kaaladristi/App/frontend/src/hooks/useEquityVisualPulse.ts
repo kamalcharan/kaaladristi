@@ -48,6 +48,7 @@ const EQUITY_PULSE_COLS = [
   'flow_type', 'vacuum_flag', 'volume_divergence_flag',
   'accum_distrib',
   'magic_rs', 'magic_ma', 'magic_rs_zone',
+  'dot_sbd', 'dot_svd', 'dot_syd',
 ].join(',');
 
 // ── Fetch equity metadata ──────────────────────────────────────

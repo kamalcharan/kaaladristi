@@ -32,6 +32,7 @@ function load(rel, deps = {}) {
 const { priceActionEvents } = load('../../src/services/priceActionEvents.ts');
 const { buildStoryEvents, KIND_COLORS, storyCoverage, blindLeadingBars, STORY_WARMUP_BARS } = load('../../src/services/storyEvents.ts', {
   './priceActionEvents': { priceActionEvents },
+  '../constants/signalScale': load('../../src/constants/signalScale.ts'),
 });
 
 const titles = (evs) => evs.map((e) => e.title);

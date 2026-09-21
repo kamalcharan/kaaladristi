@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { TrendingUp, TrendingDown, BarChart3, AlertCircle, RefreshCw, ArrowLeft } from 'lucide-react';
+import { ZONE_LABELS } from '@/constants/signalScale';
 import { fetchIndicatorDataById, fetchEquityEodById, fetchEquityWarmupBars, fetchEquityTimeframeById, resampleRows, type EquityTimeframe, fetchStockJourneys, currentJourney, type IndicatorRow } from '@/services/indicatorData';
 import TradingChart from '@/components/charts/TradingChart';
 import VaNiInsight from '@/components/domain/VaNiInsight';
@@ -158,6 +159,8 @@ export default function ChartView({ storyPreview = false }: { storyPreview?: boo
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const [range, setRange] = useState<TimeRange>('1Y');
+  const [selectedStoryEvent, setSelectedStoryEvent] = useState<StoryEvent | null>(null);
+  useEffect(() => { setSelectedStoryEvent(null); }, [range, id]);
   const [tf, setTf] = useState<EquityTimeframe>('daily');
   const [isFull, setIsFull] = useState(false);
   // Escape always exits fullscreen — the toolbar ✕ can scroll out of view
@@ -672,7 +675,7 @@ export default function ChartView({ storyPreview = false }: { storyPreview?: boo
    *  Same object drives Story View and Story Play — the toggle only
    *  controls what sits BELOW the chart, never what's on it. */
   const setupOverlayFull = useMemo(() => {
-    if (!setupOverlayCore) return undefined;
+    if (!setupOverlayCore && !storyPreview) return undefined;
     // Anchor each callout at the LAST bar whose range touched the zone
     // price — the reference-deck grammar (breakout callout points at the
     // breakout bar, support-test callout at the last test). Falls back
@@ -684,7 +687,7 @@ export default function ChartView({ storyPreview = false }: { storyPreview?: boo
       }
       return rows[rows.length - 1]?.trade_date;
     };
-    const callouts = setupOverlayCore.callouts.map((c) => ({
+    const callouts = (setupOverlayCore?.callouts ?? []).map((c) => ({
       ...c,
       anchorDate: anchorFor(c.price),
     }));
@@ -724,7 +727,7 @@ export default function ChartView({ storyPreview = false }: { storyPreview?: boo
       promote: promotedDates.has(`${e.date}|${e.kind}`),
     })).filter((p) => p.price > 0);
     return { ...setupOverlayCore, callouts, levels: setupLevelsForPlay, bigMoney, storyPins };
-  }, [setupOverlayCore, setupLevelsForPlay, bigMoneyChartLines, storyEvents, rows]);
+  }, [setupOverlayCore, setupLevelsForPlay, bigMoneyChartLines, storyEvents, rows, storyPreview]);
   // Latest Clean Breakaway/Breakdown within the rotation's plotted window —
   // storyEvents is indexed against `rows`, rotationPoints against `pulseBars`;
   // join by date (same pattern used for the story/playhead bridge below).
@@ -743,17 +746,20 @@ export default function ChartView({ storyPreview = false }: { storyPreview?: boo
   const storyBubble = useMemo(() => {
     // Equities gate the bubble to the Chart & Replay tab; indices have no tab
     // strip (single chart-centric view) so the bubble is always live there.
-    if ((isEquity && dvTab !== 'chart') || !playheadDate) return null;
+    if ((isEquity && !storyPreview && dvTab !== 'chart') || !playheadDate) return null;
     let best: StoryEvent | null = null;
     for (const e of storyEvents) {
       if (e.date === playheadDate && (!best || e.priority > best.priority)) best = e;
     }
-    return best ? { date: best.date, tone: best.tone, color: KIND_COLORS[best.kind], title: best.title, detail: best.detail, reactionPct: best.reactionPct } : null;
-  }, [storyEvents, playheadDate, dvTab, isEquity]);
+    return best ? { date: best.date, tone: best.tone, color: KIND_COLORS[best.kind], title: best.title, detail: best.detail, reactionPct: storyPreview ? null : best.reactionPct } : null;
+  }, [storyEvents, playheadDate, dvTab, isEquity, storyPreview]);
 
   // Replay playback — walk the playhead forward, dwelling on event bars so the
   // on-candle bubble is readable, then gliding to the next.
   const [playing, setPlaying] = useState(false);
+  useEffect(() => {
+    if (storyPreview && searchParams.get('tab') !== 'chart') setPlaying(false);
+  }, [storyPreview, searchParams]);
   const playIdxRef = useRef(effectiveIdx);
   useEffect(() => { playIdxRef.current = effectiveIdx; }, [effectiveIdx]);
   useEffect(() => {
@@ -875,16 +881,18 @@ export default function ChartView({ storyPreview = false }: { storyPreview?: boo
               data={rows}
               workspaceMode
               height={isFull ? Math.max(700, window.innerHeight - 120) : 480}
-              highlightDate={activeIndex != null && pulseBars[effectiveIdx] ? pulseBars[effectiveIdx].trade_date : null}
+              highlightDate={storyPreview && selectedStoryEvent ? selectedStoryEvent.date : activeIndex != null && pulseBars[effectiveIdx] ? pulseBars[effectiveIdx].trade_date : null}
               overlays={frameworkOverlays}
               astroBands={astroBands}
               bigMoneyEvents={bigMoneyChartLines}
               setupLevels={setupLevelsForPlay}
-              setupEntries={setupEntriesForPlay}
-              overlay={setupOverlayFull}
+              // Use TradingChart's stable empty default. A fresh [] retriggers
+              // buildCharts after viewport updates, repeatedly resetting focus.
+              setupEntries={storyPreview ? undefined : setupEntriesForPlay}
+              overlay={storyPreview && setupOverlayFull ? { ...setupOverlayFull, callouts: [] } : setupOverlayFull}
               benchmarkIndexId={isIndex && id ? Number(id) : null}
               benchmarkName={isIndex ? name : null}
-              storyBubble={storyBubble}
+              storyBubble={storyPreview && selectedStoryEvent ? { date: selectedStoryEvent.date, title: selectedStoryEvent.title, detail: selectedStoryEvent.detail, tone: selectedStoryEvent.tone, color: KIND_COLORS[selectedStoryEvent.kind], reactionPct: null } : storyBubble}
               onVisibleRangeChange={handleVisibleRange}
               onZoneClick={handleZoneClick}
             />
@@ -917,10 +925,11 @@ export default function ChartView({ storyPreview = false }: { storyPreview?: boo
   // single block — no per-type duplication.
   const replayTab = (
     <>
-      {!storyPreview && storyEvents.length > 0 && (
+      {storyEvents.length > 0 && (
         <div className="flex items-center gap-3 mb-2">
           <button
             onClick={() => {
+              setSelectedStoryEvent(null);
               if (!playing) {
                 // Start the story at the first signal event in the window.
                 const pbIdx = new Map(pulseBars.map((b, i) => [b.trade_date, i]));
@@ -935,12 +944,12 @@ export default function ChartView({ storyPreview = false }: { storyPreview?: boo
           >
             {playing ? '❚❚ Pause' : '▷ Play story'}
           </button>
-          <button
+          {!storyPreview && <button
             onClick={() => setStoryOpen(true)}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border border-kd-border text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-[var(--accent)] transition-colors"
           >
             ⤢ Story mode
-          </button>
+          </button>}
           <span className="text-[11px] text-muted font-mono">
             {storyEvents.length} signal events · price × data story
           </span>
@@ -1006,14 +1015,14 @@ export default function ChartView({ storyPreview = false }: { storyPreview?: boo
         <div className="hidden lg:block" />
       </div>
 
-      {!storyPreview && pulseBars.length > 0 && (
+      {pulseBars.length > 0 && (
         <div className="mt-1">
           <TimelineSlider
             total={pulseBars.length}
             activeIndex={effectiveIdx}
             bars={pulseBars}
             corrHistory={corrHistory}
-            onChange={setActiveIndex}
+            onChange={idx => { setSelectedStoryEvent(null); setActiveIndex(idx); }}
           />
         </div>
       )}
@@ -1153,10 +1162,20 @@ export default function ChartView({ storyPreview = false }: { storyPreview?: boo
   if (storyPreview) return (
     <ErrorBoundary>
       <StockStoryWorkspace name={name} equityId={numId} search={searchParams.toString()}
-        latest={latest} setup={setupDataForPlay.data} setupLoading={setupDataForPlay.isLoading}
-        setupError={!!setupDataForPlay.error} inferredLens={!setupParam}
+        mcapCr={equityPulse.meta?.mcap_cr ?? scanPresence.stock?.mcap_cr ?? null}
+        events={storyEvents} fromDate={rows[0]?.trade_date} barCount={rows.length}
+        bigMoney={bigMoneyEvents} journeys={journeys}
+        selectedEvent={selectedStoryEvent} onSelectEvent={event => { setSelectedStoryEvent(event); setPlaying(false); }}
+        latest={latest}
+        setupContent={effectiveSetup ? <ScannerArrivalView equityId={numId} setupKey={effectiveSetup} /> : <p className="text-sm text-muted">No setup reference is available yet.</p>}
+        dataContent={<DataTab equityId={numId} symbol={name} />}
+        positionContent={isLoading ? <p>Loading position data…</p> : rows.length > 0 ? <ThesisTab
+          bars={rows as unknown as ThesisBar[]} warmupBars={warmupBars as unknown as ThesisBar[]}
+          journey={journey} equityId={numId} name={name} currentClose={currentClose}
+          autoOpenForm={wantPositionForm} onAutoOpened={() => setWantPositionForm(false)}
+        /> : <p>Position data is unavailable.</p>}
         loading={isLoading} error={isError} scanCount={scanPresence.matchedScans.length}
-        scansLoading={scanPresence.isLoading} pulseDate={pulseBars[pulseBars.length - 1]?.trade_date}
+        scansLoading={scanPresence.isLoading} pulseDate={pulseBars[effectiveIdx]?.trade_date}
         actions={<><BookmarkToggle equityId={numId} size={18} /><button onClick={() => navigate('/chart/equity/' + numId + '?name=' + encodeURIComponent(name) + '&tab=thesis')}>My position →</button></>}
         context={<>
           {equityPulse.industryContext ? <IndustryContextCard industry={equityPulse.meta?.industry ?? null} context={equityPulse.industryContext} /> : <div className="glass-card rounded-lg p-3 text-sm">Industry: {equityPulse.meta?.industry ?? 'unavailable'} · strength not available</div>}
@@ -1164,11 +1183,10 @@ export default function ChartView({ storyPreview = false }: { storyPreview?: boo
           <SectorMembershipCard equityId={numId} exchange={equityPulse.meta?.exchange ?? null} />
         </>}
         lensPicker={<div className="flex gap-2 flex-wrap mb-3">{storyChoices.map(choice => <button key={choice.id} aria-pressed={effectiveSetup === choice.id} className="rounded-full border border-kd-border px-3 py-1 text-xs" onClick={() => setSearchParams(prev => { prev.set('setup', choice.id); return prev; }, { replace: true })}>{choice.name}</button>)}</div>}
-        stats={latest ? <StatStrip latest={latest} mcapCr={equityPulse.meta?.mcap_cr ?? scanPresence.stock?.mcap_cr ?? null} isEquity /> : null}
+        stats={latest ? <StatStrip latest={latest} hideMarketCap isEquity /> : null}
         leadership={leadershipSection}
         participation={<>{pumpDumpResult && <PumpDumpBanner result={pumpDumpResult} />}{participationSection}{!snapshot && <p className="text-sm text-muted">Participation widgets are waiting for their source data. No participation confirmation is inferred.</p>}</>}
         chart={replayTab}
-        setupDetail={effectiveSetup ? <ScannerArrivalView equityId={numId} setupKey={effectiveSetup} /> : <p className="text-sm text-muted">No setup reference is available yet.</p>}
       />
       <CatalogDrawer isOpen={overlayDrawerOpen} onClose={() => setOverlayDrawerOpen(false)} context="overlay" />
     </ErrorBoundary>
@@ -1264,7 +1282,7 @@ export default function ChartView({ storyPreview = false }: { storyPreview?: boo
                   <StatPill label="H/L" value={`${fmt(latest.high)} / ${fmt(latest.low)}`} />
                   <StatPill label="52W" value={`${fmt(low52w)} – ${fmt(high52w)}`} />
                   {latest.rsi_14 != null && <StatPill label="RSI" value={latest.rsi_14.toFixed(1)} />}
-                  {latest.magic_rs_zone && <StatPill label="RS" value={latest.magic_rs_zone} />}
+                  {latest.magic_rs_zone && <StatPill label="RS" value={ZONE_LABELS[latest.magic_rs_zone]?.label ?? 'Unavailable'} />}
                   {isEquity && equityPulse.meta && !equityPulse.meta.is_active && (
                     <span className="text-[10px] font-mono text-risk-amber bg-risk-amber/10 px-1.5 py-0.5 rounded">
                       Inactive — last traded {latest.trade_date}
@@ -1551,4 +1569,3 @@ function StatPill({ label, value }: { label: string; value: string }) {
 function fmt(n: number): string {
   return n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
-

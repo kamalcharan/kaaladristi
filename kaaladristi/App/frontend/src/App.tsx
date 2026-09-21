@@ -18,7 +18,7 @@ import RuleEvalView from '@/views/RuleEvalView';
 import CalendarView from '@/views/CalendarView';
 import AlmanacPage from '@/views/AlmanacPage';
 import ChartView from '@/views/ChartView';
-import StockStoryPage from '@/views/StockStoryPage';
+import StockStoryPage, { StockStoryRedirect } from '@/views/StockStoryPage';
 import { VisualPulsePage } from '@/components/domain/VisualPulse';
 import { EquityVisualPulsePage } from '@/components/domain/VisualPulse/equity';
 import { IntradayPage } from '@/components/domain/Intraday';
@@ -127,8 +127,9 @@ function AppRoutes() {
           <Route path="/rule-eval" element={<RuleEvalView />} />
           <Route path="/astro-calendar" element={<CalendarView />} />
           <Route path="/almanac" element={<AlmanacPage />} />
+          <Route path="/chart/equity/:id" element={<StockStoryPage />} />
           <Route path="/chart/:type/:id" element={<ChartView />} />
-          <Route path="/story/equity/:id" element={<StockStoryPage />} />
+          <Route path="/story/equity/:id" element={<StockStoryRedirect />} />
           <Route path="/pulse/:indexId" element={<VisualPulsePage />} />
           <Route path="/pulse/equity/:equityId" element={<EquityVisualPulsePage />} />
           <Route path="/intraday/:indexId" element={<IntradayPage />} />

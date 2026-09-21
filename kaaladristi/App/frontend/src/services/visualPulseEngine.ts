@@ -33,6 +33,10 @@ export interface PulseBar {
   magic_rs: number | null;
   magic_ma: number | null;
   magic_rs_zone: string | null;
+  /** Equity pipeline signatures; absent for index bars. */
+  dot_sbd?: boolean | null;
+  dot_svd?: boolean | null;
+  dot_syd?: boolean | null;
 }
 
 export interface DcInferenceEvent {
@@ -192,6 +196,11 @@ const ASTRO_WEIGHTS: Record<string, number> = {
 // └─────────────────────────────────────────────────────────────┘
 
 export function computeDots(bar: PulseBar, prevBar: PulseBar | null): DotSignals {
+  // Equity widgets and story events must read the same recorded signatures.
+  // Only legacy/index bars without these columns use the fallback detector.
+  if ('dot_sbd' in bar || 'dot_svd' in bar || 'dot_syd' in bar) {
+    return { isSBD: bar.dot_sbd === true, isSVD: bar.dot_svd === true, isSYD: bar.dot_syd === true };
+  }
   const range = bar.high - bar.low;
   const bodyRatio = range > 0 ? Math.abs(bar.close - bar.open) / range : 0;
   const aboveMid = bar.close > (bar.high + bar.low) / 2;

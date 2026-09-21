@@ -13,6 +13,7 @@
  */
 
 import { priceActionEvents } from './priceActionEvents'
+import { ZONE_LABELS } from '../constants/signalScale'
 
 export type StoryTone = 'bull' | 'bear' | 'neutral'
 
@@ -24,6 +25,12 @@ export interface StoryBar {
   low?: number | null
   volume?: number | null
   magic_rs?: number | null
+  magic_rs_chg_5d?: number | null
+  magic_rs_chg_22d?: number | null
+  magic_rs_chg_66d?: number | null
+  dot_sbd?: boolean | null
+  dot_svd?: boolean | null
+  bm_event?: string | null
   magic_ma?: number | null
   delivery_pct?: number | null
   score_5d?: number | null
@@ -521,11 +528,29 @@ export function buildStoryEvents(
 
   // The first bar carries no predecessor, so only a stored stage_since can
   // speak for it.
-  if (bars.length) addStageEvent(0, bars[0])
+  const addRecordedActivity = (i: number) => {
+    const b = bars[i]
+    const signatures = [b.dot_sbd === true ? 'SBD' : '', b.dot_svd === true ? 'SVD' : ''].filter(Boolean)
+    if (signatures.length) add(i, 'scan', `${signatures.join(' + ')} recorded`, `Stored volume signature${signatures.length > 1 ? 's' : ''} on this session. Compare with price structure on the same date.`, 'neutral')
+    if (bigMoneyDates?.has(b.trade_date)) add(i, 'big_money', '₹ Big money day', `Delivered value exceeded its stored threshold. Price-based classification: ${b.bm_event ?? 'unavailable'}; this does not identify the participants.`, b.bm_event === 'entry' ? 'bull' : b.bm_event === 'exit' ? 'bear' : 'neutral')
+  }
+  if (bars.length) { addStageEvent(0, bars[0]); addRecordedActivity(0) }
 
   for (let i = 1; i < bars.length; i++) {
     const b = bars[i]
     const p = bars[i - 1]
+
+    // Read stored momentum. Missing history is not a zero crossing.
+    for (const [field, horizon] of [
+      ['magic_rs_chg_5d', 5], ['magic_rs_chg_22d', 22], ['magic_rs_chg_66d', 66],
+    ] as const) {
+      const now = b[field], prev = p[field]
+      if (now == null || prev == null || !Number.isFinite(now) || !Number.isFinite(prev)) continue
+      if (prev <= 0 && now > 0) add(i, 'magic_rs', `RS momentum · ${horizon} sessions crossed above zero`, `Stored change: ${prev.toFixed(2)} → ${now.toFixed(2)} points.`, 'bull')
+      else if (prev >= 0 && now < 0) add(i, 'magic_rs', `RS momentum · ${horizon} sessions crossed below zero`, `Stored change: ${prev.toFixed(2)} → ${now.toFixed(2)} points.`, 'bear')
+    }
+    // Daily signatures are observations on each recorded session, not scan entries.
+    addRecordedActivity(i)
 
     // 1) Conviction — Score 5D crossing its 22D pace.
     if (b.score_5d != null && b.score_22d != null && p.score_5d != null && p.score_22d != null) {
@@ -539,8 +564,9 @@ export function buildStoryEvents(
     const zb = zoneBucket(b.magic_rs_zone)
     const zp = zoneBucket(p.magic_rs_zone)
     if (zb && zp && zb !== zp) {
-      if (zb === 'bull' && zp !== 'bull') add(i, 'magic_rs', 'Magic RS turned green', `Relative strength crossed into ${b.magic_rs_zone}`, 'bull')
-      else if (zb === 'bear' && zp !== 'bear') add(i, 'magic_rs', 'Magic RS turned red', `Relative strength crossed into ${b.magic_rs_zone}`, 'bear')
+      const label = ZONE_LABELS[b.magic_rs_zone ?? '']?.label ?? 'Unavailable'
+      if (zb === 'bull' && zp !== 'bull') add(i, 'magic_rs', `MagicRS zone · ${label}`, `Relative strength zone changed to ${label}.`, 'bull')
+      else if (zb === 'bear' && zp !== 'bear') add(i, 'magic_rs', `MagicRS zone · ${label}`, `Relative strength zone changed to ${label}.`, 'bear')
     }
 
     // 3) Flow flip.
@@ -590,9 +616,6 @@ export function buildStoryEvents(
     for (const s of SCAN_FLAGS) {
       if (b[s.flag] === true && p[s.flag] !== true) add(i, 'scan', s.title, `Qualified for the ${s.title} screen`, s.tone)
     }
-
-    // 6) Big money day.
-    if (bigMoneyDates?.has(b.trade_date)) add(i, 'big_money', '₹ Big money day', 'Delivered value spiked well above its norm — an institutional footprint', 'bull')
 
     // 6b) Sector rotating in — the stock's industry crossed into the leading quartile.
     if (sectorByDate) {

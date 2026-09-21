@@ -841,7 +841,7 @@ export default function TradingChart({ data, height = 900, compact = false, work
     chartsRef.current.forEach((chart) => {
       chart.timeScale().setVisibleLogicalRange({ from: from + offset, to: to + offset });
     });
-  }, [highlightDate, data]);
+  }, [highlightDate, data, overlayApi]);
 
   useEffect(() => {
     buildCharts();

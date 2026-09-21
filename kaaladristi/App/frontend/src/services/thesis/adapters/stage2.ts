@@ -74,7 +74,7 @@ const WEEKLY_VOL_EXPANSION_X = 1.5;
 // ── Adapter ─────────────────────────────────────────────────────────────
 
 export const stage2LeadersAdapter: SetupAdapter = (weekly, latest, identity) => {
-  const ema50w = smaFromEnd(weekly, 50, (b) => b.close);   // weekly 50 EMA proxy (SMA — close enough for a visible line)
+  const ema50w = smaFromEnd(weekly, 50, (b) => b.close);   // Legacy property name; actual calculation is a 50-week SMA.
 
   const header       = buildHeader(latest, identity);
   const keyLevels    = buildKeyLevels(latest, ema50w);
@@ -206,7 +206,7 @@ function buildPersonas(latest: LatestEodRow, weekly: WeeklyBar[], ema50Weekly: n
       entryNo: 2,
       price: inRange(ema50Weekly),
       label: 'Structural pivot zone',
-      rationale: 'Pullback reclaim of the weekly 50 EMA — earlier zone, wider risk. Only relevant while the primary trend is structurally intact.',
+      rationale: 'Pullback reclaim of the weekly 50 SMA — earlier zone, wider risk. Only relevant while the primary trend is structurally intact.',
     },
     {
       entryNo: 3,
@@ -248,11 +248,11 @@ function buildWhatConfirms(latest: LatestEodRow, weekly: WeeklyBar[], ema50Weekl
 
   // 1. Weekly close above 50 EMA
   items.push({
-    label: 'Weekly close above 50 EMA',
+    label: 'Weekly close above 50 SMA',
     state: check(latestWeek?.close != null && ema50Weekly != null ? latestWeek.close > ema50Weekly : null),
     explain: ema50Weekly != null
-      ? `Weekly close ${fmt(latestWeek?.close)} vs 50 EMA ${fmt(ema50Weekly)}.`
-      : 'Need at least 50 weekly bars to compute the 50 EMA.',
+      ? `Weekly close ${fmt(latestWeek?.close)} vs 50-week SMA ${fmt(ema50Weekly)}.`
+      : 'Need at least 50 weekly bars to compute the 50-week SMA.',
   });
 
   // 2. Weekly close above prior 20-week high
@@ -348,7 +348,7 @@ function buildHorizontalLines(kl: KeyLevels): HorizontalLine[] {
   push(kl.majorResistance,     'Major Resistance',     'bear');
   push(kl.immediateResistance, 'Immediate Resistance', 'bear');
   push(kl.pivot,               'Pivot',                'neutral');
-  push(kl.ema50Weekly,         '50 EMA (weekly)',      'neutral');
+  push(kl.ema50Weekly,         '50 SMA (weekly)',      'neutral');
   push(kl.immediateSupport,    'Immediate Support',    'bull');
   push(kl.strongSupport,       'Strong Support',       'bull');
   return lines;
@@ -374,11 +374,11 @@ function buildCurrentSituation(latest: LatestEodRow, whatConfirms: WhatConfirmsI
   if (ema50Weekly != null) {
     const distPct = ((latest.close - ema50Weekly) / ema50Weekly) * 100;
     if (Math.abs(distPct) < 2) {
-      parts.push(`Trading around the weekly 50 EMA (${distPct.toFixed(1)}%) — a structural pivot line.`);
+      parts.push(`Trading around the weekly 50 SMA (${distPct.toFixed(1)}%) — a structural pivot line.`);
     } else if (distPct >= 2) {
-      parts.push(`Trading ${distPct.toFixed(1)}% above the weekly 50 EMA.`);
+      parts.push(`Trading ${distPct.toFixed(1)}% above the weekly 50 SMA.`);
     } else {
-      parts.push(`Trading ${Math.abs(distPct).toFixed(1)}% below the weekly 50 EMA — below the structural line.`);
+      parts.push(`Trading ${Math.abs(distPct).toFixed(1)}% below the weekly 50 SMA — below the structural line.`);
     }
   }
   if (latest.w52_high != null) {

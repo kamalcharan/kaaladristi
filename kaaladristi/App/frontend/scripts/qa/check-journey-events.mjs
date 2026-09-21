@@ -36,6 +36,7 @@ function loadTs(rel, deps = {}) {
 const priceAction = loadTs('../../src/services/priceActionEvents.ts');
 const { buildStoryEvents } = loadTs('../../src/services/storyEvents.ts', {
   './priceActionEvents': priceAction,
+  '../constants/signalScale': loadTs('../../src/constants/signalScale.ts'),
 });
 
 /** Minimal flat bars — no signal columns, so only the events under test fire. */

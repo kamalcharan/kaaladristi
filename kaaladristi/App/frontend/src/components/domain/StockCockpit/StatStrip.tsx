@@ -54,11 +54,12 @@ function Row({ label, value, valueClass }: { label: string; value: string; value
 }
 
 export default function StatStrip({
-  latest, mcapCr, isEquity,
+  latest, mcapCr, isEquity, hideMarketCap = false,
 }: {
   latest: LatestRow | null;
   mcapCr?: number | null;
   isEquity: boolean;
+  hideMarketCap?: boolean;
 }) {
   if (!latest) return null;
 
@@ -133,7 +134,7 @@ export default function StatStrip({
           <>
             <Row label="Delivery" value={latest.delivery_qty != null ? latest.delivery_qty.toLocaleString('en-IN') : '—'} />
             <Row label="Delivery %" value={latest.delivery_pct != null ? `${latest.delivery_pct.toFixed(1)}%` : '—'} />
-            <Row label="Market Cap" value={mcapCr != null ? `₹${num(mcapCr)} Cr` : '—'} />
+            {!hideMarketCap && mcapCr != null && Number.isFinite(mcapCr) && mcapCr > 0 && <Row label="Market Cap" value={`₹${num(mcapCr)} Cr`} />}
           </>
         ) : (
           <Row label="Traded Value" value={latest.value_cr != null ? `₹${num(latest.value_cr, 1)} Cr` : '—'} />

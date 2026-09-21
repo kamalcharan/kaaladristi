@@ -214,7 +214,7 @@ function buildWhatConfirms(
     label: 'Above last week’s close (the list’s own bar)',
     state: check(refClose != null ? latest.close > refClose : null),
     explain: refClose != null
-      ? `Close ${fmt(latest.close)} vs last week’s close ${fmt(refClose)}. About 42% of the eligible universe clears this on a typical day — it is a starting filter, not a finding.`
+      ? `Close ${fmt(latest.close)} vs last week’s close ${fmt(refClose)}.`
       : 'No previous-week close on this bar (first week of the symbol’s history).',
   });
 
@@ -223,7 +223,7 @@ function buildWhatConfirms(
     label: 'Also above last week’s HIGH',
     state: check(priorWeekHigh != null ? latest.close > priorWeekHigh : null),
     explain: priorWeekHigh != null
-      ? `Prior week high ${fmt(priorWeekHigh)}. Roughly 9% of the universe clears this, against 42% for the close.`
+      ? `Close ${fmt(latest.close)} vs prior week high ${fmt(priorWeekHigh)}.`
       : 'Need at least 2 weekly bars for a prior-week high.',
   });
 
@@ -231,7 +231,7 @@ function buildWhatConfirms(
     label: 'Also above the 20-week high',
     state: check(high20w != null ? latest.close > high20w : null),
     explain: high20w != null
-      ? `20-week high ${fmt(high20w)}. This is the rung that reads as a weekly BREAKOUT rather than weekly momentum — and depth, not the shallow window, is what forward-tested with an edge.`
+      ? `Close ${fmt(latest.close)} vs prior 20-week high ${fmt(high20w)}.`
       : 'Need at least 21 weekly bars for a 20-week lookback.',
   });
 
