@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import MarketBreadthChart from '@/components/domain/MarketBreadthChart';
 import BreadthRocChart from '@/components/domain/BreadthRocChart';
@@ -7,10 +7,10 @@ import { DristiQLoader } from '@/components/ui';
 import { useMarketStructureReading } from '@/hooks/useMarketStructureReading';
 import { useMarketStructureStore } from '@/stores/marketStructureStore';
 import { useBookmarkStore } from '@/stores/bookmarkStore';
-import { useBookmarkMarketData } from '@/hooks/useBookmarks';
+import PersonalStoryCards from '@/components/domain/PersonalStoryCards';
 import { momentumLabel } from '@/lib/structureStates';
 import { participationBand, rocMomentumReading } from '@/lib/heatmapReading';
-import { bookmarkSignalState, type BookmarkSignalStateKey } from '@/lib/bookmarkState';
+
 import './workspaceToday.css';
 
 
@@ -37,8 +37,6 @@ export default function WorkspaceToday() {
   const bookmarks = useBookmarkStore(s => s.bookmarks);
   const hasLoaded = useBookmarkStore(s => s.hasLoaded);
   const loadBookmarks = useBookmarkStore(s => s.load);
-  const equityIds = useMemo(() => bookmarks.map(b => b.equity_id), [bookmarks]);
-  const bookmarkMarket = useBookmarkMarketData(equityIds);
 
   useEffect(() => { if (!hasLoaded) void loadBookmarks(); }, [hasLoaded, loadBookmarks]);
 
@@ -55,14 +53,6 @@ export default function WorkspaceToday() {
   const breadthImproving = latest?.breadth_score != null && previous?.breadth_score != null && latest.breadth_score > previous.breadth_score;
   const agreement = [breadthImproving, rocImproving, dailyBuyer, fiveDayBuyer].filter(Boolean).length;
   const direction = scoreDelta > 1 ? 'Improving' : scoreDelta < -1 ? 'Deteriorating' : 'Stable';
-  const rankedBookmarks = bookmarks.map(bookmark => {
-    const market = bookmarkMarket.dataByEquity.get(bookmark.equity_id);
-    return { bookmark, market, state: bookmarkSignalState(market) };
-  }).sort((a, b) => a.state.priority - b.state.priority);
-  const visibleBookmarks = rankedBookmarks.slice(0, 4);
-  const counts = rankedBookmarks.reduce((acc, row) => { acc[row.state.key] += 1; return acc; },
-    { improving: 0, turning: 0, cooling: 0, fading: 0, watch: 0 } as Record<BookmarkSignalStateKey, number>);
-  const attentionCount = counts.fading + counts.cooling;
   const rocReading = rocMomentumReading(latestRoc?.roc_13, latestRoc?.sma_breadth);
 
   if (data.isLoading && !latest) return <DristiQLoader message="Reading market structure…" />;
@@ -99,13 +89,8 @@ export default function WorkspaceToday() {
     </section>
 
     <section className="wt-bookmarks" data-tour="today-bookmarks">
-      <header><div><p>PERSONAL RELEVANCE</p><h2>Your stocks today</h2><span>MagicRS and short-term versus longer-term flow across your saved stocks.</span></div><button onClick={() => navigate('/bookmarks')}>View all {bookmarks.length} stocks →</button></header>
-      {bookmarks.length === 0 ? <div className="wt-empty">Bookmark stocks from Discovery to see how they fit today’s environment.</div> : <>
-        <div className="wt-stock-summary"><strong>{attentionCount > 0 ? `${attentionCount} need attention` : 'No cooling or fading stocks'}</strong><div className="wt-counts"><span className="fading"><b>{counts.fading}</b> Fading</span><span className="cooling"><b>{counts.cooling}</b> Cooling</span><span className="turning"><b>{counts.turning}</b> Turning</span><span className="improving"><b>{counts.improving}</b> Improving</span>{counts.watch > 0 && <span><b>{counts.watch}</b> Watch</span>}</div></div>
-        <div className="wt-bookmark-list">{visibleBookmarks.map(({ bookmark, market, state }) => <button key={bookmark.equity_id} onClick={() => navigate(`/chart/equity/${bookmark.equity_id}?name=${encodeURIComponent(bookmark.symbol)}`)}>
-          <strong>{bookmark.symbol}<small>{bookmark.industry ?? 'Stock'}</small></strong><span className={state.key}>{state.label}</span><em title={state.explanation}>MagicRS {fmt(market?.magic_rs)} · Flow 5D {fmt(market?.score_5d, 0)} / 22D {fmt(market?.score_22d, 0)}</em><i>→</i>
-        </button>)}</div>
-      </>}
+      <header><div><p>PERSONAL RELEVANCE</p><h2>Your stocks today</h2><span>Recorded events in the latest market session—not an overall stock verdict.</span></div><button onClick={() => navigate('/bookmarks')}>View all {bookmarks.length} stocks →</button></header>
+      <PersonalStoryCards compact />
     </section>
 
     <section className="wt-boundaries">

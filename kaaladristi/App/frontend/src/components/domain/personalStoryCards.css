@@ -1,0 +1,47 @@
+.personal-stories{color:var(--text-primary)}
+.personal-stories .ps-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.personal-stories .ps-coverage{font-size:12px;color:var(--text-muted);margin-bottom:14px}
+.personal-stories .ps-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;min-width:0;overflow-wrap:anywhere}
+.personal-stories header{display:flex;justify-content:space-between;gap:12px}
+.personal-stories h3{font-family:var(--font-serif);font-size:23px;margin:5px 0}
+.personal-stories a{color:var(--accent)}
+.personal-stories h3 a{color:var(--text-primary)}
+.personal-stories p,.personal-stories small{font-size:12px;line-height:1.5;color:var(--text-muted)}
+.personal-stories .ps-eyebrow{font-size:11px;color:var(--accent)}
+.personal-stories .ps-price{font:20px var(--font-mono);text-align:right;flex-shrink:0}
+.personal-stories small{display:block}
+.personal-stories .ps-events{border-top:1px solid var(--border);margin-top:14px;padding-top:12px}
+.personal-stories .ps-event{display:grid;grid-template-columns:28px 1fr;gap:5px;font-size:13px;margin:10px 0}
+.personal-stories time{grid-column:2;font:11px var(--font-mono);color:var(--text-muted)}
+.personal-stories .ps-positive{color:var(--risk-green)}
+.personal-stories .ps-negative{color:var(--risk-red)}
+.personal-stories .ps-evidence{display:flex;flex-wrap:wrap;gap:8px 16px;border-bottom:1px solid var(--border);padding:12px 0;font-size:12px}
+.personal-stories b{font-weight:500;font-family:var(--font-mono)}
+.personal-stories .ps-reference{background:var(--surface-2);padding:10px 12px;margin-top:12px;border-radius:6px;font-size:12px}
+.personal-stories footer{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:14px;font-size:12px}
+.personal-stories footer>span{color:var(--text-muted)}
+.personal-stories .ps-holding{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;border-top:1px solid var(--border);margin-top:12px;padding-top:12px}
+.personal-stories .ps-holding strong{display:block;font:16px var(--font-mono);margin-top:5px}
+.personal-stories summary{font-size:12px;color:var(--accent);cursor:pointer}
+.personal-stories button{padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--card);color:var(--text-primary);cursor:pointer}
+.personal-stories .ps-manage{margin-top:12px;border-top:1px solid var(--border);padding-top:10px}
+.personal-stories .ps-manage a,.personal-stories .ps-manage button{display:block;margin-top:12px;font-size:12px}
+.personal-stories .ps-warning{color:var(--risk-amber)}
+.personal-stories .ps-mix{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0}
+.personal-stories .ps-mix button{display:inline-flex;align-items:center;gap:4px;padding:5px 8px;font-size:12px;min-height:32px}
+.personal-stories .ps-mix button[aria-pressed=true]{outline:2px solid var(--accent);outline-offset:1px}
+.personal-stories .ps-tone-bull,.personal-stories button.ps-tone-bull{color:var(--risk-green)}
+.personal-stories .ps-tone-bear,.personal-stories button.ps-tone-bear{color:var(--risk-red)}
+.personal-stories .ps-tone-neutral,.personal-stories button.ps-tone-neutral{color:var(--text-secondary)}
+.personal-stories .ps-event>span:nth-child(2){color:var(--text-primary)}
+.personal-stories .ps-event-symbol{display:flex;align-items:center;gap:2px}
+.personal-stories .ps-event{grid-template-columns:32px 1fr;margin:8px 0}
+.personal-stories.ps-compact .ps-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+.personal-stories.ps-compact .ps-card{padding:14px}
+.personal-stories.ps-compact h3{font-size:18px}
+.personal-stories.ps-compact .ps-reference{display:none}
+.personal-stories.ps-compact .ps-evidence{padding:8px 0}
+@media(pointer:coarse){.personal-stories .ps-mix button{min-height:44px}}
+@media(max-width:1000px){.personal-stories .ps-grid{grid-template-columns:1fr}}
+@media(max-width:1000px){.personal-stories.ps-compact .ps-grid{grid-template-columns:1fr}}
+@media(max-width:400px){.personal-stories .ps-card{padding:14px}.personal-stories header{flex-wrap:wrap}.personal-stories .ps-price{text-align:left}.personal-stories .ps-holding{gap:8px}}

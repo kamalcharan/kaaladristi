@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
+import PersonalStoryCards from './PersonalStoryCards';
 import { Star, Loader2 } from 'lucide-react';
 import { Card, DristiQLoader } from '@/components/ui';
 import { displaySymbol, displaySubName, navName as toNavName, bseTooltip } from '@/lib/symbolUtils';
@@ -387,95 +388,13 @@ function WatchlistBody() {
   );
 }
 
-// ── Positions tab body (Phase 2a) ───────────────────────────────────────────
-// Held stocks = bookmarks WITH an entry (migration 153). Entry · now · P&L ·
-// State; row → the stock's Thesis tab (the full cockpit). Symbol/company come
-// straight off the bookmark row — no extra fetch. The existing position presentation is intentionally unchanged.
-
-function legacyPositionLabel(key: BookmarkSignalStateKey): string {
-  if (key === 'improving') return '▲ Improving';
-  if (key === 'turning') return '▲ Turning';
-  if (key === 'cooling') return '~ Cooling';
-  if (key === 'fading') return '▼ Fading';
-  return 'Watch';
-}
-
-function PosKv({ label, value, color, big }: { label: string; value: string; color?: string; big?: boolean }) {
-  return (
-    <span style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 8.5, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-faint)' }}>{label}</span>
-      <span style={{ fontFamily: 'var(--font-mono)', fontSize: big ? 15 : 13, fontWeight: big ? 700 : 600, color: color ?? 'var(--text-primary)' }}>{value}</span>
-    </span>
-  );
-}
-
-function PositionsBody() {
-  const navigate = useNavigate();
-  const bookmarks = useBookmarkStore((s) => s.bookmarks);
-  const clearPosition = useBookmarkStore((s) => s.clearPosition);
-  const held = useMemo(() => bookmarks.filter((b) => b.entry_price != null), [bookmarks]);
-  const ids = useMemo(() => held.map((b) => b.equity_id), [held]);
-  const { dataByEquity, isLoading } = useBookmarkMarketData(ids);
-
-  if (held.length === 0) {
-    return (
-      <div style={{ padding: '64px 24px', textAlign: 'center', background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 16 }}>
-        <p style={{ fontSize: 14, color: 'var(--text-muted)', marginBottom: 6 }}>No positions yet</p>
-        <p style={{ fontSize: 12, color: 'var(--text-faint)' }}>
-          Open a stock and hit <span style={{ color: 'var(--accent, var(--gold-soft))' }}>＋ Position</span> to track entry, P&amp;L and thesis health here.
-        </p>
-      </div>
-    );
-  }
-  if (isLoading) return <DristiQLoader message="Loading positions…" />;
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      {held.map((b) => {
-        const m = dataByEquity.get(b.equity_id);
-        const name = displaySymbol({ symbol: b.symbol, company_name: b.company_name });
-        const close = m?.close ?? null;
-        const entry = b.entry_price ?? 0;
-        const pnl = close != null && entry > 0 ? ((close - entry) / entry) * 100 : null;
-        const st = bookmarkSignalState(m);
-        const openThesis = () => navigate(`/chart/equity/${b.equity_id}?name=${encodeURIComponent(toNavName(b))}&tab=thesis`);
-        return (
-          <Card key={b.id} rounded="xl" className="px-3 py-2.5">
-            <div style={{ display: 'flex', alignItems: 'center', gap: 18, flexWrap: 'wrap' }}>
-              <div style={{ minWidth: 150, cursor: 'pointer' }} onClick={openThesis}>
-                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{name}</span>
-                {b.company_name && (
-                  <div style={{ fontSize: 10, color: 'var(--text-faint)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 200 }}>{b.company_name}</div>
-                )}
-              </div>
-              <PosKv label="Entry" value={`₹${b.entry_price} · ${b.entry_date ?? '—'}${b.entry_qty ? ` · ${b.entry_qty}` : ''}`} />
-              <PosKv label="Now" value={close != null ? `₹${close.toLocaleString('en-IN', { maximumFractionDigits: 2 })}` : '—'} />
-              <PosKv label="P&L" value={pnl != null ? `${pnl >= 0 ? '+' : ''}${pnl.toFixed(1)}%` : '—'}
-                color={pnl != null ? (pnl >= 0 ? 'var(--risk-green)' : 'var(--risk-red)') : undefined} big />
-              <span style={{
-                fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 600, whiteSpace: 'nowrap',
-                padding: '2px 8px', borderRadius: 100, color: st.color,
-                background: `color-mix(in srgb, ${st.color} 12%, transparent)`,
-                border: `1px solid color-mix(in srgb, ${st.color} 32%, transparent)`,
-              }}>{legacyPositionLabel(st.key)}</span>
-              <button onClick={openThesis} style={{ marginLeft: 'auto', fontSize: 11, padding: '5px 12px', borderRadius: 6, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer' }}>
-                Study ›
-              </button>
-              <button onClick={() => clearPosition(b.equity_id)} title="Remove position (keeps the bookmark)" style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-faint)', background: 'none', border: 'none', cursor: 'pointer' }}>✕</button>
-            </div>
-          </Card>
-        );
-      })}
-    </div>
-  );
-}
-
 /**
  * "My Stocks" — Watchlist + Positions tabs (Phase 2a). The Workspace tab body
  * (WorkspacePage.tsx) and the /bookmarks deep-link route both render this.
  */
 export default function MyBookmarksPanel() {
   const {pathname}=useLocation();
+  const [view, setView] = useState<'stories' | 'compare'>('stories');
   const [search,setSearch]=useSearchParams();
   const requestedTab=pathname==='/bookmarks'&&search.get('tab')==='positions'?'positions':'watchlist';
   const [tab, setTab] = useState<'watchlist' | 'positions'>(requestedTab);
@@ -490,7 +409,7 @@ export default function MyBookmarksPanel() {
   return (
     <div>
       <div style={{ display: 'flex', gap: 2, borderBottom: '1px solid var(--border)', marginBottom: 16 }}>
-        {([['watchlist', 'Watchlist', bookmarks.length], ['positions', 'Positions', posCount]] as const).map(([id, label, n]) => (
+        {([['watchlist', 'Watching', bookmarks.length], ['positions', 'Positions', posCount]] as const).map(([id, label, n]) => (
           <button
             key={id}
             onClick={() => {setTab(id);if(pathname==='/bookmarks')setSearch({...Object.fromEntries(search),tab:id});}}
@@ -506,7 +425,8 @@ export default function MyBookmarksPanel() {
           </button>
         ))}
       </div>
-      {tab === 'watchlist' ? <WatchlistBody /> : <PositionsBody />}
+      {tab === 'watchlist' && <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>{(['stories', 'compare'] as const).map(mode => <button key={mode} aria-pressed={view === mode} onClick={() => setView(mode)} className="rounded-full border border-kd-border px-3 py-2 text-xs">{mode === 'stories' ? 'Stories' : 'Compare · table & flow map'}</button>)}</div>}
+      {tab === 'positions' ? <PersonalStoryCards positions /> : view === 'stories' ? <PersonalStoryCards /> : <WatchlistBody />}
     </div>
   );
 }
