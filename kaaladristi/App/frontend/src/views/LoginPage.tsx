@@ -134,7 +134,7 @@ export default function LoginPage() {
             Dristi<span style={{ color: C.g1 }}>Q</span>
           </span>
         </Link>
-        <Link to="/" style={{ fontFamily: MONO, fontSize: 10, letterSpacing: '.18em', textTransform: 'uppercase', color: C.ink3, textDecoration: 'none', transition: 'color .2s ease' }}
+        <Link to="/" style={{ fontFamily: MONO, fontSize: 12, letterSpacing: '.18em', textTransform: 'uppercase', color: C.ink3, textDecoration: 'none', transition: 'color .2s ease' }}
           onMouseEnter={e => (e.currentTarget.style.color = C.g1)}
           onMouseLeave={e => (e.currentTarget.style.color = C.ink3)}>
           ← Back to home
@@ -153,7 +153,7 @@ export default function LoginPage() {
             <h1 style={{ fontFamily: SERIF, fontWeight: 400, fontSize: 36, color: C.ink1, letterSpacing: '-0.02em', margin: '0 0 8px', lineHeight: 1.1 }}>
               {authMode === 'forgot' ? 'Reset Password' : authMode === 'login' ? 'Welcome back.' : 'Create account.'}
             </h1>
-            <p style={{ fontFamily: MONO, fontSize: 10, letterSpacing: '.22em', textTransform: 'uppercase', color: C.ink3, margin: 0 }}>
+            <p style={{ fontFamily: MONO, fontSize: 12, letterSpacing: '.22em', textTransform: 'uppercase', color: C.ink3, margin: 0 }}>
               {authMode === 'forgot' ? 'Enter your email — we\'ll help you reset' : authMode === 'login' ? 'Sign in to your DristiQ dashboard' : 'Join the DristiQ beta cohort'}
             </p>
           </div>
@@ -174,7 +174,7 @@ export default function LoginPage() {
                     background: authMode === m ? C.rs : 'transparent',
                     border: 'none', borderRight: i === 0 ? `1px solid ${C.rule}` : 'none',
                     color: authMode === m ? C.g1 : C.ink3,
-                    fontFamily: MONO, fontSize: 10, letterSpacing: '.18em', textTransform: 'uppercase',
+                    fontFamily: MONO, fontSize: 12, letterSpacing: '.18em', textTransform: 'uppercase',
                     cursor: 'pointer', transition: 'all .2s ease',
                   }}>
                     {m === 'login' ? 'Sign In' : 'Register'}
@@ -199,7 +199,7 @@ export default function LoginPage() {
             <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
               {authMode === 'register' && (
                 <div>
-                  <label style={{ display: 'block', fontFamily: MONO, fontSize: 9, letterSpacing: '.2em', textTransform: 'uppercase', color: C.ink4, marginBottom: 8 }}>Full Name</label>
+                  <label style={{ display: 'block', fontFamily: MONO, fontSize: 11, letterSpacing: '.2em', textTransform: 'uppercase', color: C.ink4, marginBottom: 8 }}>Full Name</label>
                   <input type="text" value={fullName} onChange={e => setFullName(e.target.value)}
                     placeholder="Rajesh Kumar" required style={inputStyle}
                     onFocus={e => (e.currentTarget.style.borderColor = C.g2)}
@@ -208,7 +208,7 @@ export default function LoginPage() {
               )}
 
               <div>
-                <label style={{ display: 'block', fontFamily: MONO, fontSize: 9, letterSpacing: '.2em', textTransform: 'uppercase', color: C.ink4, marginBottom: 8 }}>Email</label>
+                <label style={{ display: 'block', fontFamily: MONO, fontSize: 11, letterSpacing: '.2em', textTransform: 'uppercase', color: C.ink4, marginBottom: 8 }}>Email</label>
                 <input type="email" value={email} onChange={e => setEmail(e.target.value)}
                   placeholder="you@example.com" required style={inputStyle}
                   onFocus={e => (e.currentTarget.style.borderColor = C.g2)}
@@ -217,20 +217,20 @@ export default function LoginPage() {
 
               {authMode !== 'forgot' && (
                 <div>
-                  <label style={{ display: 'block', fontFamily: MONO, fontSize: 9, letterSpacing: '.2em', textTransform: 'uppercase', color: C.ink4, marginBottom: 8 }}>Password</label>
+                  <label style={{ display: 'block', fontFamily: MONO, fontSize: 11, letterSpacing: '.2em', textTransform: 'uppercase', color: C.ink4, marginBottom: 8 }}>Password</label>
                   <input type="password" value={password} onChange={e => setPassword(e.target.value)}
                     placeholder="••••••••" required minLength={6} style={inputStyle}
                     onFocus={e => (e.currentTarget.style.borderColor = C.g2)}
                     onBlur={e => (e.currentTarget.style.borderColor = C.rule)}/>
                   {authMode === 'register' && (
-                    <p style={{ fontFamily: MONO, fontSize: 9, letterSpacing: '.14em', color: C.ink4, margin: '6px 0 0' }}>Minimum 6 characters</p>
+                    <p style={{ fontFamily: MONO, fontSize: 11, letterSpacing: '.14em', color: C.ink4, margin: '6px 0 0' }}>Minimum 6 characters</p>
                   )}
                 </div>
               )}
 
               {authMode === 'login' && (
                 <div style={{ textAlign: 'right', marginTop: -6 }}>
-                  <button type="button" onClick={() => reset('forgot')} style={{ background: 'none', border: 'none', fontFamily: MONO, fontSize: 9, letterSpacing: '.16em', textTransform: 'uppercase', color: C.ink3, cursor: 'pointer', transition: 'color .2s ease' }}
+                  <button type="button" onClick={() => reset('forgot')} style={{ background: 'none', border: 'none', fontFamily: MONO, fontSize: 11, letterSpacing: '.16em', textTransform: 'uppercase', color: C.ink3, cursor: 'pointer', transition: 'color .2s ease' }}
                     onMouseEnter={e => (e.currentTarget.style.color = C.g1)}
                     onMouseLeave={e => (e.currentTarget.style.color = C.ink3)}>
                     Forgot password?
@@ -239,7 +239,7 @@ export default function LoginPage() {
               )}
               {authMode === 'forgot' && (
                 <div style={{ textAlign: 'right', marginTop: -6 }}>
-                  <button type="button" onClick={() => reset('login')} style={{ background: 'none', border: 'none', fontFamily: MONO, fontSize: 9, letterSpacing: '.16em', textTransform: 'uppercase', color: C.ink3, cursor: 'pointer', transition: 'color .2s ease' }}
+                  <button type="button" onClick={() => reset('login')} style={{ background: 'none', border: 'none', fontFamily: MONO, fontSize: 11, letterSpacing: '.16em', textTransform: 'uppercase', color: C.ink3, cursor: 'pointer', transition: 'color .2s ease' }}
                     onMouseEnter={e => (e.currentTarget.style.color = C.g1)}
                     onMouseLeave={e => (e.currentTarget.style.color = C.ink3)}>
                     ← Back to sign in
@@ -265,7 +265,7 @@ export default function LoginPage() {
 
           {/* Footer note */}
           <div style={{ textAlign: 'center', marginTop: 24 }}>
-            <p style={{ fontFamily: MONO, fontSize: 9, letterSpacing: '.16em', textTransform: 'uppercase', color: C.ink4, margin: 0, lineHeight: 1.8 }}>
+            <p style={{ fontFamily: MONO, fontSize: 11, letterSpacing: '.16em', textTransform: 'uppercase', color: C.ink4, margin: 0, lineHeight: 1.8 }}>
               Data platform only · Not investment advice<br/>
               <span style={{ color: C.ink3 }}>
                 By continuing you agree to our{' '}

@@ -136,7 +136,7 @@ export default function TimelineSlider({ total, activeIndex, bars, corrHistory, 
               }}
             >
               <span style={{
-                fontSize: 7, fontFamily: 'var(--font-mono, monospace)',
+                fontSize: 10, fontFamily: 'var(--font-mono, monospace)',
                 color: ch.color, whiteSpace: 'nowrap',
               }}>{ch.label.slice(0, 5)}</span>
               <div style={{
@@ -165,10 +165,10 @@ export default function TimelineSlider({ total, activeIndex, bars, corrHistory, 
       {/* Meta */}
       <div style={{ width: 90, textAlign: 'right', flexShrink: 0 }}>
         <div style={{
-          fontSize: 9, fontFamily: 'var(--font-mono, monospace)', color: 'var(--text-secondary)',
+          fontSize: 11, fontFamily: 'var(--font-mono, monospace)', color: 'var(--text-secondary)',
         }}>{dateStr}</div>
         <div style={{
-          fontSize: 9, fontFamily: 'var(--font-mono, monospace)',
+          fontSize: 11, fontFamily: 'var(--font-mono, monospace)',
           color: isNow ? 'var(--accent-gold)' : 'var(--text-muted)',
         }}>
           {isNow ? 'NOW' : `\u2212${max - activeIndex} bars`}

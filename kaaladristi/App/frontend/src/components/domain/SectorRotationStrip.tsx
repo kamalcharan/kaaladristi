@@ -28,7 +28,7 @@ function CategoryColumn({
     <div className="flex-1 min-w-0">
       <div className="flex items-center gap-1.5 mb-2">
         <Icon className={cn('w-3 h-3', iconColor)} />
-        <span className="text-[10px] font-bold uppercase tracking-wider text-secondary">
+        <span className="text-[12px] font-bold uppercase tracking-wider text-secondary">
           {title}
         </span>
       </div>
@@ -36,10 +36,10 @@ function CategoryColumn({
         <div className="space-y-1">
           {top3.map((item) => (
             <div key={item.industry} className="flex items-center gap-2">
-              <span className="text-[11px] text-primary truncate">{item.industry}</span>
+              <span className="text-[12px] text-primary truncate">{item.industry}</span>
               {item.rank_change !== 0 && (
                 <span className={cn(
-                  'text-[9px] font-mono font-bold shrink-0',
+                  'text-[11px] font-mono font-bold shrink-0',
                   item.rank_change > 0 ? 'text-risk-green' : 'text-risk-red',
                 )}>
                   {item.rank_change > 0 ? '+' : ''}{item.rank_change}
@@ -49,7 +49,7 @@ function CategoryColumn({
           ))}
         </div>
       ) : (
-        <p className="text-[10px] text-muted italic">
+        <p className="text-[12px] text-muted italic">
           {title === 'Rotating In' ? 'No significant rotation in. Markets stable.' :
            title === 'Rotating Out' ? 'No significant rotation out. Markets stable.' :
            'None currently'}
@@ -70,7 +70,7 @@ export default function SectorRotationStrip() {
         <h3 className="text-xs font-bold text-primary uppercase tracking-wider">Sector Rotation</h3>
         <Link
           to="/industry-transition"
-          className="text-[10px] font-mono text-accent-indigo hover:underline"
+          className="text-[12px] font-mono text-accent-indigo hover:underline"
         >
           Full view &rarr;
         </Link>

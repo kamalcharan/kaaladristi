@@ -46,7 +46,7 @@ function Pill({ color, children }: { color: string; children: React.ReactNode })
     <span
       style={{
         ...MONO, display: 'inline-flex', alignItems: 'center', gap: 5,
-        fontSize: 10, fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase',
+        fontSize: 12, fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase',
         padding: '3px 9px', borderRadius: 999,
         color, background: `color-mix(in srgb, ${color} 14%, transparent)`,
         border: `1px solid color-mix(in srgb, ${color} 34%, transparent)`,
@@ -81,7 +81,7 @@ export default function MoveQualityCard({
     return (
       <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
         <Pill color={color}>{icon} {mq.verdict}</Pill>
-        <span style={{ ...MONO, fontSize: 11, color: 'var(--text-muted)' }}>
+        <span style={{ ...MONO, fontSize: 12, color: 'var(--text-muted)' }}>
           {mq.upCount}/{mq.total} up{mq.topSharePct != null && mq.verdict === 'narrow' ? ` · ${mq.topName} ${mq.topSharePct}%` : ''}
         </span>
       </div>
@@ -98,14 +98,14 @@ export default function MoveQualityCard({
     >
       {/* Verdict + trap contrast */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 8 }}>
-        <span style={{ ...MONO, fontSize: 9, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-faint)' }}>
+        <span style={{ ...MONO, fontSize: 11, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-faint)' }}>
           Move Quality
         </span>
         <Pill color={color}>{icon} {mq.headline}</Pill>
         {trap && badge && (
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginLeft: 'auto' }}>
-            <span style={{ ...MONO, fontSize: 9, color: 'var(--text-faint)' }}>badge</span>
-            <span style={{ ...MONO, fontSize: 10, color: 'var(--text-faint)', textDecoration: 'line-through', textDecorationColor: 'var(--risk-red)' }}>
+            <span style={{ ...MONO, fontSize: 11, color: 'var(--text-faint)' }}>badge</span>
+            <span style={{ ...MONO, fontSize: 12, color: 'var(--text-faint)', textDecoration: 'line-through', textDecorationColor: 'var(--risk-red)' }}>
               {badge.label}
             </span>
           </span>
@@ -126,11 +126,11 @@ export default function MoveQualityCard({
         />
       </div>
 
-      <p style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 10 }}>Concentration is the largest share of positive constituent Flow 5D scores, not contribution to the index price move. Session advances and multi-session scores measure different horizons.</p>
+      <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 10 }}>Concentration is the largest share of positive constituent Flow 5D scores, not contribution to the index price move. Session advances and multi-session scores measure different horizons.</p>
       {/* Reason bullets */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 14px' }}>
         {mq.flags.map((f, i) => (
-          <span key={i} style={{ ...MONO, fontSize: 10.5, color: 'var(--text-muted)' }}>
+          <span key={i} style={{ ...MONO, fontSize: 12, color: 'var(--text-muted)' }}>
             <span style={{ color, marginRight: 4 }}>·</span>{f}
           </span>
         ))}
@@ -151,7 +151,7 @@ export default function MoveQualityCard({
                   setVaniText(text); setVaniLoading(false)
                 }}
                 disabled={vaniLoading}
-                style={{ ...MONO, fontSize: 10, fontWeight: 600, color: 'var(--vani)', background: 'none', border: 'none', cursor: vaniLoading ? 'default' : 'pointer', padding: 0, opacity: vaniLoading ? 0.6 : 1 }}
+                style={{ ...MONO, fontSize: 12, fontWeight: 600, color: 'var(--vani)', background: 'none', border: 'none', cursor: vaniLoading ? 'default' : 'pointer', padding: 0, opacity: vaniLoading ? 0.6 : 1 }}
               >
                 {vaniLoading ? '✦ VaNi is reading…' : '✦ Ask VaNi to read this move'}
               </button>
@@ -167,9 +167,9 @@ function Stat({ label, value, sub, tone }: { label: string; value: string; sub: 
   const c = tone === 'ok' ? 'var(--risk-green)' : tone === 'bad' ? 'var(--risk-red)' : 'var(--risk-amber)'
   return (
     <div style={{ background: 'color-mix(in srgb, var(--text-primary) 3%, transparent)', border: '1px solid var(--border)', borderRadius: 8, padding: '8px 10px' }}>
-      <div style={{ ...MONO, fontSize: 8.5, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-faint)' }}>{label}</div>
+      <div style={{ ...MONO, fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-faint)' }}>{label}</div>
       <div style={{ ...MONO, fontSize: 17, fontWeight: 700, color: c, lineHeight: 1.15 }}>{value}</div>
-      <div style={{ ...MONO, fontSize: 9, color: 'var(--text-faint)' }}>{sub}</div>
+      <div style={{ ...MONO, fontSize: 11, color: 'var(--text-faint)' }}>{sub}</div>
     </div>
   )
 }

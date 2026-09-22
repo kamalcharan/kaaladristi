@@ -83,7 +83,7 @@ export default function ScannerArrivalView({ equityId, setupKey }: Props) {
         <p style={{ ...SANS, fontSize: 12, fontWeight: 600, color: T.bear, marginBottom: 4 }}>
           Couldn't build the setup view for this stock.
         </p>
-        <p style={{ ...SANS, fontSize: 11, color: T.ink2, lineHeight: 1.4 }}>
+        <p style={{ ...SANS, fontSize: 12, color: T.ink2, lineHeight: 1.4 }}>
           {error?.message ?? 'No data returned. Fresh listings and unknown setups sometimes surface this — refreshing later usually resolves it.'}
         </p>
       </div>
@@ -106,7 +106,7 @@ export default function ScannerArrivalView({ equityId, setupKey }: Props) {
         paddingBottom: 20, borderBottom: `1px solid ${T.rule}`,
       }}>
         <div>
-          <div style={{ ...SANS, fontSize: 10, letterSpacing: '0.22em', textTransform: 'uppercase', color: T.gold, fontWeight: 600, marginBottom: 10 }}>
+          <div style={{ ...SANS, fontSize: 12, letterSpacing: '0.22em', textTransform: 'uppercase', color: T.gold, fontWeight: 600, marginBottom: 10 }}>
             Setup Read · {data.setupLabel}
           </div>
           <h1 style={{
@@ -128,10 +128,10 @@ export default function ScannerArrivalView({ equityId, setupKey }: Props) {
             display: 'inline-flex', alignItems: 'baseline', gap: 8,
             padding: '6px 12px', border: `1px solid ${phaseColor}66`,
             background: `${phaseColor}14`, borderRadius: 3, color: phaseColor,
-            ...SANS, fontSize: 11, fontWeight: 600, letterSpacing: '0.14em', textTransform: 'uppercase', marginBottom: 12,
+            ...SANS, fontSize: 12, fontWeight: 600, letterSpacing: '0.14em', textTransform: 'uppercase', marginBottom: 12,
           }}>
             {h.phase}
-            <span style={{ ...SANS, color: T.ink2, fontWeight: 500, letterSpacing: '0.02em', textTransform: 'none', fontSize: 11 }}>
+            <span style={{ ...SANS, color: T.ink2, fontWeight: 500, letterSpacing: '0.02em', textTransform: 'none', fontSize: 12 }}>
               · <span style={MONO}>₹{h.close.toFixed(2)}</span>
               &nbsp;· <span style={{ color: pctChng >= 0 ? T.bull : T.bear, ...MONO }}>
                 {pctChng >= 0 ? '+' : ''}{pctChng.toFixed(2)}%
@@ -201,7 +201,7 @@ export default function ScannerArrivalView({ equityId, setupKey }: Props) {
           background: `linear-gradient(90deg, ${T.gold}0a, transparent 60%)`,
           padding: '16px 20px 18px', borderRadius: '0 4px 4px 0',
         }}>
-          <div style={{ ...SANS, fontSize: 10, letterSpacing: '0.24em', textTransform: 'uppercase', color: T.gold, fontWeight: 600, marginBottom: 6 }}>
+          <div style={{ ...SANS, fontSize: 12, letterSpacing: '0.24em', textTransform: 'uppercase', color: T.gold, fontWeight: 600, marginBottom: 6 }}>
             ✎ Editor's Note
           </div>
           <p style={{
@@ -244,7 +244,7 @@ function CardHead({ title, eyebrow }: { title: string; eyebrow: string }) {
       }}>
         {title}
       </h3>
-      <span style={{ ...SANS, fontSize: 10, letterSpacing: '0.22em', textTransform: 'uppercase', color: T.ink3, fontWeight: 600 }}>
+      <span style={{ ...SANS, fontSize: 12, letterSpacing: '0.22em', textTransform: 'uppercase', color: T.ink3, fontWeight: 600 }}>
         {eyebrow}
       </span>
     </div>
@@ -266,7 +266,7 @@ function Kv({ label, value, tone }: { label: string; value: string; tone?: 'bull
   const color = tone === 'bull' ? T.bull : tone === 'bear' ? T.bear : T.ink;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-      <dt style={{ ...SANS, fontSize: 9, letterSpacing: '0.16em', textTransform: 'uppercase', color: T.ink3, fontWeight: 600 }}>
+      <dt style={{ ...SANS, fontSize: 11, letterSpacing: '0.16em', textTransform: 'uppercase', color: T.ink3, fontWeight: 600 }}>
         {label}
       </dt>
       <dd style={{ ...MONO, fontSize: 13, fontWeight: 500, color }}>
@@ -306,7 +306,7 @@ function PersonaCard({
           }} />
           {heading}
         </h3>
-        <span style={{ ...SANS, fontSize: 10, letterSpacing: '0.22em', textTransform: 'uppercase', color: T.ink3, fontWeight: 600 }}>
+        <span style={{ ...SANS, fontSize: 12, letterSpacing: '0.22em', textTransform: 'uppercase', color: T.ink3, fontWeight: 600 }}>
           {sub}
         </span>
       </div>
@@ -335,7 +335,7 @@ function PersonaCard({
             </span>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
               <span style={{ ...SANS, fontSize: 13, color: T.ink, fontWeight: 500 }}>{e.label}</span>
-              <span style={{ ...SANS, fontSize: 11, color: T.ink3, lineHeight: 1.35 }}>
+              <span style={{ ...SANS, fontSize: 12, color: T.ink3, lineHeight: 1.35 }}>
                 {sebiSafeRationale(e.rationale)}
               </span>
             </div>
@@ -365,7 +365,7 @@ function WhatConfirmsSection({ items }: { items: WhatConfirmsItem[] }) {
         <h3 style={{ ...SERIF, fontSize: 20, fontWeight: 500, fontVariationSettings: '"opsz" 32', color: T.ink }}>
           What Confirms This Setup
         </h3>
-        <span style={{ ...SANS, fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', color: T.ink3, fontWeight: 600 }}>
+        <span style={{ ...SANS, fontSize: 12, letterSpacing: '0.16em', textTransform: 'uppercase', color: T.ink3, fontWeight: 600 }}>
           <span style={{ ...MONO, color: T.bull }}>{met}</span> of {items.length} met
           {pending > 0 && <>&nbsp;·&nbsp; <span style={{ color: T.pending }}>{pending} pending</span></>}
         </span>
@@ -385,7 +385,7 @@ function WhatConfirmsSection({ items }: { items: WhatConfirmsItem[] }) {
               <span style={{
                 width: 18, height: 18, borderRadius: '50%',
                 display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 10, fontWeight: 700, lineHeight: 1,
+                fontSize: 12, fontWeight: 700, lineHeight: 1,
                 background: `${gc}22`, color: gc, border: `1px solid ${gc}55`,
                 marginTop: 2,
               }}>
@@ -395,13 +395,13 @@ function WhatConfirmsSection({ items }: { items: WhatConfirmsItem[] }) {
                 <span style={{ ...SERIF, fontSize: 13, fontWeight: 500, color: T.ink, fontVariationSettings: '"opsz" 18' }}>
                   {it.label}
                   <span style={{
-                    ...SANS, fontSize: 9, letterSpacing: '0.14em', textTransform: 'uppercase',
+                    ...SANS, fontSize: 11, letterSpacing: '0.14em', textTransform: 'uppercase',
                     color: isFail ? T.bear : isPending ? T.pending : T.ink3, fontWeight: 600, marginLeft: 8,
                   }}>
                     · {isFail ? 'not met' : isPending ? 'pending' : 'structural'}
                   </span>
                 </span>
-                <span style={{ ...SANS, fontSize: 11, color: T.ink3, lineHeight: 1.4 }}>
+                <span style={{ ...SANS, fontSize: 12, color: T.ink3, lineHeight: 1.4 }}>
                   {it.explain}
                 </span>
               </div>

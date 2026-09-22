@@ -59,7 +59,7 @@ function signColor(v: number | null): string {
 }
 
 const HEAD: React.CSSProperties = {
-  fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase',
+  fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase',
   color: 'var(--text-faint)', flexShrink: 0,
 };
 const CELL_MONO: React.CSSProperties = { fontFamily: 'var(--font-mono)', fontSize: 12 };
@@ -140,7 +140,7 @@ function BookmarkRowCard({
             <ExchangeBadge exchange={bookmark.exchange} />
           </div>
           {subName && (
-            <div style={{ fontSize: 10, color: 'var(--text-faint)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <div style={{ fontSize: 12, color: 'var(--text-faint)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {subName}
             </div>
           )}
@@ -151,7 +151,7 @@ function BookmarkRowCard({
           {(() => {
             const st = bookmarkSignalState(market);
             return <span title={st.explanation} style={{
-              fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 600, whiteSpace: 'nowrap',
+              fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap',
               padding: '3px 8px', borderRadius: 100, color: st.color,
               background: `color-mix(in srgb, ${st.color} 12%, transparent)`,
               border: `1px solid color-mix(in srgb, ${st.color} 32%, transparent)`,
@@ -165,7 +165,7 @@ function BookmarkRowCard({
             {market?.close != null ? `₹${market.close.toLocaleString('en-IN', { maximumFractionDigits: 2 })}` : '—'}
           </div>
           {pct != null && (
-            <div style={{ ...CELL_MONO, fontSize: 11, color: signColor(pct) }}>
+            <div style={{ ...CELL_MONO, fontSize: 12, color: signColor(pct) }}>
               {pct >= 0 ? '+' : ''}{pct.toFixed(2)}%
             </div>
           )}
@@ -175,7 +175,7 @@ function BookmarkRowCard({
             by that sector's live rotation signal) · Industry as muted subtext */}
         <div style={{ width: W.sector, flexShrink: 0 }}>
           {sectors.length === 0 ? (
-            <span style={{ fontSize: 11, color: 'var(--text-faint)' }}>No sector</span>
+            <span style={{ fontSize: 12, color: 'var(--text-faint)' }}>No sector</span>
           ) : (
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
               {sectors.map((sec) => {
@@ -186,7 +186,7 @@ function BookmarkRowCard({
                     onClick={(e) => { e.stopPropagation(); navigate(`/sector-rotation/${sec.id}`); }}
                     title={`${sec.name}${sec.signal ? ` — ${sec.signal.label}` : ''}`}
                     style={{
-                      fontSize: 9, fontWeight: 600, padding: '2px 6px', borderRadius: 100, cursor: 'pointer',
+                      fontSize: 11, fontWeight: 600, padding: '2px 6px', borderRadius: 100, cursor: 'pointer',
                       border: `1px solid color-mix(in srgb, ${color} 45%, transparent)`,
                       background: `color-mix(in srgb, ${color} 10%, transparent)`,
                       color, whiteSpace: 'nowrap',
@@ -199,7 +199,7 @@ function BookmarkRowCard({
             </div>
           )}
           {bookmark.industry && (
-            <div style={{ fontSize: 10, color: 'var(--text-faint)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <div style={{ fontSize: 12, color: 'var(--text-faint)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {bookmark.industry}
             </div>
           )}
@@ -227,14 +227,14 @@ function BookmarkRowCard({
             fills in a moment after prices/sectors rather than blocking them. */}
         <div style={{ width: W.scanners, flexShrink: 0, display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
           {scanLoading ? (
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 10, color: 'var(--text-faint)' }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, color: 'var(--text-faint)' }}>
               <Loader2 className="w-3 h-3 animate-spin" /> checking…
             </span>
           ) : scanTags.length === 0 ? (
-            <span style={{ fontSize: 10, color: 'var(--text-faint)' }}>No scanner match</span>
+            <span style={{ fontSize: 12, color: 'var(--text-faint)' }}>No scanner match</span>
           ) : scanTags.map((t) => (
             <span key={t.id} title={t.vani ? 'VaNi highlight in this scanner' : undefined} style={{
-              fontSize: 9, fontWeight: 600, padding: '2px 7px', borderRadius: 100,
+              fontSize: 11, fontWeight: 600, padding: '2px 7px', borderRadius: 100,
               background: t.vani ? 'color-mix(in srgb, var(--gold) 14%, transparent)' : 'color-mix(in srgb, var(--accent-indigo) 12%, transparent)',
               color: t.vani ? 'var(--gold)' : 'var(--accent-indigo)',
             }}>
@@ -253,7 +253,7 @@ function BookmarkRowCard({
               cellWidth={40} cellHeight={30}
             />
           ) : (
-            <span style={{ fontSize: 10, color: 'var(--text-faint)' }}>No flow data</span>
+            <span style={{ fontSize: 12, color: 'var(--text-faint)' }}>No flow data</span>
           )}
         </div>
 
@@ -262,7 +262,7 @@ function BookmarkRowCard({
           onClick={openChart}
           title="Open chart"
           style={{
-            width: 76, flexShrink: 0, fontSize: 11, padding: '5px 10px', borderRadius: 6,
+            width: 76, flexShrink: 0, fontSize: 12, padding: '5px 10px', borderRadius: 6,
             border: '1px solid var(--border)', background: 'transparent',
             color: 'var(--text-secondary)', cursor: 'pointer',
           }}
@@ -360,7 +360,7 @@ function WatchlistBody() {
           border: `1px solid ${stateFilter === filter.key ? 'var(--accent)' : 'var(--border)'}`,
           background: stateFilter === filter.key ? 'color-mix(in srgb, var(--accent) 12%, transparent)' : 'var(--card)',
           color: stateFilter === filter.key ? 'var(--text-primary)' : 'var(--text-muted)',
-          borderRadius: 999, padding: '6px 10px', fontSize: 11, cursor: 'pointer',
+          borderRadius: 999, padding: '6px 10px', fontSize: 12, cursor: 'pointer',
         }}>{filter.label} <b style={{ marginLeft: 4, fontFamily: 'var(--font-mono)' }}>{filter.count}</b></button>)}
       </div>
       <div style={{ overflowX: 'auto' }}>
@@ -421,7 +421,7 @@ export default function MyBookmarksPanel() {
             }}
           >
             {label}
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: tab === id ? 'var(--accent, var(--gold-soft))' : 'var(--text-faint)', background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)', borderRadius: 999, padding: '1px 7px' }}>{n}</span>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: tab === id ? 'var(--accent, var(--gold-soft))' : 'var(--text-faint)', background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)', borderRadius: 999, padding: '1px 7px' }}>{n}</span>
           </button>
         ))}
       </div>

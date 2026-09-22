@@ -50,7 +50,7 @@ export default function PipelineStatusDot() {
           <div className={cn('absolute inset-0 w-2 h-2 rounded-full animate-ping opacity-50', config.color)} />
         )}
       </div>
-      <span className="text-[10px] text-muted group-hover:text-[var(--text-secondary)] transition-colors hidden sm:inline">
+      <span className="text-[12px] text-muted group-hover:text-[var(--text-secondary)] transition-colors hidden sm:inline">
         {overall === 'healthy' ? 'Pipeline' : config.label}
       </span>
     </button>

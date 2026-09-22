@@ -53,7 +53,7 @@ function ImpactCell({ impact }: { impact: string }) {
   return (
     <span style={{
       fontFamily: 'var(--font-mono)',
-      fontSize: 10,
+      fontSize: 12,
       letterSpacing: '0.12em',
       color: 'var(--text-faint)',
       whiteSpace: 'nowrap',
@@ -122,7 +122,7 @@ function EventRow({
         {showDate && (
           <span style={{
             fontFamily: 'var(--font-mono)',
-            fontSize: 11,
+            fontSize: 12,
             color: isToday ? 'rgba(212,168,75,0.9)' : 'var(--text-faint)',
             width: 52,
             flexShrink: 0,
@@ -146,7 +146,7 @@ function EventRow({
         {!showDate && (
           <span style={{
             fontFamily: 'var(--font-mono)',
-            fontSize: 11,
+            fontSize: 12,
             color: 'var(--text-faint)',
             flexShrink: 0,
             width: 150,
@@ -210,7 +210,7 @@ function Section({
       }}>
         <span style={{
           fontFamily: 'var(--font-mono)',
-          fontSize: 9,
+          fontSize: 11,
           letterSpacing: '0.2em',
           textTransform: 'uppercase',
           color: 'var(--text-faint)',
@@ -219,7 +219,7 @@ function Section({
         </span>
         <span style={{
           fontFamily: 'var(--font-mono)',
-          fontSize: 9,
+          fontSize: 11,
           color: 'color-mix(in srgb, var(--text-primary) 15%, transparent)',
           letterSpacing: '0.08em',
         }}>
@@ -232,7 +232,7 @@ function Section({
           padding: '24px 14px',
           textAlign: 'center',
           fontFamily: 'var(--font-mono)',
-          fontSize: 11,
+          fontSize: 12,
           color: 'color-mix(in srgb, var(--text-primary) 15%, transparent)',
           letterSpacing: '0.1em',
         }}>
@@ -296,7 +296,7 @@ export default function PlanetaryIntelView() {
         <div>
           <div style={{
             fontFamily: 'var(--font-mono)',
-            fontSize: 9,
+            fontSize: 11,
             letterSpacing: '0.18em',
             textTransform: 'uppercase',
             color: 'var(--text-faint)',
@@ -331,7 +331,7 @@ export default function PlanetaryIntelView() {
               onClick={() => setOffset(opt.offset)}
               style={{
                 fontFamily: 'var(--font-mono)',
-                fontSize: 10,
+                fontSize: 12,
                 fontWeight: 700,
                 padding: '4px 14px',
                 borderRadius: 5,

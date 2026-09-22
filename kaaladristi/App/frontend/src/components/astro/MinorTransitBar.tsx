@@ -68,10 +68,10 @@ function TransitChip({ event }: { event: AstroEvent }) {
       )}>
         {/* Impact dot */}
         <span className={cn('w-1.5 h-1.5 rounded-full shrink-0', c.text.replace('text-', 'bg-'))} />
-        <span className={cn('text-[11px] font-semibold', c.text)}>
+        <span className={cn('text-[12px] font-semibold', c.text)}>
           {event.display_name}
         </span>
-        <span className="text-[10px] text-muted font-mono">
+        <span className="text-[12px] text-muted font-mono">
           {fmtShort(event.start_date)}–{fmtShort(event.end_date)}
         </span>
       </div>
@@ -82,18 +82,18 @@ function TransitChip({ event }: { event: AstroEvent }) {
           className="absolute bottom-full left-0 mb-2 z-50 w-60 p-3 rounded-xl bg-kd-surface border border-kd-border shadow-2xl"
           style={{ pointerEvents: 'none' }}
         >
-          <div className={cn('text-[10px] font-bold mb-1 uppercase tracking-wide', c.text)}>
+          <div className={cn('text-[12px] font-bold mb-1 uppercase tracking-wide', c.text)}>
             {label}
           </div>
-          <div className="text-[10px] font-mono text-muted mb-2">
+          <div className="text-[12px] font-mono text-muted mb-2">
             {fmtShort(event.start_date)} → {fmtShort(event.end_date)}
           </div>
           {event.inference ? (
-            <p className="text-[11px] text-[var(--text-secondary)] leading-relaxed italic">
+            <p className="text-[12px] text-[var(--text-secondary)] leading-relaxed italic">
               "{event.inference}"
             </p>
           ) : (
-            <p className="text-[11px] text-muted">No inference recorded.</p>
+            <p className="text-[12px] text-muted">No inference recorded.</p>
           )}
         </div>
       )}

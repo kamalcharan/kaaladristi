@@ -104,7 +104,7 @@ export default function FpbVaNiCard({symbols=[], onCohort, sessionDate}:{symbols
             {!stale && group?.releases && <div id="fpb-outcomes" className="vani-followups"><h4>{group.label}</h4><p className="text-xs text-muted">Current recorded statuses for releases in the last 180 days; this is not a historical status snapshot.</p>{group.releases.length===0?<p>No releases in this period.</p>:group.releases.map(r=><a className="sector-question" style={{display:'block',marginTop:8}} key={`${r.equity_id}-${r.release_date}`} href={`/chart/equity/${r.equity_id}`}><strong>{r.symbol}</strong> · {r.release_date} · {r.status.replaceAll('_',' ').toLowerCase()}</a>)}</div>}
             </>
           ) : (
-            <p style={{ fontSize: 11, color: 'var(--text-faint)', margin: 0 }}>
+            <p style={{ fontSize: 12, color: 'var(--text-faint)', margin: 0 }}>
               VaNi has nothing to report for this intent today.
             </p>
           )

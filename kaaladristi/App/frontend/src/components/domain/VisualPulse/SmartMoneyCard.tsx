@@ -82,7 +82,7 @@ function SmChart({ history }: { history: SmartMoneyBar[] }) {
       {/* Y-axis labels */}
       {[0, 25, 50].map((v) => (
         <text key={v} x={w - 2} y={toY(v) + 3} textAnchor="end"
-          fill="var(--text-muted)" fontSize={7} fontFamily="var(--font-mono, monospace)">{v}</text>
+          fill="var(--text-muted)" fontSize={10} fontFamily="var(--font-mono, monospace)">{v}</text>
       ))}
     </svg>
   );
@@ -103,7 +103,7 @@ function DotTimeline({ history }: { history: SmartMoneyBar[] }) {
   if (events.length === 0) {
     return (
       <div style={{
-        fontSize: 9, fontFamily: 'var(--font-mono, monospace)',
+        fontSize: 11, fontFamily: 'var(--font-mono, monospace)',
         color: 'var(--text-muted)', fontStyle: 'italic', padding: '4px 0',
       }}>No volume signature events in window</div>
     );
@@ -125,7 +125,7 @@ function DotTimeline({ history }: { history: SmartMoneyBar[] }) {
             display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
           }}>
             <span style={{
-              fontSize: 7, fontFamily: 'var(--font-mono, monospace)', color: e.color,
+              fontSize: 10, fontFamily: 'var(--font-mono, monospace)', color: e.color,
             }}>{e.type}</span>
             <div style={{
               width: e.size, height: e.size, borderRadius: '50%',
@@ -134,7 +134,7 @@ function DotTimeline({ history }: { history: SmartMoneyBar[] }) {
               boxShadow: e.type === 'SVD' ? `0 0 8px ${e.color}` : `0 0 4px ${e.color}`,
             }} />
             <span style={{
-              fontSize: 7, fontFamily: 'var(--font-mono, monospace)',
+              fontSize: 10, fontFamily: 'var(--font-mono, monospace)',
               color: 'var(--text-muted)',
             }}>{barsAgo === 0 ? 'now' : `−${barsAgo}`}</span>
           </div>
@@ -158,7 +158,7 @@ function ValueBlock({ label, value, color, trend }: {
         {value?.toFixed(1) ?? '—'}
         {trend != null && (
           <span style={{
-            fontSize: 8, marginLeft: 2, whiteSpace: 'nowrap',
+            fontSize: 10, marginLeft: 2, whiteSpace: 'nowrap',
             color: trend > 0 ? 'var(--risk-green)' : trend < 0 ? 'var(--risk-red)' : 'var(--text-muted)',
           }}>
             {trend > 0 ? '↑' : trend < 0 ? '↓' : '→'}{Math.abs(trend).toFixed(1)}
@@ -166,7 +166,7 @@ function ValueBlock({ label, value, color, trend }: {
         )}
       </div>
       <div style={{
-        fontSize: 8, fontFamily: 'var(--font-mono, monospace)',
+        fontSize: 10, fontFamily: 'var(--font-mono, monospace)',
         textTransform: 'uppercase', color: 'var(--text-muted)', marginTop: 2,
       }}>{label}</div>
     </div>
@@ -196,14 +196,14 @@ export default function SmartMoneyCard({ smHistory, sm, narrative }: SmartMoneyC
         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
       }}>
         <span style={{
-          fontSize: 8, fontFamily: 'var(--font-mono, monospace)',
+          fontSize: 10, fontFamily: 'var(--font-mono, monospace)',
           textTransform: 'uppercase', letterSpacing: 3, color: 'var(--text-muted)',
         }}>Smart Money &middot; Volume Signature</span>
       </div>
 
       {/* Chart */}
       <div style={{ padding: '8px 14px 4px' }}>
-        <div style={{ display: 'flex', gap: 14, fontSize: 8, fontFamily: 'var(--font-mono, monospace)', color: 'var(--text-muted)', marginBottom: 4 }}>
+        <div style={{ display: 'flex', gap: 14, fontSize: 10, fontFamily: 'var(--font-mono, monospace)', color: 'var(--text-muted)', marginBottom: 4 }}>
           <span><span style={{ color: 'var(--risk-red)' }}>━</span> Smart Money</span>
           <span><span style={{ color: 'var(--risk-amber)' }}>╌</span> Fast Money</span>
         </div>
@@ -230,7 +230,7 @@ export default function SmartMoneyCard({ smHistory, sm, narrative }: SmartMoneyC
       {/* Dot Timeline */}
       <div style={{ padding: '8px 14px', borderTop: '1px solid var(--kd-border)' }}>
         <div style={{
-          fontSize: 8, fontFamily: 'var(--font-mono, monospace)',
+          fontSize: 10, fontFamily: 'var(--font-mono, monospace)',
           textTransform: 'uppercase', letterSpacing: 1, color: 'var(--text-muted)', marginBottom: 6,
         }}>Volume Signature Events</div>
         <DotTimeline history={smHistory} />
@@ -243,7 +243,7 @@ export default function SmartMoneyCard({ smHistory, sm, narrative }: SmartMoneyC
       }}>
         <span style={{
           padding: '3px 10px', borderRadius: 10,
-          fontSize: 9, fontFamily: 'var(--font-mono, monospace)', fontWeight: 700,
+          fontSize: 11, fontFamily: 'var(--font-mono, monospace)', fontWeight: 700,
           background: `color-mix(in srgb, ${relColor} 22%, transparent)`,
           border: `1px solid color-mix(in srgb, ${relColor} 44%, transparent)`,
           color: relColor,
@@ -253,7 +253,7 @@ export default function SmartMoneyCard({ smHistory, sm, narrative }: SmartMoneyC
       {/* Narrative */}
       <div style={{
         padding: '8px 14px 10px', borderTop: '1px solid var(--kd-border)',
-        fontSize: 10, fontStyle: 'italic', color: 'var(--text-secondary)',
+        fontSize: 12, fontStyle: 'italic', color: 'var(--text-secondary)',
         lineHeight: 1.5, minHeight: 36,
       }}>{narrative}</div>
     </div>

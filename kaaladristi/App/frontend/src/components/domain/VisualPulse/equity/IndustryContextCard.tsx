@@ -61,7 +61,7 @@ export default function IndustryContextCard({ industry, context }: IndustryConte
     <div className="rounded-lg bg-kd-card border border-kd-border p-3">
       <div className="flex items-center gap-2 mb-2">
         <Factory className="w-3.5 h-3.5 text-accent-indigo" />
-        <span className="text-[11px] font-serif font-semibold text-primary tracking-wide">
+        <span className="text-[12px] font-serif font-semibold text-primary tracking-wide">
           Industry Context
         </span>
       </div>
@@ -77,19 +77,19 @@ export default function IndustryContextCard({ industry, context }: IndustryConte
 
         {/* Status badge */}
         <div className="flex items-center gap-2">
-          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-mono ${config.color} ${config.bg}`}>
+          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[12px] font-mono ${config.color} ${config.bg}`}>
             <Icon className="w-3 h-3" />
             {config.arrow && <span>{config.arrow}</span>}
             {config.label}
           </span>
-          <span className="text-[10px] font-mono text-secondary">
+          <span className="text-[12px] font-mono text-secondary">
             ({percentileStr}{prevStr})
           </span>
         </div>
 
         {/* Stock rank within industry */}
         {context.stockRank != null && context.industryStockCount > 0 && (
-          <div className="text-[10px] font-mono text-muted">
+          <div className="text-[12px] font-mono text-muted">
             Position: {context.stockRank}{ordinal(context.stockRank)} of {context.industryStockCount} stocks by RS
           </div>
         )}

@@ -175,13 +175,13 @@ export default function SectorLordsDetail({ onBack }: SectorLordsDetailProps) {
             <div className="grid grid-cols-[1fr_auto] gap-4 px-5 py-3.5 bg-kd-elevated/50 border-b-2 border-kd-border">
               <button
                 onClick={() => toggleSort('sector')}
-                className="flex items-center gap-1.5 text-[11px] font-bold text-secondary uppercase tracking-wider hover:text-[var(--text-primary)] transition-colors text-left"
+                className="flex items-center gap-1.5 text-[12px] font-bold text-secondary uppercase tracking-wider hover:text-[var(--text-primary)] transition-colors text-left"
               >
                 Sector <SortIcon field="sector" />
               </button>
               <button
                 onClick={() => toggleSort('planet')}
-                className="flex items-center gap-1.5 text-[11px] font-bold text-secondary uppercase tracking-wider hover:text-[var(--text-primary)] transition-colors text-left"
+                className="flex items-center gap-1.5 text-[12px] font-bold text-secondary uppercase tracking-wider hover:text-[var(--text-primary)] transition-colors text-left"
               >
                 Ruling Planet <SortIcon field="planet" />
               </button>
@@ -212,7 +212,7 @@ export default function SectorLordsDetail({ onBack }: SectorLordsDetailProps) {
             </div>
           </div>
 
-          <p className="mt-3 text-[11px] text-muted">
+          <p className="mt-3 text-[12px] text-muted">
             Showing {rows.length} of {sectorLords?.length} mappings
           </p>
         </>

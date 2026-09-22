@@ -27,7 +27,7 @@ export function ExchangeBadge({ exchange }: { exchange: string | null }) {
   if (!exchange) return null;
   return (
     <span className={cn(
-      'text-[8px] font-bold px-1 py-0.5 rounded border',
+      'text-[10px] font-bold px-1 py-0.5 rounded border',
       exchange === 'NSE'
         ? 'text-accent-cyan border-accent-cyan/30 bg-accent-cyan/5'
         : 'text-risk-amber border-risk-amber/30 bg-risk-amber/5',
@@ -44,19 +44,19 @@ export function SignalDots({ svd, sbd, syd }: { svd: boolean; sbd: boolean; syd:
   return (
     <div className="flex items-center gap-2 flex-wrap">
       {svd && (
-        <span className="inline-flex items-center gap-1.5 text-[10px] font-bold text-risk-green">
+        <span className="inline-flex items-center gap-1.5 text-[12px] font-bold text-risk-green">
           <span className="w-2.5 h-2.5 rounded-full bg-risk-green shrink-0" />
           Volume Drive
         </span>
       )}
       {sbd && (
-        <span className="inline-flex items-center gap-1.5 text-[10px] font-bold text-accent-cyan">
+        <span className="inline-flex items-center gap-1.5 text-[12px] font-bold text-accent-cyan">
           <span className="w-2.5 h-2.5 rounded-full bg-accent-cyan shrink-0" />
           Rising Flow
         </span>
       )}
       {syd && (
-        <span className="inline-flex items-center gap-1.5 text-[10px] font-bold text-risk-red">
+        <span className="inline-flex items-center gap-1.5 text-[12px] font-bold text-risk-red">
           <span className="w-2.5 h-2.5 rounded-full bg-risk-red shrink-0" />
           Falling Flow
         </span>
@@ -70,7 +70,7 @@ export function SignalDots({ svd, sbd, syd }: { svd: boolean; sbd: boolean; syd:
 export function MetricPill({ label, value, color }: { label: string; value: string; color?: string }) {
   return (
     <div className="bg-kd-bg/40 rounded-lg px-2 py-1.5 border border-kd-border min-w-[56px]">
-      <p className="text-[9px] text-muted uppercase tracking-wider leading-none mb-0.5">{label}</p>
+      <p className="text-[11px] text-muted uppercase tracking-wider leading-none mb-0.5">{label}</p>
       <p className={cn('text-xs font-bold font-mono leading-none', color ?? 'text-[var(--text-primary)]')}>{value}</p>
     </div>
   );

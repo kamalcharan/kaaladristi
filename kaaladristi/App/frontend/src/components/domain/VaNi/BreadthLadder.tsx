@@ -50,7 +50,7 @@ export default function BreadthLadder({ legs, concedeLevel, history }: BreadthLa
       style={{ borderColor: 'var(--border)', background: 'var(--card-soft, var(--card))' }}
     >
       <div className="flex items-baseline justify-between mb-2.5">
-        <span className="text-[10px] font-mono uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
+        <span className="text-[12px] font-mono uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
           Share of the market holding each line
         </span>
       </div>
@@ -63,7 +63,7 @@ export default function BreadthLadder({ legs, concedeLevel, history }: BreadthLa
           return (
             <div key={leg} className="flex items-center gap-2.5">
               <span
-                className="text-[10px] w-[74px] shrink-0 leading-tight"
+                className="text-[12px] w-[74px] shrink-0 leading-tight"
                 style={{ color: mine ? 'var(--text-primary)' : 'var(--text-muted)',
                          fontWeight: mine ? 600 : 400 }}
               >
@@ -85,7 +85,7 @@ export default function BreadthLadder({ legs, concedeLevel, history }: BreadthLa
               </div>
 
               <span
-                className="text-[11px] font-mono tabular-nums w-[38px] text-right shrink-0"
+                className="text-[12px] font-mono tabular-nums w-[38px] text-right shrink-0"
                 style={{ color: mine ? 'var(--text-primary)' : 'var(--text-muted)' }}
               >
                 {pct.toFixed(0)}%
@@ -93,7 +93,7 @@ export default function BreadthLadder({ legs, concedeLevel, history }: BreadthLa
 
               {mine && (
                 <span
-                  className="text-[9px] font-mono uppercase tracking-wider shrink-0"
+                  className="text-[11px] font-mono uppercase tracking-wider shrink-0"
                   style={{ color: 'var(--accent-indigo)' }}
                   title="Your concede line, from how you set up DristiQ"
                 >
@@ -130,13 +130,13 @@ export default function BreadthLadder({ legs, concedeLevel, history }: BreadthLa
               ))}
             </div>
             <div className="flex justify-between items-baseline mt-1.5">
-              <span className="text-[9px] font-mono" style={{ color: 'var(--text-muted)' }}>
+              <span className="text-[11px] font-mono" style={{ color: 'var(--text-muted)' }}>
                 {first.toFixed(1)}
               </span>
-              <span className="text-[10px]" style={{ color: tone }}>
+              <span className="text-[12px]" style={{ color: tone }}>
                 {move >= 0 ? '+' : ''}{move.toFixed(1)} over {history.length} sessions
               </span>
-              <span className="text-[9px] font-mono" style={{ color: 'var(--text-primary)' }}>
+              <span className="text-[11px] font-mono" style={{ color: 'var(--text-primary)' }}>
                 {last.toFixed(1)}
               </span>
             </div>

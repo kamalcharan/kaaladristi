@@ -51,7 +51,7 @@ function NotePill({ label, scope, scopeValue }: {
   return (
     <span
       className={cn(
-        'inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded border leading-none',
+        'inline-flex items-center gap-1 text-[12px] font-medium px-1.5 py-0.5 rounded border leading-none',
         cls.text, cls.bg, cls.border,
       )}
     >
@@ -82,7 +82,7 @@ function PanchangTableRow({ row }: { row: PanchangRow }) {
       <td className="px-3 py-2.5 whitespace-nowrap">
         <div className="flex flex-col">
           <span className="text-xs font-semibold text-white">{dd} {mmm}</span>
-          <span className="text-[10px] text-muted">{row.weekday.slice(0, 3)}</span>
+          <span className="text-[12px] text-muted">{row.weekday.slice(0, 3)}</span>
         </div>
       </td>
 
@@ -109,7 +109,7 @@ function PanchangTableRow({ row }: { row: PanchangRow }) {
       {/* Signals / Notes */}
       <td className="px-3 py-2.5">
         {row.notes.length === 0 ? (
-          <span className="text-[10px] text-white/15">—</span>
+          <span className="text-[12px] text-white/15">—</span>
         ) : (
           <div className="flex flex-col gap-1">
             {row.notes.map(n => (
@@ -120,7 +120,7 @@ function PanchangTableRow({ row }: { row: PanchangRow }) {
                   scopeValue={n.scope_value}
                 />
                 {n.annotation && (
-                  <span className="text-[10px] text-muted italic pl-0.5">{n.annotation}</span>
+                  <span className="text-[12px] text-muted italic pl-0.5">{n.annotation}</span>
                 )}
               </div>
             ))}
@@ -235,7 +235,7 @@ export default function PanchangView() {
                   {['Date', 'Tithi', 'Moon Rashi', 'Nakshatra', 'Nak Lord', 'Signals / Notes'].map(h => (
                     <th
                       key={h}
-                      className="px-3 py-2.5 text-[11px] font-semibold text-muted uppercase tracking-wide"
+                      className="px-3 py-2.5 text-[12px] font-semibold text-muted uppercase tracking-wide"
                     >
                       {h}
                     </th>

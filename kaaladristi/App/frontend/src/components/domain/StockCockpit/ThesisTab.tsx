@@ -179,7 +179,7 @@ export default function ThesisTab({
   }, [equityId, relationship])
 
   if (!thesis) {
-    return <div className="glass-card rounded-xl p-4 text-[11px] text-muted">No data to read a thesis yet.</div>
+    return <div className="glass-card rounded-xl p-4 text-[12px] text-muted">No data to read a thesis yet.</div>
   }
 
   const vColor = TONE[thesis.verdict.tone]
@@ -188,7 +188,7 @@ export default function ThesisTab({
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       {/* ── Relationship + verdict header ── */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-        <span style={{ ...MONO, fontSize: 9, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-faint)' }}>
+        <span style={{ ...MONO, fontSize: 11, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-faint)' }}>
           {relationship === 'position' ? 'Position · held' : relationship === 'watchlist' ? 'Watchlist · watching' : 'Not tracked'}
         </span>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, ...MONO, fontSize: 12, fontWeight: 700, color: vColor }}>
@@ -203,14 +203,14 @@ export default function ThesisTab({
             <Kv label="P&L" value={thesis.pnlPct != null ? `${thesis.pnlPct >= 0 ? '+' : ''}${thesis.pnlPct.toFixed(1)}%` : '—'}
               color={thesis.pnlPct != null ? (thesis.pnlPct >= 0 ? 'var(--risk-green)' : 'var(--risk-red)') : undefined} big />
             <button onClick={() => clearPositionApi(equityId)} title="Remove position"
-              style={{ ...MONO, fontSize: 10, color: 'var(--text-faint)', background: 'none', border: 'none', cursor: 'pointer' }}>
+              style={{ ...MONO, fontSize: 12, color: 'var(--text-faint)', background: 'none', border: 'none', cursor: 'pointer' }}>
               ✕
             </button>
           </span>
         )}
         {relationship !== 'position' && (
           <button onClick={() => setShowForm((s) => !s)}
-            style={{ marginLeft: 'auto', ...MONO, fontSize: 11, fontWeight: 600, color: 'var(--accent, var(--gold-soft))',
+            style={{ marginLeft: 'auto', ...MONO, fontSize: 12, fontWeight: 600, color: 'var(--accent, var(--gold-soft))',
               background: 'color-mix(in srgb, var(--accent, var(--gold-soft)) 10%, transparent)',
               border: '1px solid color-mix(in srgb, var(--accent, var(--gold-soft)) 35%, transparent)',
               borderRadius: 7, padding: '5px 12px', cursor: 'pointer' }}>
@@ -233,7 +233,7 @@ export default function ThesisTab({
           <i style={{ color: 'var(--text-faint)' }}>Observational, not advice.</i>
           <div style={{ marginTop: 5 }}>
             {vaniText ? (
-              <span style={{ ...MONO, fontSize: 9, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-faint)' }}>✦ VaNi · grounded narration</span>
+              <span style={{ ...MONO, fontSize: 11, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-faint)' }}>✦ VaNi · grounded narration</span>
             ) : (
               <button
                 onClick={async () => {
@@ -242,7 +242,7 @@ export default function ThesisTab({
                   setVaniText(text); setVaniTried(true); setVaniLoading(false)
                 }}
                 disabled={vaniLoading}
-                style={{ ...MONO, fontSize: 10, fontWeight: 600, color: 'var(--vani)', background: 'none',
+                style={{ ...MONO, fontSize: 12, fontWeight: 600, color: 'var(--vani)', background: 'none',
                   border: 'none', cursor: vaniLoading ? 'default' : 'pointer', padding: 0, opacity: vaniLoading ? 0.6 : 1 }}
               >
                 {vaniLoading ? '✦ VaNi is reading…' : vaniTried ? '✦ VaNi unavailable — retry' : '✦ Ask VaNi to narrate this'}
@@ -250,7 +250,7 @@ export default function ThesisTab({
             )}
             <button
               onClick={() => setAskOpen((o) => !o)}
-              style={{ ...MONO, fontSize: 10, fontWeight: 600, color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, marginLeft: 12 }}
+              style={{ ...MONO, fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, marginLeft: 12 }}
             >
               {askOpen ? '▴ Ask a question' : '▾ Ask a question'}
             </button>
@@ -267,7 +267,7 @@ export default function ThesisTab({
                   setAnswer(a); setAsking(false)
                 }}
                 disabled={asking}
-                style={{ ...MONO, fontSize: 10, fontWeight: 600, color: 'var(--vani)', background: 'none',
+                style={{ ...MONO, fontSize: 12, fontWeight: 600, color: 'var(--vani)', background: 'none',
                   border: 'none', cursor: asking ? 'default' : 'pointer', padding: 0, marginLeft: 12, opacity: asking ? 0.6 : 1 }}
               >
                 ✦ Where is this in its journey?
@@ -309,7 +309,7 @@ export default function ThesisTab({
                   <b style={{ color: 'var(--vani)' }}>VaNi</b> — {answer}
                 </div>
               )}
-              <div style={{ ...MONO, fontSize: 9, color: 'var(--text-faint)', marginTop: 5 }}>VaNi answers only from this stock's computed facts.</div>
+              <div style={{ ...MONO, fontSize: 11, color: 'var(--text-faint)', marginTop: 5 }}>VaNi answers only from this stock's computed facts.</div>
             </div>
           )}
         </div>
@@ -344,7 +344,7 @@ export default function ThesisTab({
               border: '1px solid var(--accent, var(--gold-soft))', borderRadius: 8, padding: '8px 16px', cursor: 'pointer' }}>
             Add position
           </button>
-          {userId == null && <span style={{ ...MONO, fontSize: 10, color: 'var(--risk-amber)' }}>Sign in to save positions.</span>}
+          {userId == null && <span style={{ ...MONO, fontSize: 12, color: 'var(--risk-amber)' }}>Sign in to save positions.</span>}
         </div>
       )}
 
@@ -357,7 +357,7 @@ export default function ThesisTab({
             <span style={{ ...MONO, fontSize: 22, fontWeight: 700, color: healthColor(thesis.alignedNow, thesis.total) }}>
               {thesis.alignedNow}<span style={{ color: 'var(--text-faint)', fontSize: 13 }}>/{thesis.total}</span>
             </span>
-            <span style={{ ...MONO, fontSize: 10, color: 'var(--text-muted)' }}>
+            <span style={{ ...MONO, fontSize: 12, color: 'var(--text-muted)' }}>
               {relationship === 'position' && thesis.entry ? `entry ${thesis.entry.aligned}/${thesis.entry.total}` : `trend ${thesis.alignedTrend}`}
             </span>
           </div>
@@ -366,7 +366,7 @@ export default function ThesisTab({
             {thesis.pillars.map((p) => {
               const gap = p.value === '—'
               return (
-                <span key={p.key} style={{ ...MONO, fontSize: 10, color: gap ? 'var(--text-faint)' : p.aligned ? 'var(--text-secondary)' : 'var(--text-faint)' }}
+                <span key={p.key} style={{ ...MONO, fontSize: 12, color: gap ? 'var(--text-faint)' : p.aligned ? 'var(--text-secondary)' : 'var(--text-faint)' }}
                   title={gap ? 'No data for this pillar — not counted' : undefined}>
                   {gap ? '·' : p.aligned ? '✓' : '✗'} {p.label}{gap ? ' (no data)' : ''}
                 </span>
@@ -396,7 +396,7 @@ export default function ThesisTab({
             <>
               <Label>Risk ↔ reward · 30 bars</Label>
               <PostureChart points={thesis.postureTrajectory.map((p) => p.posture)} />
-              <div style={{ display: 'flex', justifyContent: 'space-between', ...MONO, fontSize: 9, color: 'var(--text-faint)', marginTop: 2 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', ...MONO, fontSize: 11, color: 'var(--text-faint)', marginTop: 2 }}>
                 <span>{thesis.postureTrajectory[0]?.date}</span><span>now</span>
               </div>
             </>
@@ -426,13 +426,13 @@ export default function ThesisTab({
             {thesis.signals.map((e, i) => (
               <div key={`${e.barIndex}-${e.kind}-${i}`} style={{ display: 'grid', gridTemplateColumns: '70px 1fr', gap: 12,
                 padding: '8px 0', borderBottom: '1px solid color-mix(in srgb, var(--text-primary) 5%, transparent)' }}>
-                <span style={{ ...MONO, fontSize: 11, color: 'var(--text-faint)' }}>{e.date}</span>
+                <span style={{ ...MONO, fontSize: 12, color: 'var(--text-faint)' }}>{e.date}</span>
                 <span style={{ fontSize: 12.5 }}>
                   <span style={{ color: TONE[e.tone], marginRight: 5 }} title={e.tone}>●</span>
                   <b style={{ color: KIND_COLORS[e.kind] }}>{e.title}.</b>{' '}
                   <span style={{ color: 'var(--text-muted)' }}>{e.detail}.</span>
                   {e.reactionPct != null && (
-                    <span style={{ ...MONO, fontSize: 10, color: e.reactionPct >= 0 ? 'var(--risk-green)' : 'var(--risk-red)' }}>
+                    <span style={{ ...MONO, fontSize: 12, color: e.reactionPct >= 0 ? 'var(--risk-green)' : 'var(--risk-red)' }}>
                       {' '}({e.reactionPct >= 0 ? '+' : ''}{e.reactionPct.toFixed(1)}% / 5 bars)
                     </span>
                   )}
@@ -455,12 +455,12 @@ function Card({ children }: { children: React.ReactNode }) {
   return <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 10, padding: '12px 14px', boxShadow: 'var(--card-shadow)' }}>{children}</div>
 }
 function Label({ children }: { children: React.ReactNode }) {
-  return <div style={{ ...MONO, fontSize: 9, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-faint)' }}>{children}</div>
+  return <div style={{ ...MONO, fontSize: 11, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-faint)' }}>{children}</div>
 }
 function Kv({ label, value, color, big }: { label: string; value: string; color?: string; big?: boolean }) {
   return (
     <span style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-      <span style={{ ...MONO, fontSize: 8.5, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-faint)' }}>{label}</span>
+      <span style={{ ...MONO, fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-faint)' }}>{label}</span>
       <span style={{ ...MONO, fontSize: big ? 15 : 13, fontWeight: big ? 700 : 600, color: color ?? 'var(--text-primary)' }}>{value}</span>
     </span>
   )
@@ -475,7 +475,7 @@ function Meter({ frac, color }: { frac: number; color: string }) {
 function Field({ label, value, onChange, type = 'text', placeholder }: { label: string; value: string; onChange: (v: string) => void; type?: string; placeholder?: string }) {
   return (
     <label style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-      <span style={{ ...MONO, fontSize: 9, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-faint)' }}>{label}</span>
+      <span style={{ ...MONO, fontSize: 11, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-faint)' }}>{label}</span>
       <input value={value} onChange={(e) => onChange(e.target.value)} type={type} placeholder={placeholder}
         style={{ ...MONO, fontSize: 13, color: 'var(--text-primary)', background: 'var(--bg)', border: '1px solid var(--border)',
           borderRadius: 7, padding: '7px 10px', width: 130, colorScheme: 'dark light' }} />
@@ -488,7 +488,7 @@ function PillarList({ pillars }: { pillars: Pillar[] }) {
       {pillars.map((p) => {
         const gap = p.value === '—'
         return (
-          <div key={p.key} style={{ display: 'flex', justifyContent: 'space-between', ...MONO, fontSize: 11 }}>
+          <div key={p.key} style={{ display: 'flex', justifyContent: 'space-between', ...MONO, fontSize: 12 }}>
             <span style={{ color: 'var(--text-secondary)' }}>{p.label}</span>
             <span style={{ color: gap ? 'var(--text-faint)' : p.toneColor }}>{p.value}{gap ? '' : p.aligned ? ' ✓' : ' ✗'}</span>
           </div>
@@ -502,7 +502,7 @@ function PillarList({ pillars }: { pillars: Pillar[] }) {
  *  pills can reuse the exact same read instead of a second copy. */
 export function PnlChart({ points }: { points: number[] }) {
   if (points.length < 2) {
-    return <div style={{ height: 60, display: 'flex', alignItems: 'center', ...MONO, fontSize: 10, color: 'var(--text-faint)' }}>Not enough history since entry.</div>
+    return <div style={{ height: 60, display: 'flex', alignItems: 'center', ...MONO, fontSize: 12, color: 'var(--text-faint)' }}>Not enough history since entry.</div>
   }
   const W = 240, H = 60
   const min = Math.min(0, ...points), max = Math.max(0, ...points)

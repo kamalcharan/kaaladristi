@@ -119,13 +119,13 @@ export default function RsiWidget() {
             color, lineHeight: 1 }}>
             {currentRsi.toFixed(1)}
           </span>
-          <span style={{ fontSize: 10, fontFamily: 'var(--font-mono, monospace)',
+          <span style={{ fontSize: 12, fontFamily: 'var(--font-mono, monospace)',
             color, opacity: 0.7, letterSpacing: '0.05em' }}>
             {zone}
           </span>
         </div>
         {currentMfi != null && (
-          <span style={{ fontSize: 10, fontFamily: 'var(--font-mono, monospace)',
+          <span style={{ fontSize: 12, fontFamily: 'var(--font-mono, monospace)',
             color: '#2dd4bf', opacity: 0.8 }}>
             MFI {currentMfi.toFixed(1)}
           </span>
@@ -152,13 +152,13 @@ export default function RsiWidget() {
 
       {/* Legend */}
       <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
-        <span style={{ fontSize: 8, fontFamily: 'var(--font-mono, monospace)',
+        <span style={{ fontSize: 10, fontFamily: 'var(--font-mono, monospace)',
           color: 'color-mix(in srgb, var(--text-primary) 30%, transparent)', display: 'flex', alignItems: 'center', gap: 4 }}>
           <span style={{ display: 'inline-block', width: 14, height: 2,
             background: color, borderRadius: 1 }} />
           RSI 14
         </span>
-        <span style={{ fontSize: 8, fontFamily: 'var(--font-mono, monospace)',
+        <span style={{ fontSize: 10, fontFamily: 'var(--font-mono, monospace)',
           color: 'color-mix(in srgb, var(--text-primary) 30%, transparent)', display: 'flex', alignItems: 'center', gap: 4 }}>
           <span style={{ display: 'inline-block', width: 14, height: 2,
             background: '#2dd4bf', opacity: 0.7, borderRadius: 1,

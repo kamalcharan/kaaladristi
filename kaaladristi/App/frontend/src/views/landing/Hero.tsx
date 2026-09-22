@@ -20,10 +20,10 @@ export function Hero({ atmo, loading }: { atmo: Atmo | null; loading: boolean })
 
         {/* Instrument band */}
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:40, gap:20, flexWrap:'wrap' }}>
-          <div style={{ fontFamily:MONO, fontSize:10, letterSpacing:'.24em', textTransform:'uppercase', color:C.ink3 }}>
+          <div style={{ fontFamily:MONO, fontSize:12, letterSpacing:'.24em', textTransform:'uppercase', color:C.ink3 }}>
             <span style={{ color:C.g2 }}>◉</span>&nbsp;&nbsp;Śaka {sakaYear} · Vaiśākha · Kṛṣṇa Pakṣa · {tithiLabel}
           </div>
-          <div style={{ fontFamily:MONO, fontSize:10, letterSpacing:'.24em', textTransform:'uppercase', color:C.ink3 }}>
+          <div style={{ fontFamily:MONO, fontSize:12, letterSpacing:'.24em', textTransform:'uppercase', color:C.ink3 }}>
             NSE · BSE · BETA — EST. HYD 2026
           </div>
         </div>
@@ -64,7 +64,7 @@ export function Hero({ atmo, loading }: { atmo: Atmo | null; loading: boolean })
               </div>
             </FadeUp>
             <FadeUp delay={420}>
-              <div style={{ fontFamily:MONO, marginTop:28, fontSize:11, letterSpacing:'.18em', textTransform:'uppercase', color:C.ink3 }}>
+              <div style={{ fontFamily:MONO, marginTop:28, fontSize:12, letterSpacing:'.18em', textTransform:'uppercase', color:C.ink3 }}>
                 Built for NSE · BSE · Indian market rhythms
               </div>
             </FadeUp>
@@ -76,11 +76,11 @@ export function Hero({ atmo, loading }: { atmo: Atmo | null; loading: boolean })
               <PanchangamMandala size={560}/>
             </div>
             <AtmosphericCard atmo={atmo} loading={loading}/>
-            <div style={{ fontFamily:MONO, position:'absolute', top:'8%', right:'-8%', fontSize:9, letterSpacing:'.2em', textTransform:'uppercase', color:C.g2, lineHeight:1.6 }}>
+            <div style={{ fontFamily:MONO, position:'absolute', top:'8%', right:'-8%', fontSize:11, letterSpacing:'.2em', textTransform:'uppercase', color:C.g2, lineHeight:1.6 }}>
               <div>CONVERGENCE ZONE</div>
               <div style={{ color:C.ink4 }}>ancient ⟶ modern</div>
             </div>
-            <div style={{ fontFamily:MONO, position:'absolute', bottom:'4%', right:'-2%', fontSize:9, letterSpacing:'.2em', textTransform:'uppercase', color:C.ink4 }}>
+            <div style={{ fontFamily:MONO, position:'absolute', bottom:'4%', right:'-2%', fontSize:11, letterSpacing:'.2em', textTransform:'uppercase', color:C.ink4 }}>
               Fig. I — Kāla Yantra
             </div>
           </div>
@@ -93,12 +93,12 @@ export function Hero({ atmo, loading }: { atmo: Atmo | null; loading: boolean })
             background:'rgba(19,22,29,0.4)', display:'grid',
             gridTemplateColumns:'auto 1fr auto', gap:28, alignItems:'center',
           }}>
-            <div style={{ fontFamily:MONO, fontSize:10, letterSpacing:'.24em', color:C.g2 }}>◇ NON-ADVISORY</div>
+            <div style={{ fontFamily:MONO, fontSize:12, letterSpacing:'.24em', color:C.g2 }}>◇ NON-ADVISORY</div>
             <p style={{ margin:0, fontSize:13, color:C.ink2, lineHeight:1.55, fontFamily:SANS }}>
               DristiQ is a market data and time-cycle intelligence platform. It does{' '}
               <em style={{ color:C.g1, fontStyle:'italic' }}>not</em> provide investment advice or buy/sell recommendations. Like a weather report — we show you the conditions. You make the call.
             </p>
-            <div style={{ fontFamily:MONO, fontSize:10, letterSpacing:'.24em', color:C.ink4, textAlign:'right' }}>ref. §§ 1–10</div>
+            <div style={{ fontFamily:MONO, fontSize:12, letterSpacing:'.24em', color:C.ink4, textAlign:'right' }}>ref. §§ 1–10</div>
           </div>
         </FadeUp>
       </div>

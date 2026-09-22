@@ -10,10 +10,10 @@ interface RiskGaugeProps {
 }
 
 const sizeConfig = {
-  hero:    { px: 220, stroke: 8,  r: 42, fontSize: 'text-6xl',  labelSize: 'text-[10px]' },
-  summary: { px: 120, stroke: 7,  r: 42, fontSize: 'text-3xl',  labelSize: 'text-[9px]' },
-  mini:    { px: 80,  stroke: 6,  r: 42, fontSize: 'text-xl',   labelSize: 'text-[8px]' },
-  tiny:    { px: 56,  stroke: 6,  r: 22, fontSize: 'text-base', labelSize: 'text-[7px]' },
+  hero:    { px: 220, stroke: 8,  r: 42, fontSize: 'text-6xl',  labelSize: 'text-[12px]' },
+  summary: { px: 120, stroke: 7,  r: 42, fontSize: 'text-3xl',  labelSize: 'text-[11px]' },
+  mini:    { px: 80,  stroke: 6,  r: 42, fontSize: 'text-xl',   labelSize: 'text-[10px]' },
+  tiny:    { px: 56,  stroke: 6,  r: 22, fontSize: 'text-base', labelSize: 'text-[10px]' },
 };
 
 export default function RiskGauge({

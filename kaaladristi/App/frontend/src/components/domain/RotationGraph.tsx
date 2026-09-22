@@ -157,7 +157,7 @@ export default function RotationGraph({
     return (
       <div className="glass-card rounded-2xl p-4">
         <h3 className="text-[13px] font-bold text-[var(--text-primary)] mb-1">{title}</h3>
-        <p className="text-[11px] text-muted">Not enough history to plot a rotation for this instrument.</p>
+        <p className="text-[12px] text-muted">Not enough history to plot a rotation for this instrument.</p>
       </div>
     );
   }
@@ -178,24 +178,24 @@ export default function RotationGraph({
       <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
         <div>
           <h3 className="text-[13px] font-bold text-[var(--text-primary)]">{title}</h3>
-          <span className="text-[10px] text-muted">{cfg.subtitle} · last {pts.length} sessions · observational</span>
+          <span className="text-[12px] text-muted">{cfg.subtitle} · last {pts.length} sessions · observational</span>
         </div>
         <div className="flex items-center gap-2">
           {cfg.showBenchmark && (
-            <span className="text-[9px] font-mono uppercase tracking-wider px-2 py-0.5 rounded-full"
+            <span className="text-[11px] font-mono uppercase tracking-wider px-2 py-0.5 rounded-full"
               style={{ color: TEAL, border: `1px solid color-mix(in srgb, ${TEAL} 34%, transparent)`, background: `color-mix(in srgb, ${TEAL} 8%, transparent)` }}>
               vs {benchmark}
             </span>
           )}
           {q && (
-            <span className="text-[9px] font-mono font-bold uppercase tracking-wider px-2 py-0.5 rounded-full"
+            <span className="text-[11px] font-mono font-bold uppercase tracking-wider px-2 py-0.5 rounded-full"
               style={{ color: q.color, border: `1px solid color-mix(in srgb, ${q.color} 40%, transparent)`, background: `color-mix(in srgb, ${q.color} 12%, transparent)` }}>
               {q.name}
             </span>
           )}
           {!reduceMotion && (
             <button onClick={replay} title="Replay the rotation path"
-              className="text-[9px] font-mono uppercase tracking-wider px-2 py-0.5 rounded-full"
+              className="text-[11px] font-mono uppercase tracking-wider px-2 py-0.5 rounded-full"
               style={{ color: 'var(--vani)', cursor: 'pointer',
                 border: '1px solid color-mix(in srgb, var(--vani) 30%, transparent)',
                 background: 'color-mix(in srgb, var(--vani) 8%, transparent)' }}>
@@ -294,12 +294,12 @@ export default function RotationGraph({
               style={{ background: 'linear-gradient(180deg, color-mix(in srgb, var(--vani) 9%, var(--card)) 0%, var(--card) 70%)',
                        border: '1px solid color-mix(in srgb, var(--vani) 28%, transparent)' }}>
               <div className="flex items-center gap-2 mb-1.5">
-                <span className="w-5 h-5 rounded-md flex items-center justify-center text-[10px] font-mono font-bold text-white shrink-0"
+                <span className="w-5 h-5 rounded-md flex items-center justify-center text-[12px] font-mono font-bold text-white shrink-0"
                   style={{ background: 'linear-gradient(135deg,#9d8ff9,#5b4fd4)', boxShadow: '0 2px 8px rgba(124,106,247,.4)' }}>V</span>
-                <span className="text-[8px] font-mono uppercase tracking-widest" style={{ color: 'var(--vani)' }}>VaNi · read</span>
+                <span className="text-[10px] font-mono uppercase tracking-widest" style={{ color: 'var(--vani)' }}>VaNi · read</span>
               </div>
               <div className="text-[15px] font-bold" style={{ color: q.color }}>{q.name}</div>
-              <div className="text-[11px] text-muted mt-1 leading-snug">
+              <div className="text-[12px] text-muted mt-1 leading-snug">
                 {cfg.levelName} {today.level!.toFixed(2)} ({posWord}); its momentum is {momWord}.
                 {cfg.showBenchmark ? ` Measured against ${benchmark}.` : ''} Observational only.
               </div>
@@ -307,7 +307,7 @@ export default function RotationGraph({
           )}
           <div className="flex flex-col gap-1.5">
             {(['hi_up','hi_dn','lo_dn','lo_up'] as Pos[]).map(k => (
-              <div key={k} className="flex items-center gap-2 text-[11px] text-muted">
+              <div key={k} className="flex items-center gap-2 text-[12px] text-muted">
                 <span className="w-2.5 h-2.5 rounded-[3px] shrink-0" style={{ background: cfg.quad[k].color }} />
                 {cfg.quad[k].name} — {cfg.quad[k].sub}
               </div>
@@ -319,16 +319,16 @@ export default function RotationGraph({
               a restatement of the trail's dot colors. */}
           {variant === 'rs' && (
             <div className="pt-2.5 mt-0.5 border-t" style={{ borderColor: 'color-mix(in srgb, var(--text-primary) 10%, transparent)' }}>
-              <div className="text-[9px] font-mono uppercase tracking-widest text-faint mb-1">Clean read</div>
+              <div className="text-[11px] font-mono uppercase tracking-widest text-faint mb-1">Clean read</div>
               {breakaway ? (
                 <>
-                  <div className="text-[11px] font-mono font-bold" style={{ color: breakaway.tone === 'bull' ? 'var(--risk-green)' : 'var(--risk-red)' }}>
+                  <div className="text-[12px] font-mono font-bold" style={{ color: breakaway.tone === 'bull' ? 'var(--risk-green)' : 'var(--risk-red)' }}>
                     {breakaway.title} · {fmtDate(breakaway.date)}
                   </div>
-                  <div className="text-[10px] text-muted mt-1 leading-snug">{breakaway.detail}.</div>
+                  <div className="text-[12px] text-muted mt-1 leading-snug">{breakaway.detail}.</div>
                 </>
               ) : (
-                <div className="text-[10px] text-muted leading-snug">
+                <div className="text-[12px] text-muted leading-snug">
                   No clean Magic RS breakaway in the last {pts.length} sessions — {q ? `the ${q.name.toLowerCase()} reading isn't` : 'this reading isn\'t'} backed by a steady, low-noise separation from its own baseline.
                 </div>
               )}
@@ -337,7 +337,7 @@ export default function RotationGraph({
         </div>
       </div>
 
-      <div className="text-[9px] text-faint mt-3 leading-relaxed">
+      <div className="text-[11px] text-faint mt-3 leading-relaxed">
         Observational {variant === 'rs' ? `relative-strength analytics vs ${benchmark}` : 'breadth-participation analytics'} —
         {' '}{cfg.levelName.toLowerCase()} and its recent momentum, historical data only. Not investment advice, not a
         recommendation, and not a forecast of price. Quadrant names describe measured {cfg.levelName.toLowerCase()} and

@@ -143,7 +143,7 @@ function StepRow({ step }: { step: StepStatus }) {
           {step.label}
         </div>
         {isFailed && step.error_msg && (
-          <div className="text-[10px] text-risk-red mt-0.5 truncate max-w-[300px]">
+          <div className="text-[12px] text-risk-red mt-0.5 truncate max-w-[300px]">
             {step.error_msg}
           </div>
         )}
@@ -153,7 +153,7 @@ function StepRow({ step }: { step: StepStatus }) {
       <div className="w-20 text-right">
         {step.rows_count > 0 && (
           <span className={cn(
-            'text-[11px] mono font-medium',
+            'text-[12px] mono font-medium',
             isActive ? 'text-accent-indigo' : 'text-[var(--text-secondary)]',
           )}>
             {step.rows_count.toLocaleString()} rows
@@ -164,12 +164,12 @@ function StepRow({ step }: { step: StepStatus }) {
       {/* Duration */}
       <div className="w-14 text-right">
         {step.duration_ms != null && step.duration_ms > 0 && (
-          <span className="text-[10px] mono text-muted">
+          <span className="text-[12px] mono text-muted">
             {fmtDuration(step.duration_ms)}
           </span>
         )}
         {isActive && (
-          <span className="text-[10px] text-accent-indigo animate-pulse">running</span>
+          <span className="text-[12px] text-accent-indigo animate-pulse">running</span>
         )}
       </div>
     </div>
@@ -190,8 +190,8 @@ function DateSection({ view, defaultOpen }: { view: DateView; defaultOpen: boole
         className="flex items-center gap-2 w-full text-left py-1.5 px-2 rounded-md hover:bg-kd-elevated/40 transition-colors"
       >
         {open ? <ChevronDown className="w-3 h-3 text-muted" /> : <ChevronRight className="w-3 h-3 text-muted" />}
-        <span className="text-[11px] font-bold text-[var(--text-primary)]">{fmtDate(view.date)}</span>
-        <span className="text-[9px] text-muted mono">{view.date}</span>
+        <span className="text-[12px] font-bold text-[var(--text-primary)]">{fmtDate(view.date)}</span>
+        <span className="text-[11px] text-muted mono">{view.date}</span>
 
         {/* Progress bar */}
         <div className="flex-1 mx-2">
@@ -207,7 +207,7 @@ function DateSection({ view, defaultOpen }: { view: DateView; defaultOpen: boole
         </div>
 
         <span className={cn(
-          'text-[10px] font-bold mono',
+          'text-[12px] font-bold mono',
           hasFailed ? 'text-risk-red' : allDone ? 'text-risk-green' : 'text-accent-indigo',
         )}>
           {view.completed}/{view.total}
@@ -306,27 +306,27 @@ export default function PipelineExecution() {
           </h3>
           {isActive && (
             <>
-              <span className="px-2 py-0.5 rounded-md bg-accent-indigo/10 border border-accent-indigo/30 text-[9px] font-bold text-accent-indigo uppercase">
+              <span className="px-2 py-0.5 rounded-md bg-accent-indigo/10 border border-accent-indigo/30 text-[11px] font-bold text-accent-indigo uppercase">
                 Live
               </span>
               <button
                 onClick={() => cancelMutation.mutate()}
                 disabled={cancelMutation.isPending}
-                className="px-2 py-0.5 rounded-md bg-risk-red/10 border border-risk-red/30 text-[9px] font-bold text-risk-red uppercase hover:bg-risk-red/20 transition-colors"
+                className="px-2 py-0.5 rounded-md bg-risk-red/10 border border-risk-red/30 text-[11px] font-bold text-risk-red uppercase hover:bg-risk-red/20 transition-colors"
               >
                 {cancelMutation.isPending ? 'Cancelling...' : 'Cancel'}
               </button>
             </>
           )}
           {job?.status === 'cancelled' && (
-            <span className="px-2 py-0.5 rounded-md bg-risk-amber/10 border border-risk-amber/30 text-[9px] font-bold text-risk-amber uppercase">
+            <span className="px-2 py-0.5 rounded-md bg-risk-amber/10 border border-risk-amber/30 text-[11px] font-bold text-risk-amber uppercase">
               Cancelled
             </span>
           )}
         </div>
 
         {job && (
-          <div className="flex items-center gap-3 text-[10px] text-muted">
+          <div className="flex items-center gap-3 text-[12px] text-muted">
             {job.type === 'backfill' && (
               <span className="font-bold">{job.total_dates} dates</span>
             )}
@@ -384,12 +384,12 @@ export default function PipelineExecution() {
               </div>
               {/* Progress text from worker */}
               {job.progress && (
-                <div className="text-[11px] text-[var(--text-secondary)] mt-0.5 mono">
+                <div className="text-[12px] text-[var(--text-secondary)] mt-0.5 mono">
                   {job.progress}
                 </div>
               )}
               {!job.progress && (
-                <div className="text-[10px] text-[var(--text-secondary)] mt-0.5">
+                <div className="text-[12px] text-[var(--text-secondary)] mt-0.5">
                   {isActive ? 'Waiting for worker to pick up job...' :
                    job.status === 'completed' ? 'Completed successfully.' :
                    job.status === 'cancelled' ? 'Job was cancelled.' :
@@ -408,7 +408,7 @@ export default function PipelineExecution() {
                   style={{ width: `${job.progress_pct}%` }}
                 />
               </div>
-              <div className="text-[9px] text-muted mt-1 text-right mono">
+              <div className="text-[11px] text-muted mt-1 text-right mono">
                 {job.progress_pct}%
               </div>
             </div>
@@ -431,7 +431,7 @@ export default function PipelineExecution() {
 
       {/* Job timestamps */}
       {job && (
-        <div className="flex items-center gap-4 mt-3 pt-3 border-t border-kd-border/30 text-[9px] text-muted">
+        <div className="flex items-center gap-4 mt-3 pt-3 border-t border-kd-border/30 text-[11px] text-muted">
           {job.started_at && (
             <span>Started: <span className="mono text-[var(--text-secondary)]">{fmtTimeIST(job.started_at)}</span></span>
           )}

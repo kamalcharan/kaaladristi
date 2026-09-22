@@ -80,7 +80,7 @@ const OUTCOME_LABEL: Record<Outcome, { label: string; color: string }> = {
 };
 
 const inputCls = 'w-full px-4 py-3 bg-kd-elevated border border-kd-border rounded-xl text-sm text-[var(--text-primary)] placeholder:text-muted focus:outline-none focus:border-accent-indigo/60 transition-colors';
-const labelCls = 'block text-[11px] uppercase tracking-widest font-bold text-muted mb-2';
+const labelCls = 'block text-[12px] uppercase tracking-widest font-bold text-muted mb-2';
 
 async function fetchInference(ruleId: number): Promise<InferenceResponse> {
   const res = await fetch(`${PIPELINE_API}/api/rules/${ruleId}/inference`);
@@ -202,7 +202,7 @@ function RuleSettingsForm({ initial, onCancel, onSave, isSaving, saveError }: {
     <div className="space-y-5">
       <div>
         <label className={labelCls}>Rule Settings</label>
-        <p className="text-[10px] text-muted -mt-1">
+        <p className="text-[12px] text-muted -mt-1">
           The rule's own metadata — code and type are identity (auto, above). The inference is authored on the previous screen.
         </p>
       </div>
@@ -275,7 +275,7 @@ function RuleSettingsForm({ initial, onCancel, onSave, isSaving, saveError }: {
       <div className="flex items-center justify-between gap-4">
         <div>
           <div className={labelCls}>Visible in Catalog</div>
-          <p className="text-[10px] text-muted -mt-1">Shown to users under Catalog → Astro Rules.</p>
+          <p className="text-[12px] text-muted -mt-1">Shown to users under Catalog → Astro Rules.</p>
         </div>
         <button
           type="button"
@@ -502,7 +502,7 @@ export default function RuleInferenceModal({
               <label className={labelCls}>Astro Event · auto</label>
               <div className={cn(inputCls, 'opacity-80 cursor-default select-text')}>
                 <div className="text-[var(--text-primary)]">{data?.rule?.display_name ?? ruleName}</div>
-                <div className="text-muted font-mono text-[11px] mt-0.5">{data?.rule?.rule_code ?? ''}</div>
+                <div className="text-muted font-mono text-[12px] mt-0.5">{data?.rule?.rule_code ?? ''}</div>
               </div>
             </div>
             <div>
@@ -557,7 +557,7 @@ export default function RuleInferenceModal({
                         </div>
                       )}
                     </div>
-                    <div className="flex items-center gap-2 flex-wrap text-[10px] font-mono">
+                    <div className="flex items-center gap-2 flex-wrap text-[12px] font-mono">
                       {superseded ? (
                         <span className="px-1.5 py-0.5 rounded border border-kd-border text-muted">
                           superseded{row.superseded_at ? ` ${String(row.superseded_at).slice(0, 10)}` : ''} — verdict frozen
@@ -592,7 +592,7 @@ export default function RuleInferenceModal({
           {mode === 'choose' && (
             <div>
               <label className={labelCls}>New inference — choose how</label>
-              <p className="text-[10px] text-muted mb-3 -mt-1">
+              <p className="text-[12px] text-muted mb-3 -mt-1">
                 Saving replaces the current active inference for this scope; the previous one is
                 kept as history with its verdict frozen at that moment.
               </p>
@@ -660,7 +660,7 @@ export default function RuleInferenceModal({
                   <ChevronLeft className="w-3.5 h-3.5" /> {editingId != null ? 'New inference instead' : 'Back'}
                 </button>
                 {editingId != null && (
-                  <span className="text-[10px] font-mono px-2 py-1 rounded-lg border border-accent-indigo/40 text-accent-indigo bg-accent-indigo/10">
+                  <span className="text-[12px] font-mono px-2 py-1 rounded-lg border border-accent-indigo/40 text-accent-indigo bg-accent-indigo/10">
                     Editing active inference — saving replaces it (previous kept as history)
                   </span>
                 )}
@@ -836,7 +836,7 @@ export default function RuleInferenceModal({
           <div className="px-6 py-3 border-t border-kd-border flex justify-end shrink-0">
             <button
               onClick={() => { settingsReturnMode.current = mode; setMetaError(null); setMode('settings'); }}
-              className="text-[11px] text-muted hover:text-secondary transition-colors underline underline-offset-2"
+              className="text-[12px] text-muted hover:text-secondary transition-colors underline underline-offset-2"
             >
               Rule settings — code, tags, bias →
             </button>

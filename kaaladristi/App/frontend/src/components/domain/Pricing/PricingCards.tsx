@@ -197,7 +197,7 @@ export default function PricingCards({ onPaidSuccess, onFreeSelected }: PricingC
             }}>
               {tier.highlight && (
                 <div style={{ position: 'absolute', top: -12, left: '50%', transform: 'translateX(-50%)',
-                  padding: '2px 12px', borderRadius: 20, fontSize: 10, fontWeight: 600,
+                  padding: '2px 12px', borderRadius: 20, fontSize: 12, fontWeight: 600,
                   background: 'var(--accent)', color: '#fff', letterSpacing: '.06em',
                   fontFamily: 'var(--font-mono,monospace)', whiteSpace: 'nowrap' }}>
                   BEST VALUE
@@ -210,7 +210,7 @@ export default function PricingCards({ onPaidSuccess, onFreeSelected }: PricingC
                 ₹{inr(tier.base)}
                 <span style={{ fontSize: 13, fontWeight: 400, color: 'var(--text-muted)' }}> / {tier.duration}</span>
               </div>
-              <div style={{ fontSize: 11.5, color: 'var(--accent)', marginBottom: 2 }}>
+              <div style={{ fontSize: 12, color: 'var(--accent)', marginBottom: 2 }}>
                 + 18% GST · ₹{inr(gstTotal(tier.base))} total
               </div>
               <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 22 }}>
@@ -244,7 +244,7 @@ export default function PricingCards({ onPaidSuccess, onFreeSelected }: PricingC
       <div style={{ maxWidth: 560, margin: '0 auto 32px', borderRadius: 16, overflow: 'hidden',
         border: '1px solid var(--border)', background: 'var(--card)' }}>
         <div style={{ padding: '12px 20px', background: 'var(--panel-recess)',
-          borderBottom: '1px solid var(--border)', fontSize: 11,
+          borderBottom: '1px solid var(--border)', fontSize: 12,
           color: 'color-mix(in srgb, var(--text-primary) 40%, transparent)', fontFamily: 'var(--font-mono,monospace)',
           letterSpacing: '.04em' }}>
           EVERYTHING INCLUDED — TRIAL & ANNUAL

@@ -73,20 +73,20 @@ function Cell({ label, primary, secondary, tone, highlight, borderRight }: CellP
     }}>
       <div style={{
         fontFamily: 'var(--font-mono, monospace)',
-        fontSize: 8, color: 'var(--text-faint)',
+        fontSize: 10, color: 'var(--text-faint)',
         letterSpacing: '0.1em', textTransform: 'uppercase',
         marginBottom: 2,
       }}>{label}</div>
       <div style={{
         fontFamily: 'var(--font-mono, monospace)',
-        fontSize: 11, fontWeight: 700,
+        fontSize: 12, fontWeight: 700,
         color, lineHeight: 1.2,
         overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
       }}>{primary ?? '—'}</div>
       {secondary !== undefined && (
         <div style={{
           fontFamily: 'var(--font-mono, monospace)',
-          fontSize: 9, color: tone ? color : 'var(--text-muted)',
+          fontSize: 11, color: tone ? color : 'var(--text-muted)',
           marginTop: 1, lineHeight: 1.2,
           overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
         }}>{secondary}</div>
@@ -156,7 +156,7 @@ export default function TopStrip({
             <span>{SQ_LABELS[sq]}</span>
             {isTurning && (
               <span style={{
-                fontSize: 8, color: 'var(--risk-amber)',
+                fontSize: 10, color: 'var(--risk-amber)',
                 border: '1px solid var(--risk-amber)',
                 padding: '0 4px', borderRadius: 2, marginLeft: 2,
               }}>TURNING</span>

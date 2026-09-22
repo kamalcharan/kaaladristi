@@ -99,7 +99,7 @@ export default function CatalogDrawer({ isOpen, onClose, context = 'block' }: Ca
               <button
                 onClick={handleFullCatalog}
                 style={{
-                  fontSize: 11,
+                  fontSize: 12,
                   fontFamily: 'var(--font-mono, monospace)',
                   color: 'var(--accent)',
                   background: 'none',

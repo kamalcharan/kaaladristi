@@ -14,7 +14,7 @@ export default function SymbolSwitcher() {
           key={s}
           onClick={() => setSymbol(s)}
           className={cn(
-            'px-6 py-2 rounded-xl text-[11px] font-bold uppercase tracking-wider transition-all duration-300',
+            'px-6 py-2 rounded-xl text-[12px] font-bold uppercase tracking-wider transition-all duration-300',
             selectedSymbol === s
               ? 'bg-accent-indigo text-[var(--text-primary)] shadow-lg shadow-[color-mix(in_srgb,var(--accent-indigo)_20%,transparent)]'
               : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)]'

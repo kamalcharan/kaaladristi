@@ -456,7 +456,7 @@ function ExistingVaNiChatPanel({ docked = false }: { docked?: boolean } = {}) {
             <div className="text-base font-serif font-bold text-[var(--text-primary)] leading-tight">
               VaNi <span className="font-normal text-[var(--text-secondary)]">&middot; वाणी</span>
             </div>
-            <div className="text-[10px] font-mono text-[var(--text-secondary)] tracking-wide uppercase mt-0.5">
+            <div className="text-[12px] font-mono text-[var(--text-secondary)] tracking-wide uppercase mt-0.5">
               {headerSubtext}
             </div>
           </div>
@@ -490,7 +490,7 @@ function ExistingVaNiChatPanel({ docked = false }: { docked?: boolean } = {}) {
                 {entity.symbol}
               </span>
               {entity.pageContext && (
-                <span className="text-[9px] font-mono text-white/30 uppercase tracking-wider">
+                <span className="text-[11px] font-mono text-white/30 uppercase tracking-wider">
                   {entity.pageContext}
                 </span>
               )}
@@ -520,7 +520,7 @@ function ExistingVaNiChatPanel({ docked = false }: { docked?: boolean } = {}) {
                   // asking "what would you like to know?" is a prompt to work,
                   // not information. A quiet label over the list does the job.
                   <div className="flex items-center gap-2 mb-2.5 px-1">
-                    <span className="text-[10px] font-mono uppercase tracking-wider text-white/30">
+                    <span className="text-[12px] font-mono uppercase tracking-wider text-white/30">
                       {autorunIntent ? 'Go deeper' : 'Ask about this page'}
                     </span>
                     {autorunIntent && <div className="flex-1 h-px bg-[var(--accent-indigo)]/10" />}
@@ -533,7 +533,7 @@ function ExistingVaNiChatPanel({ docked = false }: { docked?: boolean } = {}) {
                     <p className="text-sm font-medium text-white/80 mb-1">
                       {entity ? `Ask about ${entity.symbol}` : 'What would you like to know?'}
                     </p>
-                    <p className="text-[11px] text-white/30 max-w-[260px] mx-auto leading-relaxed">
+                    <p className="text-[12px] text-white/30 max-w-[260px] mx-auto leading-relaxed">
                       {entity
                         ? `VaNi will analyse ${entity.symbol}'s signals and context.`
                         : 'VaNi reads the live data on this page and answers your questions.'}
@@ -555,7 +555,7 @@ function ExistingVaNiChatPanel({ docked = false }: { docked?: boolean } = {}) {
                   {docked && !showAllIntents && allIntents.length > 4 && (
                     <button
                       onClick={() => setShowAllIntents(true)}
-                      className="w-full text-left px-4 py-2 text-[11px] text-[var(--accent-indigo)]/70 hover:text-[var(--accent-indigo)] transition-colors"
+                      className="w-full text-left px-4 py-2 text-[12px] text-[var(--accent-indigo)]/70 hover:text-[var(--accent-indigo)] transition-colors"
                     >
                       {allIntents.length - 4} more questions
                     </button>
@@ -586,7 +586,7 @@ function ExistingVaNiChatPanel({ docked = false }: { docked?: boolean } = {}) {
             <div className="pt-3">
               <div className="flex items-center gap-2 mb-3">
                 <div className="flex-1 h-px bg-[var(--accent-indigo)]/10" />
-                <span className="text-[9px] font-mono text-[var(--accent-indigo)]/40 uppercase tracking-widest px-2">
+                <span className="text-[11px] font-mono text-[var(--accent-indigo)]/40 uppercase tracking-widest px-2">
                   also ask
                 </span>
                 <div className="flex-1 h-px bg-[var(--accent-indigo)]/10" />
@@ -610,7 +610,7 @@ function ExistingVaNiChatPanel({ docked = false }: { docked?: boolean } = {}) {
             <div className="pt-3">
               <div className="flex items-center gap-2">
                 <div className="flex-1 h-px bg-[var(--accent-indigo)]/10" />
-                <span className="text-[9px] font-mono text-[var(--accent-indigo)]/30 uppercase tracking-widest px-2">
+                <span className="text-[11px] font-mono text-[var(--accent-indigo)]/30 uppercase tracking-widest px-2">
                   all answered
                 </span>
                 <div className="flex-1 h-px bg-[var(--accent-indigo)]/10" />

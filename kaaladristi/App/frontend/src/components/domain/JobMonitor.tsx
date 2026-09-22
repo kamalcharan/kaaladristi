@@ -144,7 +144,7 @@ export default function JobMonitor() {
           <div className="p-4 space-y-4">
             {/* Backend status */}
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-mono text-muted uppercase tracking-wider">Backend</span>
+              <span className="text-[12px] font-mono text-muted uppercase tracking-wider">Backend</span>
               {isOffline ? (
                 <span className="flex items-center gap-1.5 text-xs text-risk-red/80">
                   <span className="w-2 h-2 rounded-full bg-risk-red animate-pulse" />
@@ -161,14 +161,14 @@ export default function JobMonitor() {
             {/* Discovery job */}
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <span className="text-[11px] font-mono text-muted uppercase tracking-wider">Discovery</span>
+                <span className="text-[12px] font-mono text-muted uppercase tracking-wider">Discovery</span>
                 {discoveryRunning ? (
-                  <span className="flex items-center gap-1 text-[11px] text-risk-amber">
+                  <span className="flex items-center gap-1 text-[12px] text-risk-amber">
                     <Loader2 className="w-3 h-3 animate-spin" />
                     Running · {elapsed(discovery?.started_at ?? null)}
                   </span>
                 ) : discovery?.finished_at ? (
-                  <span className={cn('flex items-center gap-1 text-[11px]',
+                  <span className={cn('flex items-center gap-1 text-[12px]',
                     (discovery.errors?.length ?? 0) > 0 ? 'text-risk-red/70' : 'text-risk-green/70')}>
                     {(discovery.errors?.length ?? 0) > 0
                       ? <XCircle className="w-3 h-3" />
@@ -176,19 +176,19 @@ export default function JobMonitor() {
                     Done
                   </span>
                 ) : (
-                  <span className="text-[11px] text-muted">Idle</span>
+                  <span className="text-[12px] text-muted">Idle</span>
                 )}
               </div>
 
               {discoveryRunning && discovery && (
                 <>
                   {discovery.phase === 'confidence_scoring' ? (
-                    <div className="flex items-center gap-2 text-[11px] text-risk-green/80 py-1">
+                    <div className="flex items-center gap-2 text-[12px] text-risk-green/80 py-1">
                       <Loader2 className="w-3 h-3 animate-spin shrink-0" />
                       <span>Confidence scoring — scoring transits…</span>
                     </div>
                   ) : discovery.rules_total === 0 ? (
-                    <div className="flex items-center gap-2 text-[11px] text-risk-amber/80 py-1">
+                    <div className="flex items-center gap-2 text-[12px] text-risk-amber/80 py-1">
                       <Loader2 className="w-3 h-3 animate-spin shrink-0" />
                       <span className="capitalize">{discovery.phase ?? 'Starting'}…</span>
                     </div>
@@ -197,7 +197,7 @@ export default function JobMonitor() {
                   )}
                   {discovery.phase !== 'confidence_scoring' && (
                     <>
-                      <div className="grid grid-cols-2 gap-2 text-[11px]">
+                      <div className="grid grid-cols-2 gap-2 text-[12px]">
                         <div>
                           <p className="text-muted">Rules</p>
                           <p className="text-secondary font-mono">{discovery.rules_done} / {discovery.rules_total || '?'}</p>
@@ -226,7 +226,7 @@ export default function JobMonitor() {
                         </button>
                       )}
                       {(cancelMutation.isPending || discovery.cancel_requested) && (
-                        <p className="text-[11px] text-risk-amber text-center">Cancel requested — finishing current rule…</p>
+                        <p className="text-[12px] text-risk-amber text-center">Cancel requested — finishing current rule…</p>
                       )}
                     </>
                   )}
@@ -234,7 +234,7 @@ export default function JobMonitor() {
               )}
 
               {!discoveryRunning && discovery?.finished_at && (
-                <div className="text-[11px] text-muted space-y-1.5">
+                <div className="text-[12px] text-muted space-y-1.5">
                   <p>{discovery.signals_inserted.toLocaleString()} signals · {(discovery.transits_inserted ?? 0).toLocaleString()} transits · {discovery.rules_done} rules</p>
                   <p>Finished {new Date(discovery.finished_at).toLocaleTimeString()}</p>
                   {(discovery.errors?.length ?? 0) > 0 && (
@@ -260,14 +260,14 @@ export default function JobMonitor() {
             {/* Confidence job */}
             <div className="space-y-2 pt-3 border-t border-kd-border/40">
               <div className="flex items-center justify-between">
-                <span className="text-[11px] font-mono text-muted uppercase tracking-wider">Confidence</span>
+                <span className="text-[12px] font-mono text-muted uppercase tracking-wider">Confidence</span>
                 {confidenceRunning ? (
-                  <span className="flex items-center gap-1 text-[11px] text-risk-amber">
+                  <span className="flex items-center gap-1 text-[12px] text-risk-amber">
                     <Loader2 className="w-3 h-3 animate-spin" />
                     Running · {elapsed(confidence?.started_at ?? null)}
                   </span>
                 ) : confidence?.finished_at ? (
-                  <span className={cn('flex items-center gap-1 text-[11px]',
+                  <span className={cn('flex items-center gap-1 text-[12px]',
                     confidence.error ? 'text-risk-red/70' : 'text-risk-green/70')}>
                     {confidence.error
                       ? <XCircle className="w-3 h-3" />
@@ -275,12 +275,12 @@ export default function JobMonitor() {
                     Done
                   </span>
                 ) : (
-                  <span className="text-[11px] text-muted">Idle</span>
+                  <span className="text-[12px] text-muted">Idle</span>
                 )}
               </div>
 
               {confidenceRunning && confidence && (
-                <div className="grid grid-cols-2 gap-2 text-[11px]">
+                <div className="grid grid-cols-2 gap-2 text-[12px]">
                   <div>
                     <p className="text-muted">Signals scored</p>
                     <p className="text-secondary font-mono">{confidence.signals_scored.toLocaleString()}</p>
@@ -293,13 +293,13 @@ export default function JobMonitor() {
               )}
 
               {!confidenceRunning && confidence?.finished_at && !confidence.error && (
-                <p className="text-[11px] text-muted">
+                <p className="text-[12px] text-muted">
                   {confidence.signals_scored.toLocaleString()} signals scored · {confidence.rules_upserted} rules updated
                 </p>
               )}
 
               {confidence?.error && (
-                <p className="text-[11px] text-risk-red/70 truncate" title={confidence.error}>{confidence.error}</p>
+                <p className="text-[12px] text-risk-red/70 truncate" title={confidence.error}>{confidence.error}</p>
               )}
             </div>
           </div>

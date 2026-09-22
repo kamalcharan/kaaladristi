@@ -36,10 +36,10 @@ const DIRECTION_LABEL = {
 function Kv({ label, value, color }: { label: string; value: string; color?: string }) {
   return (
     <div style={{ minWidth: 0 }}>
-      <div style={{ ...MONO, fontSize: 8.5, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-faint)' }}>
+      <div style={{ ...MONO, fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-faint)' }}>
         {label}
       </div>
-      <div style={{ ...MONO, fontSize: 11.5, fontWeight: 600, color: color ?? 'var(--text-primary)' }}>
+      <div style={{ ...MONO, fontSize: 12, fontWeight: 600, color: color ?? 'var(--text-primary)' }}>
         {value}
       </div>
     </div>
@@ -66,12 +66,12 @@ export default function StructureStrip({ structure, compact = false }: {
       marginTop: 8,
     }}>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap', marginBottom: 7 }}>
-        <span style={{ ...MONO, fontSize: 9, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-faint)' }}>
+        <span style={{ ...MONO, fontSize: 11, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-faint)' }}>
           Structure
         </span>
         <span style={{ fontSize: compact ? 11.5 : 12.5, fontWeight: 600, color: tint }}>{label}</span>
         {bigMoney && bigMoney.sessionsSince > 0 && (
-          <span style={{ ...MONO, fontSize: 10, color: 'var(--text-faint)', marginLeft: 'auto' }}>
+          <span style={{ ...MONO, fontSize: 12, color: 'var(--text-faint)', marginLeft: 'auto' }}>
             {bigMoney.sessionsSince} session{bigMoney.sessionsSince === 1 ? '' : 's'} since
           </span>
         )}

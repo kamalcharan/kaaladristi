@@ -110,12 +110,12 @@ function DayCell({ day, events, isToday }: {
       onMouseEnter={() => setShowTip(true)}
       onMouseLeave={() => setShowTip(false)}
     >
-      <span className="text-[9px] font-bold uppercase tracking-wider text-muted">{dow}</span>
+      <span className="text-[11px] font-bold uppercase tracking-wider text-muted">{dow}</span>
       <span className={cn(
         'text-[17px] font-bold mono leading-none',
         isToday ? 'text-accent-indigo' : 'text-[var(--text-primary)]',
       )}>{dd}</span>
-      <span className="text-[8px] text-muted uppercase tracking-wide">{mon}</span>
+      <span className="text-[10px] text-muted uppercase tracking-wide">{mon}</span>
 
       {/* Dots row */}
       <div className="flex items-center gap-0.5 mt-0.5 h-3">
@@ -137,7 +137,7 @@ function DayCell({ day, events, isToday }: {
           className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-50 w-56 p-3 rounded-lg bg-kd-surface border border-kd-border shadow-xl"
           style={{ pointerEvents: 'none' }}
         >
-          <div className="text-[10px] font-bold mono text-[var(--text-primary)] mb-2">
+          <div className="text-[12px] font-bold mono text-[var(--text-primary)] mb-2">
             {dd} {mon} · {dow}
           </div>
           {active.map((e, i) => {
@@ -145,15 +145,15 @@ function DayCell({ day, events, isToday }: {
             const label = ASTRO_SIGNAL_LABELS[e.market_impact] ?? e.market_impact;
             return (
               <div key={i} className="mb-2 pb-1.5 border-b border-kd-border last:border-0 last:mb-0 last:pb-0">
-                <div className={cn('text-[9px] font-semibold', c.text)}>
+                <div className={cn('text-[11px] font-semibold', c.text)}>
                   {e.display_name}
                 </div>
-                <div className="text-[8px] text-muted mt-0.5">
+                <div className="text-[10px] text-muted mt-0.5">
                   {e.start_date}
                   <span className={cn('ml-1 uppercase', c.text)}>· {label}</span>
                 </div>
                 {e.inference && (
-                  <div className="text-[8px] text-[var(--accent-gold)] italic mt-1">
+                  <div className="text-[10px] text-[var(--accent-gold)] italic mt-1">
                     "{e.inference}"
                   </div>
                 )}
@@ -181,7 +181,7 @@ function Legend({ events }: { events: AstroEvent[] }) {
         return (
           <span
             key={impact}
-            className={cn('inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[9px] font-semibold border', c.bg, c.text, c.border)}
+            className={cn('inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold border', c.bg, c.text, c.border)}
           >
             <span className={cn('w-1.5 h-1.5 rounded-full', COLOR_DOT[impactToColor(impact)] ?? 'bg-slate-500')} />
             {label}
@@ -213,7 +213,7 @@ export default function DailyEventStrip({ selectedDate }: { selectedDate: string
     <div className="glass-card rounded-2xl p-4">
       <div className="flex items-center justify-between mb-3">
         <h3 className="text-[13px] font-bold text-[var(--text-primary)]">7-Day Outlook</h3>
-        <span className="text-[10px] text-muted">Mon – Fri · daily events</span>
+        <span className="text-[12px] text-muted">Mon – Fri · daily events</span>
       </div>
 
       {isLoading ? (

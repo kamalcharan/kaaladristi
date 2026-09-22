@@ -181,7 +181,7 @@ function BreakRow({ label, side, baseline, color }: {
           <td key={k} className={cn('px-3 py-2 text-xs tabular-nums text-center', retColor(side[k]))}>
             {fmtPct(side[k], true)}
             {side[k] != null && bl != null && (
-              <span className="text-[9px] text-muted ml-1">vs {fmtPct(bl, true)}</span>
+              <span className="text-[11px] text-muted ml-1">vs {fmtPct(bl, true)}</span>
             )}
           </td>
         );
@@ -201,13 +201,13 @@ function LevelBreakCard({ row }: { row: PatternRow }) {
   return (
     <div className="rounded-xl border border-kd-border bg-kd-card overflow-hidden">
       <div className="px-4 py-2.5 border-b border-kd-border/60 flex items-center gap-2 flex-wrap">
-        <span className="text-[11px] font-mono uppercase tracking-wider text-accent-gold">
+        <span className="text-[12px] font-mono uppercase tracking-wider text-accent-gold">
           Level Break — window high/low
         </span>
-        <span className="text-[10px] font-mono text-muted">
+        <span className="text-[12px] font-mono text-muted">
           anchor: {row.anchor === 'window_end' ? 'window end' : 'window start'} · scan 30 sessions
         </span>
-        <span className="ml-auto text-[10px] font-mono text-muted">
+        <span className="ml-auto text-[12px] font-mono text-muted">
           {cleanUsable
             ? `clean occurrences (no same-band overlap) · n=${headline.n}`
             : `all occurrences · n=${headline.n}${clean && (clean.n ?? 0) > 0 ? ` (clean n=${clean.n} — insufficient)` : ''}`}
@@ -218,7 +218,7 @@ function LevelBreakCard({ row }: { row: PatternRow }) {
           <thead>
             <tr className="border-b border-kd-border bg-kd-elevated/60">
               {['Outcome', 'Share', 'n', 'Median break', 'Fwd 5d', 'Fwd 10d', 'Fwd 22d'].map(h => (
-                <th key={h} className="text-left text-[10px] font-mono text-muted px-3 py-2 uppercase tracking-wider whitespace-nowrap">{h}</th>
+                <th key={h} className="text-left text-[12px] font-mono text-muted px-3 py-2 uppercase tracking-wider whitespace-nowrap">{h}</th>
               ))}
             </tr>
           </thead>
@@ -230,7 +230,7 @@ function LevelBreakCard({ row }: { row: PatternRow }) {
         </table>
       </div>
       {cleanUsable && overall && (
-        <div className="px-4 py-2 text-[10px] font-mono text-muted border-t border-kd-border/40">
+        <div className="px-4 py-2 text-[12px] font-mono text-muted border-t border-kd-border/40">
           All occurrences (n={overall.n}): high first {overall.high_first?.pct?.toFixed(0)}%
           {' · '}low first {overall.low_first?.pct?.toFixed(0)}%
           {' · '}fwd 10d after high-break {fmtPct(overall.high_first?.avg_fwd_10d, true)}
@@ -270,7 +270,7 @@ function SequenceCard({ row, allSeqRows }: { row: PatternRow; allSeqRows: Patter
   const fromClean = cleanSeq.length > 0;
   return (
     <div className="rounded-xl border border-kd-border bg-kd-card px-4 py-3">
-      <div className="text-[11px] font-mono uppercase tracking-wider text-accent-gold mb-1.5">
+      <div className="text-[12px] font-mono uppercase tracking-wider text-accent-gold mb-1.5">
         Sequence — who moves first
       </div>
       {seq.length === 0 ? (
@@ -290,17 +290,17 @@ function SequenceCard({ row, allSeqRows }: { row: PatternRow; allSeqRows: Patter
                   <span className={m.direction === 'up' ? 'text-risk-green' : 'text-risk-red/80'}>
                     {' '}{m.direction === 'up' ? '↑' : '↓'}
                   </span>
-                  <span className="text-muted font-mono text-[11px]"> D{m.first_move >= 0 ? '+' : ''}{m.first_move}</span>
-                  <span className={cn('font-mono text-[10px] ml-1',
+                  <span className="text-muted font-mono text-[12px]"> D{m.first_move >= 0 ? '+' : ''}{m.first_move}</span>
+                  <span className={cn('font-mono text-[12px] ml-1',
                     replicated ? 'text-risk-green/80' : 'text-muted')}>
                     {replicated ? `· ${reps} benchmarks agree` : `· unreplicated (${reps})`}
                   </span>
                 </span>
               );
             })}
-            {fromClean && <span className="text-[10px] font-mono text-muted ml-2">(clean subset)</span>}
+            {fromClean && <span className="text-[12px] font-mono text-muted ml-2">(clean subset)</span>}
           </p>
-          <p className="text-[10px] text-muted mt-1.5 leading-relaxed">
+          <p className="text-[12px] text-muted mt-1.5 leading-relaxed">
             Single-benchmark sequences fire at noise-consistent rates — only moves the same
             direction on ≥{REPLICATION_MIN} benchmarks (±2 sessions) read as signatures; the
             rest are shown faded.
@@ -317,17 +317,17 @@ function ProfileCard({ row }: { row: PatternRow }) {
   return (
     <div className="rounded-xl border border-kd-border bg-kd-card px-4 py-3">
       <div className="flex items-center gap-2 mb-2">
-        <span className="text-[11px] font-mono uppercase tracking-wider text-accent-gold">
+        <span className="text-[12px] font-mono uppercase tracking-wider text-accent-gold">
           Reaction profile
         </span>
-        <span className="text-[10px] font-mono text-muted">
+        <span className="text-[12px] font-mono text-muted">
           D−10 … D+15 around anchor · deviation vs own D−10…D−4 baseline · n={overall.n}
         </span>
       </div>
       <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3">
         {Object.entries(overall.fields).map(([f, data]) => (
           <div key={f} className="rounded-lg bg-kd-elevated/40 border border-kd-border/50 p-2">
-            <div className="text-[10px] font-mono text-secondary mb-1">{FIELD_LABELS[f] ?? f}</div>
+            <div className="text-[12px] font-mono text-secondary mb-1">{FIELD_LABELS[f] ?? f}</div>
             <Spark field={data} offsets={overall.offsets} />
           </div>
         ))}
@@ -346,7 +346,7 @@ function ContextCard({ row }: { row: PatternRow }) {
   };
   return (
     <div className="rounded-xl border border-kd-border bg-kd-card px-4 py-3">
-      <div className="text-[11px] font-mono uppercase tracking-wider text-accent-gold mb-2">
+      <div className="text-[12px] font-mono uppercase tracking-wider text-accent-gold mb-2">
         Context conditioning — same pattern under different regimes
       </div>
       <div className="space-y-2.5">
@@ -357,7 +357,7 @@ function ContextCard({ row }: { row: PatternRow }) {
           if (entries.length < 2) return null;
           return (
             <div key={key}>
-              <div className="text-[10px] font-mono text-muted uppercase tracking-wider mb-1">
+              <div className="text-[12px] font-mono text-muted uppercase tracking-wider mb-1">
                 {CONTEXT_LABELS[key] ?? key}
               </div>
               <div className="flex flex-wrap gap-1.5">
@@ -366,7 +366,7 @@ function ContextCard({ row }: { row: PatternRow }) {
                   const greyed = (bs.n ?? 0) < 20;
                   return (
                     <span key={val} className={cn(
-                      'px-2 py-1 rounded-md text-[10px] font-mono border',
+                      'px-2 py-1 rounded-md text-[12px] font-mono border',
                       greyed ? 'text-muted border-kd-border opacity-60' : 'text-secondary border-kd-border',
                     )}>
                       {val}: high-first {bs.high_first?.pct != null ? `${bs.high_first.pct.toFixed(0)}%` : '—'}
@@ -388,12 +388,12 @@ function PeersCard({ row }: { row: PatternRow }) {
   if (peers.length === 0) return null;
   return (
     <div className="rounded-xl border border-kd-border bg-kd-card px-4 py-3">
-      <div className="text-[11px] font-mono uppercase tracking-wider text-accent-gold mb-1.5">
+      <div className="text-[12px] font-mono uppercase tracking-wider text-accent-gold mb-1.5">
         Co-occurring events (same band)
       </div>
       <div className="flex flex-wrap gap-1.5">
         {peers.map(p => (
-          <span key={p.with} className="px-2 py-1 rounded-md text-[10px] font-mono text-secondary border border-kd-border">
+          <span key={p.with} className="px-2 py-1 rounded-md text-[12px] font-mono text-secondary border border-kd-border">
             {p.with} <span className="text-muted">· n={p.n}</span>
             {p.stats?.high_first?.pct != null && (
               <span className="text-muted"> · combo high-first {p.stats.high_first.pct.toFixed(0)}%</span>
@@ -504,7 +504,7 @@ export default function PatternsTab({ ruleId }: { ruleId: number }) {
 
       {/* Benchmark selector */}
       <div className="flex items-center gap-2 flex-wrap">
-        <span className="text-[10px] font-mono text-muted uppercase tracking-wider">Benchmark</span>
+        <span className="text-[12px] font-mono text-muted uppercase tracking-wider">Benchmark</span>
         <select
           value={effectiveBench ?? ''}
           onChange={e => setBenchId(Number(e.target.value))}
@@ -517,17 +517,17 @@ export default function PatternsTab({ ruleId }: { ruleId: number }) {
           ))}
         </select>
         {selected?.curated && (
-          <span className="px-2 py-0.5 rounded-md text-[10px] font-mono text-risk-amber border border-risk-amber/30 bg-risk-amber/10">
+          <span className="px-2 py-0.5 rounded-md text-[12px] font-mono text-risk-amber border border-risk-amber/30 bg-risk-amber/10">
             curated basket — reconstructed composite of current constituents
           </span>
         )}
         {selected && selected.maxN < 20 && (
-          <span className="px-2 py-0.5 rounded-md text-[10px] font-mono text-muted border border-kd-border">
+          <span className="px-2 py-0.5 rounded-md text-[12px] font-mono text-muted border border-kd-border">
             insufficient occurrences (n={selected.maxN}) — read with caution
           </span>
         )}
         {levelBreak && (
-          <span className="ml-auto text-[10px] font-mono text-muted">
+          <span className="ml-auto text-[12px] font-mono text-muted">
             band: {levelBreak.band} · computed {levelBreak.computed_at?.slice(0, 10)}
           </span>
         )}
@@ -551,7 +551,7 @@ export default function PatternsTab({ ruleId }: { ruleId: number }) {
         </div>
       )}
 
-      <p className="text-[10px] text-muted leading-relaxed">
+      <p className="text-[12px] text-muted leading-relaxed">
         Historical base rates from completed rule windows (transit spans, or single signal days for daily rules) — observations, not predictions or advice.
         Clean = occurrences with no same-band co-occurring event. Forward returns shown against the
         benchmark's unconditional drift. Stats with n &lt; 20 are greyed; n &lt; 10 is never shown.

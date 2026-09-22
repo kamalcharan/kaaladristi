@@ -34,7 +34,7 @@ export function AstroTeaser() {
             {/* Releasing-soon chip */}
             <div style={{
               position: 'absolute', top: 14, right: 14, zIndex: 2,
-              fontFamily: MONO, fontSize: 10, letterSpacing: '.16em', textTransform: 'uppercase',
+              fontFamily: MONO, fontSize: 12, letterSpacing: '.16em', textTransform: 'uppercase',
               color: C.g1, border: `1px solid ${C.rule}`, background: C.rs,
               padding: '5px 12px', borderRadius: 3,
             }}>
@@ -56,7 +56,7 @@ export function AstroTeaser() {
                   return (
                     <div key={row.name} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                       <span style={{
-                        fontFamily: MONO, fontSize: 10, letterSpacing: '.08em',
+                        fontFamily: MONO, fontSize: 12, letterSpacing: '.08em',
                         color: C.ink3, width: 74, flexShrink: 0,
                       }}>
                         {row.sym}&nbsp;{row.name}
@@ -77,7 +77,7 @@ export function AstroTeaser() {
                           <span key={i} style={{
                             position: 'absolute', left: `${m.at}%`, top: '50%',
                             transform: 'translate(-50%,-50%)',
-                            fontFamily: MONO, fontSize: 10, color: C.g1, lineHeight: 1,
+                            fontFamily: MONO, fontSize: 12, color: C.g1, lineHeight: 1,
                           }}>
                             {m.m}
                           </span>
@@ -91,7 +91,7 @@ export function AstroTeaser() {
               {/* Legend */}
               <div style={{
                 marginTop: 16, display: 'flex', gap: 22, flexWrap: 'wrap',
-                fontFamily: MONO, fontSize: 10, letterSpacing: '.08em', color: C.ink4,
+                fontFamily: MONO, fontSize: 12, letterSpacing: '.08em', color: C.ink4,
               }}>
                 <span><span style={{ color: C.g1 }}>℞</span>&nbsp;Retrograde window</span>
                 <span><span style={{ color: C.g1 }}>→</span>&nbsp;Sign ingress</span>

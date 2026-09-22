@@ -240,10 +240,10 @@ export default function JobQueue({ refreshKey }: Props) {
                       <span className="text-xs font-medium text-secondary">
                         Backfill {headerLabel}
                       </span>
-                      <span className="text-[10px] text-muted mono">
+                      <span className="text-[12px] text-muted mono">
                         {group.batchId}
                       </span>
-                      <span className="ml-auto text-[10px] text-muted">
+                      <span className="ml-auto text-[12px] text-muted">
                         {group.completed}/{group.total} complete
                         {group.failed > 0 && (
                           <span className="text-rose-400"> · {group.failed} failed</span>
@@ -266,7 +266,7 @@ export default function JobQueue({ refreshKey }: Props) {
                       {activeIds.length > 0 && (
                         <button
                           onClick={() => onCancelBatch(group.batchId, activeIds)}
-                          className="px-1.5 py-0.5 rounded text-[10px] font-medium
+                          className="px-1.5 py-0.5 rounded text-[12px] font-medium
                                      bg-rose-500/10 border border-rose-500/30 text-risk-red
                                      hover:bg-rose-500/20 transition-colors"
                           title={`Cancel ${activeIds.length} active job(s) in this batch`}
@@ -319,13 +319,13 @@ function JobRow({ job, onCancel, indent }: {
           {job.dimension && <span className="text-muted"> · {job.dimension}</span>}
         </div>
         {job.exchange && (
-          <div className="text-[10px] text-muted">{job.exchange}</div>
+          <div className="text-[12px] text-muted">{job.exchange}</div>
         )}
       </td>
       <td className="px-2 py-1.5 mono text-secondary">{jobDateDisplay(job)}</td>
       <td className="px-2 py-1.5">
         <span className={cn(
-          'inline-block px-1.5 py-0.5 rounded text-[10px] font-medium',
+          'inline-block px-1.5 py-0.5 rounded text-[12px] font-medium',
           STATUS_BADGE[job.status],
         )}>
           {job.status}
@@ -342,18 +342,18 @@ function JobRow({ job, onCancel, indent }: {
                 style={{ width: `${job.progress_pct ?? 0}%` }}
               />
             </div>
-            <div className="text-[10px] text-muted truncate" title={job.progress_text ?? ''}>
+            <div className="text-[12px] text-muted truncate" title={job.progress_text ?? ''}>
               {job.progress_text ?? '…'}
             </div>
           </div>
         )}
         {job.status !== 'running' && job.progress_text && (
-          <div className="text-[10px] text-muted truncate" title={job.progress_text}>
+          <div className="text-[12px] text-muted truncate" title={job.progress_text}>
             {job.progress_text}
           </div>
         )}
         {job.error_msg && (
-          <div className="text-[10px] text-rose-400 truncate" title={job.error_msg}>
+          <div className="text-[12px] text-rose-400 truncate" title={job.error_msg}>
             {job.error_msg}
           </div>
         )}

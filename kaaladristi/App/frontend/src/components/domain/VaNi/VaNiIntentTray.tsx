@@ -46,14 +46,14 @@ export default function VaNiIntentTray({
   return (
     <div className="shrink-0 border-t border-[var(--accent-indigo)]/15 bg-[var(--bg)]/60 backdrop-blur-sm px-5 py-3 space-y-1.5">
       <div className="flex items-center gap-2">
-        <span className="text-[9px] font-mono uppercase tracking-widest text-[var(--accent-indigo)]/40">
+        <span className="text-[11px] font-mono uppercase tracking-widest text-[var(--accent-indigo)]/40">
           {heading}
         </span>
         <div className="flex-1 h-px bg-[var(--accent-indigo)]/10" />
         {(hidden > 0 || expanded) && (
           <button
             onClick={() => setExpanded((v) => !v)}
-            className="flex items-center gap-1 text-[9px] font-mono uppercase tracking-widest text-[var(--accent-indigo)]/50 hover:text-[var(--accent-indigo)] transition-colors"
+            className="flex items-center gap-1 text-[11px] font-mono uppercase tracking-widest text-[var(--accent-indigo)]/50 hover:text-[var(--accent-indigo)] transition-colors"
           >
             {expanded ? 'less' : `${hidden} more`}
             {expanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}

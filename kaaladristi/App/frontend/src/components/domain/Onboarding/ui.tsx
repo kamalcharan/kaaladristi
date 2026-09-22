@@ -15,7 +15,7 @@ export function VaniDot({ size = 22 }: { size?: number }) {
 
 export function SectionLabel({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
   return (
-    <div style={{ fontFamily: MONO, fontSize: 10, letterSpacing: '.12em', textTransform: 'uppercase',
+    <div style={{ fontFamily: MONO, fontSize: 12, letterSpacing: '.12em', textTransform: 'uppercase',
       color: 'var(--text-muted)', marginBottom: 10, ...style }}>{children}</div>
   )
 }
@@ -24,7 +24,7 @@ export function Question({ n, text, sub }: { n: number; text: string; sub?: stri
   return (
     <div style={{ marginBottom: 14 }}>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
-        <span style={{ fontFamily: MONO, fontSize: 11, color: 'var(--accent)' }}>0{n}</span>
+        <span style={{ fontFamily: MONO, fontSize: 12, color: 'var(--accent)' }}>0{n}</span>
         <span style={{ fontFamily: 'var(--font-display)', fontStyle: 'italic', fontSize: 19,
           color: 'var(--gold)', letterSpacing: '-0.01em' }}>{text}</span>
       </div>

@@ -59,7 +59,7 @@ export default function StockFlowHeatmap({ label, rows }: { label: string; rows:
               key={w}
               onClick={() => setWin(w)}
               style={{
-                padding: '3px 9px', borderRadius: 4, border: 'none', cursor: 'pointer', fontSize: 11,
+                padding: '3px 9px', borderRadius: 4, border: 'none', cursor: 'pointer', fontSize: 12,
                 fontWeight: win === w ? 600 : 400,
                 background: win === w ? 'color-mix(in srgb, var(--text-primary) 8%, transparent)' : 'transparent',
                 color: win === w ? 'var(--text-primary)' : 'var(--text-muted)',

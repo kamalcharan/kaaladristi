@@ -223,7 +223,7 @@ function AlmanacRangeNav({ viewMode, setViewMode, rangeLabel, todayInRange, onPr
           key={m}
           onClick={() => setViewMode(m)}
           style={{
-            padding: '4px 12px', borderRadius: 6, fontSize: 11, textTransform: 'capitalize',
+            padding: '4px 12px', borderRadius: 6, fontSize: 12, textTransform: 'capitalize',
             cursor: 'pointer', fontFamily: 'var(--font-mono, monospace)',
             background: viewMode === m ? 'color-mix(in srgb, var(--accent) 18%, transparent)' : 'transparent',
             border: `1px solid ${viewMode === m ? 'color-mix(in srgb, var(--accent) 45%, transparent)' : 'var(--border)'}`,
@@ -251,7 +251,7 @@ function AlmanacRangeNav({ viewMode, setViewMode, rangeLabel, todayInRange, onPr
           }}>›</button>
           {!todayInRange && (
             <button onClick={onToday} style={{
-              marginLeft: 6, padding: '3px 10px', borderRadius: 6, fontSize: 10.5, cursor: 'pointer',
+              marginLeft: 6, padding: '3px 10px', borderRadius: 6, fontSize: 12, cursor: 'pointer',
               border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-secondary)',
             }}>Today</button>
           )}
@@ -304,7 +304,7 @@ function TimelineLane({
     <div style={{ display: 'flex', alignItems: 'stretch', minHeight: 40 }}>
       <div style={{
         width: 88, flexShrink: 0, display: 'flex', alignItems: 'center',
-        fontSize: 10, fontFamily: 'var(--font-mono, monospace)',
+        fontSize: 12, fontFamily: 'var(--font-mono, monospace)',
         color: 'var(--text-secondary)', letterSpacing: '0.04em', textTransform: 'uppercase',
       }}>
         {title}
@@ -348,7 +348,7 @@ function TimelineLane({
             >
               {width > 3 && (
                 <span style={{
-                  fontSize: 9, whiteSpace: 'nowrap', padding: '0 6px',
+                  fontSize: 11, whiteSpace: 'nowrap', padding: '0 6px',
                   color: locked ? 'var(--text-muted)' : 'var(--text-primary)',
                   fontFamily: 'var(--font-mono, monospace)',
                 }}>
@@ -457,7 +457,7 @@ function MercuryAlmanacBody({
               <span>🔒</span>
               <span>Your plan shows the next {horizonDays} days. History is unlimited on every plan.</span>
               <button onClick={onGate} style={{
-                marginLeft: 'auto', fontSize: 11, padding: '3px 10px', borderRadius: 6,
+                marginLeft: 'auto', fontSize: 12, padding: '3px 10px', borderRadius: 6,
                 border: '1px solid color-mix(in srgb, var(--caution) 45%, transparent)',
                 background: 'transparent', color: 'var(--caution)', cursor: 'pointer', fontFamily: 'inherit',
               }}>
@@ -481,7 +481,7 @@ function MercuryAlmanacBody({
                     }} />
                     <div style={{
                       position: 'absolute', left: `${todayLeft}%`, top: -14,
-                      transform: 'translateX(-50%)', fontSize: 9, color: 'var(--text-secondary)',
+                      transform: 'translateX(-50%)', fontSize: 11, color: 'var(--text-secondary)',
                       fontFamily: 'var(--font-mono, monospace)', zIndex: 2, pointerEvents: 'none',
                     }}>
                       today
@@ -514,13 +514,13 @@ function MercuryAlmanacBody({
           <div style={{ borderRadius: 12, border: '1px solid var(--border)', background: 'var(--card)', overflow: 'hidden' }}>
             <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)' }}>
               <div style={{
-                fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-mono, monospace)',
+                fontSize: 12, color: 'var(--text-muted)', fontFamily: 'var(--font-mono, monospace)',
                 textTransform: 'uppercase', letterSpacing: '0.08em',
               }}>
                 Events · {rangeLabel}
               </div>
               {mercurySectorNames.length > 0 && (
-                <div style={{ marginTop: 4, fontSize: 10.5, color: 'color-mix(in srgb, var(--text-primary) 40%, transparent)' }}>
+                <div style={{ marginTop: 4, fontSize: 12, color: 'color-mix(in srgb, var(--text-primary) 40%, transparent)' }}>
                   ☿ Mercury-ruled sectors (astrological reference, not a performance claim): {mercurySectorNames.join(' · ')}
                 </div>
               )}
@@ -548,7 +548,7 @@ function MercuryAlmanacBody({
                     background: ev.date === today ? 'color-mix(in srgb, var(--accent) 5%, transparent)' : undefined,
                   }}
                 >
-                  <span style={{ width: 72, flexShrink: 0, fontSize: 11, fontFamily: 'var(--font-mono, monospace)', color: 'var(--text-secondary)' }}>
+                  <span style={{ width: 72, flexShrink: 0, fontSize: 12, fontFamily: 'var(--font-mono, monospace)', color: 'var(--text-secondary)' }}>
                     {fmtD(ev.date)}
                   </span>
                   <span style={{ width: 14, flexShrink: 0, textAlign: 'center', color: ev.watchDay ? 'var(--accent)' : 'var(--text-muted)' }}>
@@ -564,7 +564,7 @@ function MercuryAlmanacBody({
                     <span
                       title={`${ev.boundary === 'start' ? 'Start' : 'End'} of a ${ev.days}-day window (this date is the ${ev.boundary})`}
                       style={{
-                        flexShrink: 0, fontSize: 10, fontFamily: 'var(--font-mono, monospace)',
+                        flexShrink: 0, fontSize: 12, fontFamily: 'var(--font-mono, monospace)',
                         color: 'color-mix(in srgb, var(--text-primary) 35%, transparent)', width: 32,
                       }}
                     >
@@ -575,7 +575,7 @@ function MercuryAlmanacBody({
                     <span
                       title={`${weekday}day · ${lord}'s day (vara lord)`}
                       style={{
-                        flexShrink: 0, fontSize: 10, fontFamily: 'var(--font-mono, monospace)',
+                        flexShrink: 0, fontSize: 12, fontFamily: 'var(--font-mono, monospace)',
                         color: lord === 'Mercury' ? MERCURY_COLOR : 'var(--text-muted)',
                         display: 'flex', alignItems: 'center', gap: 3, width: 58,
                       }}
@@ -587,7 +587,7 @@ function MercuryAlmanacBody({
                     <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'stretch', minHeight: 20 }}>
                       <div style={{
                         width: 260, flexShrink: 0, display: 'flex', alignItems: 'center',
-                        fontSize: 10.5, color: locked ? 'var(--text-muted)' : 'var(--text-secondary)',
+                        fontSize: 12, color: locked ? 'var(--text-muted)' : 'var(--text-secondary)',
                         fontFamily: locked ? 'var(--font-mono, monospace)' : undefined,
                       }}>
                         {locked ? "🔒 unlock to see this event's history" : read ? read.hover : ''}
@@ -609,7 +609,7 @@ function MercuryAlmanacBody({
                             title="India VIX as of this date — reference only, not scored"
                             style={{
                               width: 90, flexShrink: 0, display: 'flex', alignItems: 'center',
-                              fontSize: 10, fontFamily: 'var(--font-mono, monospace)', whiteSpace: 'nowrap',
+                              fontSize: 12, fontFamily: 'var(--font-mono, monospace)', whiteSpace: 'nowrap',
                               color: vixColor,
                             }}
                           >
@@ -680,7 +680,7 @@ function BayerRuleDetail({
       <button
         onClick={onBack}
         style={{
-          marginTop: 14, fontSize: 11, fontFamily: 'var(--font-mono, monospace)',
+          marginTop: 14, fontSize: 12, fontFamily: 'var(--font-mono, monospace)',
           color: 'var(--text-secondary)', background: 'none', border: 'none', cursor: 'pointer', padding: 0,
         }}
       >
@@ -689,11 +689,11 @@ function BayerRuleDetail({
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '10px 0' }}>
         <span style={{ fontSize: 18, color, lineHeight: 1 }}>{glyph}</span>
-        <span style={{ fontSize: 11, fontFamily: 'var(--font-mono, monospace)', color: 'var(--text-muted)' }}>{def.ruleNum}</span>
+        <span style={{ fontSize: 12, fontFamily: 'var(--font-mono, monospace)', color: 'var(--text-muted)' }}>{def.ruleNum}</span>
         <span style={{ fontSize: 14, color: 'var(--text-primary)', fontWeight: 600 }}>{def.label}</span>
       </div>
       {read && (
-        <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 6 }}>{read.hover}</div>
+        <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 6 }}>{read.hover}</div>
       )}
 
       <AlmanacRangeNav
@@ -738,7 +738,7 @@ function BayerRuleDetail({
                     {locked ? '🔒 ' : ''}{fmtD(seg.from)}{seg.isPoint ? '' : ` → ${fmtD(seg.to)}`}
                   </span>
                   {!seg.isPoint && (
-                    <span style={{ fontSize: 10, fontFamily: 'var(--font-mono, monospace)', color: 'var(--text-muted)' }}>
+                    <span style={{ fontSize: 12, fontFamily: 'var(--font-mono, monospace)', color: 'var(--text-muted)' }}>
                       {days}d
                     </span>
                   )}
@@ -816,7 +816,7 @@ function BayerRulesBody({
       {/* Today context — shared ambient facts, not scored claims */}
       <div style={{
         display: 'flex', alignItems: 'center', gap: 14, margin: '14px 0',
-        fontSize: 11, fontFamily: 'var(--font-mono, monospace)', color: 'var(--text-secondary)',
+        fontSize: 12, fontFamily: 'var(--font-mono, monospace)', color: 'var(--text-secondary)',
       }}>
         <span>Today · {fmtD(today)}</span>
         {lord && (
@@ -854,7 +854,7 @@ function BayerRulesBody({
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span style={{ fontSize: 16, color, lineHeight: 1 }}>{glyph}</span>
-                <span style={{ fontSize: 10.5, fontFamily: 'var(--font-mono, monospace)', color: 'var(--text-muted)' }}>
+                <span style={{ fontSize: 12, fontFamily: 'var(--font-mono, monospace)', color: 'var(--text-muted)' }}>
                   {s.def.ruleNum}
                 </span>
                 <span style={{ fontSize: 12, color: 'var(--text-primary)', fontWeight: 600 }}>
@@ -865,7 +865,7 @@ function BayerRulesBody({
               <div>
                 {s.active ? (
                   <span style={{
-                    fontSize: 10, padding: '2px 8px', borderRadius: 4,
+                    fontSize: 12, padding: '2px 8px', borderRadius: 4,
                     background: 'color-mix(in srgb, var(--accent) 18%, transparent)',
                     color: 'var(--accent)', fontFamily: 'var(--font-mono, monospace)',
                   }}>
@@ -873,7 +873,7 @@ function BayerRulesBody({
                   </span>
                 ) : (
                   <span style={{
-                    fontSize: 10, padding: '2px 8px', borderRadius: 4,
+                    fontSize: 12, padding: '2px 8px', borderRadius: 4,
                     background: 'color-mix(in srgb, var(--text-primary) 8%, transparent)',
                     color: 'var(--text-muted)', fontFamily: 'var(--font-mono, monospace)',
                   }}>
@@ -882,7 +882,7 @@ function BayerRulesBody({
                 )}
               </div>
 
-              <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
+              <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
                 {s.next
                   ? nextLocked
                     ? "🔒 next window beyond your plan's horizon"
@@ -890,13 +890,13 @@ function BayerRulesBody({
                   : 'No upcoming window in the next ~400 days'}
               </div>
 
-              <div style={{ fontSize: 10.5, color: 'color-mix(in srgb, var(--text-primary) 55%, transparent)', minHeight: 28 }}>
+              <div style={{ fontSize: 12, color: 'color-mix(in srgb, var(--text-primary) 55%, transparent)', minHeight: 28 }}>
                 {read ? read.hover : 'No evidence yet'}
               </div>
 
               <div
                 title="Bayer's own 1940 claim — a hypothesis to weigh against the evidence above, not a verified fact"
-                style={{ fontSize: 9.5, color: biasColor, fontFamily: 'var(--font-mono, monospace)' }}
+                style={{ fontSize: 11, color: biasColor, fontFamily: 'var(--font-mono, monospace)' }}
               >
                 Bayer's claim: {s.def.baseBias} (unverified)
               </div>
@@ -905,7 +905,7 @@ function BayerRulesBody({
                 <button
                   onClick={e => onExplain(s.ruleId, s.ruleCode, `${glyph} ${s.def.label}`, e.clientX, e.clientY)}
                   style={{
-                    fontSize: 10.5, color: 'var(--text-secondary)', background: 'none', border: 'none',
+                    fontSize: 12, color: 'var(--text-secondary)', background: 'none', border: 'none',
                     cursor: 'pointer', padding: 0, fontFamily: 'inherit',
                   }}
                 >
@@ -914,7 +914,7 @@ function BayerRulesBody({
                 <button
                   onClick={() => setDetailRule({ code: s.ruleCode, ruleId: s.ruleId })}
                   style={{
-                    fontSize: 10.5, color, background: 'none', border: 'none',
+                    fontSize: 12, color, background: 'none', border: 'none',
                     cursor: 'pointer', padding: 0, fontFamily: 'inherit',
                   }}
                 >
@@ -999,23 +999,23 @@ function GolaAlmanacBody({
         border: '1px solid var(--border)', background: 'var(--card)',
       }}>
         <div>
-          <div style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono, monospace)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Now</div>
+          <div style={{ fontSize: 12, color: 'var(--text-muted)', fontFamily: 'var(--font-mono, monospace)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Now</div>
           <div style={{ fontSize: 14, fontWeight: 600, color: currentHalf?.label === 'Uttara Gola' ? 'var(--bull)' : 'var(--bear)' }}>
             {currentHalf ? currentHalf.label : '—'}
           </div>
           {currentHalf && (
-            <div style={{ fontSize: 10.5, color: 'var(--text-muted)' }}>
+            <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
               {fmtD(currentHalf.from)} → {fmtD(currentHalf.to)}
             </div>
           )}
         </div>
         <div>
-          <div style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono, monospace)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Next turn window</div>
+          <div style={{ fontSize: 12, color: 'var(--text-muted)', fontFamily: 'var(--font-mono, monospace)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Next turn window</div>
           <div style={{ fontSize: 14, fontWeight: 600, color: GOLA_COLOR }}>
             {nextWindow ? nextWindow.label : '—'}
           </div>
           {nextWindow && (
-            <div style={{ fontSize: 10.5, color: 'var(--text-muted)' }}>
+            <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
               {fmtD(nextWindow.from)} → {fmtD(nextWindow.to)} · in {daysBetween(today, nextWindow.from)}d
               {nextWindow.ruleCode === RULE_DWIN ? ' · historically the weakest of the four seasonal seams' : ''}
             </div>
@@ -1025,11 +1025,11 @@ function GolaAlmanacBody({
 
       {/* Backtest observation lines — observational, never predictive */}
       <div style={{ margin: '0 0 4px', padding: '10px 16px', borderRadius: 12, border: '1px solid var(--border)', background: 'var(--card)' }}>
-        <div style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono, monospace)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>
+        <div style={{ fontSize: 12, color: 'var(--text-muted)', fontFamily: 'var(--font-mono, monospace)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>
           Backtest observation · NIFTY 50 · historical tendency, not a prediction
         </div>
         {GOLA_STUDY_LINES.map(line => (
-          <div key={line} style={{ fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.7 }}>{line}</div>
+          <div key={line} style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.7 }}>{line}</div>
         ))}
       </div>
 
@@ -1082,7 +1082,7 @@ function GolaAlmanacBody({
                     <span style={{ fontSize: 12, color: 'var(--text-primary)', minWidth: 200 }}>
                       {locked ? '🔒 ' : ''}{seg.label}
                     </span>
-                    <span style={{ fontSize: 11, fontFamily: 'var(--font-mono, monospace)', color: 'var(--text-secondary)' }}>
+                    <span style={{ fontSize: 12, fontFamily: 'var(--font-mono, monospace)', color: 'var(--text-secondary)' }}>
                       {fmtD(seg.from)} → {fmtD(seg.to)}
                     </span>
                   </div>
@@ -1138,7 +1138,7 @@ export default function AlmanacPage() {
       {/* Type selector */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 14 }}>
         <label style={{
-          fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono, monospace)',
+          fontSize: 12, color: 'var(--text-muted)', fontFamily: 'var(--font-mono, monospace)',
           textTransform: 'uppercase', letterSpacing: '0.06em',
         }}>
           Almanac

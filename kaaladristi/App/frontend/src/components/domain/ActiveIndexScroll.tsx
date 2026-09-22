@@ -17,7 +17,7 @@ function IndexCard({ item }: { item: IndexCatalogItem }) {
       )}
     >
       <div className="flex items-center justify-between mb-1.5">
-        <span className="text-[10px] font-bold text-accent-indigo uppercase tracking-wider truncate pr-1">
+        <span className="text-[12px] font-bold text-accent-indigo uppercase tracking-wider truncate pr-1">
           {item.name.replace('NIFTY ', '').replace('Nifty ', '')}
         </span>
         <BarChart3 className="w-3 h-3 text-muted shrink-0" />
@@ -28,7 +28,7 @@ function IndexCard({ item }: { item: IndexCatalogItem }) {
           : '—'}
       </div>
       {item.category && (
-        <div className="text-[9px] text-muted mt-0.5 truncate">{item.category}</div>
+        <div className="text-[11px] text-muted mt-0.5 truncate">{item.category}</div>
       )}
     </button>
   );
@@ -54,7 +54,7 @@ export default function ActiveIndexScroll() {
       <div className="flex items-center gap-2 mb-3">
         <TrendingUp className="w-3.5 h-3.5 text-accent-indigo" />
         <h3 className="text-[13px] font-bold text-[var(--text-primary)]">Active Indexes</h3>
-        <span className="ml-auto text-[10px] text-muted">{indexes.length} active · scroll →</span>
+        <span className="ml-auto text-[12px] text-muted">{indexes.length} active · scroll →</span>
       </div>
       <div className="flex gap-3 overflow-x-auto pb-1 no-scrollbar snap-x snap-mandatory">
         {indexes.map(item => (

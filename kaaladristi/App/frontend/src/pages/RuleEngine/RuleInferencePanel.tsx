@@ -70,7 +70,7 @@ export default function RuleInferencePanel({ ruleId }: { ruleId: number }) {
 
   return (
     <div className="rounded-xl border border-kd-border bg-kd-elevated/40 p-3 space-y-2.5">
-      <span className="text-[10px] font-mono uppercase tracking-wider text-muted">
+      <span className="text-[12px] font-mono uppercase tracking-wider text-muted">
         Expected vs Evidence
       </span>
 
@@ -85,7 +85,7 @@ export default function RuleInferencePanel({ ruleId }: { ruleId: number }) {
                 <span className="text-muted"> — combined with <strong>{row.pair_rule_label}</strong></span>
               )}
             </p>
-            <div className="flex items-center gap-2 flex-wrap text-[10px] font-mono">
+            <div className="flex items-center gap-2 flex-wrap text-[12px] font-mono">
               {row.market_impact && (
                 <span className="px-1.5 py-0.5 rounded border border-kd-border text-muted">
                   expected: {row.market_impact}

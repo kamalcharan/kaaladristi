@@ -93,14 +93,14 @@ function ScannerBlockContent({ catalogItemId }: { catalogItemId: string }) {
 
   if (isLoading) return (
     <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
-      fontSize: 11, color: 'color-mix(in srgb, var(--text-primary) 20%, transparent)', fontFamily: 'var(--font-mono,monospace)' }}>
+      fontSize: 12, color: 'color-mix(in srgb, var(--text-primary) 20%, transparent)', fontFamily: 'var(--font-mono,monospace)' }}>
       scanning…
     </div>
   )
 
   if (error || !data) return (
     <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
-      fontSize: 11, color: 'var(--bear)', fontFamily: 'var(--font-mono,monospace)' }}>
+      fontSize: 12, color: 'var(--bear)', fontFamily: 'var(--font-mono,monospace)' }}>
       error loading scan
     </div>
   )
@@ -113,7 +113,7 @@ function ScannerBlockContent({ catalogItemId }: { catalogItemId: string }) {
       <div style={{ padding: '4px 12px 6px', display: 'flex', alignItems: 'center', gap: 8 }}>
         <span style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-primary)',
           fontFamily: 'var(--font-mono,monospace)' }}>{data.length}</span>
-        <span style={{ fontSize: 10, color: 'color-mix(in srgb, var(--text-primary) 35%, transparent)', textTransform: 'uppercase',
+        <span style={{ fontSize: 12, color: 'color-mix(in srgb, var(--text-primary) 35%, transparent)', textTransform: 'uppercase',
           letterSpacing: '0.06em' }}>matches</span>
       </div>
       {/* Top 5 rows */}
@@ -129,17 +129,17 @@ function ScannerBlockContent({ catalogItemId }: { catalogItemId: string }) {
               background: 'color-mix(in srgb, var(--text-primary) 3%, transparent)',
               borderBottom: '1px solid color-mix(in srgb, var(--text-primary) 4%, transparent)',
             }}>
-              <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-primary)',
+              <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)',
                 flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {stock.symbol}
               </span>
               {zoneInfo && (
-                <span style={{ fontSize: 9, color: zoneInfo.color,
+                <span style={{ fontSize: 11, color: zoneInfo.color,
                   fontFamily: 'var(--font-mono,monospace)', flexShrink: 0 }}>
                   {zoneInfo.label}
                 </span>
               )}
-              <span style={{ fontSize: 10, fontWeight: 600, color: pctColor,
+              <span style={{ fontSize: 12, fontWeight: 600, color: pctColor,
                 fontFamily: 'var(--font-mono,monospace)', flexShrink: 0 }}>
                 {stock.pct_chng != null ? `${stock.pct_chng >= 0 ? '+' : ''}${stock.pct_chng.toFixed(1)}%` : '—'}
               </span>
@@ -147,7 +147,7 @@ function ScannerBlockContent({ catalogItemId }: { catalogItemId: string }) {
           )
         })}
         {data.length === 0 && (
-          <div style={{ textAlign: 'center', padding: '12px 0', fontSize: 11,
+          <div style={{ textAlign: 'center', padding: '12px 0', fontSize: 12,
             color: 'color-mix(in srgb, var(--text-primary) 20%, transparent)' }}>no matches today</div>
         )}
       </div>
@@ -212,7 +212,7 @@ function AstroRuleBlockContent({ ruleCode }: { ruleCode: string }) {
       {/* Active / Inactive pill */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <span style={{
-          fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em',
+          fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em',
           padding: '2px 8px', borderRadius: 4,
           background: isActive ? 'var(--bull-bg)' : 'var(--bear-bg)',
           color: isActive ? 'var(--bull)' : 'var(--bear)',
@@ -221,26 +221,26 @@ function AstroRuleBlockContent({ ruleCode }: { ruleCode: string }) {
           {isActive ? '● Active' : '○ Inactive'}
         </span>
         {probLabel && (
-          <span style={{ fontSize: 9, color: 'var(--gold)',
+          <span style={{ fontSize: 11, color: 'var(--gold)',
             fontFamily: 'var(--font-mono,monospace)' }}>{probLabel}</span>
         )}
       </div>
       {/* Next occurrence */}
       <div>
-        <div style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em',
+        <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em',
           color: 'color-mix(in srgb, var(--text-primary) 30%, transparent)', marginBottom: 3 }}>Next occurrence</div>
         {nextSignal
           ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)',
                 fontFamily: 'var(--font-mono,monospace)' }}>{nextSignal.date}</span>
-              <span style={{ fontSize: 9, color: nextSignal.signal === 'bullish' ? 'var(--bull)'
+              <span style={{ fontSize: 11, color: nextSignal.signal === 'bullish' ? 'var(--bull)'
                 : nextSignal.signal === 'bearish' ? 'var(--bear)' : 'var(--gold)' }}>
                 {nextSignal.signal}
               </span>
             </div>
           )
-          : <span style={{ fontSize: 11, color: 'color-mix(in srgb, var(--text-primary) 20%, transparent)',
+          : <span style={{ fontSize: 12, color: 'color-mix(in srgb, var(--text-primary) 20%, transparent)',
               fontFamily: 'var(--font-mono,monospace)' }}>none found</span>
         }
       </div>
@@ -291,7 +291,7 @@ function buildVaNiNote(result: CorrelationResult, itemA: string, itemB: string):
 }
 
 function ReturnBar({ value }: { value: number | null }) {
-  if (value == null) return <span style={{ color: 'color-mix(in srgb, var(--text-primary) 25%, transparent)', fontSize: 9 }}>—</span>
+  if (value == null) return <span style={{ color: 'color-mix(in srgb, var(--text-primary) 25%, transparent)', fontSize: 11 }}>—</span>
   const color = value >= 0 ? 'var(--bull)' : 'var(--bear)'
   const w = Math.min(Math.abs(value) * 10, 100)
   return (
@@ -299,7 +299,7 @@ function ReturnBar({ value }: { value: number | null }) {
       <div style={{ width: 60, height: 4, borderRadius: 2, background: 'color-mix(in srgb, var(--text-primary) 8%, transparent)', position: 'relative', flexShrink: 0 }}>
         <div style={{ position: 'absolute', [value >= 0 ? 'left' : 'right']: 0, width: `${w}%`, height: '100%', background: color, borderRadius: 2 }} />
       </div>
-      <span style={{ fontSize: 9, color, fontFamily: 'var(--font-mono,monospace)', flexShrink: 0 }}>
+      <span style={{ fontSize: 11, color, fontFamily: 'var(--font-mono,monospace)', flexShrink: 0 }}>
         {value >= 0 ? '+' : ''}{value.toFixed(2)}%
       </span>
     </div>
@@ -310,12 +310,12 @@ function InstanceRow({ inst }: { inst: CorrelationInstance }) {
   const outcome = (inst.return_5d ?? 0) >= 0 ? 'bull' : 'bear'
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0',
-      borderBottom: '1px solid color-mix(in srgb, var(--text-primary) 4%, transparent)', fontSize: 10 }}>
+      borderBottom: '1px solid color-mix(in srgb, var(--text-primary) 4%, transparent)', fontSize: 12 }}>
       <span style={{ color: 'color-mix(in srgb, var(--text-primary) 50%, transparent)', fontFamily: 'var(--font-mono,monospace)',
         flexShrink: 0, width: 74 }}>{inst.start_date.slice(0, 10)}</span>
       <span style={{ color: 'color-mix(in srgb, var(--text-primary) 30%, transparent)', flexShrink: 0, width: 32 }}>{inst.duration_days}d</span>
       <div style={{ flex: 1 }}><ReturnBar value={inst.return_5d} /></div>
-      <span style={{ fontSize: 8, padding: '1px 5px', borderRadius: 3, flexShrink: 0,
+      <span style={{ fontSize: 10, padding: '1px 5px', borderRadius: 3, flexShrink: 0,
         background: outcome === 'bull' ? 'var(--bull-bg)' : 'var(--bear-bg)',
         color: outcome === 'bull' ? 'var(--bull)' : 'var(--bear)' }}>
         {outcome}
@@ -332,7 +332,7 @@ function VaNiCorrelationBlock({ block, onDismiss }: { block: FrameworkBlock; onD
 
   if (!result) return (
     <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
-      fontSize: 11, color: 'color-mix(in srgb, var(--text-primary) 20%, transparent)', fontFamily: 'var(--font-mono,monospace)' }}>
+      fontSize: 12, color: 'color-mix(in srgb, var(--text-primary) 20%, transparent)', fontFamily: 'var(--font-mono,monospace)' }}>
       no correlation data
     </div>
   )
@@ -350,12 +350,12 @@ function VaNiCorrelationBlock({ block, onDismiss }: { block: FrameworkBlock; onD
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
         {[itemA, itemB].map((id, i) => (
           <React.Fragment key={id}>
-            <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 4,
+            <span style={{ fontSize: 12, padding: '2px 8px', borderRadius: 4,
               background: 'rgba(139,92,246,.14)', color: '#a78bfa',
               border: '1px solid rgba(139,92,246,.25)', fontFamily: 'var(--font-mono,monospace)' }}>
               {overlayName(id)}
             </span>
-            {i === 0 && <span style={{ fontSize: 9, color: 'color-mix(in srgb, var(--text-primary) 30%, transparent)' }}>∩</span>}
+            {i === 0 && <span style={{ fontSize: 11, color: 'color-mix(in srgb, var(--text-primary) 30%, transparent)' }}>∩</span>}
           </React.Fragment>
         ))}
       </div>
@@ -363,7 +363,7 @@ function VaNiCorrelationBlock({ block, onDismiss }: { block: FrameworkBlock; onD
       {/* 2. Status badge */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         {result.currently_active ? (
-          <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 10,
+          <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12,
             color: 'var(--bull)', fontWeight: 600 }}>
             <span style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--bull)',
               boxShadow: '0 0 6px var(--bull)', display: 'inline-block',
@@ -371,9 +371,9 @@ function VaNiCorrelationBlock({ block, onDismiss }: { block: FrameworkBlock; onD
             Active Now
           </span>
         ) : (
-          <span style={{ fontSize: 10, color: 'var(--caution)' }}>Approaching</span>
+          <span style={{ fontSize: 12, color: 'var(--caution)' }}>Approaching</span>
         )}
-        <span style={{ fontSize: 9, color: 'color-mix(in srgb, var(--text-primary) 25%, transparent)',
+        <span style={{ fontSize: 11, color: 'color-mix(in srgb, var(--text-primary) 25%, transparent)',
           fontFamily: 'var(--font-mono,monospace)' }}>
           {result.n_instances} instances · {result.shape}
         </span>
@@ -388,9 +388,9 @@ function VaNiCorrelationBlock({ block, onDismiss }: { block: FrameworkBlock; onD
         ].map(({ label, val }) => (
           <div key={label} style={{ background: 'color-mix(in srgb, var(--text-primary) 4%, transparent)', borderRadius: 6,
             padding: '4px 8px', flex: 1, textAlign: 'center' }}>
-            <div style={{ fontSize: 8, color: 'color-mix(in srgb, var(--text-primary) 30%, transparent)', textTransform: 'uppercase',
+            <div style={{ fontSize: 10, color: 'color-mix(in srgb, var(--text-primary) 30%, transparent)', textTransform: 'uppercase',
               letterSpacing: '0.06em', marginBottom: 2 }}>{label}</div>
-            <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-primary)',
+            <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)',
               fontFamily: 'var(--font-mono,monospace)' }}>{val}</div>
           </div>
         ))}
@@ -404,18 +404,18 @@ function VaNiCorrelationBlock({ block, onDismiss }: { block: FrameworkBlock; onD
           transition: 'width .3s' }} />
       </div>
       <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-        <span style={{ fontSize: 8, color: 'var(--bull)' }}>{Math.round(bullPct)}% Bull</span>
-        <span style={{ fontSize: 8, color: 'var(--bear)' }}>{Math.round(100 - bullPct)}% Bear</span>
+        <span style={{ fontSize: 10, color: 'var(--bull)' }}>{Math.round(bullPct)}% Bull</span>
+        <span style={{ fontSize: 10, color: 'var(--bear)' }}>{Math.round(100 - bullPct)}% Bear</span>
       </div>
 
       {/* 5. Instance list */}
       <div>
-        <div style={{ fontSize: 9, color: 'color-mix(in srgb, var(--text-primary) 30%, transparent)', marginBottom: 4,
+        <div style={{ fontSize: 11, color: 'color-mix(in srgb, var(--text-primary) 30%, transparent)', marginBottom: 4,
           textTransform: 'uppercase', letterSpacing: '0.06em' }}>Recent instances</div>
         {displayInstances.map(inst => <InstanceRow key={inst.start_date} inst={inst} />)}
         {!showAll && hiddenCount > 0 && (
           <button onClick={() => setShowAll(true)}
-            style={{ fontSize: 9, color: 'var(--accent)', background: 'none', border: 'none',
+            style={{ fontSize: 11, color: 'var(--accent)', background: 'none', border: 'none',
               cursor: 'pointer', padding: '4px 0', fontFamily: 'var(--font-mono,monospace)' }}>
             Show {hiddenCount} more →
           </button>
@@ -423,7 +423,7 @@ function VaNiCorrelationBlock({ block, onDismiss }: { block: FrameworkBlock; onD
       </div>
 
       {/* 6. VaNi inference note */}
-      <div style={{ fontSize: 10, color: 'color-mix(in srgb, var(--text-primary) 45%, transparent)', lineHeight: 1.6,
+      <div style={{ fontSize: 12, color: 'color-mix(in srgb, var(--text-primary) 45%, transparent)', lineHeight: 1.6,
         borderLeft: '2px solid rgba(139,92,246,.35)', paddingLeft: 8,
         fontStyle: 'italic' }}>
         {note}
@@ -433,20 +433,20 @@ function VaNiCorrelationBlock({ block, onDismiss }: { block: FrameworkBlock; onD
       <div style={{ display: 'flex', gap: 8, paddingTop: 4, borderTop: '1px solid color-mix(in srgb, var(--text-primary) 6%, transparent)' }}>
         <button
           title="Coming in Phase 3"
-          style={{ flex: 1, padding: '5px 0', fontSize: 9, borderRadius: 5,
+          style={{ flex: 1, padding: '5px 0', fontSize: 11, borderRadius: 5,
             background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)', border: '1px solid color-mix(in srgb, var(--text-primary) 10%, transparent)',
             color: 'color-mix(in srgb, var(--text-primary) 40%, transparent)', cursor: 'not-allowed', fontFamily: 'var(--font-mono,monospace)' }}>
           Mark on chart {/* TODO: Phase 3 chart markers */}
         </button>
         <button
           title="Coming in Phase 5"
-          style={{ flex: 1, padding: '5px 0', fontSize: 9, borderRadius: 5,
+          style={{ flex: 1, padding: '5px 0', fontSize: 11, borderRadius: 5,
             background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)', border: '1px solid color-mix(in srgb, var(--text-primary) 10%, transparent)',
             color: 'color-mix(in srgb, var(--text-primary) 40%, transparent)', cursor: 'not-allowed', fontFamily: 'var(--font-mono,monospace)' }}>
           Save observation {/* TODO: Phase 5 persistence */}
         </button>
         <button onClick={onDismiss}
-          style={{ padding: '5px 10px', fontSize: 9, borderRadius: 5,
+          style={{ padding: '5px 10px', fontSize: 11, borderRadius: 5,
             background: 'var(--bear-bg)', border: '1px solid var(--bear-dim)',
             color: 'var(--bear)', cursor: 'pointer', fontFamily: 'var(--font-mono,monospace)' }}>
           Dismiss
@@ -462,7 +462,7 @@ function ChartOnlyPlaceholder() {
   return (
     <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
       padding: '8px 12px' }}>
-      <span style={{ fontSize: 10, color: 'color-mix(in srgb, var(--text-primary) 15%, transparent)',
+      <span style={{ fontSize: 12, color: 'color-mix(in srgb, var(--text-primary) 15%, transparent)',
         fontFamily: 'var(--font-mono,monospace)', textAlign: 'center' }}>
         renders on chart
       </span>
@@ -506,9 +506,9 @@ function BlockContent({ block, onRemove }: { block: FrameworkBlock; onRemove: (i
     <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
       padding: '8px 12px' }}>
       {description
-        ? <span style={{ fontSize: 11, color: 'color-mix(in srgb, var(--text-primary) 20%, transparent)', lineHeight: 1.5,
+        ? <span style={{ fontSize: 12, color: 'color-mix(in srgb, var(--text-primary) 20%, transparent)', lineHeight: 1.5,
             textAlign: 'center' }}>{description}</span>
-        : <span style={{ fontSize: 11, color: 'color-mix(in srgb, var(--text-primary) 12%, transparent)',
+        : <span style={{ fontSize: 12, color: 'color-mix(in srgb, var(--text-primary) 12%, transparent)',
             fontFamily: 'var(--font-mono,monospace)' }}>{cid}</span>
       }
     </div>
@@ -632,12 +632,12 @@ export default function WorkspaceBlock({ block, editMode, isDraggable, effective
           </div>
           {!isChart && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2, flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 9, fontFamily: 'var(--font-mono, monospace)',
+              <span style={{ fontSize: 11, fontFamily: 'var(--font-mono, monospace)',
                 padding: '1px 6px', borderRadius: 3, background: badge.bg, color: badge.color }}>
                 {badge.label}
               </span>
               {isVaNi && (
-                <span style={{ fontSize: 9, fontFamily: 'var(--font-mono, monospace)',
+                <span style={{ fontSize: 11, fontFamily: 'var(--font-mono, monospace)',
                   padding: '1px 6px', borderRadius: 3,
                   background: 'rgba(124,106,247,.12)', color: '#7c6af7',
                   border: '1px solid rgba(124,106,247,.2)' }}>
@@ -671,7 +671,7 @@ export default function WorkspaceBlock({ block, editMode, isDraggable, effective
             title="Remove"
             style={{ width: 22, height: 22, borderRadius: 5, border: 'none',
               background: 'color-mix(in srgb, var(--bear) 12%, transparent)', color: 'color-mix(in srgb, var(--bear) 60%, transparent)',
-              cursor: 'pointer', fontSize: 11, flexShrink: 0, lineHeight: 1,
+              cursor: 'pointer', fontSize: 12, flexShrink: 0, lineHeight: 1,
               transition: 'all .15s', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
             onMouseEnter={e => { (e.currentTarget).style.background = 'color-mix(in srgb, var(--bear) 22%, transparent)'; (e.currentTarget).style.color = 'var(--bear)' }}
             onMouseLeave={e => { (e.currentTarget).style.background = 'color-mix(in srgb, var(--bear) 12%, transparent)'; (e.currentTarget).style.color = 'color-mix(in srgb, var(--bear) 60%, transparent)' }}>

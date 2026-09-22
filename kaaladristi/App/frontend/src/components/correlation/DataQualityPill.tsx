@@ -18,11 +18,11 @@ export function DataQualityPill({ coverage_pct, days_covered, date_from, date_to
       border: '1px solid var(--border)',
       borderRadius: 6,
       fontFamily: 'var(--font-mono, monospace)',
-      fontSize: 10,
+      fontSize: 12,
       color: 'color-mix(in srgb, var(--text-primary) 35%, transparent)',
     }}>
-      <span style={{ color, fontSize: 8 }}>●</span>
-      <span style={{ letterSpacing: '0.08em', textTransform: 'uppercase', fontSize: 9 }}>
+      <span style={{ color, fontSize: 10 }}>●</span>
+      <span style={{ letterSpacing: '0.08em', textTransform: 'uppercase', fontSize: 11 }}>
         EOD DATA
       </span>
       <span style={{ marginLeft: 'auto', color: 'color-mix(in srgb, var(--text-primary) 50%, transparent)' }}>

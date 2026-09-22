@@ -184,7 +184,7 @@ const HISTORY_CSS = `
 function HistoryPanel({ ctx }: { ctx: HistoricalContext }) {
   if (!ctx.available || !ctx.conditions || !ctx.historical) {
     return (
-      <div style={{ fontSize: 11, color: 'var(--text-faint)', fontFamily: 'var(--font-mono)', padding: '4px 0 8px' }}>
+      <div style={{ fontSize: 12, color: 'var(--text-faint)', fontFamily: 'var(--font-mono)', padding: '4px 0 8px' }}>
         No panchāṅgam data for this date
       </div>
     );
@@ -193,42 +193,42 @@ function HistoryPanel({ ctx }: { ctx: HistoricalContext }) {
   return (
     <div style={{ fontFamily: 'var(--font-mono)' }}>
       {/* Condition line */}
-      <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 2, lineHeight: 1.5 }}>
+      <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 2, lineHeight: 1.5 }}>
         {c.vara} · {c.nakshatra_lord} Nakshatra · {c.paksha}
       </div>
-      <div style={{ fontSize: 10, color: 'var(--text-faint)', marginBottom: 12 }}>
+      <div style={{ fontSize: 12, color: 'var(--text-faint)', marginBottom: 12 }}>
         Breadth: {c.breadth_regime}
       </div>
 
       {h.occurrences === 0 ? (
-        <div style={{ fontSize: 11, color: 'var(--text-faint)', marginBottom: 12 }}>
+        <div style={{ fontSize: 12, color: 'var(--text-faint)', marginBottom: 12 }}>
           No historical data for this combination
         </div>
       ) : (
         <>
           <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '4px 16px', marginBottom: 12 }}>
-            <span style={{ fontSize: 10, color: 'var(--text-faint)' }}>Similar days since 2007</span>
-            <span style={{ fontSize: 11, color: 'var(--text-primary)' }}>
+            <span style={{ fontSize: 12, color: 'var(--text-faint)' }}>Similar days since 2007</span>
+            <span style={{ fontSize: 12, color: 'var(--text-primary)' }}>
               {h.occurrences < 20 ? `${h.occurrences} (limited data)` : h.occurrences}
             </span>
-            <span style={{ fontSize: 10, color: 'var(--text-faint)' }}>Nifty positive</span>
-            <span style={{ fontSize: 11, color: 'var(--text-primary)' }}>
+            <span style={{ fontSize: 12, color: 'var(--text-faint)' }}>Nifty positive</span>
+            <span style={{ fontSize: 12, color: 'var(--text-primary)' }}>
               {h.positive_pct !== null ? `${h.positive_pct.toFixed(1)}%` : '—'}
             </span>
-            <span style={{ fontSize: 10, color: 'var(--text-faint)' }}>Average day return</span>
-            <span style={{ fontSize: 11, color: 'var(--text-primary)' }}>
+            <span style={{ fontSize: 12, color: 'var(--text-faint)' }}>Average day return</span>
+            <span style={{ fontSize: 12, color: 'var(--text-primary)' }}>
               {h.avg_return !== null ? fmtReturn(h.avg_return) : '—'}
             </span>
           </div>
 
           {h.recent.length > 0 && (
             <>
-              <div style={{ fontSize: 10, color: 'var(--text-faint)', marginBottom: 5 }}>
+              <div style={{ fontSize: 12, color: 'var(--text-faint)', marginBottom: 5 }}>
                 Recent occurrences
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
                 {h.recent.map(r => (
-                  <div key={r.date} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11 }}>
+                  <div key={r.date} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
                     <span style={{ color: 'var(--text-secondary)' }}>{fmtHistDate(r.date)}</span>
                     <span style={{ color: 'var(--text-primary)' }}>{fmtReturn(r.return)}</span>
                   </div>
@@ -240,7 +240,7 @@ function HistoryPanel({ ctx }: { ctx: HistoricalContext }) {
       )}
 
       <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid color-mix(in srgb, var(--text-primary) 6%, transparent)' }}>
-        <span style={{ fontSize: 10, color: 'var(--text-faint)', letterSpacing: '0.04em' }}>
+        <span style={{ fontSize: 12, color: 'var(--text-faint)', letterSpacing: '0.04em' }}>
           Historical data only. Not a forecast.
         </span>
       </div>
@@ -279,7 +279,7 @@ function CardHeader({ data }: { data: MarketWeatherProps }) {
         <span
           style={{
             fontFamily: 'var(--font-mono)',
-            fontSize: 9,
+            fontSize: 11,
             letterSpacing: '0.16em',
             color: 'var(--text-faint)',
             textTransform: 'uppercase',
@@ -290,7 +290,7 @@ function CardHeader({ data }: { data: MarketWeatherProps }) {
         <span
           style={{
             fontFamily: 'var(--font-mono)',
-            fontSize: 9,
+            fontSize: 11,
             letterSpacing: '0.1em',
             color: 'var(--text-faint)',
           }}
@@ -329,7 +329,7 @@ function CardHeader({ data }: { data: MarketWeatherProps }) {
         <span
           style={{
             fontFamily: 'var(--font-mono)',
-            fontSize: 11,
+            fontSize: 12,
             letterSpacing: '0.12em',
             textTransform: 'uppercase',
             color: 'var(--text-primary)',
@@ -345,7 +345,7 @@ function CardHeader({ data }: { data: MarketWeatherProps }) {
         <span
           style={{
             fontFamily: 'var(--font-body)',
-            fontSize: 11,
+            fontSize: 12,
             color: 'var(--text-faint)',
           }}
         >
@@ -386,7 +386,7 @@ function BarRow({ label, normalized, rightLabel, rightSub, arrowGlyph, arrowColo
       <span
         style={{
           fontFamily: 'var(--font-mono)',
-          fontSize: 10,
+          fontSize: 12,
           letterSpacing: '0.1em',
           color: 'var(--text-faint)',
           textTransform: 'uppercase',
@@ -420,7 +420,7 @@ function BarRow({ label, normalized, rightLabel, rightSub, arrowGlyph, arrowColo
         <span
           style={{
             fontFamily: 'var(--font-mono)',
-            fontSize: 10,
+            fontSize: 12,
             color,
             fontWeight: 600,
           }}
@@ -430,14 +430,14 @@ function BarRow({ label, normalized, rightLabel, rightSub, arrowGlyph, arrowColo
         <span
           style={{
             fontFamily: 'var(--font-body)',
-            fontSize: 10,
+            fontSize: 12,
             color: 'var(--text-secondary)',
           }}
         >
           {rightLabel}
         </span>
         {rightSub && (
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-faint)' }}>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-faint)' }}>
             {rightSub}
           </span>
         )}
@@ -547,7 +547,7 @@ function FooterTally({ astro }: { astro: MarketWeatherProps['components']['astro
           <span
             style={{
               fontFamily: 'var(--font-body)',
-              fontSize: 10,
+              fontSize: 12,
               color: 'var(--text-faint)',
               textTransform: 'uppercase',
               letterSpacing: '0.08em',
@@ -648,7 +648,7 @@ function CardShell({ data, date }: { data: MarketWeatherProps; date: string }) {
           <span
             style={{
               fontFamily: 'var(--font-mono)',
-              fontSize: 10,
+              fontSize: 12,
               letterSpacing: '0.12em',
               textTransform: 'uppercase',
               color: 'var(--text-faint)',
@@ -658,7 +658,7 @@ function CardShell({ data, date }: { data: MarketWeatherProps; date: string }) {
             Historical Pattern
           </span>
           {histLoading ? (
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-faint)' }}>…</span>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-faint)' }}>…</span>
           ) : (
             <svg
               className={`kd-hist-chevron${open ? ' open' : ''}`}
@@ -690,7 +690,7 @@ function CardShell({ data, date }: { data: MarketWeatherProps; date: string }) {
                 <div
                   style={{
                     fontFamily: 'var(--font-mono)',
-                    fontSize: 9,
+                    fontSize: 11,
                     letterSpacing: '0.2em',
                     textTransform: 'uppercase',
                     color: 'var(--text-faint)',
@@ -732,7 +732,7 @@ export default function MarketWeatherCard({ date }: MarketWeatherCardProps = {})
   if (isLoading) {
     return (
       <div style={cardBox}>
-        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-faint)', letterSpacing: '0.1em' }}>
+        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-faint)', letterSpacing: '0.1em' }}>
           LOADING…
         </span>
       </div>
@@ -742,16 +742,16 @@ export default function MarketWeatherCard({ date }: MarketWeatherCardProps = {})
   if (isError || !data) {
     return (
       <div style={{ ...cardBox, padding: '32px 24px' }}>
-        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.16em', color: 'var(--text-faint)', textTransform: 'uppercase', marginBottom: 8 }}>
+        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.16em', color: 'var(--text-faint)', textTransform: 'uppercase', marginBottom: 8 }}>
           Astro-Technical Alignment
         </div>
-        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--bear)', letterSpacing: '0.1em', marginBottom: 6 }}>
+        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--bear)', letterSpacing: '0.1em', marginBottom: 6 }}>
           API UNAVAILABLE
         </div>
-        <div style={{ fontFamily: 'var(--font-body)', fontSize: 10, color: 'var(--text-faint)' }}>
+        <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--text-faint)' }}>
           {(error as Error)?.message ?? 'Could not reach pipeline API'}
         </div>
-        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-faint)', marginTop: 8, letterSpacing: '0.08em' }}>
+        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-faint)', marginTop: 8, letterSpacing: '0.08em' }}>
           /api/dashboard/composite · {date}
         </div>
       </div>

@@ -126,7 +126,7 @@ function MonthMarkers({ days }: { days: DayStatus[] }) {
         return (
           <div key={d.date} className="w-[8px] sm:w-[10px] text-center">
             {marker ? (
-              <span className="text-[7px] sm:text-[8px] text-muted font-bold uppercase tracking-wider">
+              <span className="text-[10px] sm:text-[10px] text-muted font-bold uppercase tracking-wider">
                 {marker.month}
               </span>
             ) : null}
@@ -172,7 +172,7 @@ function DayBox({ day, dimension, dimensionId, onMark, onFixDay }: {
         <div className={cn(
           'absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2.5 py-1.5 rounded-lg',
           'bg-kd-card border border-kd-border shadow-xl',
-          'text-[9px] z-50 max-w-[320px] whitespace-normal',
+          'text-[11px] z-50 max-w-[320px] whitespace-normal',
           'hidden group-hover:block',
         )}>
           <div className="text-[var(--text-primary)] font-bold whitespace-nowrap">{fmtFull(day.date)}</div>
@@ -190,25 +190,25 @@ function DayBox({ day, dimension, dimensionId, onMark, onFixDay }: {
           {(day.status === 'missing' || day.status === 'partial') && (
             day.error ? (
               <div className="mt-1.5 pt-1.5 border-t border-kd-border/50">
-                <div className="text-[8px] uppercase tracking-wider text-muted">Last run error</div>
-                <div className="text-[9px] text-risk-red mt-0.5 break-words">{day.error}</div>
+                <div className="text-[10px] uppercase tracking-wider text-muted">Last run error</div>
+                <div className="text-[11px] text-risk-red mt-0.5 break-words">{day.error}</div>
                 {day.last_run_status && (
-                  <div className="text-[8px] text-muted mt-0.5">run status: {day.last_run_status}</div>
+                  <div className="text-[10px] text-muted mt-0.5">run status: {day.last_run_status}</div>
                 )}
               </div>
             ) : (
-              <div className="mt-1.5 pt-1.5 border-t border-kd-border/50 text-[8px] text-muted whitespace-normal">
+              <div className="mt-1.5 pt-1.5 border-t border-kd-border/50 text-[10px] text-muted whitespace-normal">
                 No error logged — likely upstream dependency missing or silent skip.
               </div>
             )
           )}
           {day.coverage_pct != null && day.populated_rows != null && day.total_rows != null && day.total_rows > 0 && (
-            <div className="mt-1.5 pt-1.5 border-t border-kd-border/50 text-[8px] text-muted">
+            <div className="mt-1.5 pt-1.5 border-t border-kd-border/50 text-[10px] text-muted">
               Column fill: {day.populated_rows}/{day.total_rows} ({day.coverage_pct.toFixed(0)}%)
             </div>
           )}
           {day.status === 'ok' && day.coverage_pct != null && day.coverage_pct < 95 && (
-            <div className="mt-0.5 text-[8px] text-risk-amber">
+            <div className="mt-0.5 text-[10px] text-risk-amber">
               Below 95% threshold — partial run.
             </div>
           )}
@@ -222,7 +222,7 @@ function DayBox({ day, dimension, dimensionId, onMark, onFixDay }: {
         <div className={cn(
           'absolute bottom-full left-1/2 -translate-x-1/2 mb-2 p-2 rounded-lg',
           'bg-kd-card border border-kd-border shadow-xl z-50',
-          'text-[9px] whitespace-nowrap min-w-[180px]',
+          'text-[11px] whitespace-nowrap min-w-[180px]',
         )}>
           <div className="text-[var(--text-primary)] font-bold mb-2">{fmtFull(day.date)}</div>
           {canFix && (
@@ -251,7 +251,7 @@ function DayBox({ day, dimension, dimensionId, onMark, onFixDay }: {
                   onChange={e => setForce(e.target.checked)}
                   className="w-3 h-3 accent-risk-amber cursor-pointer"
                 />
-                <span className="text-[9px] text-[var(--text-secondary)]">Force recompute</span>
+                <span className="text-[11px] text-[var(--text-secondary)]">Force recompute</span>
               </label>
               {canMark && <div className="border-t border-kd-border/50 my-1" />}
             </>
@@ -347,7 +347,7 @@ function HealthRowComponent({ row, period, onFix, onMark, onFixDay }: {
     <div className="flex items-center gap-3 py-2">
       <div className="w-28 sm:w-36 shrink-0">
         <div className="flex items-center gap-1">
-          <div className="text-[11px] font-bold text-[var(--text-primary)] truncate">{row.label}</div>
+          <div className="text-[12px] font-bold text-[var(--text-primary)] truncate">{row.label}</div>
           {zeroUpdateWarning && (
             <span
               className="inline-flex items-center text-risk-amber"
@@ -357,11 +357,11 @@ function HealthRowComponent({ row, period, onFix, onMark, onFixDay }: {
             </span>
           )}
         </div>
-        <div className="text-[9px] text-muted mono">
+        <div className="text-[11px] text-muted mono">
           {row.latest_date ? fmtShort(row.latest_date) : 'No data'}
         </div>
         {zeroUpdateWarning && (
-          <div className="text-[8px] text-risk-amber mt-0.5 uppercase tracking-wider">
+          <div className="text-[10px] text-risk-amber mt-0.5 uppercase tracking-wider">
             last fix: 0 rows updated
           </div>
         )}
@@ -382,16 +382,16 @@ function HealthRowComponent({ row, period, onFix, onMark, onFixDay }: {
 
       <div className="w-20 shrink-0 text-right flex items-center justify-end gap-1.5">
         {allGood ? (
-          <span className="text-[9px] font-bold text-risk-green uppercase tracking-wider">Current</span>
+          <span className="text-[11px] font-bold text-risk-green uppercase tracking-wider">Current</span>
         ) : hasGaps ? (
           <span
-            className="text-[9px] font-bold text-risk-red uppercase tracking-wider"
+            className="text-[11px] font-bold text-risk-red uppercase tracking-wider"
             title={row.last_error ? `Most recent error (${row.last_error_date}): ${row.last_error}` : undefined}
           >
             {stats.gaps} gaps
           </span>
         ) : (
-          <span className="text-[9px] text-muted">—</span>
+          <span className="text-[11px] text-muted">—</span>
         )}
         {canFix && (
           <button
@@ -444,7 +444,7 @@ function useHealthInsight(days: number) {
 
 function Legend() {
   return (
-    <div className="flex items-center gap-4 text-[9px] text-muted">
+    <div className="flex items-center gap-4 text-[11px] text-muted">
       <div className="flex items-center gap-1">
         <div className="w-2 h-2 rounded-sm bg-risk-green opacity-90" />
         <span>Present</span>
@@ -598,7 +598,7 @@ export default function DataHealthGrid() {
                 key={p.days}
                 onClick={() => setPeriod(p.days)}
                 className={cn(
-                  'px-2.5 py-1 rounded-md text-[9px] font-bold uppercase tracking-wider transition-all',
+                  'px-2.5 py-1 rounded-md text-[11px] font-bold uppercase tracking-wider transition-all',
                   period === p.days
                     ? 'bg-accent-indigo/20 text-accent-indigo border border-accent-indigo/30'
                     : 'text-muted hover:text-[var(--text-secondary)] hover:bg-kd-elevated'
@@ -626,7 +626,7 @@ export default function DataHealthGrid() {
         <div className="mb-3">
           <div className="flex items-center gap-1.5 mb-1">
             <Database className="w-3 h-3 text-muted" />
-            <span className="text-[9px] font-bold uppercase tracking-widest text-muted">Downloads</span>
+            <span className="text-[11px] font-bold uppercase tracking-widest text-muted">Downloads</span>
           </div>
           <div className="divide-y divide-kd-border/30">
             {downloads.map(row => <HealthRowComponent key={row.id} row={row} period={period} onFix={handleFix} onMark={handleMark} onFixDay={handleFixDay} />)}
@@ -639,7 +639,7 @@ export default function DataHealthGrid() {
         <div>
           <div className="flex items-center gap-1.5 mb-1 mt-2">
             <Cpu className="w-3 h-3 text-muted" />
-            <span className="text-[9px] font-bold uppercase tracking-widest text-muted">Computations</span>
+            <span className="text-[11px] font-bold uppercase tracking-widest text-muted">Computations</span>
           </div>
           <div className="divide-y divide-kd-border/30">
             {snapshots.map(row => <HealthRowComponent key={row.id} row={row} period={period} onFix={handleFix} onMark={handleMark} onFixDay={handleFixDay} />)}

@@ -249,7 +249,7 @@ export default function EquityVisualPulsePage() {
 
         {/* Stock Header */}
         <div className="flex items-center gap-2 flex-wrap mb-1">
-          <span className={`text-[10px] font-mono font-bold ${exchangeColor(meta.exchange)}`}>
+          <span className={`text-[12px] font-mono font-bold ${exchangeColor(meta.exchange)}`}>
             {meta.exchange}
           </span>
           <span className="text-base font-serif font-bold text-primary leading-none">
@@ -259,7 +259,7 @@ export default function EquityVisualPulsePage() {
             {meta.company_name}
           </span>
           {meta.industry && (
-            <span className="text-[10px] font-mono text-muted px-1.5 py-0.5 rounded bg-kd-elevated">
+            <span className="text-[12px] font-mono text-muted px-1.5 py-0.5 rounded bg-kd-elevated">
               {meta.industry}
             </span>
           )}
@@ -279,16 +279,16 @@ export default function EquityVisualPulsePage() {
               {(equityBar.pct_chng ?? 0) >= 0 ? '+' : ''}{(equityBar.pct_chng ?? 0).toFixed(2)}%
             </span>
           )}
-          <span className="text-[10px] font-mono text-muted">
+          <span className="text-[12px] font-mono text-muted">
             {isNow ? 'Latest' : `Candle ${effectiveIdx + 1} / ${bars.length}`}
           </span>
           {isInactive && (
-            <span className="text-[10px] font-mono text-risk-amber bg-risk-amber/10 px-1.5 py-0.5 rounded">
+            <span className="text-[12px] font-mono text-risk-amber bg-risk-amber/10 px-1.5 py-0.5 rounded">
               Inactive — last traded {lastTradeDate}
             </span>
           )}
           {isStaleData && (
-            <span className="text-[10px] font-mono text-muted">
+            <span className="text-[12px] font-mono text-muted">
               Last updated: {meta.exchange} {lastTradeDate} ({daysSinceLastTrade}d delayed)
             </span>
           )}
@@ -309,7 +309,7 @@ export default function EquityVisualPulsePage() {
         </div>
 
         {/* Legend */}
-        <div className="flex gap-3 py-1 text-[8px] font-mono text-muted flex-wrap">
+        <div className="flex gap-3 py-1 text-[10px] font-mono text-muted flex-wrap">
           <span><span className="text-accent-gold">{'\u254C'}</span> Golden Line (SMA 150)</span>
           <span><span className="text-accent-violet">{'\u25CF'}</span> Volume Drive</span>
           <span><span className="text-accent-indigo">{'\u25CF'}</span> Rising Flow</span>
@@ -337,13 +337,13 @@ export default function EquityVisualPulsePage() {
                 benchmarkLabel="NIFTY 500"
               />
               {limitedHistory && (
-                <div className="text-[9px] font-mono text-muted text-center mt-0.5">
+                <div className="text-[11px] font-mono text-muted text-center mt-0.5">
                   Limited history — fewer than 60 trading days available
                 </div>
               )}
             </div>
           ) : (
-            <div className="mt-2 py-4 text-center text-[11px] font-mono text-muted bg-kd-elevated rounded-lg border border-kd-border">
+            <div className="mt-2 py-4 text-center text-[12px] font-mono text-muted bg-kd-elevated rounded-lg border border-kd-border">
               Multi-benchmark RS not yet computed for this stock
             </div>
           )}

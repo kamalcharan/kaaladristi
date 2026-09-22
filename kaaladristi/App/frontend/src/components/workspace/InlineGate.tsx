@@ -176,7 +176,7 @@ export default function InlineGate({ context, isOpen, onDismiss }: InlineGatePro
           padding: '3px 10px', borderRadius: 20, marginBottom: 16,
           background: 'color-mix(in srgb, var(--accent) 15%, transparent)',
           border: '1px solid color-mix(in srgb, var(--accent) 30%, transparent)',
-          fontSize: 11, color: 'var(--accent)', fontFamily: 'var(--font-mono,monospace)' }}>
+          fontSize: 12, color: 'var(--accent)', fontFamily: 'var(--font-mono,monospace)' }}>
           <Lock size={10} />
           PAID FEATURE
         </div>
@@ -195,7 +195,7 @@ export default function InlineGate({ context, isOpen, onDismiss }: InlineGatePro
             background: 'var(--panel-recess)',
             border: '1px solid var(--border)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between',
-              fontSize: 11, color: 'var(--text-muted)', marginBottom: 6 }}>
+              fontSize: 12, color: 'var(--text-muted)', marginBottom: 6 }}>
               <span>Free tier remaining</span>
               <span style={{ color: days <= 2 ? 'var(--caution)' : 'var(--text-muted)' }}>
                 {days} day{days !== 1 ? 's' : ''} left

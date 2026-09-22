@@ -188,7 +188,7 @@ export default function VisualPulsePage() {
             color: bar.close >= (bar.open ?? 0) ? 'var(--risk-green)' : 'var(--risk-red)',
           }}>{bar.close?.toLocaleString()}</span>
           <span style={{
-            fontSize: 10, fontFamily: 'var(--font-mono, monospace)',
+            fontSize: 12, fontFamily: 'var(--font-mono, monospace)',
             color: 'var(--text-muted)',
           }}>
             Candle {effectiveIdx + 1} / {bars.length}
@@ -213,7 +213,7 @@ export default function VisualPulsePage() {
         {/* Legend */}
         <div style={{
           display: 'flex', gap: 14, padding: '4px 0',
-          fontSize: 8, fontFamily: 'var(--font-mono, monospace)', color: 'var(--text-muted)',
+          fontSize: 10, fontFamily: 'var(--font-mono, monospace)', color: 'var(--text-muted)',
         }}>
           <span><span style={{ color: 'var(--accent-gold)' }}>╌</span> Golden Line</span>
           <span><span style={{ color: 'var(--accent-violet)' }}>{'\u25CF'}</span> SVD</span>

@@ -103,12 +103,12 @@ export default function PumpDumpBanner({ result }: PumpDumpBannerProps) {
               {label}
             </span>
             {result.triggerCount > 1 && (
-              <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${showPump ? 'bg-risk-amber/15 text-risk-amber' : 'bg-risk-red/15 text-risk-red'}`}>
+              <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded ${showPump ? 'bg-risk-amber/15 text-risk-amber' : 'bg-risk-red/15 text-risk-red'}`}>
                 {result.triggerCount}x in last 30 days
               </span>
             )}
           </div>
-          <p className="text-[11px] text-secondary mt-1 leading-relaxed">
+          <p className="text-[12px] text-secondary mt-1 leading-relaxed">
             Flagged in Manipulation Watch. {reasons}
             {result.latestTriggerDate && (
               <span className="text-muted"> Last triggered: {result.latestTriggerDate}</span>
@@ -116,7 +116,7 @@ export default function PumpDumpBanner({ result }: PumpDumpBannerProps) {
           </p>
           <Link
             to="/manipulation-watch"
-            className={`inline-block text-[10px] font-mono ${textColor} hover:underline mt-1.5`}
+            className={`inline-block text-[12px] font-mono ${textColor} hover:underline mt-1.5`}
           >
             View in Manipulation Watch &rarr;
           </Link>

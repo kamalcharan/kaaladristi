@@ -63,7 +63,7 @@ export default function HistoricalContextCard({ date }: { date: string }) {
     }}>
       {/* Header */}
       <div style={{
-        fontSize: 9,
+        fontSize: 11,
         letterSpacing: '0.2em',
         textTransform: 'uppercase',
         color: 'var(--text-faint)',
@@ -73,19 +73,19 @@ export default function HistoricalContextCard({ date }: { date: string }) {
       </div>
 
       {isLoading && (
-        <div style={{ fontSize: 11, color: 'var(--text-faint)', paddingBottom: 4 }}>
+        <div style={{ fontSize: 12, color: 'var(--text-faint)', paddingBottom: 4 }}>
           Loading…
         </div>
       )}
 
       {isError && (
-        <div style={{ fontSize: 11, color: 'var(--text-faint)', paddingBottom: 4 }}>
+        <div style={{ fontSize: 12, color: 'var(--text-faint)', paddingBottom: 4 }}>
           Unavailable — backend offline
         </div>
       )}
 
       {data && !data.available && (
-        <div style={{ fontSize: 11, color: 'var(--text-faint)', paddingBottom: 4 }}>
+        <div style={{ fontSize: 12, color: 'var(--text-faint)', paddingBottom: 4 }}>
           No panchāṅgam data for this date
         </div>
       )}
@@ -100,30 +100,30 @@ export default function HistoricalContextCard({ date }: { date: string }) {
             <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 2, lineHeight: 1.5 }}>
               {conditions.vara} · {conditions.nakshatra_lord} Nakshatra · {conditions.paksha}
             </div>
-            <div style={{ fontSize: 11, color: 'var(--text-faint)', marginBottom: 14 }}>
+            <div style={{ fontSize: 12, color: 'var(--text-faint)', marginBottom: 14 }}>
               Breadth: {conditions.breadth_regime}
             </div>
 
             {/* Stats block */}
             {occurrences === 0 ? (
-              <div style={{ fontSize: 11, color: 'var(--text-faint)', marginBottom: 14 }}>
+              <div style={{ fontSize: 12, color: 'var(--text-faint)', marginBottom: 14 }}>
                 No historical data for this combination
               </div>
             ) : (
               <>
                 <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '4px 12px', marginBottom: 14 }}>
-                  <span style={{ fontSize: 10, color: 'var(--text-faint)' }}>Similar days since 2007</span>
-                  <span style={{ fontSize: 11, color: 'var(--text-primary)' }}>
+                  <span style={{ fontSize: 12, color: 'var(--text-faint)' }}>Similar days since 2007</span>
+                  <span style={{ fontSize: 12, color: 'var(--text-primary)' }}>
                     {occurrences < 20 ? `${occurrences} (limited data)` : occurrences}
                   </span>
 
-                  <span style={{ fontSize: 10, color: 'var(--text-faint)' }}>Nifty positive</span>
-                  <span style={{ fontSize: 11, color: 'var(--text-primary)' }}>
+                  <span style={{ fontSize: 12, color: 'var(--text-faint)' }}>Nifty positive</span>
+                  <span style={{ fontSize: 12, color: 'var(--text-primary)' }}>
                     {positive_pct !== null ? `${positive_pct.toFixed(1)}%` : '—'}
                   </span>
 
-                  <span style={{ fontSize: 10, color: 'var(--text-faint)' }}>Average day return</span>
-                  <span style={{ fontSize: 11, color: 'var(--text-primary)' }}>
+                  <span style={{ fontSize: 12, color: 'var(--text-faint)' }}>Average day return</span>
+                  <span style={{ fontSize: 12, color: 'var(--text-primary)' }}>
                     {avg_return !== null ? fmtReturn(avg_return) : '—'}
                   </span>
                 </div>
@@ -131,7 +131,7 @@ export default function HistoricalContextCard({ date }: { date: string }) {
                 {/* Recent occurrences */}
                 {recent.length > 0 && (
                   <>
-                    <div style={{ fontSize: 10, color: 'var(--text-faint)', marginBottom: 6 }}>
+                    <div style={{ fontSize: 12, color: 'var(--text-faint)', marginBottom: 6 }}>
                       Recent occurrences
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 3, marginBottom: 14 }}>
@@ -139,7 +139,7 @@ export default function HistoricalContextCard({ date }: { date: string }) {
                         <div key={r.date} style={{
                           display: 'flex',
                           justifyContent: 'space-between',
-                          fontSize: 11,
+                          fontSize: 12,
                           color: 'var(--text-secondary)',
                         }}>
                           <span>{fmtDate(r.date)}</span>
@@ -154,7 +154,7 @@ export default function HistoricalContextCard({ date }: { date: string }) {
 
             {/* Divider + disclaimer */}
             <div style={{ borderTop: '1px solid var(--border)', paddingTop: 10 }}>
-              <div style={{ fontSize: 10, color: 'var(--text-faint)', letterSpacing: '0.04em' }}>
+              <div style={{ fontSize: 12, color: 'var(--text-faint)', letterSpacing: '0.04em' }}>
                 Historical data only. Not a forecast.
               </div>
             </div>

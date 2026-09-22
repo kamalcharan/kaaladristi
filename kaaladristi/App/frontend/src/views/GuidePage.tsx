@@ -57,7 +57,7 @@ export default function GuidePage() {
           </div>
         </div>
 
-        <div style={{ fontFamily: MONO, fontSize: 10, letterSpacing: '.12em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 10 }}>
+        <div style={{ fontFamily: MONO, fontSize: 12, letterSpacing: '.12em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 10 }}>
           Each row opens the real page with a short walk on live data
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -69,13 +69,13 @@ export default function GuidePage() {
             return (
               <div key={key} data-tour={`guide-row-${key}`} style={{ display: 'flex', gap: 12, alignItems: 'center', padding: '12px 14px',
                 borderRadius: 12, background: 'var(--card)', border: `1px solid ${date ? 'var(--accent-dim)' : 'var(--border)'}`, minWidth: 0 }}>
-                <span style={{ fontFamily: MONO, fontSize: 11, color: date ? 'var(--bull)' : 'var(--accent)', width: 22, flexShrink: 0 }}>
+                <span style={{ fontFamily: MONO, fontSize: 12, color: date ? 'var(--bull)' : 'var(--accent)', width: 22, flexShrink: 0 }}>
                   {date ? '✓' : `0${i + 1}`}
                 </span>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
                     <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>{row.name}</span>
-                    <span style={{ fontFamily: MONO, fontSize: 10, color: 'var(--text-muted)' }}>{kind}{date ? ` · walked ${date}` : ''}</span>
+                    <span style={{ fontFamily: MONO, fontSize: 12, color: 'var(--text-muted)' }}>{kind}{date ? ` · walked ${date}` : ''}</span>
                   </div>
                   <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.45, marginTop: 2 }}>{row.why}</div>
                 </div>

@@ -59,7 +59,7 @@ export default function ConfidenceDial({ n_instances, hit_rate }: ConfidenceDial
   return (
     <div>
       <div style={{
-        fontSize: 9, fontFamily: 'var(--font-mono, monospace)',
+        fontSize: 11, fontFamily: 'var(--font-mono, monospace)',
         color: 'var(--text-muted)', letterSpacing: '0.1em',
         textTransform: 'uppercase', marginBottom: 10,
       }}>
@@ -87,14 +87,14 @@ export default function ConfidenceDial({ n_instances, hit_rate }: ConfidenceDial
             />
             <text
               x={CX} y={CY - 5}
-              textAnchor="middle" fontSize={11} fontWeight={600}
+              textAnchor="middle" fontSize={12} fontWeight={600}
               fill={color} fontFamily="var(--font-display, serif)"
             >
               {level}
             </text>
             <text
               x={CX} y={CY + 10}
-              textAnchor="middle" fontSize={9}
+              textAnchor="middle" fontSize={11}
               fill="color-mix(in srgb, var(--text-primary) 40%, transparent)" fontFamily="monospace"
             >
               n={n_instances}
@@ -110,7 +110,7 @@ export default function ConfidenceDial({ n_instances, hit_rate }: ConfidenceDial
             return (
               <div key={row.label} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span style={{
-                  width: 20, fontSize: 9, fontFamily: 'monospace',
+                  width: 20, fontSize: 11, fontFamily: 'monospace',
                   color: 'var(--text-faint)', flexShrink: 0, textAlign: 'right',
                 }}>
                   {row.pos}
@@ -120,7 +120,7 @@ export default function ConfidenceDial({ n_instances, hit_rate }: ConfidenceDial
                   background: isActive ? color : 'color-mix(in srgb, var(--text-primary) 7%, transparent)',
                 }} />
                 <span style={{
-                  fontSize: 10, fontFamily: 'var(--font-mono, monospace)',
+                  fontSize: 12, fontFamily: 'var(--font-mono, monospace)',
                   color: rowColor, fontWeight: isActive ? 600 : 400, flexShrink: 0,
                 }}>
                   {row.label}
@@ -129,7 +129,7 @@ export default function ConfidenceDial({ n_instances, hit_rate }: ConfidenceDial
             )
           })}
           <p style={{
-            fontSize: 10, color: 'var(--text-faint)',
+            fontSize: 12, color: 'var(--text-faint)',
             fontFamily: 'var(--font-mono, monospace)',
             marginTop: 4, lineHeight: 1.5,
           }}>

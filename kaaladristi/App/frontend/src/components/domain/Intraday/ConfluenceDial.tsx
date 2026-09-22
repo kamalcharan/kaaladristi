@@ -34,7 +34,7 @@ function Bar({ label, value, max, weight, color, grey, caption }: BarProps) {
     <div style={{ marginTop: 6 }}>
       <div style={{
         display: 'flex', justifyContent: 'space-between',
-        fontFamily: 'var(--font-mono, monospace)', fontSize: 9,
+        fontFamily: 'var(--font-mono, monospace)', fontSize: 11,
         color: grey ? 'var(--text-faint)' : 'var(--text-muted)',
         letterSpacing: '0.06em', marginBottom: 2,
       }}>
@@ -78,7 +78,7 @@ export default function ConfluenceDial({ breakdown }: ConfluenceDialProps) {
     }}>
       {/* Header */}
       <div style={{
-        fontFamily: 'var(--font-mono, monospace)', fontSize: 9,
+        fontFamily: 'var(--font-mono, monospace)', fontSize: 11,
         color: 'var(--text-faint)', letterSpacing: '0.12em',
         textTransform: 'uppercase', marginBottom: 6,
       }}>Confluence</div>
@@ -104,7 +104,7 @@ export default function ConfluenceDial({ breakdown }: ConfluenceDialProps) {
           </text>
           <text x={42} y={52}
             textAnchor="middle"
-            fontSize={8} fill="var(--text-faint)"
+            fontSize={10} fill="var(--text-faint)"
             fontFamily="var(--font-mono, monospace)">/10</text>
         </svg>
       </div>
@@ -112,7 +112,7 @@ export default function ConfluenceDial({ breakdown }: ConfluenceDialProps) {
       {/* Label */}
       <div style={{
         textAlign: 'center', marginTop: 4,
-        fontFamily: 'var(--font-mono, monospace)', fontSize: 10,
+        fontFamily: 'var(--font-mono, monospace)', fontSize: 12,
         color, fontWeight: 700, letterSpacing: '0.12em',
       }}>{label}</div>
 

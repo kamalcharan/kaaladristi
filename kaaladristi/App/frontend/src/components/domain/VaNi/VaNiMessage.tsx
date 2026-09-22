@@ -17,7 +17,7 @@ export function VaNiAvatar({ pulse = false }: { pulse?: boolean }) {
         (pulse ? ' animate-pulse' : '')
       }
     >
-      <span className="text-white text-[9px] font-serif font-bold">V</span>
+      <span className="text-white text-[11px] font-serif font-bold">V</span>
     </div>
   );
 }
@@ -31,7 +31,7 @@ export function VaNiThinking({ label = 'VaNi is analysing...' }: { label?: strin
       <div className="px-4 py-3 rounded-2xl rounded-tl-md bg-[#161233] border border-[var(--accent-indigo)]/15">
         <div className="flex items-center gap-2.5">
           <Loader2 className="w-3.5 h-3.5 animate-spin text-[var(--accent-indigo)]" />
-          <span className="text-[11px] text-white/40">{label}</span>
+          <span className="text-[12px] text-white/40">{label}</span>
         </div>
       </div>
     </div>
@@ -79,7 +79,7 @@ export default function VaNiMessage({
           {msg.link && onFollowLink && (
             <button
               onClick={() => {const destination=vaniDestination(msg.link!.href);if(destination)trackVani('next_step',{...analyticsContext,destination,area:'reading'});onFollowLink(msg.link!.href)}}
-              className="mt-2.5 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--accent-indigo)]/15 border border-[var(--accent-indigo)]/30 text-[11px] font-medium text-[var(--accent-indigo)] hover:bg-[var(--accent-indigo)]/25 transition-colors"
+              className="mt-2.5 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--accent-indigo)]/15 border border-[var(--accent-indigo)]/30 text-[12px] font-medium text-[var(--accent-indigo)] hover:bg-[var(--accent-indigo)]/25 transition-colors"
             >
               {msg.link.label}
               <ArrowRight className="w-3 h-3" />
@@ -89,7 +89,7 @@ export default function VaNiMessage({
         <div className="flex items-center gap-2 mt-1.5 px-2">
           {msg.logId && <VaNiFeedback analyticsContext={analyticsContext} logId={msg.logId} />}
           {msg.cached && (
-            <span className="text-[8px] font-mono text-[var(--accent-indigo)]/40 uppercase tracking-widest">
+            <span className="text-[10px] font-mono text-[var(--accent-indigo)]/40 uppercase tracking-widest">
               instant response
             </span>
           )}
@@ -103,7 +103,7 @@ export default function VaNiMessage({
                 onClearCache(msg);
               }}
               title="Clear this intent's cache"
-              className="ml-auto flex items-center gap-1 text-[8px] font-mono text-risk-red/30 hover:text-risk-red/70 transition-colors"
+              className="ml-auto flex items-center gap-1 text-[10px] font-mono text-risk-red/30 hover:text-risk-red/70 transition-colors"
             >
               <Trash2 className="w-3 h-3" />
               <span>clear cache</span>

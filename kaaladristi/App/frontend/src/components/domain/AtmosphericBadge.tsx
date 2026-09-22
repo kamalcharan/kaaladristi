@@ -19,7 +19,7 @@ export default function AtmosphericBadge() {
   return (
     <span style={{
       display: 'flex', alignItems: 'center', gap: 5,
-      fontSize: 11, color: atm.color,
+      fontSize: 12, color: atm.color,
       fontFamily: 'var(--font-mono)',
     }}>
       <span style={{

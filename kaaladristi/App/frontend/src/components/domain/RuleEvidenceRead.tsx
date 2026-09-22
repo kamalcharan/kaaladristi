@@ -27,7 +27,7 @@ export default function RuleEvidenceRead({ ruleId }: { ruleId: number | null }) 
       {/* Role chip — readiness framing, never direction */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 7 }}>
         <span style={{
-          fontSize: 9, letterSpacing: '0.1em', textTransform: 'uppercase',
+          fontSize: 11, letterSpacing: '0.1em', textTransform: 'uppercase',
           padding: '2px 7px', borderRadius: 4,
           fontFamily: 'var(--font-mono,monospace)',
           background: read.role === 'watch'
@@ -43,7 +43,7 @@ export default function RuleEvidenceRead({ ruleId }: { ruleId: number | null }) 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         {read.paragraphs.map((para, i) => (
           <p key={i} style={{
-            fontSize: 11.5, lineHeight: 1.55, margin: 0,
+            fontSize: 12, lineHeight: 1.55, margin: 0,
             color: i === read.paragraphs.length - 1 ? 'var(--text-primary)' : 'var(--text-secondary)',
           }}>
             {para}
@@ -56,7 +56,7 @@ export default function RuleEvidenceRead({ ruleId }: { ruleId: number | null }) 
         <div style={{
           marginTop: 9, paddingTop: 7,
           borderTop: '1px solid color-mix(in srgb, var(--text-primary) 8%, transparent)',
-          fontSize: 9.5, lineHeight: 1.6,
+          fontSize: 11, lineHeight: 1.6,
           fontFamily: 'var(--font-mono,monospace)',
           color: 'color-mix(in srgb, var(--text-primary) 45%, transparent)',
         }}>

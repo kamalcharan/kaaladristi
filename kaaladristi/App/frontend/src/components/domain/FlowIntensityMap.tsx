@@ -201,7 +201,7 @@ function toggleBtnStyle(active: boolean): React.CSSProperties {
     borderRadius: 4,
     border: 'none',
     cursor: 'pointer',
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: active ? 600 : 400,
     background: active ? 'color-mix(in srgb, var(--text-primary) 8%, transparent)' : 'transparent',
     color: active ? 'var(--text-primary)' : 'var(--text-muted)',
@@ -352,7 +352,7 @@ export default function FlowIntensityMap({
               {bseRows?.has(row) && (
                 <span
                   style={{
-                    fontSize: 8, fontWeight: 700, letterSpacing: '0.05em',
+                    fontSize: 10, fontWeight: 700, letterSpacing: '0.05em',
                     color: 'var(--text-secondary)',
                     background: 'color-mix(in srgb, var(--text-primary) 9%, transparent)',
                     border: '1px solid color-mix(in srgb, var(--text-primary) 18%, transparent)',
@@ -375,7 +375,7 @@ export default function FlowIntensityMap({
             display: 'flex',
             alignItems: 'center',
             color: 'var(--text-muted)',
-            fontSize: 9,
+            fontSize: 11,
             letterSpacing: '0.08em',
             textTransform: 'uppercase',
             fontFamily: 'monospace',
@@ -414,7 +414,7 @@ export default function FlowIntensityMap({
                   flexShrink: 0,
                   textAlign: 'center',
                   color: 'var(--text-muted)',
-                  fontSize: 10,
+                  fontSize: 12,
                   overflow: 'hidden',
                   height: HEADER_ROW_H,
                   display: 'flex',
@@ -498,7 +498,7 @@ export default function FlowIntensityMap({
 
       {/* ── Footer (chrome only — hidden when embedded bare) ── */}
       {!bare && (
-        <div style={{ marginTop: 12, color: 'var(--text-muted)', fontSize: 10, lineHeight: 1.5 }}>
+        <div style={{ marginTop: 12, color: 'var(--text-muted)', fontSize: 12, lineHeight: 1.5 }}>
           Cell fill = money-flow conviction (Flow 5D vs its 1-month pace). Cell number = Flow 5D. Top edge = 5D price-return direction.
           {onRowClick && (mode === 'index' ? ' Click an index name to open its detail.' : ' Click a symbol to open its detail.')}
         </div>
@@ -535,54 +535,54 @@ export default function FlowIntensityMap({
           <div style={{ fontFamily: 'monospace', fontWeight: 600, fontSize: 12, color: 'var(--text-primary)', marginBottom: 4 }}>
             {tooltip.row}
           </div>
-          <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 6 }}>
+          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 6 }}>
             {tooltip.date}
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '2px 12px' }}>
-            <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>Traded Value</span>
-            <span style={{ fontSize: 10, fontFamily: 'monospace', color: 'var(--text-primary)', textAlign: 'right' }}>
+            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Traded Value</span>
+            <span style={{ fontSize: 12, fontFamily: 'monospace', color: 'var(--text-primary)', textAlign: 'right' }}>
               {fmtCr(tooltip.cell.amt)}
             </span>
-            <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>{amtLabels.a5}</span>
-            <span style={{ fontSize: 10, fontFamily: 'monospace', color: 'var(--text-primary)', textAlign: 'right' }}>
+            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{amtLabels.a5}</span>
+            <span style={{ fontSize: 12, fontFamily: 'monospace', color: 'var(--text-primary)', textAlign: 'right' }}>
               {tooltip.cell.amt_5d != null ? fmtCr(tooltip.cell.amt_5d) : '—'}
             </span>
-            <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>{amtLabels.a22}</span>
-            <span style={{ fontSize: 10, fontFamily: 'monospace', color: 'var(--text-primary)', textAlign: 'right' }}>
+            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{amtLabels.a22}</span>
+            <span style={{ fontSize: 12, fontFamily: 'monospace', color: 'var(--text-primary)', textAlign: 'right' }}>
               {tooltip.cell.amt_22d != null ? fmtCr(tooltip.cell.amt_22d) : '—'}
             </span>
-            <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>Flow 5D</span>
-            <span style={{ fontSize: 10, fontFamily: 'monospace', color: 'var(--text-primary)', textAlign: 'right' }}>
+            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Flow 5D</span>
+            <span style={{ fontSize: 12, fontFamily: 'monospace', color: 'var(--text-primary)', textAlign: 'right' }}>
               {tooltip.cell.s5 != null ? tooltip.cell.s5.toFixed(1) : '—'}
             </span>
-            <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>Flow 22D</span>
-            <span style={{ fontSize: 10, fontFamily: 'monospace', color: 'var(--text-primary)', textAlign: 'right' }}>
+            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Flow 22D</span>
+            <span style={{ fontSize: 12, fontFamily: 'monospace', color: 'var(--text-primary)', textAlign: 'right' }}>
               {tooltip.cell.s22 != null ? tooltip.cell.s22.toFixed(1) : '—'}
             </span>
-            <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>1D Change</span>
+            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>1D Change</span>
             <span style={{
-              fontSize: 10, fontFamily: 'monospace', textAlign: 'right',
+              fontSize: 12, fontFamily: 'monospace', textAlign: 'right',
               color: tooltip.cell.d1 >= 0 ? 'var(--risk-green)' : 'var(--risk-red)',
             }}>
               {fmtPct(tooltip.cell.d1)}
             </span>
-            <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>5D Return</span>
+            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>5D Return</span>
             <span style={{
-              fontSize: 10, fontFamily: 'monospace', textAlign: 'right',
+              fontSize: 12, fontFamily: 'monospace', textAlign: 'right',
               color: (tooltip.cell.ret_5d ?? 0) >= 0 ? 'var(--risk-green)' : 'var(--risk-red)',
             }}>
               {fmtPct(tooltip.cell.ret_5d)}
             </span>
-            <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>22D Return</span>
+            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>22D Return</span>
             <span style={{
-              fontSize: 10, fontFamily: 'monospace', textAlign: 'right',
+              fontSize: 12, fontFamily: 'monospace', textAlign: 'right',
               color: (tooltip.cell.ret_22d ?? 0) >= 0 ? 'var(--risk-green)' : 'var(--risk-red)',
             }}>
               {fmtPct(tooltip.cell.ret_22d)}
             </span>
-            <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>Flow Signal</span>
-            <span style={{ fontSize: 10, fontFamily: 'monospace', color: 'var(--text-primary)', textAlign: 'right' }}>
+            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Flow Signal</span>
+            <span style={{ fontSize: 12, fontFamily: 'monospace', color: 'var(--text-primary)', textAlign: 'right' }}>
               {tooltip.cell.s5 == null || tooltip.cell.s22 == null ? 'Unavailable' : SIGNAL_LABEL[tooltip.signal]}
             </span>
           </div>

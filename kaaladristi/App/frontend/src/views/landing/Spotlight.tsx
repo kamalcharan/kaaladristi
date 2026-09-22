@@ -62,7 +62,7 @@ export function Spotlight() {
         background: { type: ColorType.Solid, color: C.bg1 },
         textColor: C.ink3,
         fontFamily: MONO,
-        fontSize: 10,
+        fontSize: 12,
         attributionLogo: false,
       },
       grid: {
@@ -172,21 +172,21 @@ export function Spotlight() {
                   width: 6, height: 6, borderRadius: '50%', background: C.g1,
                   boxShadow: `0 0 8px ${C.glow}`, display: 'inline-block',
                 }} />
-                <span style={{ fontFamily: MONO, fontSize: 11, letterSpacing: '.16em', textTransform: 'uppercase', color: C.ink2 }}>
+                <span style={{ fontFamily: MONO, fontSize: 12, letterSpacing: '.16em', textTransform: 'uppercase', color: C.ink2 }}>
                   {isEquity ? 'NSE Equity · Daily' : `${data?.index_name ?? 'NIFTY 500'} · Daily`}
                 </span>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
                 {isEquity && (
                   <span style={{
-                    fontFamily: MONO, fontSize: 10, letterSpacing: '.12em', textTransform: 'uppercase',
+                    fontFamily: MONO, fontSize: 12, letterSpacing: '.12em', textTransform: 'uppercase',
                     color: C.g1, border: `1px solid ${C.rule}`, background: C.rs,
                     padding: '4px 10px', borderRadius: 3,
                   }}>
                     Identity revealed inside
                   </span>
                 )}
-                <span style={{ fontFamily: MONO, fontSize: 10, letterSpacing: '.12em', color: C.ink3 }}>
+                <span style={{ fontFamily: MONO, fontSize: 12, letterSpacing: '.12em', color: C.ink3 }}>
                   {data ? `AS OF ${data.trade_date}` : 'LOADING'}
                 </span>
               </div>
@@ -197,7 +197,7 @@ export function Spotlight() {
               {!data && (
                 <div style={{
                   height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontFamily: MONO, fontSize: 11, letterSpacing: '.18em', textTransform: 'uppercase', color: C.ink4,
+                  fontFamily: MONO, fontSize: 12, letterSpacing: '.18em', textTransform: 'uppercase', color: C.ink4,
                 }}>
                   Reading today&rsquo;s tape…
                 </div>
@@ -209,7 +209,7 @@ export function Spotlight() {
               <div style={{
                 display: 'flex', alignItems: 'center', gap: 18, flexWrap: 'wrap',
                 padding: '8px 18px', borderTop: `1px solid ${C.rule}`,
-                fontFamily: MONO, fontSize: 10, letterSpacing: '.08em', color: C.ink4,
+                fontFamily: MONO, fontSize: 12, letterSpacing: '.08em', color: C.ink4,
               }}>
                 <span><span style={{ color: C.g2 }}>──</span>&nbsp;EMA 20</span>
                 <span><span style={{ color: C.g1 }}>──</span>&nbsp;Magic RS (lower band)</span>
@@ -225,7 +225,7 @@ export function Spotlight() {
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 20, flexWrap: 'wrap' }}>
                 {(data?.scan_counts ?? []).map((s) => (
-                  <span key={s.id} style={{ fontFamily: MONO, fontSize: 11, color: C.ink3, letterSpacing: '.06em' }}>
+                  <span key={s.id} style={{ fontFamily: MONO, fontSize: 12, color: C.ink3, letterSpacing: '.06em' }}>
                     {s.label} · <span style={{ color: C.g1 }}>{s.count}</span> met conditions today
                   </span>
                 ))}
@@ -239,7 +239,7 @@ export function Spotlight() {
 
         <FadeUp delay={120}>
           <p style={{
-            fontFamily: MONO, fontSize: 10, letterSpacing: '.08em', lineHeight: 1.7,
+            fontFamily: MONO, fontSize: 12, letterSpacing: '.08em', lineHeight: 1.7,
             color: C.ink4, marginTop: 14, maxWidth: '72ch',
           }}>
             Pattern research data, refreshed daily from NSE end-of-day feeds. Selection reflects

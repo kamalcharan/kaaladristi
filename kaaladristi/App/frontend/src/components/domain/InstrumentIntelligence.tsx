@@ -53,7 +53,7 @@ function Dimension({
     <div className={cn('p-3 rounded-xl border border-kd-border bg-kd-surface/50', className)}>
       <div className="flex items-center gap-1.5 mb-2">
         <Icon className="w-3 h-3 text-accent-indigo" />
-        <span className="text-[9px] font-bold uppercase tracking-widest text-muted">{label}</span>
+        <span className="text-[11px] font-bold uppercase tracking-widest text-muted">{label}</span>
       </div>
       {children}
     </div>
@@ -70,14 +70,14 @@ function MomentumDots({ rsi, mfi, alignment }: { rsi: number | null; mfi: number
       <div className="flex items-center gap-3 mb-1">
         <div className="flex items-center gap-1">
           <span className={cn('w-2 h-2 rounded-full', rsiUp ? 'bg-risk-green' : 'bg-risk-red')} />
-          <span className="text-[10px] text-[var(--text-secondary)]">RSI</span>
+          <span className="text-[12px] text-[var(--text-secondary)]">RSI</span>
         </div>
         <div className="flex items-center gap-1">
           <span className={cn('w-2 h-2 rounded-full', mfiUp ? 'bg-risk-green' : 'bg-risk-red')} />
-          <span className="text-[10px] text-[var(--text-secondary)]">MFI</span>
+          <span className="text-[12px] text-[var(--text-secondary)]">MFI</span>
         </div>
       </div>
-      <div className={cn('text-[10px] font-bold',
+      <div className={cn('text-[12px] font-bold',
         alignment === 'aligned_up' ? 'text-risk-green' :
         alignment === 'aligned_down' ? 'text-risk-red' : 'text-risk-amber'
       )}>
@@ -107,7 +107,7 @@ function RSBar({ zone }: { zone: string | null }) {
           style={{ left: `${pct}%`, transform: `translate(-50%, -50%)` }}
         />
       </div>
-      <div className={cn('text-[10px] font-bold text-center',
+      <div className={cn('text-[12px] font-bold text-center',
         (zone?.includes('Bull')) ? 'text-risk-green' :
         (zone?.includes('Bear')) ? 'text-risk-red' : 'text-risk-amber'
       )}>
@@ -130,9 +130,9 @@ function VolumeCharacter({ character, rvol }: { character: string; rvol: number 
   const c = config[character] ?? config.unknown;
   return (
     <div>
-      <div className={cn('text-[11px] font-bold', c.color)}>{c.label}</div>
+      <div className={cn('text-[12px] font-bold', c.color)}>{c.label}</div>
       {rvol != null && (
-        <div className="text-[9px] text-muted mt-0.5">RVOL {rvol.toFixed(2)}x</div>
+        <div className="text-[11px] text-muted mt-0.5">RVOL {rvol.toFixed(2)}x</div>
       )}
     </div>
   );
@@ -212,7 +212,7 @@ export default function InstrumentIntelligence({ id, type, date }: InstrumentInt
         </div>
         {/* Alignment badge */}
         <div className={cn(
-          'flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-bold border',
+          'flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[12px] font-bold border',
           alignCfg.color, alignCfg.bg, alignCfg.border,
         )}>
           <span>{alignCfg.icon}</span>
@@ -227,18 +227,18 @@ export default function InstrumentIntelligence({ id, type, date }: InstrumentInt
       )}>
         <div>
           <div className={cn('text-[13px] font-bold', flowCfg.color)}>{flowCfg.label}</div>
-          <div className="text-[10px] text-[var(--text-secondary)]">{flowCfg.meaning}</div>
+          <div className="text-[12px] text-[var(--text-secondary)]">{flowCfg.meaning}</div>
         </div>
         <div className="text-right">
-          <div className="text-[10px] text-muted uppercase tracking-wider">GL Bias</div>
-          <div className={cn('text-[11px] font-bold',
+          <div className="text-[12px] text-muted uppercase tracking-wider">GL Bias</div>
+          <div className={cn('text-[12px] font-bold',
             ctx.golden_line.bias === 'bullish' ? 'text-risk-green' :
             ctx.golden_line.bias === 'bearish' ? 'text-risk-red' : 'text-risk-amber'
           )}>
             {ctx.golden_line.bias === 'bullish' ? 'Above GL' :
              ctx.golden_line.bias === 'bearish' ? 'Below GL' : 'At GL'}
             {ctx.golden_line.distance_pct != null && (
-              <span className="text-[9px] text-muted ml-1">({ctx.golden_line.distance_pct > 0 ? '+' : ''}{ctx.golden_line.distance_pct}%)</span>
+              <span className="text-[11px] text-muted ml-1">({ctx.golden_line.distance_pct > 0 ? '+' : ''}{ctx.golden_line.distance_pct}%)</span>
             )}
           </div>
         </div>
@@ -247,14 +247,14 @@ export default function InstrumentIntelligence({ id, type, date }: InstrumentInt
       {/* 4-dimension grid */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
         <Dimension icon={Users} label="Participation">
-          <div className={cn('text-[11px] font-bold',
+          <div className={cn('text-[12px] font-bold',
             ctx.participation.profile.includes('institution') ? 'text-risk-red' :
             ctx.participation.profile.includes('hot-money') ? 'text-risk-amber' : 'text-[var(--text-muted)]'
           )}>
             {ctx.participation.profile.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
           </div>
           {ctx.participation.institution != null && (
-            <div className="text-[9px] text-muted mt-0.5">
+            <div className="text-[11px] text-muted mt-0.5">
               Inst: {ctx.participation.institution.toFixed(0)} · Hot$: {ctx.participation.hot_money?.toFixed(0) ?? '—'}
             </div>
           )}
@@ -279,7 +279,7 @@ export default function InstrumentIntelligence({ id, type, date }: InstrumentInt
           {alerts.map((alert, i) => (
             <div key={i} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-risk-amber/5 border border-risk-amber/20">
               <AlertTriangle className="w-3 h-3 text-risk-amber shrink-0" />
-              <span className="text-[10px] text-[var(--text-secondary)]">{alert}</span>
+              <span className="text-[12px] text-[var(--text-secondary)]">{alert}</span>
             </div>
           ))}
         </div>

@@ -66,7 +66,7 @@ export function KaalaLoader({
       >
         {message}
         {subtext && (
-          <div className="text-[10px] text-[var(--text-muted)] mt-1 lowercase font-normal tracking-normal italic not-italic normal-case">
+          <div className="text-[12px] text-[var(--text-muted)] mt-1 lowercase font-normal tracking-normal italic not-italic normal-case">
             {subtext}
           </div>
         )}

@@ -23,7 +23,7 @@ function FlowChip({ flowType }: { flowType: string | null }) {
   const config = FLOW_LABELS[flowType] ?? { label: flowType, color: 'text-muted' };
   const bg = FLOW_BG[config.color] ?? 'bg-kd-elevated/30';
   return (
-    <span className={cn('text-[10px] font-bold px-2 py-0.5 rounded-md', config.color, bg)}>
+    <span className={cn('text-[12px] font-bold px-2 py-0.5 rounded-md', config.color, bg)}>
       {config.label}
     </span>
   );
@@ -54,14 +54,14 @@ function IndustryRow({
         className="w-full flex items-center gap-2 px-3 py-2.5 hover:bg-kd-elevated/30 transition-colors text-left group"
       >
         {/* Rank badge */}
-        <span className="text-[10px] font-mono font-bold text-muted shrink-0 w-6 text-right">
+        <span className="text-[12px] font-mono font-bold text-muted shrink-0 w-6 text-right">
           {item.industry_rank}
         </span>
 
         {/* Rank change arrow */}
         {item.rank_change !== 0 && (
           <span className={cn(
-            'text-[10px] font-bold flex items-center gap-0.5 shrink-0 w-7',
+            'text-[12px] font-bold flex items-center gap-0.5 shrink-0 w-7',
             rankUp ? 'text-risk-green' : rankDown ? 'text-risk-red' : 'text-muted'
           )}>
             {rankUp ? <TrendingUp className="w-2.5 h-2.5" /> : <TrendingDown className="w-2.5 h-2.5" />}
@@ -75,7 +75,7 @@ function IndustryRow({
           <span className="text-xs font-medium text-[var(--text-primary)] block leading-tight" title={item.industry}>
             {item.industry.length > 28 ? item.industry.slice(0, 26) + '...' : item.industry}
           </span>
-          <span className="text-[9px] text-muted leading-tight">{item.stock_count} stk</span>
+          <span className="text-[11px] text-muted leading-tight">{item.stock_count} stk</span>
         </div>
 
         {/* Flow chip — hide on small screens to give name more room */}
@@ -149,7 +149,7 @@ function RotationColumn({
         <h4 className="text-xs font-bold uppercase tracking-wider text-[var(--text-primary)]">
           {title}
         </h4>
-        <span className="text-[10px] text-muted ml-auto">{items.length}</span>
+        <span className="text-[12px] text-muted ml-auto">{items.length}</span>
       </div>
       {items.length > 0 ? (
         <div className="flex-1">
@@ -187,17 +187,17 @@ export default function IndustryRotationPanel() {
               <h3 className="text-sm font-bold text-[var(--text-primary)]">Industry Rotation</h3>
               {/* NSE-only scope pill — BSE coverage deferred pending industry-tag backfill. */}
               <span
-                className="text-[9px] font-mono text-accent-indigo bg-accent-indigo/10 border border-accent-indigo/30 px-1.5 py-0.5 rounded"
+                className="text-[11px] font-mono text-accent-indigo bg-accent-indigo/10 border border-accent-indigo/30 px-1.5 py-0.5 rounded"
                 title="NSE-only universe for now. BSE industry tagging is being backfilled — full-market coverage lands in a follow-up."
               >
                 NSE only
               </span>
             </div>
-            <p className="text-[11px] text-muted mt-0.5">5-day rank change across NSE industries</p>
+            <p className="text-[12px] text-muted mt-0.5">5-day rank change across NSE industries</p>
           </div>
           {data?.latestDate && (
             <div className="text-right shrink-0">
-              <span className="text-[10px] font-mono text-muted bg-kd-elevated/40 px-2 py-1 rounded-lg border border-kd-border">
+              <span className="text-[12px] font-mono text-muted bg-kd-elevated/40 px-2 py-1 rounded-lg border border-kd-border">
                 NSE {data.nseAsOfDate ?? data.latestDate}
               </span>
             </div>

@@ -89,18 +89,18 @@ export default function BreadthRawTable({ data, title = 'Raw Breadth Data', rows
     return (
       <div className="glass-card rounded-2xl p-4">
         <h3 className="text-[13px] font-bold text-[var(--text-primary)] mb-1">{title}</h3>
-        <p className="text-[11px] text-muted">No breadth data available.</p>
+        <p className="text-[12px] text-muted">No breadth data available.</p>
       </div>
     );
   }
 
   const th: React.CSSProperties = {
-    fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.06em', textTransform: 'uppercase',
+    fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.06em', textTransform: 'uppercase',
     color: 'var(--text-muted)', padding: '7px 10px', textAlign: 'right', cursor: 'pointer',
     whiteSpace: 'nowrap', userSelect: 'none', borderBottom: '1px solid color-mix(in srgb, var(--text-primary) 8%, transparent)',
   };
   const td: React.CSSProperties = {
-    fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-secondary)',
+    fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-secondary)',
     padding: '6px 10px', textAlign: 'right', whiteSpace: 'nowrap',
   };
 
@@ -108,7 +108,7 @@ export default function BreadthRawTable({ data, title = 'Raw Breadth Data', rows
     <div className="glass-card rounded-2xl p-4">
       <div className="flex items-baseline justify-between mb-1">
         <h3 className="text-[13px] font-bold text-[var(--text-primary)]">{title}</h3>
-        <span className="text-[10px] text-muted">Last {Math.min(rows, data.length)} sessions · click headers to sort</span>
+        <span className="text-[12px] text-muted">Last {Math.min(rows, data.length)} sessions · click headers to sort</span>
       </div>
 
       <div style={{ overflowX: 'auto' }}>

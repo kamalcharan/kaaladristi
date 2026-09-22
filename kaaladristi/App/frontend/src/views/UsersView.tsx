@@ -136,7 +136,7 @@ export default function UsersView() {
             <thead>
               <tr className="border-b border-kd-border bg-kd-elevated/60">
                 {['User', 'Role', 'Plan', 'Subscription ends', 'Status', 'Joined', 'Actions'].map(h => (
-                  <th key={h} className="text-left text-[10px] font-mono text-muted px-3 py-2.5 uppercase tracking-wider whitespace-nowrap">{h}</th>
+                  <th key={h} className="text-left text-[12px] font-mono text-muted px-3 py-2.5 uppercase tracking-wider whitespace-nowrap">{h}</th>
                 ))}
               </tr>
             </thead>
@@ -147,30 +147,30 @@ export default function UsersView() {
                   <tr key={u.id} className={cn('border-b border-kd-border/40', u.is_suspended && 'opacity-60')}>
                     <td className="px-3 py-2.5">
                       <div className="text-xs text-[var(--text-primary)]">{u.email}</div>
-                      <div className="text-[10px] text-muted">{u.display_name ?? u.full_name ?? ''}{self ? ' · you' : ''}</div>
+                      <div className="text-[12px] text-muted">{u.display_name ?? u.full_name ?? ''}{self ? ' · you' : ''}</div>
                     </td>
-                    <td className="px-3 py-2.5 text-[10px] font-mono">
+                    <td className="px-3 py-2.5 text-[12px] font-mono">
                       <span className={u.role === 'admin' ? 'text-accent-gold' : 'text-muted'}>{u.role ?? 'user'}</span>
                     </td>
                     <td className="px-3 py-2.5">
-                      <span className={cn('px-2 py-0.5 rounded-md text-[10px] font-mono border', TIER_COLORS[u.tier ?? 'free'])}>
+                      <span className={cn('px-2 py-0.5 rounded-md text-[12px] font-mono border', TIER_COLORS[u.tier ?? 'free'])}>
                         {u.tier ?? 'free'}
                       </span>
                     </td>
-                    <td className="px-3 py-2.5 text-[11px] font-mono text-secondary">
+                    <td className="px-3 py-2.5 text-[12px] font-mono text-secondary">
                       {fmtDate(u.sub_expires_at)}
                       {u.sub_tier && u.sub_tier !== u.tier && (
                         <span className="text-muted"> ({u.sub_tier})</span>
                       )}
                     </td>
-                    <td className="px-3 py-2.5 text-[10px] font-mono">
+                    <td className="px-3 py-2.5 text-[12px] font-mono">
                       {u.is_suspended
                         ? <span className="text-risk-red">suspended</span>
                         : u.onboarded
                           ? <span className="text-risk-green">active</span>
                           : <span className="text-risk-amber">not onboarded</span>}
                     </td>
-                    <td className="px-3 py-2.5 text-[11px] font-mono text-muted">{fmtDate(u.created_at)}</td>
+                    <td className="px-3 py-2.5 text-[12px] font-mono text-muted">{fmtDate(u.created_at)}</td>
                     <td className="px-3 py-2.5">
                       <div className="flex items-center gap-1.5">
                         <button
@@ -228,7 +228,7 @@ export default function UsersView() {
                   {dialog.kind === 'extend' && 'Extend subscription'}
                   {dialog.kind === 'delete' && 'Delete user permanently'}
                 </h2>
-                <p className="text-[11px] text-muted mt-0.5 font-mono">{dialog.user.email}</p>
+                <p className="text-[12px] text-muted mt-0.5 font-mono">{dialog.user.email}</p>
               </div>
               <button onClick={() => setDialog(null)} className="text-muted hover:text-[var(--text-primary)]">
                 <X className="w-4 h-4" />
@@ -254,7 +254,7 @@ export default function UsersView() {
                   ))}
                 </div>
                 <div>
-                  <label className="block text-[10px] uppercase tracking-widest font-bold text-muted mb-1.5">
+                  <label className="block text-[12px] uppercase tracking-widest font-bold text-muted mb-1.5">
                     End date (optional — defaults: trial 14d · quarterly 90d · annual 365d)
                   </label>
                   <input
@@ -277,7 +277,7 @@ export default function UsersView() {
             {dialog.kind === 'extend' && (
               <>
                 <div>
-                  <label className="block text-[10px] uppercase tracking-widest font-bold text-muted mb-1.5">
+                  <label className="block text-[12px] uppercase tracking-widest font-bold text-muted mb-1.5">
                     New end date (current: {fmtDate(dialog.user.sub_expires_at)})
                   </label>
                   <input

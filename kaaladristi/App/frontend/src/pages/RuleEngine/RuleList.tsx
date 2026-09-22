@@ -99,8 +99,8 @@ export function OutcomeBadge({ outcome }: { outcome: string }) {
   const s = OUTCOME_STYLES[outcome] ?? OUTCOME_STYLES.neutral;
   const prefix = OUTCOME_PREFIX[outcome];
   return (
-    <span className={cn('inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium border', s.bg, s.text, s.border)}>
-      {prefix && <span className="opacity-70 text-[9px]">{prefix}</span>}
+    <span className={cn('inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[12px] font-medium border', s.bg, s.text, s.border)}>
+      {prefix && <span className="opacity-70 text-[11px]">{prefix}</span>}
       {outcomeLabel(outcome)}
     </span>
   );
@@ -108,7 +108,7 @@ export function OutcomeBadge({ outcome }: { outcome: string }) {
 
 export function TypeChip({ ruleType }: { ruleType: string }) {
   return (
-    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono border border-kd-border bg-kd-elevated text-muted">
+    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[12px] font-mono border border-kd-border bg-kd-elevated text-muted">
       {RULE_TYPE_LABELS[ruleType] ?? ruleType}
     </span>
   );
@@ -139,7 +139,7 @@ function SignalsBadge({ count, isUnavailable }: { count: number | undefined; isU
     ? 'bg-risk-green/15 text-risk-green border-risk-green/30'
     : 'bg-risk-amber/15 text-risk-amber border-risk-amber/30';
   return (
-    <span className={cn('inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-mono border tabular-nums', style)}>
+    <span className={cn('inline-flex items-center px-1.5 py-0.5 rounded text-[12px] font-mono border tabular-nums', style)}>
       {count.toLocaleString()}
     </span>
   );
@@ -303,7 +303,7 @@ function StatsBar({ rules }: { rules: AstroRule[] }) {
       ].map(({ label, value, color }) => (
         <div key={label} className="flex flex-col">
           <span className={cn('text-xl font-semibold tabular-nums', color)}>{value}</span>
-          <span className="text-[11px] text-muted font-mono">{label}</span>
+          <span className="text-[12px] text-muted font-mono">{label}</span>
         </div>
       ))}
     </div>
@@ -556,7 +556,7 @@ export default function RuleList() {
                   <thead>
                     <tr className="border-b border-kd-border bg-kd-elevated/60">
                       {['Active', 'Code', 'Rule', 'Type', 'Outcome', 'Probability', 'Confidence', 'Last', 'Next', 'Signals', 'Source', 'Tags', 'Catalog'].map(h => (
-                        <th key={h} className="text-left text-[11px] font-mono text-muted px-3 py-2.5 uppercase tracking-wider whitespace-nowrap">
+                        <th key={h} className="text-left text-[12px] font-mono text-muted px-3 py-2.5 uppercase tracking-wider whitespace-nowrap">
                           {h}
                         </th>
                       ))}
@@ -589,7 +589,7 @@ export default function RuleList() {
 
                           {/* Code + catalog dot */}
                           <td className="px-3 py-2.5 whitespace-nowrap">
-                            <span className="inline-flex items-center gap-1.5 font-mono text-[11px] text-accent-indigo/80 bg-accent-indigo/10 border border-accent-indigo/20 px-1.5 py-0.5 rounded">
+                            <span className="inline-flex items-center gap-1.5 font-mono text-[12px] text-accent-indigo/80 bg-accent-indigo/10 border border-accent-indigo/20 px-1.5 py-0.5 rounded">
                               <span
                                 title={rule.catalog_visible ? 'Visible in Catalog' : 'Hidden from Catalog'}
                                 className={cn(
@@ -648,7 +648,7 @@ export default function RuleList() {
                                 <span className={cn('text-xs font-mono tabular-nums', urgent ? 'text-risk-amber' : 'text-secondary')}>
                                   {fmtTransitDate(next)}
                                   {urgent && (
-                                    <span className="ml-1 text-[10px] opacity-70">({daysAway}d)</span>
+                                    <span className="ml-1 text-[12px] opacity-70">({daysAway}d)</span>
                                   )}
                                 </span>
                               );
@@ -665,7 +665,7 @@ export default function RuleList() {
 
                           {/* Source */}
                           <td className="px-3 py-2.5 whitespace-nowrap">
-                            <span className={cn('inline-flex items-center gap-1 text-[11px]', isAvailable ? 'text-risk-green/70' : 'text-muted')}>
+                            <span className={cn('inline-flex items-center gap-1 text-[12px]', isAvailable ? 'text-risk-green/70' : 'text-muted')}>
                               <span className={cn('w-1.5 h-1.5 rounded-full shrink-0', isAvailable ? 'bg-risk-green/70' : 'bg-kd-border')} />
                               {rule.data_source === 'user_defined' ? 'Custom' : isAvailable ? 'Available' : 'N/A'}
                             </span>
@@ -679,7 +679,7 @@ export default function RuleList() {
                                   <TagChip key={tag} tag={tag} />
                                 ))}
                                 {rule.tags.length > 3 && (
-                                  <span className="text-[10px] text-muted font-mono">+{rule.tags.length - 3}</span>
+                                  <span className="text-[12px] text-muted font-mono">+{rule.tags.length - 3}</span>
                                 )}
                               </div>
                             ) : (
@@ -693,7 +693,7 @@ export default function RuleList() {
                               onClick={() => toggleVisibleMutation.mutate({ id: rule.id, visible: !rule.catalog_visible })}
                               title={rule.catalog_visible ? 'Hide from Catalog' : 'Show in Catalog'}
                               className={cn(
-                                'text-[11px] font-mono px-2 py-0.5 rounded border transition-colors',
+                                'text-[12px] font-mono px-2 py-0.5 rounded border transition-colors',
                                 rule.catalog_visible
                                   ? 'bg-risk-green/15 text-risk-green border-risk-green/30 hover:bg-risk-green/25'
                                   : 'bg-kd-elevated text-muted border-kd-border hover:border-kd-border-active hover:text-secondary',
@@ -720,7 +720,7 @@ export default function RuleList() {
                   >
                     ← Prev
                   </button>
-                  <span className="text-[11px] text-muted font-mono">
+                  <span className="text-[12px] text-muted font-mono">
                     Page {safePage} / {pageCount}
                   </span>
                   <button
@@ -732,7 +732,7 @@ export default function RuleList() {
                   </button>
                 </div>
               ) : <span />}
-              <p className="text-[11px] text-muted text-right font-mono">
+              <p className="text-[12px] text-muted text-right font-mono">
                 {filtered.length} of {rules.length} rules
               </p>
             </div>

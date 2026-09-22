@@ -34,11 +34,11 @@ export default function BigMoneyCard({ events }: { events: BigMoneyEvent[] }) {
       <div className="rounded-lg bg-kd-card border border-kd-border p-3">
         <div className="flex items-center gap-2 mb-1">
           <Landmark className="w-3.5 h-3.5" style={{ color: 'var(--gold, #d4a84b)' }} />
-          <span className="text-[11px] font-serif font-semibold text-primary tracking-wide">
+          <span className="text-[12px] font-serif font-semibold text-primary tracking-wide">
             Big Money Days
           </span>
         </div>
-        <p className="text-[9px] text-muted leading-snug">
+        <p className="text-[11px] text-muted leading-snug">
           No big-money days in this window — no session had delivered value ≥{BIG_MONEY_MIN_RATIO}×
           this stock's 66-day norm and in its own top 2% of delivered days. These are structurally
           rare, and stocks without delivery data (most BSE-only scrips) won't register any.
@@ -54,12 +54,12 @@ export default function BigMoneyCard({ events }: { events: BigMoneyEvent[] }) {
     <div className="rounded-lg bg-kd-card border border-kd-border p-3">
       <div className="flex items-center gap-2 mb-1">
         <Landmark className="w-3.5 h-3.5" style={{ color: 'var(--gold, #d4a84b)' }} />
-        <span className="text-[11px] font-serif font-semibold text-primary tracking-wide">
+        <span className="text-[12px] font-serif font-semibold text-primary tracking-wide">
           Big Money Days
         </span>
-        <span className="ml-auto text-[9px] font-mono text-muted">{events.length}</span>
+        <span className="ml-auto text-[11px] font-mono text-muted">{events.length}</span>
       </div>
-      <p className="text-[9px] text-muted leading-snug mb-2.5">
+      <p className="text-[11px] text-muted leading-snug mb-2.5">
         Delivered value ≥{BIG_MONEY_MIN_RATIO}× this stock's 66-day norm and in its own top 2% of
         the prior 252 sessions — price zones where large money changed hands. Marked ₹ on the chart.
         Footprint is inferred from how price absorbed the handover (delivery itself is two-sided).
@@ -69,23 +69,23 @@ export default function BigMoneyCard({ events }: { events: BigMoneyEvent[] }) {
         {shown.map((ev) => (
           <div key={ev.trade_date} className="rounded-md bg-kd-elevated border border-kd-border px-2.5 py-1.5">
             <div className="flex items-baseline gap-2 flex-wrap">
-              <span className="text-[10px] font-mono text-[var(--text-secondary)]">{fmtDay(ev.trade_date)}</span>
-              <span className="text-[11px] font-mono font-bold" style={{ color: DIRECTION_BADGE[ev.direction].color }}>
+              <span className="text-[12px] font-mono text-[var(--text-secondary)]">{fmtDay(ev.trade_date)}</span>
+              <span className="text-[12px] font-mono font-bold" style={{ color: DIRECTION_BADGE[ev.direction].color }}>
                 ₹{ev.delivCr >= 100 ? ev.delivCr.toFixed(0) : ev.delivCr.toFixed(1)} Cr
               </span>
               <span
-                className="text-[8.5px] font-mono font-bold uppercase tracking-wider px-1.5 py-0.5 rounded"
+                className="text-[10px] font-mono font-bold uppercase tracking-wider px-1.5 py-0.5 rounded"
                 style={{ color: DIRECTION_BADGE[ev.direction].color, background: DIRECTION_BADGE[ev.direction].bg }}
               >
                 {DIRECTION_BADGE[ev.direction].label}
               </span>
-              <span className="text-[9.5px] font-mono text-muted">{ev.ratio.toFixed(1)}× norm</span>
-              <span className="ml-auto text-[9.5px] font-mono text-muted">
+              <span className="text-[11px] font-mono text-muted">{ev.ratio.toFixed(1)}× norm</span>
+              <span className="ml-auto text-[11px] font-mono text-muted">
                 zone ₹{ev.low.toFixed(0)}–{ev.high.toFixed(0)}
               </span>
             </div>
             {ev.sessionsSince > 0 && (
-              <div className="text-[9px] text-muted mt-0.5">
+              <div className="text-[11px] text-muted mt-0.5">
                 closed above the zone in {ev.heldAbove} of {ev.sessionsSince} sessions since
               </div>
             )}

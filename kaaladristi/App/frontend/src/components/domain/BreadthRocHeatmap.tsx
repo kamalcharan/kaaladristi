@@ -71,7 +71,7 @@ export default function BreadthRocHeatmap({
     return (
       <div className="glass-card rounded-2xl p-4">
         <h3 className="text-[13px] font-bold text-[var(--text-primary)] mb-1">{title}</h3>
-        <p className="text-[11px] text-muted">No breadth-momentum data available for this view.</p>
+        <p className="text-[12px] text-muted">No breadth-momentum data available for this view.</p>
       </div>
     );
   }
@@ -85,7 +85,7 @@ export default function BreadthRocHeatmap({
       <div className="flex flex-wrap items-start justify-between gap-3 mb-1">
         <div>
           <h3 className="text-[13px] font-bold text-[var(--text-primary)]">{title}</h3>
-          <span className="text-[10px] text-muted">Momentum turns before level — spot inflections and cross-horizon divergence</span>
+          <span className="text-[12px] text-muted">Momentum turns before level — spot inflections and cross-horizon divergence</span>
         </div>
         <div className="flex items-center gap-0.5 bg-kd-elevated rounded-lg p-0.5">
           {PERIODS.map(p => (
@@ -93,7 +93,7 @@ export default function BreadthRocHeatmap({
               key={p}
               onClick={() => setPeriod(p)}
               className={
-                'px-2.5 py-1 rounded-md text-[10px] font-bold transition-all ' +
+                'px-2.5 py-1 rounded-md text-[12px] font-bold transition-all ' +
                 (period === p ? 'bg-accent-indigo text-white' : 'text-muted hover:text-[var(--text-secondary)]')
               }
             >
@@ -106,7 +106,7 @@ export default function BreadthRocHeatmap({
       <div style={{ overflowX: 'auto' }}>
         <div style={{ minWidth: 620 }}>
           <div style={{ display: 'flex', marginLeft: 150, justifyContent: 'space-between',
-            fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-muted)', marginBottom: 6 }}>
+            fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)', marginBottom: 6 }}>
             <span>{newest && fmtDate(newest)}</span>
             <span>{mid && fmtDate(mid)}</span>
             <span>{oldest && fmtDate(oldest)}</span>
@@ -114,7 +114,7 @@ export default function BreadthRocHeatmap({
 
           {rows.map(row => (
             <div key={row.key} style={{ display: 'flex', alignItems: 'center', marginBottom: 4 }}>
-              <div style={{ width: 150, flexShrink: 0, fontFamily: 'var(--font-body)', fontSize: 10,
+              <div style={{ width: 150, flexShrink: 0, fontFamily: 'var(--font-body)', fontSize: 12,
                 color: 'var(--text-secondary)', paddingRight: 8 }}>
                 {row.label}
               </div>
@@ -136,7 +136,7 @@ export default function BreadthRocHeatmap({
         </div>
       </div>
 
-      <div className="mt-2 text-[9px] text-muted" style={{ marginLeft: 150 }}>
+      <div className="mt-2 text-[11px] text-muted" style={{ marginLeft: 150 }}>
         Green = expanding breadth momentum · red = contracting · navy ≈ flat · intensity vs window peak
       </div>
     </div>

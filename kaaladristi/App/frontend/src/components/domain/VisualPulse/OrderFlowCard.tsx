@@ -27,7 +27,7 @@ function FlagChip({ label, color }: { label: string; color: string }) {
     <span style={{
       display: 'inline-flex', alignItems: 'center', gap: 4,
       padding: '2px 8px', borderRadius: 10,
-      fontSize: 8, fontFamily: 'var(--font-mono, monospace)',
+      fontSize: 10, fontFamily: 'var(--font-mono, monospace)',
       background: `color-mix(in srgb, ${color} 10%, transparent)`,
       border: `1px solid color-mix(in srgb, ${color} 44%, transparent)`,
       color,
@@ -93,7 +93,7 @@ function VolumeBar({ label, value, max }: { label: string; value: number; max: n
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
       <span style={{
-        width: 36, fontSize: 8, fontFamily: 'var(--font-mono, monospace)',
+        width: 36, fontSize: 10, fontFamily: 'var(--font-mono, monospace)',
         textTransform: 'uppercase', letterSpacing: 1, color: 'var(--text-muted)',
       }}>{label}</span>
       <div style={{ flex: 1, height: 4, background: 'var(--kd-bg)', borderRadius: 2 }}>
@@ -103,7 +103,7 @@ function VolumeBar({ label, value, max }: { label: string; value: number; max: n
         }} />
       </div>
       <span style={{
-        width: 32, textAlign: 'right', fontSize: 9,
+        width: 32, textAlign: 'right', fontSize: 11,
         fontFamily: 'var(--font-mono, monospace)', color,
       }}>{value?.toFixed(2) ?? '—'}</span>
     </div>
@@ -145,11 +145,11 @@ export default function OrderFlowCard({ bar, rss, rssHistory, narrative }: Order
         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
       }}>
         <span style={{
-          fontSize: 8, fontFamily: 'var(--font-mono, monospace)',
+          fontSize: 10, fontFamily: 'var(--font-mono, monospace)',
           textTransform: 'uppercase', letterSpacing: 3, color: 'var(--text-muted)',
         }}>Order Flow &middot; RSS</span>
         <span style={{
-          fontSize: 9, fontFamily: 'var(--font-mono, monospace)', color: 'var(--text-muted)',
+          fontSize: 11, fontFamily: 'var(--font-mono, monospace)', color: 'var(--text-muted)',
         }}>{bar.trade_date}</span>
       </div>
 
@@ -165,7 +165,7 @@ export default function OrderFlowCard({ bar, rss, rssHistory, narrative }: Order
           }}>{fc.arrow}</span>
         </div>
         <div style={{
-          fontSize: 9, fontFamily: 'var(--font-mono, monospace)',
+          fontSize: 11, fontFamily: 'var(--font-mono, monospace)',
           color: 'var(--text-muted)', textTransform: 'uppercase', marginTop: 2,
         }}>
           Close {bar.close?.toLocaleString()} &middot; RSI {bar.rsi_14?.toFixed(0) ?? '—'}
@@ -192,14 +192,14 @@ export default function OrderFlowCard({ bar, rss, rssHistory, narrative }: Order
               color: rssColor,
             }}>{rss.value?.toFixed(0) ?? '—'}</span>
             <div style={{
-              fontSize: 8, fontFamily: 'var(--font-mono, monospace)',
+              fontSize: 10, fontFamily: 'var(--font-mono, monospace)',
               color: 'var(--text-muted)', textTransform: 'uppercase',
             }}>RSS</div>
           </div>
           <div style={{ width: 1, height: 28, background: 'var(--kd-border)' }} />
           <RssArc value={rss.value ?? 0} color={rssColor} />
           <div style={{
-            fontSize: 8, fontFamily: 'var(--font-mono, monospace)',
+            fontSize: 10, fontFamily: 'var(--font-mono, monospace)',
             textTransform: 'uppercase', color: rssColor,
           }}>
             {rss.zone} {rss.slope > 5 ? '↑' : rss.slope < -5 ? '↓' : '→'}
@@ -209,7 +209,7 @@ export default function OrderFlowCard({ bar, rss, rssHistory, narrative }: Order
         {/* Spread bar */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
           <span style={{
-            width: 48, fontSize: 8, fontFamily: 'var(--font-mono, monospace)',
+            width: 48, fontSize: 10, fontFamily: 'var(--font-mono, monospace)',
             textTransform: 'uppercase', color: 'var(--text-muted)', flexShrink: 0,
           }}>Spread</span>
           <div style={{
@@ -235,7 +235,7 @@ export default function OrderFlowCard({ bar, rss, rssHistory, narrative }: Order
             )}
           </div>
           <span style={{
-            width: 40, textAlign: 'right', fontSize: 10,
+            width: 40, textAlign: 'right', fontSize: 12,
             fontFamily: 'var(--font-mono, monospace)',
             color: (rss.spread ?? 0) > 0 ? 'var(--risk-green)'
               : rss.spreadNarrowing ? 'var(--accent-gold)' : 'var(--risk-red)',
@@ -253,7 +253,7 @@ export default function OrderFlowCard({ bar, rss, rssHistory, narrative }: Order
         {rss.pumpRisk && (
           <div style={{
             marginTop: 6, padding: '4px 8px', borderRadius: 6,
-            fontSize: 9, fontFamily: 'var(--font-mono, monospace)',
+            fontSize: 11, fontFamily: 'var(--font-mono, monospace)',
             textTransform: 'uppercase',
             background: 'color-mix(in srgb, var(--risk-red) 10%, transparent)',
             color: 'var(--risk-red)',
@@ -267,7 +267,7 @@ export default function OrderFlowCard({ bar, rss, rssHistory, narrative }: Order
       {/* Narrative */}
       <div style={{
         padding: '8px 14px 10px', borderTop: '1px solid var(--kd-border)',
-        fontSize: 10, fontStyle: 'italic', color: 'var(--text-secondary)',
+        fontSize: 12, fontStyle: 'italic', color: 'var(--text-secondary)',
         lineHeight: 1.5, minHeight: 36,
       }}>{narrative}</div>
     </div>

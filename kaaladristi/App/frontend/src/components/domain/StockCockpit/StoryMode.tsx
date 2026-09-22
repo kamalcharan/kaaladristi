@@ -162,7 +162,7 @@ export default function StoryMode({ open, onClose, bars, warmupBars, name, lates
         <div className="min-w-0">
           <div className="text-lg font-bold tracking-tight text-[var(--text-primary)] truncate">{name}</div>
           {corr && (
-            <div className="text-[11px]" style={{ color: corr.color }}>
+            <div className="text-[12px]" style={{ color: corr.color }}>
               ● <span className="font-semibold">{corr.state}</span>
               <span className="text-muted"> · {alignedCount} of 4 aligned{corr.tagline ? ` · ${corr.tagline}` : ''}</span>
             </div>
@@ -180,10 +180,10 @@ export default function StoryMode({ open, onClose, bars, warmupBars, name, lates
                 border: `1px solid ${p.aligned ? `color-mix(in srgb, ${p.toneColor} 35%, transparent)` : 'var(--border)'}`,
               }}
             >
-              <div className="text-[8.5px] font-mono uppercase tracking-wider text-muted">{p.label}</div>
+              <div className="text-[10px] font-mono uppercase tracking-wider text-muted">{p.label}</div>
               <div className="flex items-baseline gap-1.5">
                 <span className="text-sm font-mono font-bold text-[var(--text-primary)]">{p.value}</span>
-                <span className="text-[9px]" style={{ color: p.toneColor }}>{p.tone}</span>
+                <span className="text-[11px]" style={{ color: p.toneColor }}>{p.tone}</span>
               </div>
             </div>
           ))}
@@ -241,7 +241,7 @@ export default function StoryMode({ open, onClose, bars, warmupBars, name, lates
                 setVaniText(text); setVaniLoading(false)
               }}
               disabled={vaniLoading}
-              className="ml-auto shrink-0 text-[10px] font-mono font-semibold px-2.5 py-1 rounded-full border transition-colors"
+              className="ml-auto shrink-0 text-[12px] font-mono font-semibold px-2.5 py-1 rounded-full border transition-colors"
               style={{ color: 'var(--vani)', borderColor: 'color-mix(in srgb, var(--vani) 34%, transparent)',
                 background: 'color-mix(in srgb, var(--vani) 10%, transparent)', opacity: vaniLoading ? 0.6 : 1 }}
             >
@@ -273,7 +273,7 @@ export default function StoryMode({ open, onClose, bars, warmupBars, name, lates
             <button
               key={s}
               onClick={() => setSpeed(s)}
-              className="px-2 py-1 rounded-md text-[11px] font-mono transition-colors"
+              className="px-2 py-1 rounded-md text-[12px] font-mono transition-colors"
               style={{
                 background: speed === s ? 'var(--accent-glow)' : 'transparent',
                 color: speed === s ? 'var(--accent)' : 'var(--text-muted)',
@@ -308,7 +308,7 @@ export default function StoryMode({ open, onClose, bars, warmupBars, name, lates
           {cur ? (
             <>
               <div className="text-xs font-semibold" style={{ color: KIND_COLORS[cur.kind] }}>{cur.title}</div>
-              <div className="text-[10px] text-muted font-mono">
+              <div className="text-[12px] text-muted font-mono">
                 {cur.date}
                 {cur.reactionPct != null && (
                   <> · price <span style={{ color: cur.reactionPct >= 0 ? 'var(--risk-green)' : 'var(--risk-red)' }}>{cur.reactionPct >= 0 ? '+' : ''}{cur.reactionPct.toFixed(1)}%</span> / 5 bars</>
@@ -316,7 +316,7 @@ export default function StoryMode({ open, onClose, bars, warmupBars, name, lates
               </div>
             </>
           ) : (
-            <div className="text-[11px] text-muted">No signal events in range.</div>
+            <div className="text-[12px] text-muted">No signal events in range.</div>
           )}
         </div>
       </div>

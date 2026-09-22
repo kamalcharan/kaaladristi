@@ -161,8 +161,8 @@ function validate(values: RuleFormValues, mode: FormMode): ValidationErrors {
 // ── UI helpers ────────────────────────────────────────────────────────────────
 
 const inputCls = 'w-full px-3 py-2 bg-kd-elevated border border-kd-border rounded-xl text-sm text-[var(--text-primary)] placeholder:text-muted focus:outline-none focus:border-accent-indigo/60 transition-colors';
-const labelCls = 'block text-[10px] uppercase tracking-widest font-bold text-muted mb-1.5';
-const errorCls = 'text-[11px] text-risk-red mt-1';
+const labelCls = 'block text-[12px] uppercase tracking-widest font-bold text-muted mb-1.5';
+const errorCls = 'text-[12px] text-risk-red mt-1';
 
 function FieldError({ msg }: { msg?: string }) {
   if (!msg) return null;
@@ -212,7 +212,7 @@ export function AdminTagsField({ tags, onChange }: { tags: string[]; onChange: (
           className="flex-1 min-w-[120px] bg-transparent text-sm text-[var(--text-primary)] placeholder:text-muted outline-none"
         />
       </div>
-      <p className="text-[10px] text-muted mt-1">Press Enter or comma to add a tag</p>
+      <p className="text-[12px] text-muted mt-1">Press Enter or comma to add a tag</p>
     </div>
   );
 }
@@ -300,7 +300,7 @@ export function RuleFormBody({
               )}
               <FieldError msg={errors.rule_code} />
               {!isLocked && !errors.rule_code && (
-                <p className="text-[10px] text-muted mt-1 font-mono">Format: LETTERS-LETTERS-LETTERS</p>
+                <p className="text-[12px] text-muted mt-1 font-mono">Format: LETTERS-LETTERS-LETTERS</p>
               )}
             </div>
 
@@ -449,7 +449,7 @@ export function RuleFormBody({
           <div className="pt-2">
             <div className="flex items-center gap-3 mb-4">
               <div className="flex-1 h-px bg-kd-border" />
-              <span className="text-[9px] font-mono uppercase tracking-widest text-muted px-1">Admin</span>
+              <span className="text-[11px] font-mono uppercase tracking-widest text-muted px-1">Admin</span>
               <div className="flex-1 h-px bg-kd-border" />
             </div>
 
@@ -457,7 +457,7 @@ export function RuleFormBody({
             <div className="flex items-start justify-between gap-4 mb-5">
               <div className="flex-1">
                 <div className={labelCls}>Visible in Catalog</div>
-                <p className="text-[11px] text-muted leading-relaxed">
+                <p className="text-[12px] text-muted leading-relaxed">
                   When enabled, this rule appears in the user Catalog under Astro Rules.
                 </p>
               </div>

@@ -122,7 +122,7 @@ function SignalTooltip({ signals, dow, dd, mon }: { signals: SignalItem[]; dow: 
         padding: '8px 12px 6px',
         borderBottom: '1px solid color-mix(in srgb, var(--text-primary) 6%, transparent)',
         fontFamily: 'var(--font-mono)',
-        fontSize: 9,
+        fontSize: 11,
         letterSpacing: '0.12em',
         color: 'var(--text-faint)',
         textTransform: 'uppercase',
@@ -142,7 +142,7 @@ function SignalTooltip({ signals, dow, dd, mon }: { signals: SignalItem[]; dow: 
               {/* Rule name */}
               <div style={{
                 fontFamily: 'var(--font-body)',
-                fontSize: 10,
+                fontSize: 12,
                 fontWeight: 600,
                 color: 'var(--text-primary)',
                 marginBottom: 3,
@@ -154,7 +154,7 @@ function SignalTooltip({ signals, dow, dd, mon }: { signals: SignalItem[]; dow: 
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                 <span style={{
                   fontFamily: 'var(--font-mono)',
-                  fontSize: 8,
+                  fontSize: 10,
                   fontWeight: 700,
                   letterSpacing: '0.1em',
                   textTransform: 'uppercase',
@@ -169,7 +169,7 @@ function SignalTooltip({ signals, dow, dd, mon }: { signals: SignalItem[]; dow: 
                 {s.confidence != null && (
                   <span style={{
                     fontFamily: 'var(--font-mono)',
-                    fontSize: 8,
+                    fontSize: 10,
                     color: 'var(--text-faint)',
                     letterSpacing: '0.06em',
                   }}>
@@ -221,7 +221,7 @@ function DayCell({ iso, week }: { iso: string; week: WeekDay | undefined }) {
       )}
 
       {/* Day */}
-      <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.1em', color: 'var(--text-faint)', textTransform: 'uppercase', marginBottom: 2 }}>
+      <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.1em', color: 'var(--text-faint)', textTransform: 'uppercase', marginBottom: 2 }}>
         {dow}
       </div>
       <div style={{ fontFamily: 'var(--font-display)', fontSize: 20, fontWeight: 500, color: 'var(--text-primary)', lineHeight: 1, marginBottom: 3 }}>
@@ -229,7 +229,7 @@ function DayCell({ iso, week }: { iso: string; week: WeekDay | undefined }) {
       </div>
 
       {/* Tone */}
-      <div style={{ fontFamily: 'var(--font-mono)', fontSize: 8.5, letterSpacing: '0.04em', color: tone.color, textTransform: 'uppercase', marginBottom: 4 }}>
+      <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.04em', color: tone.color, textTransform: 'uppercase', marginBottom: 4 }}>
         {tone.label}
       </div>
 
@@ -241,7 +241,7 @@ function DayCell({ iso, week }: { iso: string; week: WeekDay | undefined }) {
             {turning > 0 && <div style={{ flex: turning, background: 'var(--caution)', borderRadius: 2 }} />}
             {bearish > 0 && <div style={{ flex: bearish, background: 'var(--bear)', borderRadius: 2 }} />}
           </div>
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 8, color: 'var(--text-faint)', marginTop: 2, letterSpacing: '0.06em' }}>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-faint)', marginTop: 2, letterSpacing: '0.06em' }}>
             {total} rule{total !== 1 ? 's' : ''}
           </div>
         </div>
@@ -280,7 +280,7 @@ export default function SixDayOutlookCompact({ date }: SixDayOutlookCompactProps
             · forward read
           </em>
         </span>
-        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 8, color: 'var(--text-faint)', letterSpacing: '0.1em' }}>
+        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-faint)', letterSpacing: '0.1em' }}>
           HOVER FOR RULES
         </span>
       </div>
@@ -313,13 +313,13 @@ export default function SixDayOutlookCompact({ date }: SixDayOutlookCompactProps
         ].map(({ color, label }) => (
           <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
             <div style={{ width: 6, height: 6, borderRadius: '50%', background: color }} />
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 8.5, letterSpacing: '0.1em', color: 'var(--text-faint)', textTransform: 'uppercase' }}>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.1em', color: 'var(--text-faint)', textTransform: 'uppercase' }}>
               {label}
             </span>
           </div>
         ))}
         <div style={{ flex: 1 }} />
-        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 8, letterSpacing: '0.1em', color: 'var(--text-faint)', textTransform: 'uppercase' }}>
+        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.1em', color: 'var(--text-faint)', textTransform: 'uppercase' }}>
           bar = nak-vara signals
         </span>
       </div>

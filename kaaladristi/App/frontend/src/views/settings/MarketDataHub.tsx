@@ -85,7 +85,7 @@ export default function MarketDataHub({ onBack }: { onBack: () => void }) {
             </div>
             <h3 className="text-sm font-semibold mb-1 text-[var(--text-primary)]">{s.title}</h3>
             <p className="text-xs text-muted leading-relaxed mb-3">{s.description}</p>
-            <span className="text-[10px] mono text-muted uppercase tracking-wider">{s.meta}</span>
+            <span className="text-[12px] mono text-muted uppercase tracking-wider">{s.meta}</span>
           </button>
         ))}
       </div>

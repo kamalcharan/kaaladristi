@@ -99,12 +99,12 @@ function PlaceholderCard({ title, cycle }: { title: string; cycle: string }) {
       background: 'var(--panel-recess)',
     }}>
       <div style={{
-        fontFamily: 'var(--font-mono, monospace)', fontSize: 9,
+        fontFamily: 'var(--font-mono, monospace)', fontSize: 11,
         color: 'var(--text-faint)', letterSpacing: '0.12em',
         textTransform: 'uppercase', marginBottom: 4,
       }}>{title}</div>
       <div style={{
-        fontFamily: 'var(--font-mono, monospace)', fontSize: 10,
+        fontFamily: 'var(--font-mono, monospace)', fontSize: 12,
         color: 'var(--text-muted)',
       }}>arrives in {cycle}</div>
     </div>
@@ -357,7 +357,7 @@ export default function IntradayPage() {
             flexShrink: 0,
           }}>
             <div style={{
-              fontFamily: 'var(--font-mono, monospace)', fontSize: 9,
+              fontFamily: 'var(--font-mono, monospace)', fontSize: 11,
               color: 'var(--text-faint)', letterSpacing: '0.1em',
               marginBottom: 6,
             }}>
@@ -437,7 +437,7 @@ export default function IntradayPage() {
                 background: 'color-mix(in srgb, var(--accent-violet) 6%, transparent)',
               }}>
                 <div style={{
-                  fontFamily: 'var(--font-mono, monospace)', fontSize: 9,
+                  fontFamily: 'var(--font-mono, monospace)', fontSize: 11,
                   color: 'var(--accent-violet)', letterSpacing: '0.1em',
                   marginBottom: 6,
                 }}>DEV · MOCK LP SIGNAL</div>
@@ -455,7 +455,7 @@ export default function IntradayPage() {
                       key={opt.label}
                       onClick={() => setLpDebug({ score: opt.score, dot: opt.dot })}
                       style={{
-                        fontFamily: 'var(--font-mono, monospace)', fontSize: 9,
+                        fontFamily: 'var(--font-mono, monospace)', fontSize: 11,
                         padding: '3px 6px', borderRadius: 2, cursor: 'pointer',
                         background: lpDebug.score === opt.score && lpDebug.dot === opt.dot
                           ? 'var(--accent-violet)'
@@ -477,7 +477,7 @@ export default function IntradayPage() {
                 marginTop: 4, padding: '6px 8px',
                 background: 'var(--panel-recess)',
                 border: '1px solid var(--kd-border)', borderRadius: 4,
-                fontFamily: 'var(--font-mono, monospace)', fontSize: 9,
+                fontFamily: 'var(--font-mono, monospace)', fontSize: 11,
                 color: 'var(--text-muted)', letterSpacing: '0.05em',
               }}>
                 plan_score={planScore.plan_score.toFixed(2)} ·
@@ -505,7 +505,7 @@ export default function IntradayPage() {
         padding: '6px 16px', flexWrap: 'wrap', gap: 8,
         borderTop: '1px solid var(--kd-border)',
         background: 'var(--panel-recess)',
-        fontFamily: 'var(--font-mono, monospace)', fontSize: 9,
+        fontFamily: 'var(--font-mono, monospace)', fontSize: 11,
         color: 'var(--text-faint)', letterSpacing: '0.04em',
       }}>
         <span>

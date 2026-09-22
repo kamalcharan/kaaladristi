@@ -77,9 +77,9 @@ function DayCell({ day, inferences }: { day: string; inferences: DcInference[] }
       onMouseEnter={() => setShowTip(true)}
       onMouseLeave={() => setShowTip(false)}
     >
-      <span className="text-[9px] font-bold uppercase tracking-wider text-muted">{dow}</span>
+      <span className="text-[11px] font-bold uppercase tracking-wider text-muted">{dow}</span>
       <span className="text-[17px] font-bold mono text-[var(--text-primary)] leading-none">{dd}</span>
-      <span className="text-[8px] text-muted uppercase tracking-wide">{mon}</span>
+      <span className="text-[10px] text-muted uppercase tracking-wide">{mon}</span>
 
       {/* Dots row */}
       <div className="flex items-center gap-0.5 mt-0.5 h-3">
@@ -100,7 +100,7 @@ function DayCell({ day, inferences }: { day: string; inferences: DcInference[] }
         <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-50 w-56 p-3 rounded-lg bg-kd-surface border border-kd-border shadow-xl"
           style={{ pointerEvents: 'none' }}
         >
-          <div className="text-[10px] font-bold mono text-[var(--text-primary)] mb-2">
+          <div className="text-[12px] font-bold mono text-[var(--text-primary)] mb-2">
             {dd} {mon} · {dow}
           </div>
           {active.map(inf => {
@@ -108,15 +108,15 @@ function DayCell({ day, inferences }: { day: string; inferences: DcInference[] }
             const impactColor = opt ? (STATUS_COLOR_CLASSES[opt.color]?.text ?? 'text-muted') : 'text-muted';
             return (
               <div key={inf.id} className="mb-2 pb-1.5 border-b border-kd-border last:border-0 last:mb-0 last:pb-0">
-                <div className={cn('text-[9px] font-semibold', impactColor)}>
+                <div className={cn('text-[11px] font-semibold', impactColor)}>
                   {inf.astro_event}
                 </div>
-                <div className="text-[8px] text-muted mt-0.5">
+                <div className="text-[10px] text-muted mt-0.5">
                   {inf.start_date}{inf.end_date && inf.end_date !== inf.start_date ? ` → ${inf.end_date}` : ''}
                   {opt && <span className={cn('ml-1 uppercase', impactColor)}>· {opt.label}</span>}
                 </div>
                 {inf.inference && (
-                  <div className="text-[8px] text-[var(--accent-gold)] italic mt-1">
+                  <div className="text-[10px] text-[var(--accent-gold)] italic mt-1">
                     "{inf.inference}"
                   </div>
                 )}
@@ -147,7 +147,7 @@ function Legend({ inferences }: { inferences: DcInference[] }) {
         return (
           <span
             key={impact}
-            className={cn('inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[9px] font-semibold border', c.bg, c.text, c.border)}
+            className={cn('inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold border', c.bg, c.text, c.border)}
           >
             <span className={cn('w-1.5 h-1.5 rounded-full', COLOR_DOT[opt.color])} />
             {opt.label}
@@ -168,7 +168,7 @@ export default function SevenDayStrip({ selectedDate }: { selectedDate: string }
     <div className="glass-card rounded-2xl p-4">
       <div className="flex items-center justify-between mb-3">
         <h3 className="text-[13px] font-bold text-[var(--text-primary)]">6-Day Outlook</h3>
-        <span className="text-[10px] text-muted">Mon – Fri · inference</span>
+        <span className="text-[12px] text-muted">Mon – Fri · inference</span>
       </div>
 
       {isLoading ? (

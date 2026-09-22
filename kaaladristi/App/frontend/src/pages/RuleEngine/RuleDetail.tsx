@@ -238,7 +238,7 @@ function ScopeChips({ scope }: { scope: string[] | null }) {
           ? `${s.slice(7)} Sectors`
           : s.charAt(0).toUpperCase() + s.slice(1);
         return (
-          <span key={s} className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] border border-kd-border bg-kd-elevated text-secondary font-mono">
+          <span key={s} className="inline-flex items-center px-2 py-0.5 rounded-md text-[12px] border border-kd-border bg-kd-elevated text-secondary font-mono">
             {label}
           </span>
         );
@@ -255,7 +255,7 @@ function ConditionsBlock({ conditions }: { conditions: Record<string, unknown> |
     <div className="grid grid-cols-2 gap-x-6 gap-y-2 sm:grid-cols-3">
       {Object.entries(conditions).map(([k, v]) => (
         <div key={k} className="flex flex-col gap-0.5">
-          <span className="text-[10px] font-mono text-muted uppercase tracking-wider">{k}</span>
+          <span className="text-[12px] font-mono text-muted uppercase tracking-wider">{k}</span>
           <span className="text-xs text-secondary break-words">
             {Array.isArray(v) ? v.join(', ') : String(v)}
           </span>
@@ -361,14 +361,14 @@ function PerTransitBarChart({ transits, highlightId, onHighlight }: {
   return (
     <div className="rounded-xl border border-kd-border bg-kd-card overflow-hidden">
       <div className="px-5 pt-4 pb-2">
-        <p className="text-[10px] font-mono text-muted uppercase tracking-wider mb-1.5">
+        <p className="text-[12px] font-mono text-muted uppercase tracking-wider mb-1.5">
           Per-Transit Performance · {n} event{n !== 1 ? 's' : ''} · {windowLabel} · as of {today}
         </p>
         <p className="font-display text-xl text-white leading-snug">
           Each bar is{' '}
           <em className="not-italic text-accent-gold font-medium">one transit</em>
           {' '}— the rule fires{avgDuration > 0 ? `, runs for ~${avgDuration}d,` : ''} and ends. Between events, nothing is held.
-          {n < 5 && <span className="text-[11px] font-sans font-normal text-muted ml-2">({n} event{n !== 1 ? 's' : ''} — more history accumulates over time)</span>}
+          {n < 5 && <span className="text-[12px] font-sans font-normal text-muted ml-2">({n} event{n !== 1 ? 's' : ''} — more history accumulates over time)</span>}
         </p>
       </div>
 
@@ -452,27 +452,27 @@ function PerTransitBarChart({ transits, highlightId, onHighlight }: {
 
       {/* Reading guide */}
       <div className="px-4 py-2.5 border-t border-kd-border/30 flex items-center gap-5 flex-wrap">
-        <span className="flex items-center gap-1.5 text-[10px] font-mono text-muted">
+        <span className="flex items-center gap-1.5 text-[12px] font-mono text-muted">
           <span className="w-2.5 h-2.5 bg-risk-green shrink-0 opacity-80"/>
           Positive return
         </span>
-        <span className="flex items-center gap-1.5 text-[10px] font-mono text-muted">
+        <span className="flex items-center gap-1.5 text-[12px] font-mono text-muted">
           <span className="w-2.5 h-2.5 border border-risk-red shrink-0"/>
           Negative return
         </span>
-        <span className="flex items-center gap-1.5 text-[10px] font-mono text-muted">
+        <span className="flex items-center gap-1.5 text-[12px] font-mono text-muted">
           <span className="w-2 h-2 rounded-full bg-risk-green shrink-0"/>
           Matched ·
           <span className="w-2 h-2 rounded-full bg-risk-red shrink-0 mx-1"/>
           Unmatched (dot at baseline)
         </span>
-        <span className="text-[10px] font-mono text-accent-gold">
+        <span className="text-[12px] font-mono text-accent-gold">
           {`— AVG ${avgReturn >= 0 ? '+' : ''}${avgReturn.toFixed(1)}%`}
         </span>
-        <span className="text-[10px] font-mono text-accent-indigo/80">
+        <span className="text-[12px] font-mono text-accent-indigo/80">
           {`MED ${medianReturn >= 0 ? '+' : ''}${medianReturn.toFixed(1)}%`}
         </span>
-        <span className="text-[10px] font-mono text-muted ml-auto">click bar to highlight row</span>
+        <span className="text-[12px] font-mono text-muted ml-auto">click bar to highlight row</span>
       </div>
     </div>
   );
@@ -522,9 +522,9 @@ function BacktestStatGrid({ conf, transits, isDaily = false }: {
       <div className="grid grid-cols-2 sm:grid-cols-[1.3fr_1fr_1fr_1fr_1fr] divide-y sm:divide-y-0 divide-x divide-kd-border/50">
         {top.map((s, i) => (
           <div key={i} className="px-4 py-5">
-            <p className="text-[10px] font-mono text-muted uppercase tracking-wider mb-2">{s.k}</p>
+            <p className="text-[12px] font-mono text-muted uppercase tracking-wider mb-2">{s.k}</p>
             <p className={cn('font-mono font-semibold tabular-nums leading-none', i === 0 ? 'text-3xl' : 'text-xl', s.color)}>{s.v}</p>
-            {s.sub && <p className="text-[10px] font-mono text-muted mt-1.5">{s.sub}</p>}
+            {s.sub && <p className="text-[12px] font-mono text-muted mt-1.5">{s.sub}</p>}
           </div>
         ))}
       </div>
@@ -532,16 +532,16 @@ function BacktestStatGrid({ conf, transits, isDaily = false }: {
       <div className="grid grid-cols-2 sm:grid-cols-4 divide-x divide-kd-border/50 border-t border-kd-border/50">
         {bot.map((s, i) => (
           <div key={i} className="px-4 py-3">
-            <p className="text-[10px] font-mono text-muted uppercase tracking-wider mb-1">{s.k}</p>
+            <p className="text-[12px] font-mono text-muted uppercase tracking-wider mb-1">{s.k}</p>
             <p className={cn('font-mono text-lg font-semibold tabular-nums', s.color)}>{s.v}</p>
-            {s.sub && <p className="text-[10px] font-mono text-muted mt-1">{s.sub}</p>}
+            {s.sub && <p className="text-[12px] font-mono text-muted mt-1">{s.sub}</p>}
           </div>
         ))}
       </div>
       {/* Honesty pass (owner 2026-07-07): every number in this grid is scored
           against NIFTY 50 — until applicability-aware benchmarks land, say so
           instead of letting sector inferences look sector-validated. */}
-      <div className="px-4 py-2 border-t border-kd-border/50 text-[10px] font-mono text-muted">
+      <div className="px-4 py-2 border-t border-kd-border/50 text-[12px] font-mono text-muted">
         All statistics measured against NIFTY 50 — sector/index-specific behavior lives in the Patterns tab (benchmark selector).
       </div>
     </div>
@@ -625,10 +625,10 @@ function BenchConfidenceStrip({ ruleId }: { ruleId: number }) {
   return (
     <div className="rounded-xl border border-kd-border bg-kd-card px-4 py-3">
       <div className="flex items-baseline gap-2 mb-2 flex-wrap">
-        <span className="text-[11px] font-mono uppercase tracking-wider text-accent-gold">
+        <span className="text-[12px] font-mono uppercase tracking-wider text-accent-gold">
           Confidence by benchmark
         </span>
-        <span className="text-[10px] font-mono text-muted">
+        <span className="text-[12px] font-mono text-muted">
           same windows, each index's own returns · benchmarks from the inference's Applies To
         </span>
       </div>
@@ -643,7 +643,7 @@ function BenchConfidenceStrip({ ruleId }: { ruleId: number }) {
                 ? `tested vs ${row.hypothesis_source === 'inference' ? 'inference' : 'base bias'} (${row.hypothesis_impact.replace(/_/g, ' ')})`
                 : undefined}
               className={cn(
-                'px-2 py-1 rounded-md text-[10px] font-mono border',
+                'px-2 py-1 rounded-md text-[12px] font-mono border',
                 greyed ? 'text-muted border-kd-border opacity-60' : 'text-secondary border-kd-border',
                 claimed && !greyed && 'border-accent-indigo/40',
               )}
@@ -686,20 +686,20 @@ function RegimeGrid({ transits }: { transits: RuleTransit[] }) {
 
   return (
     <div className="rounded-xl border border-kd-border bg-kd-card p-4">
-      <p className="text-[10px] font-mono text-muted uppercase tracking-wider mb-3">Performance by Market Regime</p>
+      <p className="text-[12px] font-mono text-muted uppercase tracking-wider mb-3">Performance by Market Regime</p>
       <div className="grid grid-cols-3 gap-3">
         {regimes.map(r => {
           const c = CFG[r.regime];
           return (
             <div key={r.regime} className="rounded-lg border border-kd-border bg-kd-elevated/50 px-3 py-3">
               <div className="flex items-center justify-between mb-2">
-                <span className={cn('text-[10px] font-mono uppercase tracking-wider', c.accent)}>{c.label}</span>
-                <span className="text-[10px] font-mono text-muted">n={r.count}</span>
+                <span className={cn('text-[12px] font-mono uppercase tracking-wider', c.accent)}>{c.label}</span>
+                <span className="text-[12px] font-mono text-muted">n={r.count}</span>
               </div>
               <p className={cn('text-xl font-mono font-semibold tabular-nums', r.avg >= 0 ? 'text-risk-green' : 'text-risk-red/80')}>
                 {fmtPct(r.avg)}
               </p>
-              <p className="text-[10px] font-mono text-muted mt-1">
+              <p className="text-[12px] font-mono text-muted mt-1">
                 {r.matched}/{r.count} matched · {r.count ? ((r.matched / r.count) * 100).toFixed(0) : 0}% hit
               </p>
               <div className="mt-2.5 h-1 rounded-full bg-kd-border/60">
@@ -759,7 +759,7 @@ function DistributionChart({ transits }: { transits: RuleTransit[] }) {
   return (
     <div className="rounded-xl border border-kd-border bg-kd-card overflow-hidden">
       <div className="px-4 pt-4 pb-1">
-        <p className="text-[10px] font-mono text-muted uppercase tracking-wider">Return Distribution · {returns.length} transits</p>
+        <p className="text-[12px] font-mono text-muted uppercase tracking-wider">Return Distribution · {returns.length} transits</p>
       </div>
       <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ width: '100%', height: H, display: 'block' }}>
         {counts.map((b, i) => {
@@ -799,7 +799,7 @@ function DistributionChart({ transits }: { transits: RuleTransit[] }) {
         </text>
       </svg>
       <div className="px-4 pb-3 border-t border-kd-border/30 pt-2">
-        <p className="text-[10px] font-mono text-muted italic">
+        <p className="text-[12px] font-mono text-muted italic">
           Are wins spread across many transits, or do a few outliers inflate the average?
         </p>
       </div>
@@ -847,7 +847,7 @@ function AlphaChart({ transits }: { transits: RuleTransit[] }) {
   return (
     <div className="rounded-xl border border-kd-border bg-kd-card overflow-hidden">
       <div className="px-4 pt-4 pb-1">
-        <p className="text-[10px] font-mono text-muted uppercase tracking-wider">Return vs Average (α) · {n} transits</p>
+        <p className="text-[12px] font-mono text-muted uppercase tracking-wider">Return vs Average (α) · {n} transits</p>
       </div>
       <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ width: '100%', height: H, display: 'block' }}>
         {ticks.map(v => {
@@ -887,7 +887,7 @@ function AlphaChart({ transits }: { transits: RuleTransit[] }) {
         </text>
       </svg>
       <div className="px-4 pb-3 border-t border-kd-border/30 pt-2">
-        <p className="text-[10px] font-mono text-muted italic">
+        <p className="text-[12px] font-mono text-muted italic">
           Green = transit beat the rule's average · Red = missed · Centred on {avg >= 0 ? '+' : ''}{avg.toFixed(1)}% avg
         </p>
       </div>
@@ -942,7 +942,7 @@ function BacktestTabs({
               key={t.key}
               onClick={() => setTab(t.key)}
               className={cn(
-                'px-4 py-3 text-[11px] font-mono uppercase tracking-wider whitespace-nowrap border-b-2 transition-colors',
+                'px-4 py-3 text-[12px] font-mono uppercase tracking-wider whitespace-nowrap border-b-2 transition-colors',
                 tab === t.key
                   ? 'border-accent-gold text-accent-gold'
                   : 'border-transparent text-muted hover:text-secondary',
@@ -963,7 +963,7 @@ function BacktestTabs({
               <thead>
                 <tr className="border-b border-kd-border bg-kd-elevated/60">
                   {['Start', 'End', 'Days', 'Nifty Return', 'Regime', 'Matched'].map(h => (
-                    <th key={h} className="text-left text-[10px] font-mono text-muted px-3 py-2.5 uppercase tracking-wider whitespace-nowrap">{h}</th>
+                    <th key={h} className="text-left text-[12px] font-mono text-muted px-3 py-2.5 uppercase tracking-wider whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -990,12 +990,12 @@ function BacktestTabs({
                           ? <span className="text-risk-amber font-mono animate-pulse">◉ LIVE</span>
                           : <span className={returnColor(t.nifty_return_pct)}>{fmtPct(t.nifty_return_pct)}</span>}
                       </td>
-                      <td className="px-3 py-2.5 text-[10px] font-mono uppercase">
+                      <td className="px-3 py-2.5 text-[12px] font-mono uppercase">
                         <span className={cn(regimeCfg[regime])}>{regime}</span>
                       </td>
                       <td className="px-3 py-2.5 text-xs text-center">
                         {isActive
-                          ? <span className="text-risk-amber font-mono text-[10px]">ACTIVE</span>
+                          ? <span className="text-risk-amber font-mono text-[12px]">ACTIVE</span>
                           : <span className={t.matched === true ? 'text-risk-green' : t.matched === false ? 'text-risk-red/60' : 'text-muted'}>
                               {t.matched === true ? '✓ Match' : t.matched === false ? '✕ Miss' : '—'}
                             </span>}
@@ -1016,7 +1016,7 @@ function BacktestTabs({
               {/* Header */}
               <div className="grid grid-cols-[120px_120px_70px_1fr_100px_1fr] gap-2.5 px-4 py-2.5 border-b border-kd-border bg-kd-elevated/60">
                 {['START', 'END', 'DAYS', 'AGING', 'STRENGTH', 'NOTE'].map(h => (
-                  <span key={h} className="text-[9.5px] font-mono text-muted uppercase tracking-wider">{h}</span>
+                  <span key={h} className="text-[11px] font-mono text-muted uppercase tracking-wider">{h}</span>
                 ))}
               </div>
               {upcomingTransits.map(t => {
@@ -1067,11 +1067,11 @@ function BacktestTabs({
                       ? 'border-accent-gold/40 bg-accent-gold/5'
                       : 'border-kd-border bg-kd-elevated/30',
                   )}>
-                    <p className={cn('font-mono text-[10px] uppercase tracking-wider mb-1', isNext ? 'text-accent-gold' : 'text-muted')}>
+                    <p className={cn('font-mono text-[12px] uppercase tracking-wider mb-1', isNext ? 'text-accent-gold' : 'text-muted')}>
                       {isNext ? `Next · in ${inDays}d` : `T+${inDays}d`}
                     </p>
                     <p className="font-mono text-lg font-medium text-white">{fmtDate(s.date)}</p>
-                    <p className="font-mono text-[10px] text-muted mt-1 uppercase">
+                    <p className="font-mono text-[12px] text-muted mt-1 uppercase">
                       {dt.toLocaleDateString('en-US', { weekday: 'long' })}
                     </p>
                   </div>
@@ -1090,7 +1090,7 @@ function BacktestTabs({
                   <thead>
                     <tr className="border-b border-kd-border bg-kd-elevated/60">
                       {['Date', 'Signal', 'Strength', 'Nifty', 'Details'].map(h => (
-                        <th key={h} className="text-left text-[10px] font-mono text-muted px-3 py-2.5 uppercase tracking-wider whitespace-nowrap">{h}</th>
+                        <th key={h} className="text-left text-[12px] font-mono text-muted px-3 py-2.5 uppercase tracking-wider whitespace-nowrap">{h}</th>
                       ))}
                     </tr>
                   </thead>
@@ -1103,7 +1103,7 @@ function BacktestTabs({
                         <td className="px-3 py-2 text-xs font-mono text-secondary whitespace-nowrap">
                           {sig.date}
                           {sig.partial_day && (
-                            <span className="ml-1.5 text-[9px] font-mono text-risk-amber/70 border border-risk-amber/30 rounded px-1">
+                            <span className="ml-1.5 text-[11px] font-mono text-risk-amber/70 border border-risk-amber/30 rounded px-1">
                               partial
                             </span>
                           )}
@@ -1134,7 +1134,7 @@ function BacktestTabs({
                   >
                     <ChevronLeft className="w-3.5 h-3.5"/> Prev
                   </button>
-                  <span className="text-[11px] font-mono text-muted">
+                  <span className="text-[12px] font-mono text-muted">
                     Page {signalsPage + 1} of {totalPages} · {signalsTotal.toLocaleString()} total
                   </span>
                   <button
@@ -1156,7 +1156,7 @@ function BacktestTabs({
             <thead>
               <tr className="border-b border-kd-border bg-kd-elevated/60">
                 {['Year', 'Transits', 'Matched', 'Win %', 'Avg Return', 'Avg Days'].map(h => (
-                  <th key={h} className="text-left text-[10px] font-mono text-muted px-3 py-2.5 uppercase tracking-wider whitespace-nowrap">{h}</th>
+                  <th key={h} className="text-left text-[12px] font-mono text-muted px-3 py-2.5 uppercase tracking-wider whitespace-nowrap">{h}</th>
                 ))}
               </tr>
             </thead>
@@ -1584,19 +1584,19 @@ export default function RuleDetail() {
             <div className="flex-1 min-w-0">
               {/* Pills row */}
               <div className="flex flex-wrap items-center gap-2 mb-3">
-                <span className="font-mono text-[10px] tracking-wider text-accent-indigo/80 bg-accent-indigo/10 border border-accent-indigo/20 px-2.5 py-1 rounded">
+                <span className="font-mono text-[12px] tracking-wider text-accent-indigo/80 bg-accent-indigo/10 border border-accent-indigo/20 px-2.5 py-1 rounded">
                   {rule.rule_code}
                 </span>
-                <span className="font-mono text-[10px] tracking-wider text-accent-indigo border border-accent-indigo/30 bg-accent-indigo/8 px-2.5 py-1 rounded uppercase">
+                <span className="font-mono text-[12px] tracking-wider text-accent-indigo border border-accent-indigo/30 bg-accent-indigo/8 px-2.5 py-1 rounded uppercase">
                   {RULE_TYPE_LABELS[rule.rule_type] ?? rule.rule_type}
                 </span>
                 <OutcomeBadge outcome={outcome} />
                 {!rule.is_active && (
-                  <span className="font-mono text-[10px] text-risk-red/70 border border-risk-red/20 bg-risk-red/10 px-2.5 py-1 rounded uppercase tracking-wider">
+                  <span className="font-mono text-[12px] text-risk-red/70 border border-risk-red/20 bg-risk-red/10 px-2.5 py-1 rounded uppercase tracking-wider">
                     Inactive
                   </span>
                 )}
-                <span className="font-mono text-[10px] text-muted tracking-wider ml-1">
+                <span className="font-mono text-[12px] text-muted tracking-wider ml-1">
                   BENCHMARK · NIFTY 50
                 </span>
               </div>
@@ -1614,10 +1614,10 @@ export default function RuleDetail() {
           {/* Conditions inline as key → value chips */}
           {rule.conditions && Object.keys(rule.conditions).length > 0 && (
             <div className="flex flex-wrap items-center gap-2 pt-4 border-t border-kd-border/40">
-              <span className="font-mono text-[10px] text-muted uppercase tracking-wider shrink-0">Conditions</span>
+              <span className="font-mono text-[12px] text-muted uppercase tracking-wider shrink-0">Conditions</span>
               {Object.entries(rule.conditions).map(([k, v]) => (
                 <span key={k} className="inline-flex items-center gap-2 px-3 py-1 border border-kd-border/60 bg-kd-elevated/30 text-xs">
-                  <span className="font-mono text-[10px] text-muted uppercase tracking-wider">{k}</span>
+                  <span className="font-mono text-[12px] text-muted uppercase tracking-wider">{k}</span>
                   <span className="text-secondary">{Array.isArray(v) ? v.join(', ') : String(v)}</span>
                 </span>
               ))}
@@ -1627,11 +1627,11 @@ export default function RuleDetail() {
           {/* Scope + data source row */}
           <div className="flex flex-wrap items-center gap-x-6 gap-y-2 pt-3 border-t border-kd-border/40">
             <div className="flex items-center gap-2">
-              <span className="font-mono text-[10px] text-muted uppercase tracking-wider">Scope</span>
+              <span className="font-mono text-[12px] text-muted uppercase tracking-wider">Scope</span>
               <ScopeChips scope={rule.scope} />
             </div>
             <div className="flex items-center gap-2">
-              <span className="font-mono text-[10px] text-muted uppercase tracking-wider">Source</span>
+              <span className="font-mono text-[12px] text-muted uppercase tracking-wider">Source</span>
               <span className={cn('inline-flex items-center gap-1.5 text-xs', rule.data_source !== 'unavailable' ? 'text-risk-green/70' : 'text-muted')}>
                 <span className={cn('w-1.5 h-1.5 rounded-full shrink-0', rule.data_source !== 'unavailable' ? 'bg-risk-green/70' : 'bg-kd-border')} />
                 {rule.data_source === 'user_defined' ? 'Custom' : rule.data_source ?? '—'}
@@ -1639,7 +1639,7 @@ export default function RuleDetail() {
             </div>
             {(rule.probability_label ?? rule.probability) && (
               <div className="flex items-center gap-2">
-                <span className="font-mono text-[10px] text-muted uppercase tracking-wider">Probability</span>
+                <span className="font-mono text-[12px] text-muted uppercase tracking-wider">Probability</span>
                 <span className="text-xs text-secondary">{rule.probability_label ?? rule.probability}</span>
               </div>
             )}
@@ -1651,7 +1651,7 @@ export default function RuleDetail() {
           <div className="flex items-baseline gap-2">
             <h2 className="text-sm font-medium text-secondary">Backtesting</h2>
             {conf?.last_computed_at && (
-              <span className="text-[11px] font-mono text-muted">as of {conf.last_computed_at.slice(0, 10)}</span>
+              <span className="text-[12px] font-mono text-muted">as of {conf.last_computed_at.slice(0, 10)}</span>
             )}
           </div>
 
@@ -1659,7 +1659,7 @@ export default function RuleDetail() {
             <>
               {isDailyOnlyRule && signalTransits.length > 0 && (
                 <div className="px-3 py-2 rounded-lg bg-accent-indigo/8 border border-accent-indigo/20">
-                  <span className="text-[11px] font-mono text-accent-indigo/80">
+                  <span className="text-[12px] font-mono text-accent-indigo/80">
                     Daily-signal rule — each bar = one trading day · return = same-day Nifty close-to-close
                   </span>
                 </div>

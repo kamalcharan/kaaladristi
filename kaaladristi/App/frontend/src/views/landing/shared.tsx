@@ -93,18 +93,18 @@ export function Navbar() {
             <span style={{ fontFamily:SERIF, fontSize:22, color:C.ink1, letterSpacing:'-0.01em' }}>
               Dristi<span style={{ color:C.g1 }}>Q</span>
             </span>
-            <span style={{ fontFamily:MONO, fontSize:9, letterSpacing:'.22em', textTransform:'uppercase', color:C.ink3 }}>
+            <span style={{ fontFamily:MONO, fontSize:11, letterSpacing:'.22em', textTransform:'uppercase', color:C.ink3 }}>
               By Vikuna Technologies
             </span>
           </div>
         </div>
         <div style={{ display:'flex', alignItems:'center', gap:28 }}>
-          <div className="dq-nav-links" style={{ fontFamily:MONO, display:'flex', gap:22, fontSize:11, letterSpacing:'.18em', textTransform:'uppercase', color:C.ink3 }}>
+          <div className="dq-nav-links" style={{ fontFamily:MONO, display:'flex', gap:22, fontSize:12, letterSpacing:'.18em', textTransform:'uppercase', color:C.ink3 }}>
             {[['insight','The Insight'],['layer','Layer'],['vani','VaNi'],['origin','Origin']].map(([id,label]) => (
               <a key={id} href={`#${id}`} onClick={smooth(id)} className="dq-navlink">{label}</a>
             ))}
           </div>
-          <button onClick={() => navigate('/login')} className="dq-btn" style={{ padding:'10px 18px', fontSize:11 }}>
+          <button onClick={() => navigate('/login')} className="dq-btn" style={{ padding:'10px 18px', fontSize:12 }}>
             Explore Beta <span className="dq-arrow">→</span>
           </button>
         </div>

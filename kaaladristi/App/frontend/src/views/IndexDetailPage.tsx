@@ -89,7 +89,7 @@ function BseChip() {
     <span
       style={{
         ...MONO,
-        fontSize: 8,
+        fontSize: 10,
         fontWeight: 700,
         letterSpacing: '0.05em',
         color: 'var(--text-secondary)',
@@ -112,7 +112,7 @@ function BseChip() {
 function MetricCell({ label, value, color }: { label: string; value: string; color?: string }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-      <span style={{ ...MONO, fontSize: 9, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--text-faint)' }}>
+      <span style={{ ...MONO, fontSize: 11, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--text-faint)' }}>
         {label}
       </span>
       <span style={{ ...MONO, fontSize: 14, fontWeight: 600, color: color ?? 'var(--text-primary)' }}>
@@ -183,7 +183,7 @@ function ConstituentTable({
 
   const thBase: React.CSSProperties = {
     ...MONO,
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: 600,
     letterSpacing: '0.06em',
     textTransform: 'uppercase',
@@ -340,7 +340,7 @@ function ConstituentTable({
                   {flowInfo ? (
                     <span
                       style={{
-                        fontSize: 10,
+                        fontSize: 12,
                         fontWeight: 500,
                         padding: '2px 6px',
                         borderRadius: 3,
@@ -393,7 +393,7 @@ function IndexScoreCard({ row }: { row: SectorIndexRow }) {
         {flowInfo && (
           <span
             style={{
-              ...MONO, fontSize: 10, fontWeight: 700, letterSpacing: '0.07em',
+              ...MONO, fontSize: 12, fontWeight: 700, letterSpacing: '0.07em',
               textTransform: 'uppercase', padding: '4px 10px', borderRadius: 4,
               background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)',
               color: `var(${flowColorVar}, var(--text-secondary))`,
@@ -406,7 +406,7 @@ function IndexScoreCard({ row }: { row: SectorIndexRow }) {
         {signal && signalStyle && (
           <span
             style={{
-              ...MONO, fontSize: 9, fontWeight: 700, letterSpacing: '0.07em',
+              ...MONO, fontSize: 11, fontWeight: 700, letterSpacing: '0.07em',
               textTransform: 'uppercase', padding: '3px 8px', borderRadius: 4,
               color: signalStyle.color, background: signalStyle.bg,
               border: `1px solid ${signalStyle.border}`,
@@ -416,7 +416,7 @@ function IndexScoreCard({ row }: { row: SectorIndexRow }) {
           </span>
         )}
         {zoneInfo && (
-          <span style={{ ...MONO, fontSize: 10, color: 'var(--text-faint)', marginLeft: 'auto' }}>
+          <span style={{ ...MONO, fontSize: 12, color: 'var(--text-faint)', marginLeft: 'auto' }}>
             RS ·{' '}
             <span
               style={{
@@ -436,21 +436,21 @@ function IndexScoreCard({ row }: { row: SectorIndexRow }) {
       {/* Score + delivery row — scores first (owner doctrine), returns below */}
       <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', marginBottom: 14 }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          <span style={{ ...MONO, fontSize: 8, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-faint)' }}>Score</span>
+          <span style={{ ...MONO, fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-faint)' }}>Score</span>
           <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
             <span style={{ ...MONO, fontSize: 13, fontWeight: 600, color: scoreColor(row.score_5d) }}>
               {row.score_5d != null ? row.score_5d.toFixed(1) : '—'}
             </span>
             {scoreUp ? <ArrowUp size={11} color="var(--bull)" /> : <ArrowDown size={11} color="var(--bear)" />}
-            <span style={{ ...MONO, fontSize: 11, color: 'var(--text-faint)' }}>
+            <span style={{ ...MONO, fontSize: 12, color: 'var(--text-faint)' }}>
               {row.score_22d != null ? row.score_22d.toFixed(1) : '—'}
             </span>
-            <span style={{ ...MONO, fontSize: 9, color: 'var(--text-faint)' }}>5D·22D</span>
+            <span style={{ ...MONO, fontSize: 11, color: 'var(--text-faint)' }}>5D·22D</span>
           </div>
         </div>
         {surge != null && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <span style={{ ...MONO, fontSize: 8, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-faint)' }}>Delivery</span>
+            <span style={{ ...MONO, fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-faint)' }}>Delivery</span>
             <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
               <span
                 style={{
@@ -460,13 +460,13 @@ function IndexScoreCard({ row }: { row: SectorIndexRow }) {
               >
                 {surge.toFixed(2)}×
               </span>
-              <span style={{ ...MONO, fontSize: 9, color: 'var(--text-faint)' }}>5D/22D</span>
+              <span style={{ ...MONO, fontSize: 11, color: 'var(--text-faint)' }}>5D/22D</span>
             </div>
           </div>
         )}
         {row.sniper_inst != null && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <span style={{ ...MONO, fontSize: 8, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-faint)' }}>Smart Money</span>
+            <span style={{ ...MONO, fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-faint)' }}>Smart Money</span>
             <span
               style={{
                 ...MONO, fontSize: 13, fontWeight: 600,
@@ -479,7 +479,7 @@ function IndexScoreCard({ row }: { row: SectorIndexRow }) {
         )}
         {row.stock_count != null && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginLeft: 'auto' }}>
-            <span style={{ ...MONO, fontSize: 8, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-faint)' }}>Constituents</span>
+            <span style={{ ...MONO, fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-faint)' }}>Constituents</span>
             <span style={{ ...MONO, fontSize: 13, color: 'var(--text-secondary)' }}>{row.stock_count}</span>
           </div>
         )}
@@ -488,12 +488,12 @@ function IndexScoreCard({ row }: { row: SectorIndexRow }) {
       <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
         {([['5D', row.ret_5d], ['22D', row.ret_22d], ['66D', row.ret_66d]] as [string, number | null][]).map(([label, v]) => (
           <div key={label} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <span style={{ ...MONO, fontSize: 8, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-faint)' }}>{label} Ret</span>
+            <span style={{ ...MONO, fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-faint)' }}>{label} Ret</span>
             <span style={{ ...MONO, fontSize: 15, fontWeight: 700, color: pctColor(v) }}>{fmtPct(v)}</span>
           </div>
         ))}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          <span style={{ ...MONO, fontSize: 8, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-faint)' }}>RSI 14</span>
+          <span style={{ ...MONO, fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-faint)' }}>RSI 14</span>
           <span style={{ ...MONO, fontSize: 15, fontWeight: 700, color: rsiColor(row.rsi_14) }}>
             {row.rsi_14 != null ? row.rsi_14.toFixed(1) : '—'}
           </span>
@@ -524,30 +524,30 @@ function FlowTrendCard({ indexId, date, height = 170 }: { indexId: number; date:
       }}
     >
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, flexWrap: 'wrap', marginBottom: 10 }}>
-        <span style={{ ...MONO, fontSize: 9, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--text-faint)' }}>
+        <span style={{ ...MONO, fontSize: 11, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--text-faint)' }}>
           Money Flow Trend · {sparkline.length} sessions through {sectorSessionDate(date)}
         </span>
-        <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>
+        <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
           Flow 5D above Flow 22D = stronger relative to its baseline; inspect the slope for change over time.
         </span>
       </div>
       {isLoading ? (
         <div style={{ height, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <span style={{ ...MONO, fontSize: 11, color: 'var(--text-faint)' }}>Loading…</span>
+          <span style={{ ...MONO, fontSize: 12, color: 'var(--text-faint)' }}>Loading…</span>
         </div>
       ) : hasScores && sparkline.length > 1 ? (
         <>
           <ResponsiveContainer width="100%" height={height}>
             <LineChart data={sparkline} margin={{ top: 4, right: 10, bottom: 4, left: 0 }}>
-              <XAxis dataKey="trade_date" tickFormatter={sectorSessionDate} tick={{ fontSize: 9, fill: 'var(--text-muted)' }} minTickGap={45} />
-              <YAxis width={36} tick={{ fontSize: 9, fill: 'var(--text-muted)' }} />
+              <XAxis dataKey="trade_date" tickFormatter={sectorSessionDate} tick={{ fontSize: 11, fill: 'var(--text-muted)' }} minTickGap={45} />
+              <YAxis width={36} tick={{ fontSize: 11, fill: 'var(--text-muted)' }} />
               <Tooltip
                 contentStyle={{
                   background: 'var(--card)',
                   border: '1px solid var(--border)',
                   borderRadius: 4,
                   fontFamily: 'var(--font-mono)',
-                  fontSize: 11,
+                  fontSize: 12,
                   color: 'var(--text-primary)',
                 }}
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -565,17 +565,17 @@ function FlowTrendCard({ indexId, date, height = 170 }: { indexId: number; date:
           <div style={{ display: 'flex', gap: 16, marginTop: 6 }}>
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
               <span style={{ width: 14, height: 2, background: 'var(--gold-soft)', flexShrink: 0 }} />
-              <span style={{ ...MONO, fontSize: 9, color: 'var(--text-muted)' }}>Flow 5D — 1-week flow</span>
+              <span style={{ ...MONO, fontSize: 11, color: 'var(--text-muted)' }}>Flow 5D — 1-week flow</span>
             </span>
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
               <span style={{ width: 14, height: 0, borderTop: '2px dashed var(--text-faint)', flexShrink: 0 }} />
-              <span style={{ ...MONO, fontSize: 9, color: 'var(--text-muted)' }}>Flow 22D — 1-month flow</span>
+              <span style={{ ...MONO, fontSize: 11, color: 'var(--text-muted)' }}>Flow 22D — 1-month flow</span>
             </span>
           </div>
         </>
       ) : (
         <div style={{ height, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <span style={{ ...MONO, fontSize: 11, color: 'var(--text-faint)' }}>No flow-score history yet for this index</span>
+          <span style={{ ...MONO, fontSize: 12, color: 'var(--text-faint)' }}>No flow-score history yet for this index</span>
         </div>
       )}
     </div>
@@ -681,7 +681,7 @@ function HeroTiles({
 
   return (
     <div style={{ marginBottom: 16 }}>
-      <div style={{ ...MONO, fontSize: 9, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--text-faint)', marginBottom: 8 }}>
+      <div style={{ ...MONO, fontSize: 11, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--text-faint)', marginBottom: 8 }}>
         Top Movers · Flow 5D · click to open chart
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 8 }}>
@@ -703,7 +703,7 @@ function HeroTiles({
               onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.transform = 'translateY(-1px)'; }}
               onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.transform = 'none'; }}
             >
-              <span style={{ display: 'flex', alignItems: 'center', minWidth: 0, ...MONO, fontSize: 11, fontWeight: 600, color: 'var(--text-primary)' }}>
+              <span style={{ display: 'flex', alignItems: 'center', minWidth: 0, ...MONO, fontSize: 12, fontWeight: 600, color: 'var(--text-primary)' }}>
                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
                 {isNumericSymbol(d.symbol) && <BseChip />}
               </span>
@@ -782,10 +782,10 @@ function OverviewTab({ row, indexId }: { row: SectorIndexRow; indexId: number })
       {/* 5. Constituents — full width, all columns, click a row → the stock's chart */}
       <div style={{ border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden', marginBottom: 24 }}>
         <div className="sector-inset" style={{ padding: '10px 14px', background: 'var(--card)', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'baseline', gap: 8 }}>
-          <span style={{ ...MONO, fontSize: 9, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--text-faint)' }}>
+          <span style={{ ...MONO, fontSize: 11, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--text-faint)' }}>
             Constituents
           </span>
-          <span style={{ ...MONO, fontSize: 9, color: 'var(--text-faint)', opacity: 0.7 }}>
+          <span style={{ ...MONO, fontSize: 11, color: 'var(--text-faint)', opacity: 0.7 }}>
             · click a row to open its chart
           </span>
         </div>
@@ -804,7 +804,7 @@ function OverviewTab({ row, indexId }: { row: SectorIndexRow; indexId: number })
             marginBottom: 24,
           }}
         >
-          <span style={{ ...MONO, fontSize: 9, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--text-faint)', display: 'block', marginBottom: 6 }}>
+          <span style={{ ...MONO, fontSize: 11, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--text-faint)', display: 'block', marginBottom: 6 }}>
             Constituent Participation · Breadth Momentum
           </span>
           <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
@@ -817,7 +817,7 @@ function OverviewTab({ row, indexId }: { row: SectorIndexRow; indexId: number })
         <>
           {!breadthLoading && breadthData != null && breadthData.stockCount < BREADTH_SMALL_N && (
             <div style={{ marginBottom: 8 }}>
-              <span style={{ ...MONO, fontSize: 10, color: 'var(--caution, var(--risk-amber))' }}>
+              <span style={{ ...MONO, fontSize: 12, color: 'var(--caution, var(--risk-amber))' }}>
                 Small sample · {breadthData.stockCount} stocks — one constituent crossing an average
                 moves this gauge noticeably
               </span>
@@ -890,12 +890,12 @@ function MomentumCard({ row, indexId }: { row: SectorIndexRow; indexId: number }
     >
       {/* Mini sparkline */}
       <div style={{ width: 160, flexShrink: 0 }}>
-        <span style={{ ...MONO, fontSize: 9, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--text-faint)', display: 'block', marginBottom: 4 }}>
+        <span style={{ ...MONO, fontSize: 11, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--text-faint)', display: 'block', marginBottom: 4 }}>
           {sparkline.length}-session close
         </span>
         {sparkLoading ? (
           <div style={{ height: 48, display: 'flex', alignItems: 'center' }}>
-            <span style={{ ...MONO, fontSize: 10, color: 'var(--text-faint)' }}>…</span>
+            <span style={{ ...MONO, fontSize: 12, color: 'var(--text-faint)' }}>…</span>
           </div>
         ) : sparkline.length > 1 ? (
           <ResponsiveContainer width="100%" height={48}>
@@ -910,7 +910,7 @@ function MomentumCard({ row, indexId }: { row: SectorIndexRow; indexId: number }
 
       {/* Flow 5D vs 22D */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-        <span style={{ ...MONO, fontSize: 9, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--text-faint)' }}>
+        <span style={{ ...MONO, fontSize: 11, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--text-faint)' }}>
           Score Momentum
         </span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -920,22 +920,22 @@ function MomentumCard({ row, indexId }: { row: SectorIndexRow; indexId: number }
           {score5dHigher
             ? <ArrowUp size={12} color="var(--bull)" />
             : <ArrowDown size={12} color="var(--bear)" />}
-          <span style={{ ...MONO, fontSize: 11, color: 'var(--text-faint)' }}>
+          <span style={{ ...MONO, fontSize: 12, color: 'var(--text-faint)' }}>
             vs {row.score_22d != null ? row.score_22d.toFixed(1) : '—'}
           </span>
         </div>
-        <span style={{ ...MONO, fontSize: 9, color: 'var(--text-faint)' }}>5D vs 22D</span>
+        <span style={{ ...MONO, fontSize: 11, color: 'var(--text-faint)' }}>5D vs 22D</span>
       </div>
 
       {/* % Amt Change */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-        <span style={{ ...MONO, fontSize: 9, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--text-faint)' }}>
+        <span style={{ ...MONO, fontSize: 11, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--text-faint)' }}>
           % Amt Chg
         </span>
         <span style={{ ...MONO, fontSize: 14, fontWeight: 600, color: pctColor(pctAmtChg) }}>
           {fmtPct(pctAmtChg)}
         </span>
-        <span style={{ ...MONO, fontSize: 9, color: 'var(--text-faint)' }}>5D vs 22D avg</span>
+        <span style={{ ...MONO, fontSize: 11, color: 'var(--text-faint)' }}>5D vs 22D avg</span>
       </div>
 
       {/* Signal badge */}
@@ -944,7 +944,7 @@ function MomentumCard({ row, indexId }: { row: SectorIndexRow; indexId: number }
           <span
             style={{
               ...MONO,
-              fontSize: 10,
+              fontSize: 12,
               fontWeight: 700,
               letterSpacing: '0.07em',
               textTransform: 'uppercase',
@@ -1115,7 +1115,7 @@ export default function IndexDetailPage() {
             cursor: 'pointer',
             color: 'var(--text-faint)',
             ...MONO,
-            fontSize: 11,
+            fontSize: 12,
             letterSpacing: '0.04em',
             padding: '0 0 10px 0',
           }}
@@ -1132,7 +1132,7 @@ export default function IndexDetailPage() {
             <span
               style={{
                 ...MONO,
-                fontSize: 9,
+                fontSize: 11,
                 letterSpacing: '0.08em',
                 textTransform: 'uppercase',
                 color: 'var(--text-faint)',
@@ -1148,7 +1148,7 @@ export default function IndexDetailPage() {
             <span
               style={{
                 ...MONO,
-                fontSize: 9,
+                fontSize: 11,
                 letterSpacing: '0.06em',
                 color: 'var(--text-faint)',
                 background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)',
@@ -1174,7 +1174,7 @@ export default function IndexDetailPage() {
               }}
               style={{
                 ...MONO,
-                fontSize: 11,
+                fontSize: 12,
                 color: 'var(--text-secondary)',
                 background: 'var(--bg)',
                 border: '1px solid var(--border)',
@@ -1188,7 +1188,7 @@ export default function IndexDetailPage() {
               <button
                 onClick={() => { setSelectedDate(null); setSearch(prev => { const next = new URLSearchParams(prev); next.delete('asof'); return next; }); }}
                 style={{
-                  ...MONO, fontSize: 10, color: 'var(--gold-soft)', background: 'none',
+                  ...MONO, fontSize: 12, color: 'var(--gold-soft)', background: 'none',
                   border: 'none', cursor: 'pointer', padding: 0,
                 }}
               >
@@ -1201,7 +1201,7 @@ export default function IndexDetailPage() {
               onClick={() => navigate(`/chart/index/${indexId}?name=${encodeURIComponent(row.name)}`)}
               style={{
                 display: 'inline-flex', alignItems: 'center', gap: 5,
-                ...MONO, fontSize: 11, fontWeight: 600, letterSpacing: '0.04em',
+                ...MONO, fontSize: 12, fontWeight: 600, letterSpacing: '0.04em',
                 color: 'var(--accent, var(--gold-soft))',
                 background: 'color-mix(in srgb, var(--accent, var(--gold-soft)) 10%, transparent)',
                 border: '1px solid color-mix(in srgb, var(--accent, var(--gold-soft)) 35%, transparent)',

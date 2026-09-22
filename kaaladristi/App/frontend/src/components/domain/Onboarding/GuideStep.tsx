@@ -30,14 +30,14 @@ function PickRow({ stock, presetName }: { stock: ScanStock; presetName: string }
           <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>{displaySymbol(stock)}</span>
           <CardExchangeBadge exchange={stock.exchange} />
         </div>
-        <div style={{ fontSize: 11, color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+        <div style={{ fontSize: 12, color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
           {presetName}{stock.industry ? ` · ${stock.industry}` : ''}
         </div>
       </div>
       <div style={{ textAlign: 'right', fontFamily: MONO, flexShrink: 0 }}>
         <div style={{ fontSize: 13, color: 'var(--text-primary)' }}>{fmtInr(stock.close)}</div>
         {d != null && (
-          <div style={{ fontSize: 11, color: d >= 0 ? 'var(--bull)' : 'var(--bear)' }}>{d >= 0 ? '+' : ''}{d.toFixed(2)}%</div>
+          <div style={{ fontSize: 12, color: d >= 0 ? 'var(--bull)' : 'var(--bear)' }}>{d >= 0 ? '+' : ''}{d.toFixed(2)}%</div>
         )}
       </div>
       <BookmarkToggle equityId={stock.equity_id} size={20} />
@@ -83,7 +83,7 @@ export default function GuideStep({ persona, onContinue }: { persona: Persona; o
         <section data-tour="onboarding-picks">
           <Question n={1} text="Today's three, one per setup type" />
           {uniquePicks.length === 0 ? (
-            <div style={{ fontFamily: MONO, fontSize: 11, color: 'var(--text-muted)', padding: '12px 0' }}>
+            <div style={{ fontFamily: MONO, fontSize: 12, color: 'var(--text-muted)', padding: '12px 0' }}>
               {data.loading ? 'Reading today\'s market…' : 'No live setups to show today — you can bookmark from any scanner once inside.'}
             </div>
           ) : (
@@ -107,7 +107,7 @@ export default function GuideStep({ persona, onContinue }: { persona: Persona; o
             {scanners.map((m, i) => (
               <div key={m.id} style={{ display: 'flex', gap: 12, alignItems: 'flex-start', padding: '10px 12px',
                 borderRadius: 12, background: 'var(--card)', border: '1px solid var(--border)' }}>
-                <span style={{ fontFamily: MONO, fontSize: 11, color: 'var(--accent)', marginTop: 2 }}>0{i + 1}</span>
+                <span style={{ fontFamily: MONO, fontSize: 12, color: 'var(--accent)', marginTop: 2 }}>0{i + 1}</span>
                 <div style={{ minWidth: 0 }}>
                   <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{m.name}</div>
                   <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.45 }}>{m.description}</div>

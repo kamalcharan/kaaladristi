@@ -162,7 +162,7 @@ export default function VerdictHero({ latest, snapshot, mode, breadthPct }: Prop
       {/* Eyebrow */}
       <div
         style={{
-          fontSize: 10,
+          fontSize: 12,
           fontFamily: 'var(--font-mono, monospace)',
           letterSpacing: '0.12em',
           textTransform: 'uppercase',
@@ -208,7 +208,7 @@ export default function VerdictHero({ latest, snapshot, mode, breadthPct }: Prop
           >
             <div
               style={{
-                fontSize: 9.5,
+                fontSize: 11,
                 fontFamily: 'var(--font-mono, monospace)',
                 letterSpacing: '0.1em',
                 textTransform: 'uppercase',
@@ -221,12 +221,12 @@ export default function VerdictHero({ latest, snapshot, mode, breadthPct }: Prop
             <div style={{ fontSize: 21, fontWeight: 700, fontFamily: 'var(--font-mono, monospace)', lineHeight: 1.05 }}>
               {p.value}
             </div>
-            <div style={{ fontSize: 10.5, color: p.toneColor, marginTop: 3 }}>{p.tone}</div>
+            <div style={{ fontSize: 12, color: p.toneColor, marginTop: 3 }}>{p.tone}</div>
           </button>
         ))}
       </div>
 
-      <div style={{ fontSize: 10, color: 'var(--verdict-hero-muted)', marginTop: 12 }}>
+      <div style={{ fontSize: 12, color: 'var(--verdict-hero-muted)', marginTop: 12 }}>
         Pillar cards jump to their evidence. Not advice, not a forecast.
       </div>
     </div>

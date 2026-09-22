@@ -50,10 +50,10 @@ function Shell({ children, count }: { children: React.ReactNode; count?: number 
     <div className="rounded-lg bg-kd-card border border-kd-border p-3">
       <div className="flex items-center gap-2 mb-1">
         <Users className="w-3.5 h-3.5" style={{ color: 'var(--accent-indigo)' }} />
-        <span className="text-[11px] font-serif font-semibold text-primary tracking-wide">
+        <span className="text-[12px] font-serif font-semibold text-primary tracking-wide">
           Bulk &amp; Block Deals
         </span>
-        {count != null && <span className="ml-auto text-[9px] font-mono text-muted">{count}</span>}
+        {count != null && <span className="ml-auto text-[11px] font-mono text-muted">{count}</span>}
       </div>
       {children}
     </div>
@@ -82,30 +82,30 @@ function DealRow({ d }: { d: BulkDeal }) {
   return (
     <div className="rounded-md bg-kd-elevated border border-kd-border px-2.5 py-1.5">
       <div className="flex items-baseline gap-2 flex-wrap">
-        <span className="text-[10px] font-mono text-[var(--text-secondary)]">{fmtDay(d.dealDate)}</span>
+        <span className="text-[12px] font-mono text-[var(--text-secondary)]">{fmtDay(d.dealDate)}</span>
         <span
-          className="text-[8.5px] font-mono font-bold uppercase tracking-wider px-1.5 py-0.5 rounded"
+          className="text-[10px] font-mono font-bold uppercase tracking-wider px-1.5 py-0.5 rounded"
           style={{ color: side.color, background: side.bg }}
         >
           {side.label}
         </span>
-        <span className="text-[11px] font-mono font-bold" style={{ color: side.color }}>
+        <span className="text-[12px] font-mono font-bold" style={{ color: side.color }}>
           ₹{fmtCr(d.valueCr)} Cr
         </span>
         {d.pctOfEquity != null && (
-          <span className="text-[9.5px] font-mono text-muted">{d.pctOfEquity.toFixed(2)}% of equity</span>
+          <span className="text-[11px] font-mono text-muted">{d.pctOfEquity.toFixed(2)}% of equity</span>
         )}
-        <span className="ml-auto text-[9px] font-mono text-muted">
+        <span className="ml-auto text-[11px] font-mono text-muted">
           {d.feeds.join(' + ')}
         </span>
       </div>
 
       {/* The name is the reason this card exists — give it the emphasis. */}
-      <div className="text-[10px] text-primary font-medium leading-snug mt-0.5 break-words">
+      <div className="text-[12px] text-primary font-medium leading-snug mt-0.5 break-words">
         {d.clientName}
       </div>
 
-      <div className="text-[9px] text-muted mt-0.5 font-mono">
+      <div className="text-[11px] text-muted mt-0.5 font-mono">
         {fmtQty(d.quantity)} @ ₹{d.price.toFixed(2)}
         {d.day0 && d.day0 !== d.dealDate && <> · actionable {fmtDay(d.day0)}</>}
       </div>
@@ -118,7 +118,7 @@ export default function BulkDealsCard({ result }: { result: BulkDealsResult | un
   if (!result) {
     return (
       <Shell>
-        <p className="text-[9px] text-muted leading-snug">Loading disclosed deals…</p>
+        <p className="text-[11px] text-muted leading-snug">Loading disclosed deals…</p>
       </Shell>
     );
   }
@@ -128,7 +128,7 @@ export default function BulkDealsCard({ result }: { result: BulkDealsResult | un
   if (deals.length === 0) {
     return (
       <Shell>
-        <p className="text-[9px] text-muted leading-snug">
+        <p className="text-[11px] text-muted leading-snug">
           {coverageSentence(coverage, false)}
         </p>
       </Shell>
@@ -139,7 +139,7 @@ export default function BulkDealsCard({ result }: { result: BulkDealsResult | un
 
   return (
     <Shell count={deals.length}>
-      <p className="text-[9px] text-muted leading-snug mb-2.5">
+      <p className="text-[11px] text-muted leading-snug mb-2.5">
         Trades disclosed by name because they crossed a regulatory line — over 0.5% of listed
         equity in a session, or a block-window trade. Unlike Big Money days, the counterparty and
         the side are stated facts, not inferred. A block trade may leave no delivery footprint at
@@ -153,12 +153,12 @@ export default function BulkDealsCard({ result }: { result: BulkDealsResult | un
       </div>
 
       {deals.length > shown.length && (
-        <div className="text-[9px] text-muted mt-1.5">
+        <div className="text-[11px] text-muted mt-1.5">
           +{deals.length - shown.length} more in this window
         </div>
       )}
 
-      <div className="text-[8.5px] text-muted mt-2 leading-snug opacity-80">
+      <div className="text-[10px] text-muted mt-2 leading-snug opacity-80">
         {coverageSentence(coverage, true)}
       </div>
     </Shell>

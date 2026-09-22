@@ -64,21 +64,21 @@ function PanelShell({ title, summary, defaultOpen = false, children, accentColor
             borderRadius: 2, flexShrink: 0,
           }} />
           <span style={{
-            fontFamily: 'var(--font-mono, monospace)', fontSize: 10,
+            fontFamily: 'var(--font-mono, monospace)', fontSize: 12,
             fontWeight: 700, color: 'var(--text-primary)',
             letterSpacing: '0.08em', textTransform: 'uppercase',
             flexShrink: 0,
           }}>{title}</span>
           {summary && (
             <span style={{
-              fontFamily: 'var(--font-mono, monospace)', fontSize: 9,
+              fontFamily: 'var(--font-mono, monospace)', fontSize: 11,
               color: 'var(--text-muted)', marginLeft: 6,
               overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
             }}>{summary}</span>
           )}
         </div>
         <span style={{
-          color: 'var(--text-muted)', fontSize: 10,
+          color: 'var(--text-muted)', fontSize: 12,
           transform: open ? 'rotate(180deg)' : 'none',
           transition: 'transform 0.2s',
         }}>▼</span>

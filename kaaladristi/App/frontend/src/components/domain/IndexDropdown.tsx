@@ -73,7 +73,7 @@ function IndexDropdown({
       <div style={{ flex: 1, overflowY: 'auto', padding: '4px 0' }}>
         {loading ? (
           <div style={{ padding: '20px 0', textAlign: 'center',
-            fontSize: 11, color: 'color-mix(in srgb, var(--text-primary) 25%, transparent)',
+            fontSize: 12, color: 'color-mix(in srgb, var(--text-primary) 25%, transparent)',
             fontFamily: 'var(--font-mono, monospace)' }}>
             loading…
           </div>
@@ -99,7 +99,7 @@ function IndexDropdown({
             >
               <span style={{ fontSize: 12, color: 'var(--text-primary)' }}>{idx.display_name}</span>
               {added
-                ? <span style={{ fontSize: 10, color: 'var(--accent)', fontFamily: 'var(--font-mono,monospace)' }}>✓</span>
+                ? <span style={{ fontSize: 12, color: 'var(--accent)', fontFamily: 'var(--font-mono,monospace)' }}>✓</span>
                 : <span style={{ fontSize: 16, color: 'var(--accent-dim)' }}>+</span>
               }
             </button>

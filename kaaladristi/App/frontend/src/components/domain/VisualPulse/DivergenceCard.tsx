@@ -68,9 +68,9 @@ function DualSparkline({ prices, rsis }: { prices: number[]; rsis: number[] }) {
       <polyline points={rPoints} fill="none" stroke="var(--accent-indigo)"
         strokeWidth={1.2} strokeLinecap="round" strokeLinejoin="round" />
       {/* Labels */}
-      <text x={0} y={10} fill="var(--text-muted)" fontSize={7}
+      <text x={0} y={10} fill="var(--text-muted)" fontSize={10}
         fontFamily="var(--font-mono, monospace)">Price</text>
-      <text x={0} y={hTop + gap + 10} fill="var(--text-muted)" fontSize={7}
+      <text x={0} y={hTop + gap + 10} fill="var(--text-muted)" fontSize={10}
         fontFamily="var(--font-mono, monospace)">RSI</text>
     </svg>
   );
@@ -99,13 +99,13 @@ export default function DivergenceCard({ divergence, rsiHistory, priceHistory }:
         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
       }}>
         <span style={{
-          fontSize: 8, fontFamily: 'var(--font-mono, monospace)',
+          fontSize: 10, fontFamily: 'var(--font-mono, monospace)',
           textTransform: 'uppercase', letterSpacing: 3, color: 'var(--text-muted)',
         }}>RSI Divergence</span>
         {hasDiv && (
           <span style={{
             padding: '2px 8px', borderRadius: 10,
-            fontSize: 8, fontFamily: 'var(--font-mono, monospace)', fontWeight: 700,
+            fontSize: 10, fontFamily: 'var(--font-mono, monospace)', fontWeight: 700,
             background: `color-mix(in srgb, ${color} 15%, transparent)`,
             border: `1px solid color-mix(in srgb, ${color} 40%, transparent)`,
             color,
@@ -123,13 +123,13 @@ export default function DivergenceCard({ divergence, rsiHistory, priceHistory }:
               <span style={{ fontSize: 16 }}>{FRESHNESS_EMOJI[divergence.freshness]}</span>
               <div>
                 <div style={{
-                  fontSize: 10, fontFamily: 'var(--font-mono, monospace)',
+                  fontSize: 12, fontFamily: 'var(--font-mono, monospace)',
                   fontWeight: 600, color,
                 }}>
                   {divergence.barsAgo === 0 ? 'Active now' : `${divergence.barsAgo} bars ago`}
                 </div>
                 <div style={{
-                  fontSize: 8, fontFamily: 'var(--font-mono, monospace)',
+                  fontSize: 10, fontFamily: 'var(--font-mono, monospace)',
                   color: 'var(--text-muted)',
                 }}>{FRESHNESS_LABEL[divergence.freshness]}</div>
               </div>
@@ -140,13 +140,13 @@ export default function DivergenceCard({ divergence, rsiHistory, priceHistory }:
 
             {/* Explanation */}
             <div style={{
-              marginTop: 8, fontSize: 10, fontStyle: 'italic',
+              marginTop: 8, fontSize: 12, fontStyle: 'italic',
               color: 'var(--text-secondary)', lineHeight: 1.5,
             }}>{divergence.label}</div>
           </>
         ) : (
           <div style={{
-            fontSize: 10, fontFamily: 'var(--font-mono, monospace)',
+            fontSize: 12, fontFamily: 'var(--font-mono, monospace)',
             color: 'var(--text-muted)', fontStyle: 'italic',
             padding: '8px 0',
           }}>No divergence detected in last 50 bars</div>

@@ -78,7 +78,7 @@ function ImpactBadge({ impact }: { impact: string | null }) {
   const s = MARKET_STATUS_MAP.get(impact);
   const c = STATUS_COLOR_CLASSES[s?.color ?? 'slate'];
   return (
-    <span className={cn('inline-flex items-center px-2.5 py-0.5 rounded-lg text-[11px] font-semibold border', c.bg, c.text, c.border)}>
+    <span className={cn('inline-flex items-center px-2.5 py-0.5 rounded-lg text-[12px] font-semibold border', c.bg, c.text, c.border)}>
       {s?.label ?? impact}
     </span>
   );
@@ -94,7 +94,7 @@ function ConfidenceDots({ value }: { value: number | null }) {
           className={cn('w-1.5 h-1.5 rounded-full', i < value ? 'bg-accent-indigo' : 'bg-kd-border')}
         />
       ))}
-      <span className="ml-1.5 text-[11px] text-muted mono">{value}/10</span>
+      <span className="ml-1.5 text-[12px] text-muted mono">{value}/10</span>
     </div>
   );
 }
@@ -176,7 +176,7 @@ function FormModal({ initial, initialAppl, editId, onClose, onSave, isSaving, sa
   const isValid = form.astro_event.trim() && form.start_date;
 
   const inputCls = 'w-full px-4 py-3 bg-kd-elevated border border-kd-border rounded-xl text-sm text-[var(--text-primary)] placeholder:text-muted focus:outline-none focus:border-accent-indigo/60 transition-colors';
-  const labelCls = 'block text-[11px] uppercase tracking-widest font-bold text-muted mb-2';
+  const labelCls = 'block text-[12px] uppercase tracking-widest font-bold text-muted mb-2';
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
@@ -386,7 +386,7 @@ function InferenceCard({
       {/* Row 1: event + date + actions */}
       <div className="flex items-center gap-3">
         <p className="text-[13px] font-bold text-[var(--text-primary)] leading-tight flex-1 truncate">{row.astro_event}</p>
-        <span className="text-[10px] mono text-muted whitespace-nowrap shrink-0">
+        <span className="text-[12px] mono text-muted whitespace-nowrap shrink-0">
           {formatDateRange(row)}
         </span>
         <div className="flex items-center gap-0.5 shrink-0 ml-1">
@@ -397,7 +397,7 @@ function InferenceCard({
             onClick={() => onDelete(row.id)}
             title={isConfirming ? 'Click again to confirm' : 'Delete'}
             className={cn(
-              'h-7 rounded-md flex items-center justify-center transition-all text-[11px] font-medium',
+              'h-7 rounded-md flex items-center justify-center transition-all text-[12px] font-medium',
               isConfirming
                 ? 'px-2 bg-risk-red/20 text-risk-red border border-risk-red/40'
                 : 'w-7 text-muted hover:text-risk-red hover:bg-risk-red/10'
@@ -413,12 +413,12 @@ function InferenceCard({
         <ImpactBadge impact={row.market_impact} />
         <ConfidenceDots value={row.confidence} />
         {scopeLabels.map(lbl => (
-          <span key={lbl} className="px-1.5 py-px rounded bg-kd-elevated border border-kd-border text-[10px] text-[var(--text-secondary)] font-medium">
+          <span key={lbl} className="px-1.5 py-px rounded bg-kd-elevated border border-kd-border text-[12px] text-[var(--text-secondary)] font-medium">
             {lbl}
           </span>
         ))}
         {(row.applicability_scope ?? []).map(s => (
-          <span key={s} className="px-1.5 py-px rounded bg-accent-indigo/10 border border-accent-indigo/20 text-[9px] text-accent-indigo font-semibold uppercase tracking-wider">
+          <span key={s} className="px-1.5 py-px rounded bg-accent-indigo/10 border border-accent-indigo/20 text-[11px] text-accent-indigo font-semibold uppercase tracking-wider">
             {s}
           </span>
         ))}
@@ -735,7 +735,7 @@ export default function InferenceView() {
 
         {/* Footer note */}
         {rows.length > 0 && (
-          <p className="text-[10px] text-muted mt-3 text-right mono">
+          <p className="text-[12px] text-muted mt-3 text-right mono">
             {rows.length} entries &middot; Rule Engine correlation coming soon
           </p>
         )}

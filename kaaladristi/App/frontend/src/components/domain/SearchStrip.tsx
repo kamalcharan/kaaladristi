@@ -327,7 +327,7 @@ export default function SearchStrip() {
                     {/^\d+$/.test(item.symbol) ? item.name : item.symbol}
                   </span>
                   <span className={cn(
-                    'text-[8px] font-bold px-1 py-0.5 rounded border shrink-0',
+                    'text-[10px] font-bold px-1 py-0.5 rounded border shrink-0',
                     item.type === 'index'
                       ? 'text-accent-cyan border-accent-cyan/30 bg-accent-cyan/5'
                       : item.exchange === 'NSE'
@@ -339,10 +339,10 @@ export default function SearchStrip() {
                 </div>
                 <div className="flex items-center gap-1.5">
                   {item.type === 'equity' && !/^\d+$/.test(item.symbol) && (
-                    <span className="text-[10px] text-muted truncate">{item.name}</span>
+                    <span className="text-[12px] text-muted truncate">{item.name}</span>
                   )}
                   {item.industry && (
-                    <span className="text-[10px] text-muted truncate">{item.industry}</span>
+                    <span className="text-[12px] text-muted truncate">{item.industry}</span>
                   )}
                 </div>
               </div>

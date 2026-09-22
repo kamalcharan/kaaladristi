@@ -52,19 +52,19 @@ export default function PlanetsSidebar({ date }: Props) {
       background: 'var(--panel-recess)',
     }}>
       <div style={{
-        fontFamily: 'var(--font-mono, monospace)', fontSize: 9,
+        fontFamily: 'var(--font-mono, monospace)', fontSize: 11,
         color: 'var(--text-faint)', letterSpacing: '0.12em',
         textTransform: 'uppercase', marginBottom: 6,
       }}>Planets</div>
 
       {isLoading && positions.length === 0 ? (
         <div style={{
-          fontFamily: 'var(--font-mono, monospace)', fontSize: 10,
+          fontFamily: 'var(--font-mono, monospace)', fontSize: 12,
           color: 'var(--text-faint)',
         }}>Loading…</div>
       ) : ordered.length === 0 ? (
         <div style={{
-          fontFamily: 'var(--font-mono, monospace)', fontSize: 10,
+          fontFamily: 'var(--font-mono, monospace)', fontSize: 12,
           color: 'var(--text-faint)',
         }}>No planetary data for this date.</div>
       ) : ordered.map((p, i) => {
@@ -76,10 +76,10 @@ export default function PlanetsSidebar({ date }: Props) {
             alignItems: 'baseline', gap: 6,
             padding: '3px 0',
             borderBottom: i < ordered.length - 1 ? '1px solid color-mix(in srgb, var(--text-primary) 4%, transparent)' : 'none',
-            fontFamily: 'var(--font-mono, monospace)', fontSize: 10,
+            fontFamily: 'var(--font-mono, monospace)', fontSize: 12,
           }}>
             <span style={{
-              color: 'var(--text-muted)', fontSize: 11,
+              color: 'var(--text-muted)', fontSize: 12,
               textAlign: 'center',
             }}>{SYMBOL[p.planet] ?? '·'}</span>
             <span style={{ color: 'var(--text-faint)' }}>{p.planet}</span>
@@ -88,7 +88,7 @@ export default function PlanetsSidebar({ date }: Props) {
               overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
             }}>{p.sign_name ?? '—'}</span>
             <span style={{
-              color: TONE_VAR[status.tone], fontSize: 9, fontWeight: 700,
+              color: TONE_VAR[status.tone], fontSize: 11, fontWeight: 700,
             }}>{status.label}</span>
           </div>
         );

@@ -14,7 +14,7 @@ import type { ChatMessage } from './types';
 function BriefRule({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex items-center gap-2">
-      <span className="text-[9px] font-mono text-[var(--accent-indigo)]/40 uppercase tracking-widest">
+      <span className="text-[11px] font-mono text-[var(--accent-indigo)]/40 uppercase tracking-widest">
         {children}
       </span>
       <div className="flex-1 h-px bg-[var(--accent-indigo)]/10" />
@@ -128,7 +128,7 @@ export default function VaNiAutorunBrief({
       {!isLoading && !message && (
         <div className="flex items-start gap-2 px-3 py-2.5 rounded-xl bg-[var(--bg)]/40 border border-[var(--accent-indigo)]/10">
           <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5 text-[var(--accent-indigo)]/40" />
-          <p className="text-[11px] text-white/40 leading-relaxed">
+          <p className="text-[12px] text-white/40 leading-relaxed">
             {isError || data?.error
               ? 'VaNi could not reach the market read just now. The questions below still work.'
               : 'No completed trading session to read yet. The questions below still work.'}

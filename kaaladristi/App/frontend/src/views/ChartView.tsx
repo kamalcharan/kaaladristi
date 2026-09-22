@@ -820,7 +820,7 @@ export default function ChartView({ storyPreview = false }: { storyPreview?: boo
                   key={t}
                   onClick={() => setTf(t)}
                   className={cn(
-                    'px-2.5 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider transition-all',
+                    'px-2.5 py-0.5 rounded-md text-[12px] font-bold uppercase tracking-wider transition-all',
                     tf === t ? 'bg-accent-indigo/25 text-accent-indigo' : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)]',
                   )}
                 >
@@ -834,7 +834,7 @@ export default function ChartView({ storyPreview = false }: { storyPreview?: boo
                   key={r}
                   onClick={() => setRange(r)}
                   className={cn(
-                    'px-3 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all duration-200',
+                    'px-3 py-1 rounded-lg text-[12px] font-bold uppercase tracking-wider transition-all duration-200',
                     range === r
                       ? 'bg-accent-indigo/20 text-accent-indigo border border-accent-indigo/30'
                       : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)] hover:bg-kd-elevated',
@@ -844,12 +844,12 @@ export default function ChartView({ storyPreview = false }: { storyPreview?: boo
                 </button>
               ))
             ) : (
-              <span className="text-[9px] text-muted font-mono px-1">full history · {tf} bars</span>
+              <span className="text-[11px] text-muted font-mono px-1">full history · {tf} bars</span>
             )}
             <button
               onClick={() => setIsFull((f) => !f)}
               title={isFull ? 'Exit fullscreen' : 'Fullscreen chart'}
-              className="ml-auto px-2.5 py-1 rounded-lg text-[11px] text-[var(--text-muted)] hover:text-[var(--text-secondary)] hover:bg-kd-elevated border border-kd-border transition-all"
+              className="ml-auto px-2.5 py-1 rounded-lg text-[12px] text-[var(--text-muted)] hover:text-[var(--text-secondary)] hover:bg-kd-elevated border border-kd-border transition-all"
             >
               {isFull ? '✕' : '⛶'}
             </button>
@@ -924,7 +924,7 @@ export default function ChartView({ storyPreview = false }: { storyPreview?: boo
         )}
       </div>
       {rows.length > 0 && (
-        <p className="text-[9px] text-muted mt-1 text-right mono">
+        <p className="text-[11px] text-muted mt-1 text-right mono">
           {rows.length} days &middot; {rows[0].trade_date} to {rows[rows.length - 1].trade_date}
         </p>
       )}
@@ -963,7 +963,7 @@ export default function ChartView({ storyPreview = false }: { storyPreview?: boo
           >
             ⤢ Story mode
           </button>}
-          <span className="text-[11px] text-muted font-mono">
+          <span className="text-[12px] text-muted font-mono">
             {storyEvents.length} signal events · price × data story
           </span>
         </div>
@@ -1020,8 +1020,8 @@ export default function ChartView({ storyPreview = false }: { storyPreview?: boo
             />
           ) : (
             <div className="rounded-lg bg-kd-card border border-kd-border p-3">
-              <div className="text-[11px] font-serif font-semibold text-primary mb-1">Magic RS</div>
-              <div className="text-[10px] text-muted leading-snug">Not computed (RS vs NIFTY 500 needs a benchmark series — absent for many BSE/thin names).</div>
+              <div className="text-[12px] font-serif font-semibold text-primary mb-1">Magic RS</div>
+              <div className="text-[12px] text-muted leading-snug">Not computed (RS vs NIFTY 500 needs a benchmark series — absent for many BSE/thin names).</div>
             </div>
           ))}
         </div>
@@ -1070,7 +1070,7 @@ export default function ChartView({ storyPreview = false }: { storyPreview?: boo
                 {tf === 'daily' && hasRsData ? (
                   <RotationGraph points={rotationPoints} benchmark="NIFTY 500" autoPlay playSeconds={7} breakaway={latestBreakaway} />
                 ) : (
-                  <div className="glass-card rounded-xl p-3 text-[10px] text-muted">
+                  <div className="glass-card rounded-xl p-3 text-[12px] text-muted">
                     RS-Rotation is available on the daily timeframe{hasRsData ? '' : ' (RS not computed here)'}.
                   </div>
                 )}
@@ -1087,10 +1087,10 @@ export default function ChartView({ storyPreview = false }: { storyPreview?: boo
                       onClick={() => setMembershipOpen((o) => !o)}
                       className="w-full flex items-center justify-between px-3 py-2.5 text-left"
                     >
-                      <span className="text-[10px] font-mono uppercase tracking-wider text-[var(--text-muted)]">
+                      <span className="text-[12px] font-mono uppercase tracking-wider text-[var(--text-muted)]">
                         Index membership
                       </span>
-                      <span className="text-[10px] text-[var(--text-faint)]">{membershipOpen ? '▴' : '▾'}</span>
+                      <span className="text-[12px] text-[var(--text-faint)]">{membershipOpen ? '▴' : '▾'}</span>
                     </button>
                     {membershipOpen && (
                       <div className="px-1 pb-1">
@@ -1122,7 +1122,7 @@ export default function ChartView({ storyPreview = false }: { storyPreview?: boo
             {tf === 'daily' ? (
               <StockFlowHeatmap label={name} rows={rows} />
             ) : (
-              <div className="glass-card rounded-xl p-3 text-[10px] text-muted">
+              <div className="glass-card rounded-xl p-3 text-[12px] text-muted">
                 Flow heatmap is available on the daily timeframe.
               </div>
             )}
@@ -1222,7 +1222,7 @@ export default function ChartView({ storyPreview = false }: { storyPreview?: boo
               <ArrowLeft className="w-3.5 h-3.5" />
             </button>
             <span className={cn(
-              'text-[9px] font-bold uppercase tracking-widest px-2 py-0.5 rounded border',
+              'text-[11px] font-bold uppercase tracking-widest px-2 py-0.5 rounded border',
               isIndex
                 ? 'text-accent-cyan border-accent-cyan/30 bg-accent-cyan/8'
                 : 'text-accent-violet border-accent-violet/30 bg-accent-violet/8',
@@ -1241,7 +1241,7 @@ export default function ChartView({ storyPreview = false }: { storyPreview?: boo
                     onClick={() => setDvTab('thesis')}
                     title="View your position thesis"
                     className={cn(
-                      'text-[10px] font-mono font-bold px-2 py-0.5 rounded-full border transition-colors',
+                      'text-[12px] font-mono font-bold px-2 py-0.5 rounded-full border transition-colors',
                       pnl != null && pnl < 0
                         ? 'text-risk-red border-risk-red/40 bg-risk-red/10'
                         : 'text-risk-green border-risk-green/40 bg-risk-green/10',
@@ -1255,7 +1255,7 @@ export default function ChartView({ storyPreview = false }: { storyPreview?: boo
                 <button
                   onClick={() => { setWantPositionForm(true); setDvTab('thesis'); }}
                   title="Add a position — track entry, P&L and thesis health"
-                  className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded-full border border-kd-border text-[var(--text-muted)] hover:text-[var(--accent)] hover:border-[var(--accent)] transition-colors"
+                  className="text-[12px] font-mono font-semibold px-2 py-0.5 rounded-full border border-kd-border text-[var(--text-muted)] hover:text-[var(--accent)] hover:border-[var(--accent)] transition-colors"
                 >
                   ＋ Position
                 </button>
@@ -1298,7 +1298,7 @@ export default function ChartView({ storyPreview = false }: { storyPreview?: boo
                   {latest.rsi_14 != null && <StatPill label="RSI" value={latest.rsi_14.toFixed(1)} />}
                   {latest.magic_rs_zone && <StatPill label="RS" value={ZONE_LABELS[latest.magic_rs_zone]?.label ?? 'Unavailable'} />}
                   {isEquity && equityPulse.meta && !equityPulse.meta.is_active && (
-                    <span className="text-[10px] font-mono text-risk-amber bg-risk-amber/10 px-1.5 py-0.5 rounded">
+                    <span className="text-[12px] font-mono text-risk-amber bg-risk-amber/10 px-1.5 py-0.5 rounded">
                       Inactive — last traded {latest.trade_date}
                     </span>
                   )}
@@ -1306,7 +1306,7 @@ export default function ChartView({ storyPreview = false }: { storyPreview?: boo
                     const todayStr = new Date().toISOString().split('T')[0];
                     const daysSince = Math.round((new Date(todayStr).getTime() - new Date(latest.trade_date).getTime()) / 86400000);
                     return daysSince > 1 && equityPulse.meta?.is_active ? (
-                      <span className="text-[10px] font-mono text-muted">Last updated: {latest.trade_date} ({daysSince}d ago)</span>
+                      <span className="text-[12px] font-mono text-muted">Last updated: {latest.trade_date} ({daysSince}d ago)</span>
                     ) : null;
                   })()}
                 </div>
@@ -1316,7 +1316,7 @@ export default function ChartView({ storyPreview = false }: { storyPreview?: boo
               {!isLoading && !isError && rows.length > 0 && (aiLoading || aiData?.insight) && (
                 <div id="study-read" style={{ scrollMarginTop: 118 }}>
                   {!isEquity && snapshot?.corrState.tagline && (
-                    <div className="text-[11px] mb-1.5" style={{ color: snapshot.corrState.color }}>
+                    <div className="text-[12px] mb-1.5" style={{ color: snapshot.corrState.color }}>
                       ● <span className="font-semibold">{snapshot.corrState.state}</span>
                       <span className="text-muted"> — {snapshot.corrState.tagline}</span>
                     </div>
@@ -1433,13 +1433,13 @@ export default function ChartView({ storyPreview = false }: { storyPreview?: boo
                     the lens. Clicking writes ?setup= so the choice deep-links. */}
                 {storyChoices.length > 1 && (
                   <div className="flex items-center gap-1 flex-wrap">
-                    <span className="text-[9px] font-bold uppercase tracking-widest text-muted mr-1">Lens</span>
+                    <span className="text-[11px] font-bold uppercase tracking-widest text-muted mr-1">Lens</span>
                     {storyChoices.map((c) => (
                       <button
                         key={c.id}
                         onClick={() => setSearchParams((prev) => { prev.set('setup', c.id); return prev; }, { replace: true })}
                         className={cn(
-                          'px-2.5 py-1 rounded-full text-[10px] font-medium border transition-colors',
+                          'px-2.5 py-1 rounded-full text-[12px] font-medium border transition-colors',
                           c.id === effectiveSetup
                             ? 'border-[var(--accent)] text-[var(--accent)] bg-[var(--accent-glow)]'
                             : 'border-kd-border text-[var(--text-secondary)] hover:border-[var(--accent)]',
@@ -1451,12 +1451,12 @@ export default function ChartView({ storyPreview = false }: { storyPreview?: boo
                   </div>
                 )}
                 {!setupParam && storyChoices.length > 0 && (
-                  <span className="text-[10px] text-muted font-mono">
+                  <span className="text-[12px] text-muted font-mono">
                     story from scan presence
                   </span>
                 )}
                 {!setupParam && storyChoices.length === 0 && (
-                  <span className="text-[10px] text-muted font-mono">
+                  <span className="text-[12px] text-muted font-mono">
                     {scanPresence.isLoading ? 'structural story · checking scans…' : 'structural story · not in a scan today'}
                   </span>
                 )}
@@ -1563,7 +1563,7 @@ function StoryModeToggle({ mode, onChange }: { mode: 'view' | 'play'; onChange: 
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex items-center gap-2 mb-2">
-      <span className="text-[9px] font-mono font-semibold uppercase tracking-[0.16em] text-[var(--text-faint)] whitespace-nowrap">
+      <span className="text-[11px] font-mono font-semibold uppercase tracking-[0.16em] text-[var(--text-faint)] whitespace-nowrap">
         {children}
       </span>
       <div className="h-px flex-1" style={{ background: 'linear-gradient(90deg, var(--border), transparent)' }} />

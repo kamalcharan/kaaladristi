@@ -34,7 +34,7 @@ export default function SignalFlipCard({
           borderRadius: 100,
           border: 'none',
           cursor: active ? 'default' : 'pointer',
-          fontSize: 9,
+          fontSize: 11,
           fontWeight: active ? 700 : 500,
           letterSpacing: '0.06em',
           textTransform: 'uppercase',
@@ -51,7 +51,7 @@ export default function SignalFlipCard({
   return (
     <div className="rounded-lg bg-kd-card border border-kd-border p-3">
       <div className="flex items-center gap-2 mb-2">
-        <span className="text-[11px] font-serif font-semibold text-primary tracking-wide">
+        <span className="text-[12px] font-serif font-semibold text-primary tracking-wide">
           {title}
         </span>
         <span

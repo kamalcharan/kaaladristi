@@ -198,7 +198,7 @@ const COL_DEFS: Record<SectorRotationColKey, ColDef> = {
         <span
           style={{
             display: 'inline-flex', alignItems: 'center', padding: '2px 8px', borderRadius: 4,
-            fontSize: 11, fontWeight: 600, letterSpacing: '0.04em', whiteSpace: 'nowrap',
+            fontSize: 12, fontWeight: 600, letterSpacing: '0.04em', whiteSpace: 'nowrap',
             color:      SIGNAL_STYLE[r.signal].color,
             background: SIGNAL_STYLE[r.signal].bg,
             border:     `1px solid ${SIGNAL_STYLE[r.signal].border}`,
@@ -354,7 +354,7 @@ export default function SectorRotationTable({ rows }: Props) {
 
   const thBase: React.CSSProperties = {
     padding: '8px 10px',
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: 600,
     letterSpacing: '0.06em',
     textTransform: 'uppercase',
@@ -439,7 +439,7 @@ export default function SectorRotationTable({ rows }: Props) {
               border: '1px solid var(--border)',
               background: pickerOpen ? 'var(--accent-glow)' : 'transparent',
               color: pickerOpen ? 'var(--gold-soft)' : 'var(--text-muted)',
-              fontSize: 11,
+              fontSize: 12,
               fontFamily: 'var(--font-mono)',
               cursor: 'pointer',
               transition: 'all 0.15s',
@@ -467,7 +467,7 @@ export default function SectorRotationTable({ rows }: Props) {
               <div
                 style={{
                   padding: '4px 12px 6px',
-                  fontSize: 9,
+                  fontSize: 11,
                   color: 'var(--text-faint)',
                   letterSpacing: '0.08em',
                   textTransform: 'uppercase',
@@ -514,7 +514,7 @@ export default function SectorRotationTable({ rows }: Props) {
                         display: 'inline-flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        fontSize: 9,
+                        fontSize: 11,
                         color: 'var(--kd-bg, #0e1117)',
                         lineHeight: 1,
                       }}

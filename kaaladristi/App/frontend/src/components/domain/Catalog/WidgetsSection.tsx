@@ -80,12 +80,12 @@ function ChartPlayerMock() {
           width: 22, height: 22, borderRadius: '50%',
           border: '1px solid rgba(139,122,248,0.4)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: 9, color: '#8b7af8',
+          fontSize: 11, color: '#8b7af8',
         }}>▶</div>
         <div style={{ flex: 1, height: 3, borderRadius: 2, background: 'color-mix(in srgb, var(--text-primary) 8%, transparent)', position: 'relative' }}>
           <div style={{ width: '40%', height: '100%', borderRadius: 2, background: 'rgba(139,122,248,0.5)' }} />
         </div>
-        <span style={{ fontSize: 9, fontFamily: 'var(--font-mono,monospace)', color: 'var(--text-faint)' }}>1D</span>
+        <span style={{ fontSize: 11, fontFamily: 'var(--font-mono,monospace)', color: 'var(--text-faint)' }}>1D</span>
       </div>
     </div>
   )
@@ -100,11 +100,11 @@ function SixDayMock() {
     <div style={{ padding: '10px 4px 4px', display: 'flex', flexDirection: 'column', gap: 4 }}>
       {days.map((d, i) => (
         <div key={d} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: 9, fontFamily: 'var(--font-mono,monospace)', color: 'var(--text-faint)', width: 24 }}>{d}</span>
+          <span style={{ fontSize: 11, fontFamily: 'var(--font-mono,monospace)', color: 'var(--text-faint)', width: 24 }}>{d}</span>
           <div style={{ flex: 1, height: 6, borderRadius: 3, background: `${colors[i]}22` }}>
             <div style={{ width: `${[60,90,20,35,70,85][i]}%`, height: '100%', borderRadius: 3, background: colors[i], opacity: 0.7 }} />
           </div>
-          <span style={{ fontSize: 10, color: colors[i], width: 20, textAlign: 'right' }}>{signals[i]}</span>
+          <span style={{ fontSize: 12, color: colors[i], width: 20, textAlign: 'right' }}>{signals[i]}</span>
         </div>
       ))}
     </div>
@@ -140,8 +140,8 @@ function ConvictionMock() {
         })}
       </div>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 5 }}>
-        <span style={{ fontSize: 9, fontFamily: 'var(--font-mono,monospace)', color: 'rgba(201,168,76,0.7)' }}>── baseline</span>
-        <span style={{ fontSize: 9, fontFamily: 'var(--font-mono,monospace)', color: '#2dd4bf' }}>surge ↑ detected</span>
+        <span style={{ fontSize: 11, fontFamily: 'var(--font-mono,monospace)', color: 'rgba(201,168,76,0.7)' }}>── baseline</span>
+        <span style={{ fontSize: 11, fontFamily: 'var(--font-mono,monospace)', color: '#2dd4bf' }}>surge ↑ detected</span>
       </div>
     </div>
   )
@@ -206,7 +206,7 @@ function RsiWidget() {
           color: current >= 70 ? '#f87171' : current <= 30 ? '#2dd4bf' : '#8b7af8', lineHeight: 1 }}>
           {current?.toFixed(1) ?? '—'}
         </span>
-        <span style={{ fontSize: 10, fontFamily: 'var(--font-mono,monospace)', color: 'var(--text-faint)', letterSpacing: '0.04em' }}>
+        <span style={{ fontSize: 12, fontFamily: 'var(--font-mono,monospace)', color: 'var(--text-faint)', letterSpacing: '0.04em' }}>
           {current >= 70 ? 'OVERBOUGHT' : current <= 30 ? 'OVERSOLD' : 'NEUTRAL'}
         </span>
       </div>
@@ -237,7 +237,7 @@ function AtrWidget() {
           color: 'rgba(201,168,76,0.9)', lineHeight: 1 }}>
           {current?.toFixed(1) ?? '—'}
         </span>
-        <span style={{ fontSize: 10, fontFamily: 'var(--font-mono,monospace)', color: 'var(--text-faint)', letterSpacing: '0.04em' }}>
+        <span style={{ fontSize: 12, fontFamily: 'var(--font-mono,monospace)', color: 'var(--text-faint)', letterSpacing: '0.04em' }}>
           {current > avg * 1.2 ? 'HIGH VOL' : current < avg * 0.8 ? 'LOW VOL' : 'AVG RANGE'}
         </span>
       </div>
@@ -297,7 +297,7 @@ function WidgetCard({
         {item.tier_required === 'paid' && (
           <div style={{
             position: 'absolute', top: 14, right: 14,
-            fontSize: 8, fontFamily: 'var(--font-mono, monospace)',
+            fontSize: 10, fontFamily: 'var(--font-mono, monospace)',
             padding: '2px 6px',
             background: locked ? 'color-mix(in srgb, var(--text-primary) 4%, transparent)' : 'color-mix(in srgb, var(--accent) 10%, transparent)',
             border: `1px solid ${locked ? 'color-mix(in srgb, var(--text-primary) 12%, transparent)' : 'color-mix(in srgb, var(--accent) 28%, transparent)'}`,
@@ -332,7 +332,7 @@ function WidgetCard({
 
         {/* VaNi one-liner — only for unlocked */}
         {!locked && item.vani_explanation && (
-          <p style={{ fontSize: 11.5, color: 'var(--text-secondary)', lineHeight: 1.55, marginBottom: 14 }}>
+          <p style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.55, marginBottom: 14 }}>
             <span style={{ color: 'var(--accent)' }}>✦</span>{' '}
             {item.vani_explanation.split('. ')[0]}.
           </p>
@@ -341,7 +341,7 @@ function WidgetCard({
         {/* Footer */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 8 }}>
           <span style={{
-            fontSize: 9, fontFamily: 'var(--font-mono, monospace)',
+            fontSize: 11, fontFamily: 'var(--font-mono, monospace)',
             color: 'var(--text-faint)', background: 'color-mix(in srgb, var(--text-primary) 3%, transparent)',
             border: '1px solid var(--border)', padding: '1px 5px', borderRadius: 3,
           }}>
@@ -350,14 +350,14 @@ function WidgetCard({
 
           {!locked && (
             active ? (
-              <span style={{ fontSize: 11, fontFamily: 'var(--font-mono, monospace)', color: 'var(--bull)' }}>
+              <span style={{ fontSize: 12, fontFamily: 'var(--font-mono, monospace)', color: 'var(--bull)' }}>
                 ✓ added
               </span>
             ) : (
               <button
                 onClick={onAdd}
                 style={{
-                  padding: '5px 13px', borderRadius: 6, fontSize: 11, cursor: 'pointer',
+                  padding: '5px 13px', borderRadius: 6, fontSize: 12, cursor: 'pointer',
                   border: '1px solid color-mix(in srgb, var(--accent) 38%, transparent)',
                   background: 'color-mix(in srgb, var(--accent) 10%, transparent)',
                   color: 'var(--accent)', fontFamily: 'inherit', transition: 'all 0.15s',
@@ -403,7 +403,7 @@ function WidgetCard({
           <button
             onClick={e => { e.stopPropagation(); onSelect() }}
             style={{
-              padding: '7px 16px', borderRadius: 6, fontSize: 11, cursor: 'pointer',
+              padding: '7px 16px', borderRadius: 6, fontSize: 12, cursor: 'pointer',
               border: '1px solid color-mix(in srgb, var(--accent) 40%, transparent)',
               background: 'color-mix(in srgb, var(--accent) 14%, transparent)',
               color: 'var(--accent)', fontFamily: 'inherit', alignSelf: 'flex-start',
@@ -462,7 +462,7 @@ export default function WidgetsSection({ onSelect, compact: _compact }: WidgetsS
           These don't draw on the chart — they run alongside it.
         </p>
         <span style={{
-          fontSize: 11, fontFamily: 'var(--font-mono, monospace)',
+          fontSize: 12, fontFamily: 'var(--font-mono, monospace)',
           color: 'var(--caution)', display: 'inline-flex', alignItems: 'center', gap: 5,
         }}>
           <span style={{ opacity: 0.7 }}>◑</span>

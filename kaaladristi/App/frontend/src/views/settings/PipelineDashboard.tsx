@@ -166,7 +166,7 @@ export default function PipelineDashboard({ onBack }: { onBack: () => void }) {
           <WifiOff className="w-4 h-4 text-risk-amber shrink-0" />
           <div>
             <p className="text-xs text-risk-amber font-semibold">Pipeline API not reachable</p>
-            <p className="text-[10px] text-muted mt-0.5">Run: <span className="mono text-[var(--text-secondary)]">uvicorn pipeline_api:app --host 0.0.0.0 --port 8100</span></p>
+            <p className="text-[12px] text-muted mt-0.5">Run: <span className="mono text-[var(--text-secondary)]">uvicorn pipeline_api:app --host 0.0.0.0 --port 8100</span></p>
           </div>
         </div>
       )}
@@ -188,14 +188,14 @@ export default function PipelineDashboard({ onBack }: { onBack: () => void }) {
               <div key={dl.type} className="flex items-center gap-3 py-1.5 px-2 rounded-lg hover:bg-kd-elevated/40 group">
                 <StatusDot status={dl.status} />
                 <span className="text-[12px] text-[var(--text-primary)] font-medium flex-1">{dl.label}</span>
-                <span className="text-[10px] text-muted mono">
+                <span className="text-[12px] text-muted mono">
                   {dl.last_sync ? fmtDate(dl.last_sync) : 'Never synced'}
                 </span>
                 {dl.gap_days > 0 && (
-                  <span className="text-[10px] text-risk-amber">{dl.gap_days}d behind</span>
+                  <span className="text-[12px] text-risk-amber">{dl.gap_days}d behind</span>
                 )}
                 {dl.status === 'breeze_expired' && (
-                  <button onClick={() => setShowBreeze(true)} className="text-[10px] text-accent-indigo hover:underline">
+                  <button onClick={() => setShowBreeze(true)} className="text-[12px] text-accent-indigo hover:underline">
                     Connect
                   </button>
                 )}
@@ -207,7 +207,7 @@ export default function PipelineDashboard({ onBack }: { onBack: () => void }) {
                     }}
                     disabled={isRunning}
                     title={`Re-run ${dl.label}`}
-                    className="inline-flex items-center gap-1 px-2.5 py-1 bg-kd-elevated border border-kd-border rounded-lg text-[10px] text-muted hover:text-accent-indigo hover:border-accent-indigo/40 hover:bg-kd-elevated disabled:opacity-30 transition-all"
+                    className="inline-flex items-center gap-1 px-2.5 py-1 bg-kd-elevated border border-kd-border rounded-lg text-[12px] text-muted hover:text-accent-indigo hover:border-accent-indigo/40 hover:bg-kd-elevated disabled:opacity-30 transition-all"
                   >
                     {isSourceRunning
                       ? <Loader2 className="w-2.5 h-2.5 animate-spin text-accent-indigo" />
@@ -238,17 +238,17 @@ export default function PipelineDashboard({ onBack }: { onBack: () => void }) {
               {breeze?.status === 'connected' ? `Connected (expires ${fmtDateTime(breeze.expires_at)})` : breeze?.status ?? 'Unknown'}
             </span>
           </div>
-          {breeze?.last_error && <p className="text-[10px] text-risk-red mb-3">{breeze.last_error}</p>}
+          {breeze?.last_error && <p className="text-[12px] text-risk-red mb-3">{breeze.last_error}</p>}
           <div className="space-y-3">
             <div>
-              <p className="text-[11px] text-muted mb-1">Step 1: Login via browser</p>
+              <p className="text-[12px] text-muted mb-1">Step 1: Login via browser</p>
               <a href={breeze?.login_url ?? '#'} target="_blank" rel="noreferrer"
                 className="inline-flex items-center gap-1.5 text-xs text-accent-indigo hover:underline">
                 Open Breeze Login <ExternalLink className="w-3 h-3" />
               </a>
             </div>
             <div>
-              <p className="text-[11px] text-muted mb-1">Step 2: Paste session token from redirect URL</p>
+              <p className="text-[12px] text-muted mb-1">Step 2: Paste session token from redirect URL</p>
               <div className="flex gap-2">
                 <input type="text" value={breezeToken} onChange={e => setBreezeToken(e.target.value)}
                   placeholder="Session token..." className={cn(inputCls, 'flex-1')} />
@@ -274,15 +274,15 @@ export default function PipelineDashboard({ onBack }: { onBack: () => void }) {
             <div className="space-y-1">
               <div className="flex items-center gap-2">
                 <StatusDot status={sched.active ? 'active' : 'error'} />
-                <span className="text-[11px] text-[var(--text-secondary)]">{sched.active ? 'Active' : 'Stopped'}</span>
+                <span className="text-[12px] text-[var(--text-secondary)]">{sched.active ? 'Active' : 'Stopped'}</span>
               </div>
-              <p className="text-[10px] text-muted">{sched.trigger}</p>
+              <p className="text-[12px] text-muted">{sched.trigger}</p>
               {sched.next_run && (
-                <p className="text-[10px] text-[var(--text-secondary)]">Next: {fmtDateTime(sched.next_run)}</p>
+                <p className="text-[12px] text-[var(--text-secondary)]">Next: {fmtDateTime(sched.next_run)}</p>
               )}
             </div>
           ) : (
-            <p className="text-[10px] text-muted">{apiDown ? 'API offline' : 'Loading...'}</p>
+            <p className="text-[12px] text-muted">{apiDown ? 'API offline' : 'Loading...'}</p>
           )}
         </div>
 
@@ -336,7 +336,7 @@ export default function PipelineDashboard({ onBack }: { onBack: () => void }) {
                 forceRun ? 'translate-x-4' : 'translate-x-0.5',
               )} />
             </div>
-            <span className="text-[10px] text-muted">
+            <span className="text-[12px] text-muted">
               Force re-run{forceRun && <span className="text-risk-amber ml-1">(will reset today's completed steps)</span>}
             </span>
           </label>
@@ -349,15 +349,15 @@ export default function PipelineDashboard({ onBack }: { onBack: () => void }) {
           <h3 className="text-xs font-bold uppercase tracking-widest text-muted mb-3">Backfill Missing Data</h3>
           <div className="flex flex-wrap items-end gap-3">
             <div>
-              <label className="block text-[10px] text-muted mb-1">From</label>
+              <label className="block text-[12px] text-muted mb-1">From</label>
               <input type="date" value={bfFrom} onChange={e => setBfFrom(e.target.value)} className={inputCls} />
             </div>
             <div>
-              <label className="block text-[10px] text-muted mb-1">To</label>
+              <label className="block text-[12px] text-muted mb-1">To</label>
               <input type="date" value={bfTo} onChange={e => setBfTo(e.target.value)} className={inputCls} />
             </div>
             <div>
-              <label className="block text-[10px] text-muted mb-1">Exchange</label>
+              <label className="block text-[12px] text-muted mb-1">Exchange</label>
               <select value={bfExchange} onChange={e => setBfExchange(e.target.value)} className={selectCls}>
                 <option value="ALL">All</option>
                 <option value="NSE">NSE</option>
@@ -400,25 +400,25 @@ export default function PipelineDashboard({ onBack }: { onBack: () => void }) {
         const overall = hasFailed ? 'failed' : hasPartial ? 'partial' : hasWarning ? 'warning' : 'healthy';
 
         const StepCell = ({ run }: { run?: PipelineRun }) => {
-          if (!run) return <span className="text-[10px] text-muted">—</span>;
+          if (!run) return <span className="text-[12px] text-muted">—</span>;
           const rows = run.rows_count || 0;
           return (
             <div className="flex items-center gap-1.5">
               <StepIcon status={run.status} />
-              <span className="text-[10px] mono text-[var(--text-secondary)]">
+              <span className="text-[12px] mono text-[var(--text-secondary)]">
                 {rows.toLocaleString('en-IN')}
                 {run.rows_expected ? `/${run.rows_expected.toLocaleString('en-IN')}` : ''}
               </span>
               {run.coverage_pct != null && (
                 <span className={cn(
-                  'text-[9px] font-bold',
+                  'text-[11px] font-bold',
                   run.coverage_pct >= 90 ? 'text-risk-green' : run.coverage_pct >= 70 ? 'text-risk-amber' : 'text-risk-red',
                 )}>
                   ({Number(run.coverage_pct).toFixed(0)}%)
                 </span>
               )}
               {run.status === 'failed' && run.error_msg && (
-                <span className="text-[9px] text-risk-red truncate max-w-[100px]" title={run.error_msg}>
+                <span className="text-[11px] text-risk-red truncate max-w-[100px]" title={run.error_msg}>
                   {run.error_msg.slice(0, 30)}
                 </span>
               )}
@@ -436,7 +436,7 @@ export default function PipelineDashboard({ onBack }: { onBack: () => void }) {
                 </span>
               </div>
               <div className={cn(
-                'px-2 py-0.5 rounded-md text-[9px] font-bold uppercase border',
+                'px-2 py-0.5 rounded-md text-[11px] font-bold uppercase border',
                 overall === 'healthy' ? 'text-risk-green bg-risk-green/10 border-risk-green/30' :
                 overall === 'warning' ? 'text-risk-amber bg-risk-amber/10 border-risk-amber/30' :
                 overall === 'failed' || overall === 'partial' ? 'text-risk-red bg-risk-red/10 border-risk-red/30' :
@@ -445,13 +445,13 @@ export default function PipelineDashboard({ onBack }: { onBack: () => void }) {
                 {overall}
               </div>
             </div>
-            <table className="w-full text-[11px]">
+            <table className="w-full text-[12px]">
               <thead>
                 <tr className="border-b border-kd-border">
-                  <th className="text-left py-2 px-2 text-[10px] font-bold text-muted uppercase tracking-wider w-44">Step</th>
-                  {hasNse && <th className="text-left py-2 px-2 text-[10px] font-bold text-muted uppercase tracking-wider">NSE</th>}
-                  {hasBse && <th className="text-left py-2 px-2 text-[10px] font-bold text-muted uppercase tracking-wider">BSE</th>}
-                  <th className="text-right py-2 px-2 text-[10px] font-bold text-muted uppercase tracking-wider w-14">Time</th>
+                  <th className="text-left py-2 px-2 text-[12px] font-bold text-muted uppercase tracking-wider w-44">Step</th>
+                  {hasNse && <th className="text-left py-2 px-2 text-[12px] font-bold text-muted uppercase tracking-wider">NSE</th>}
+                  {hasBse && <th className="text-left py-2 px-2 text-[12px] font-bold text-muted uppercase tracking-wider">BSE</th>}
+                  <th className="text-right py-2 px-2 text-[12px] font-bold text-muted uppercase tracking-wider w-14">Time</th>
                   <th className="w-8" />
                 </tr>
               </thead>
@@ -463,7 +463,7 @@ export default function PipelineDashboard({ onBack }: { onBack: () => void }) {
                       <td className="py-1.5 px-2 text-[var(--text-secondary)] font-medium">{stepName}</td>
                       {hasNse && <td className="py-1.5 px-2"><StepCell run={nse} /></td>}
                       {hasBse && <td className="py-1.5 px-2"><StepCell run={bse} /></td>}
-                      <td className="py-1.5 px-2 text-right text-[10px] text-muted mono">
+                      <td className="py-1.5 px-2 text-right text-[12px] text-muted mono">
                         {fmtDuration(primary?.duration_ms ?? null)}
                       </td>
                       <td className="py-1.5 px-1">
@@ -485,7 +485,7 @@ export default function PipelineDashboard({ onBack }: { onBack: () => void }) {
             </table>
 
             {/* Legend */}
-            <div className="flex items-center gap-4 mt-3 pt-2 border-t border-kd-border/30 text-[9px] text-muted">
+            <div className="flex items-center gap-4 mt-3 pt-2 border-t border-kd-border/30 text-[11px] text-muted">
               <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-risk-green" /> Healthy</span>
               <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-risk-amber" /> Warning</span>
               <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-risk-red" /> Failed</span>
@@ -511,8 +511,8 @@ export default function PipelineDashboard({ onBack }: { onBack: () => void }) {
               return (
                 <div key={dt} className="bg-kd-surface border border-kd-border rounded-xl px-4 py-2">
                   <div className="flex items-center gap-3">
-                    <span className="text-[11px] mono text-[var(--text-secondary)] font-medium w-20">{fmtDate(dt)}</span>
-                    <span className="text-[10px] text-muted w-6">
+                    <span className="text-[12px] mono text-[var(--text-secondary)] font-medium w-20">{fmtDate(dt)}</span>
+                    <span className="text-[12px] text-muted w-6">
                       {new Date(dt + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short' })}
                     </span>
                     <div className="flex items-center gap-4 flex-1">
@@ -523,10 +523,10 @@ export default function PipelineDashboard({ onBack }: { onBack: () => void }) {
                         return (
                           <div key={exchange} className="flex items-center gap-1.5">
                             <StatusDot status={fail > 0 ? 'failed' : done === steps.length ? 'completed' : 'pending'} />
-                            <span className="text-[10px] text-[var(--text-secondary)]">{exchange}</span>
-                            <span className="text-[10px] text-muted mono">{done}/{steps.length}</span>
-                            {fail > 0 && <span className="text-[10px] text-risk-red">{fail}✗</span>}
-                            <span className="text-[10px] text-muted mono">{totalRows > 0 ? `${totalRows.toLocaleString('en-IN')}r` : ''}</span>
+                            <span className="text-[12px] text-[var(--text-secondary)]">{exchange}</span>
+                            <span className="text-[12px] text-muted mono">{done}/{steps.length}</span>
+                            {fail > 0 && <span className="text-[12px] text-risk-red">{fail}✗</span>}
+                            <span className="text-[12px] text-muted mono">{totalRows > 0 ? `${totalRows.toLocaleString('en-IN')}r` : ''}</span>
                           </div>
                         );
                       })}

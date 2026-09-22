@@ -102,7 +102,7 @@ export default function CommodityCatalog({ onBack }: { onBack: () => void }) {
         <div className="text-center py-16">
           <p className="text-sm text-risk-red mb-1">Failed to load commodity catalog</p>
           <p className="text-xs text-muted">{error instanceof Error ? error.message : 'Unknown error'}</p>
-          <p className="text-[10px] text-muted mt-3 mono">Run km_migration_016_catalog_views.sql first</p>
+          <p className="text-[12px] text-muted mt-3 mono">Run km_migration_016_catalog_views.sql first</p>
         </div>
       ) : (
         <>
@@ -124,30 +124,30 @@ export default function CommodityCatalog({ onBack }: { onBack: () => void }) {
 
                 {/* Category badge */}
                 {item.category && (
-                  <span className="text-[9px] px-1.5 py-px rounded font-semibold shrink-0 uppercase tracking-wide bg-kd-elevated border border-kd-border text-[var(--text-secondary)]">
+                  <span className="text-[11px] px-1.5 py-px rounded font-semibold shrink-0 uppercase tracking-wide bg-kd-elevated border border-kd-border text-[var(--text-secondary)]">
                     {item.category}
                   </span>
                 )}
 
                 {/* Exchange badge */}
-                <span className="text-[9px] px-1.5 py-px rounded bg-risk-amber/10 border border-risk-amber/25 text-risk-amber font-semibold shrink-0 uppercase tracking-wide">
+                <span className="text-[11px] px-1.5 py-px rounded bg-risk-amber/10 border border-risk-amber/25 text-risk-amber font-semibold shrink-0 uppercase tracking-wide">
                   {item.exchange}
                 </span>
 
                 {/* Date range */}
-                <span className="text-[10px] text-muted mono shrink-0 hidden md:inline w-[200px]">
+                <span className="text-[12px] text-muted mono shrink-0 hidden md:inline w-[200px]">
                   {item.data_from && item.data_to
                     ? `${fmtDate(item.data_from)} → ${fmtDate(item.data_to)}`
                     : '—'}
                 </span>
 
                 {/* Record count */}
-                <span className="text-[10px] text-[var(--text-secondary)] mono font-medium shrink-0 w-14 text-right hidden sm:inline">
+                <span className="text-[12px] text-[var(--text-secondary)] mono font-medium shrink-0 w-14 text-right hidden sm:inline">
                   {item.record_count > 0 ? item.record_count.toLocaleString('en-IN') : '—'}
                 </span>
 
                 {/* Last close */}
-                <span className="text-[11px] text-[var(--text-secondary)] mono font-medium shrink-0 w-20 text-right">
+                <span className="text-[12px] text-[var(--text-secondary)] mono font-medium shrink-0 w-20 text-right">
                   {item.last_close
                     ? item.last_close.toLocaleString('en-IN', { minimumFractionDigits: 2 })
                     : '—'}
@@ -184,7 +184,7 @@ export default function CommodityCatalog({ onBack }: { onBack: () => void }) {
             </div>
           )}
 
-          <p className="text-[10px] text-muted mt-3 text-right mono">
+          <p className="text-[12px] text-muted mt-3 text-right mono">
             {catalog.length} total
           </p>
         </>

@@ -55,7 +55,7 @@ export function OriginCTA() {
                   <LogoMark size={36}/>
                   <div>
                     <div style={{ fontFamily:SERIF, fontSize:20, color:C.ink1, letterSpacing:'-0.01em' }}>Vikuna Technologies</div>
-                    <div style={{ fontFamily:MONO, fontSize:10, letterSpacing:'.22em', color:C.ink3, textTransform:'uppercase' }}>Hyderabad · Est. 2026</div>
+                    <div style={{ fontFamily:MONO, fontSize:12, letterSpacing:'.22em', color:C.ink3, textTransform:'uppercase' }}>Hyderabad · Est. 2026</div>
                   </div>
                 </div>
               </FadeUp>
@@ -72,7 +72,7 @@ export function OriginCTA() {
       }}>
         <div className="dq-wrap" style={{ textAlign:'center', position:'relative' }}>
           <FadeUp>
-            <div style={{ fontFamily:MONO, fontSize:10, letterSpacing:'.28em', color:C.g2, marginBottom:28 }}>◇ BETA · LIMITED COHORT</div>
+            <div style={{ fontFamily:MONO, fontSize:12, letterSpacing:'.28em', color:C.g2, marginBottom:28 }}>◇ BETA · LIMITED COHORT</div>
           </FadeUp>
           <FadeUp delay={80}>
             <h2 style={{ fontFamily:SERIF, fontWeight:400, color:C.ink1, fontSize:'clamp(42px,6vw,80px)', lineHeight:1.05, letterSpacing:'-0.02em', margin:'0 auto 24px', maxWidth:'18ch' }}>
@@ -101,13 +101,13 @@ export function OriginCTA() {
             </form>
           </FadeUp>
           <FadeUp delay={320}>
-            <div style={{ fontFamily:MONO, marginTop:24, fontSize:11, letterSpacing:'.18em', color:C.ink3, textTransform:'uppercase' }}>
+            <div style={{ fontFamily:MONO, marginTop:24, fontSize:12, letterSpacing:'.18em', color:C.ink3, textTransform:'uppercase' }}>
               No spam. No pressure. Just early access.
             </div>
           </FadeUp>
           <FadeUp delay={400}>
             <div style={{ marginTop:60, paddingTop:32, borderTop:`1px solid ${C.rs}`, maxWidth:560, margin:'60px auto 0' }}>
-              <div style={{ fontFamily:MONO, fontSize:10, letterSpacing:'.24em', color:C.ink4 }}>
+              <div style={{ fontFamily:MONO, fontSize:12, letterSpacing:'.24em', color:C.ink4 }}>
                 Data platform only. Not investment advice.
               </div>
             </div>

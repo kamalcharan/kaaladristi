@@ -65,7 +65,7 @@ function TransitRow({ transit, isLast }: { transit: AstroTransit; isLast: boolea
         <span
           style={{
             fontFamily: 'var(--font-mono)',
-            fontSize: 7.5,
+            fontSize: 10,
             letterSpacing: '0.1em',
             color: 'var(--text-faint)',
             textTransform: 'uppercase',
@@ -92,7 +92,7 @@ function TransitRow({ transit, isLast }: { transit: AstroTransit; isLast: boolea
         <div
           style={{
             fontFamily: 'var(--font-mono)',
-            fontSize: 9,
+            fontSize: 11,
             letterSpacing: '0.12em',
             color: color,
             textTransform: 'uppercase',
@@ -105,7 +105,7 @@ function TransitRow({ transit, isLast }: { transit: AstroTransit; isLast: boolea
           <p
             style={{
               margin: 0,
-              fontSize: 11.5,
+              fontSize: 12,
               color: 'var(--text-muted)',
               lineHeight: 1.45,
             }}
@@ -160,7 +160,7 @@ export default function CurrentSkyRail({ date }: CurrentSkyRailProps) {
         <span
           style={{
             fontFamily: 'var(--font-mono)',
-            fontSize: 9,
+            fontSize: 11,
             letterSpacing: '0.14em',
             color: 'var(--bull)',
             padding: '2px 7px',
@@ -217,7 +217,7 @@ export default function CurrentSkyRail({ date }: CurrentSkyRailProps) {
           padding: '8px 16px',
           borderTop: '1px solid var(--border)',
           fontFamily: 'var(--font-mono)',
-          fontSize: 8.5,
+          fontSize: 10,
           letterSpacing: '0.18em',
           color: 'var(--text-faint)',
           textTransform: 'uppercase',

@@ -46,7 +46,7 @@ export default function ThemeSettings() {
           Theme
         </span>
         {saving && (
-          <span style={{ fontSize: 10, color: 'var(--text-faint)', fontFamily: 'var(--font-mono)' }}>
+          <span style={{ fontSize: 12, color: 'var(--text-faint)', fontFamily: 'var(--font-mono)' }}>
             saving…
           </span>
         )}
@@ -111,7 +111,7 @@ export default function ThemeSettings() {
               style={{
                 flex: 1, padding: '7px 0', borderRadius: 8,
                 display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-                fontSize: 11, fontFamily: 'inherit',
+                fontSize: 12, fontFamily: 'inherit',
                 cursor: disabled ? 'not-allowed' : 'pointer',
                 opacity: disabled ? 0.35 : 1,
                 background: isActive ? 'color-mix(in srgb, var(--accent) 8%, transparent)' : 'transparent',
@@ -127,7 +127,7 @@ export default function ThemeSettings() {
         })}
       </div>
       {darkOnly && (
-        <p style={{ fontSize: 10, color: 'var(--text-faint)', margin: '2px 0 0', lineHeight: 1.5 }}>
+        <p style={{ fontSize: 12, color: 'var(--text-faint)', margin: '2px 0 0', lineHeight: 1.5 }}>
           {activeLabel} is dark-only for now — switch to another theme to use light mode.
         </p>
       )}

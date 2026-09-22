@@ -43,7 +43,7 @@ function Card({ icon, title, children }: {
     <div className="rounded-lg bg-kd-card border border-kd-border p-3">
       <div className="flex items-center gap-2 mb-2">
         {icon}
-        <span className="text-[11px] font-serif font-semibold text-primary tracking-wide">{title}</span>
+        <span className="text-[12px] font-serif font-semibold text-primary tracking-wide">{title}</span>
       </div>
       {children}
     </div>
@@ -55,8 +55,8 @@ function Row({ k, v, tone }: { k: string; v: string; tone?: 'bull' | 'bear' | 'm
     tone === 'bull' ? 'var(--bull)' : tone === 'bear' ? 'var(--bear)' : 'var(--text-secondary)';
   return (
     <div className="flex items-baseline justify-between gap-3 py-0.5">
-      <span className="text-[10px] font-mono text-muted">{k}</span>
-      <span className="text-[10px] font-mono tabular-nums" style={{ color }}>{v}</span>
+      <span className="text-[12px] font-mono text-muted">{k}</span>
+      <span className="text-[12px] font-mono tabular-nums" style={{ color }}>{v}</span>
     </div>
   );
 }
@@ -121,7 +121,7 @@ export default function DataCoverageCards({ equityId }: { equityId: number }) {
           />
         )}
         {cov.deeperTwin && (
-          <p className="mt-2 text-[9px] font-mono text-muted leading-relaxed">
+          <p className="mt-2 text-[11px] font-mono text-muted leading-relaxed">
             {cov.deeperTwin.exchange} twin {cov.deeperTwin.symbol} holds history from{' '}
             {cov.deeperTwin.firstTradeDate} — deeper than this listing.
           </p>
@@ -129,7 +129,7 @@ export default function DataCoverageCards({ equityId }: { equityId: number }) {
       </Card>
 
       <Card icon={<Layers className="w-3.5 h-3.5 text-accent-indigo" />} title="Enrichment depth">
-        {!depth && <p className="text-[10px] font-mono text-muted">Reading…</p>}
+        {!depth && <p className="text-[12px] font-mono text-muted">Reading…</p>}
         {depth && depth.map((d) => (
           <Row
             key={d.column}
@@ -139,7 +139,7 @@ export default function DataCoverageCards({ equityId }: { equityId: number }) {
           />
         ))}
         {depth && (
-          <p className="mt-2 pt-2 border-t border-kd-border text-[9px] font-mono leading-relaxed"
+          <p className="mt-2 pt-2 border-t border-kd-border text-[11px] font-mono leading-relaxed"
              style={{ color: 'var(--text-secondary)' }}>
             {missingCritical.length > 0
               ? `Not scanner-usable — ${missingCritical.map(label).join(', ')} never populated.`
@@ -214,7 +214,7 @@ function DefectsCard({ equityId }: { equityId: number }) {
       />
       <Row k="Unadjusted cliffs" v={String(cliffs)} tone={cliffs ? 'bear' : 'bull'} />
       {cliffs > 0 && (
-        <p className="mt-2 text-[9px] font-mono text-muted leading-relaxed">
+        <p className="mt-2 text-[11px] font-mono text-muted leading-relaxed">
           Single-day moves outside 0.55x–1.80x. Impossible under the price band, so these are
           splits or bonuses the feed never adjusted — km_corporate_actions is empty.
         </p>

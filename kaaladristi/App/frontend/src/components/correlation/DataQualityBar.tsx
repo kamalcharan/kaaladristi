@@ -94,12 +94,12 @@ export default function DataQualityBar({
                   borderRadius: 8, padding: '8px 12px', width: 280, zIndex: 50,
                   boxShadow: '0 4px 20px rgba(0,0,0,.5)',
                 }}>
-                  <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 6,
+                  <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 6,
                     fontFamily: 'var(--font-mono,monospace)', letterSpacing: '.04em' }}>
                     KNOWN EXCLUSIONS
                   </div>
                   {exclusions.map((e, i) => (
-                    <div key={i} style={{ fontSize: 11, color: 'var(--text-secondary)',
+                    <div key={i} style={{ fontSize: 12, color: 'var(--text-secondary)',
                       lineHeight: 1.55, paddingTop: i > 0 ? 4 : 0 }}>
                       · {e}
                     </div>

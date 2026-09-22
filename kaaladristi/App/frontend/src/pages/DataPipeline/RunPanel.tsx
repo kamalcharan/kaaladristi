@@ -179,7 +179,7 @@ export default function RunPanel({ selection, onEnqueued }: Props) {
       {/* Dimension — fix + backfill */}
       {(mode === 'fix' || mode === 'backfill') && (
         <label className="block">
-          <span className="text-[11px] text-muted">Dimension</span>
+          <span className="text-[12px] text-muted">Dimension</span>
           <select
             value={dimension}
             onChange={e => setDimension(e.target.value)}
@@ -195,7 +195,7 @@ export default function RunPanel({ selection, onEnqueued }: Props) {
             ))}
           </select>
           {isDownload && dimension !== 'all' && (
-            <p className="mt-1 text-[10px] text-amber-300">
+            <p className="mt-1 text-[12px] text-amber-300">
               Download runs hit NSE/BSE directly — expect 30–60s per date and don't
               run multiple in parallel against the same source.
             </p>
@@ -206,7 +206,7 @@ export default function RunPanel({ selection, onEnqueued }: Props) {
       {/* Single trade date — fix + daily_run */}
       {(mode === 'fix' || mode === 'daily_run') && (
         <label className="block">
-          <span className="text-[11px] text-muted">Trade date</span>
+          <span className="text-[12px] text-muted">Trade date</span>
           <input
             type="date"
             value={tradeDate}
@@ -220,7 +220,7 @@ export default function RunPanel({ selection, onEnqueued }: Props) {
       {mode === 'backfill' && (
         <div className="grid grid-cols-2 gap-2">
           <label className="block">
-            <span className="text-[11px] text-muted">From</span>
+            <span className="text-[12px] text-muted">From</span>
             <input
               type="date"
               value={dateFrom}
@@ -229,7 +229,7 @@ export default function RunPanel({ selection, onEnqueued }: Props) {
             />
           </label>
           <label className="block">
-            <span className="text-[11px] text-muted">To</span>
+            <span className="text-[12px] text-muted">To</span>
             <input
               type="date"
               value={dateTo}
@@ -244,7 +244,7 @@ export default function RunPanel({ selection, onEnqueued }: Props) {
           Hidden for index_*, industry, breadth, and 'all' (those imply or span). */}
       {(mode === 'fix' || mode === 'backfill') && showExchange && (
         <label className="block">
-          <span className="text-[11px] text-muted">Exchange (optional)</span>
+          <span className="text-[12px] text-muted">Exchange (optional)</span>
           <select
             value={exchange}
             onChange={e => setExchange(e.target.value)}
@@ -301,7 +301,7 @@ export default function RunPanel({ selection, onEnqueued }: Props) {
       )}
 
       {sched && (
-        <div className="text-[10px] text-muted pt-2 border-t border-kd-border/30 space-y-0.5">
+        <div className="text-[12px] text-muted pt-2 border-t border-kd-border/30 space-y-0.5">
           <div>
             Scheduler: <span className={sched.active ? 'text-emerald-400' : 'text-rose-400'}>
               {sched.active ? 'active' : 'inactive'}
@@ -330,7 +330,7 @@ function ModeTab({ active, onClick, label }: {
     <button
       onClick={onClick}
       className={cn(
-        'flex-1 px-2 py-1.5 rounded text-[11px] transition-colors',
+        'flex-1 px-2 py-1.5 rounded text-[12px] transition-colors',
         active ? 'bg-accent-indigo/25 text-accent-indigo' : 'text-muted hover:text-secondary',
       )}
     >

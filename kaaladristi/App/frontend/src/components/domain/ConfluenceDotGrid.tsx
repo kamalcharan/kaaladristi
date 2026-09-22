@@ -122,7 +122,7 @@ function Legend() {
       ].map(({ color, label }) => (
         <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
           <div style={{ width: 10, height: 10, borderRadius: 3, background: color, flexShrink: 0 }} />
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-muted)' }}>{label}</span>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)' }}>{label}</span>
         </div>
       ))}
     </div>
@@ -154,10 +154,10 @@ export default function ConfluenceDotGrid() {
         borderBottom: '1px solid color-mix(in srgb, var(--text-primary) 6%, transparent)',
       }}>
         <div>
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.16em', textTransform: 'uppercase', color: 'var(--text-faint)' }}>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.16em', textTransform: 'uppercase', color: 'var(--text-faint)' }}>
             Day-by-Day Signal Grid
           </div>
-          <div style={{ fontFamily: 'var(--font-body)', fontSize: 11, color: 'var(--text-secondary)', marginTop: 2 }}>
+          <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>
             Nak-Vara · Breadth · ROC · NIFTY 50 return — each column = one trading day
           </div>
         </div>
@@ -177,7 +177,7 @@ export default function ConfluenceDotGrid() {
               onClick={() => setPeriod(p.label)}
               style={{
                 fontFamily: 'var(--font-mono)',
-                fontSize: 10,
+                fontSize: 12,
                 fontWeight: 700,
                 padding: '4px 12px',
                 borderRadius: 5,
@@ -207,7 +207,7 @@ export default function ConfluenceDotGrid() {
             <span style={{ fontFamily: 'var(--font-body)', fontSize: 12 }}>Failed to load — backend may be offline</span>
           </div>
         ) : data.length === 0 ? (
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)', padding: '24px 0', textAlign: 'center' }}>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-muted)', padding: '24px 0', textAlign: 'center' }}>
             No timeline data available
           </div>
         ) : (
@@ -230,7 +230,7 @@ export default function ConfluenceDotGrid() {
                     }}
                   >
                     <div>
-                      <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
+                      <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
                         {row.label}
                       </div>
                     </div>
@@ -251,7 +251,7 @@ export default function ConfluenceDotGrid() {
                       >
                         <div style={{
                           fontFamily: 'var(--font-mono)',
-                          fontSize: 9,
+                          fontSize: 11,
                           color: 'var(--text-muted)',
                           transform: 'rotate(-45deg)',
                           transformOrigin: 'bottom center',
@@ -322,7 +322,7 @@ export default function ConfluenceDotGrid() {
                   boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
                 }}
               >
-                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 6 }}>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 6 }}>
                   {tooltip.entry.trade_date}
                 </div>
                 {ROWS.map((row, i) => (
@@ -333,10 +333,10 @@ export default function ConfluenceDotGrid() {
                     marginBottom: 2,
                     opacity: tooltip.rowIdx === i ? 1 : 0.55,
                   }}>
-                    <span style={{ fontFamily: 'var(--font-body)', fontSize: 10, color: 'var(--text-muted)' }}>{row.label}</span>
+                    <span style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--text-muted)' }}>{row.label}</span>
                     <span style={{
                       fontFamily: 'var(--font-mono)',
-                      fontSize: 10,
+                      fontSize: 12,
                       fontWeight: tooltip.rowIdx === i ? 700 : 400,
                       color: row.colorFn(tooltip.entry),
                     }}>

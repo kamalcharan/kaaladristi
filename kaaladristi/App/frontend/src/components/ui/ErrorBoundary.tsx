@@ -37,7 +37,7 @@ export class ErrorBoundary extends Component<Props, State> {
           <p className="text-sm text-muted max-w-md mb-4">
             {this.state.error?.message || 'An unexpected error occurred'}
           </p>
-          <pre className="text-[10px] text-[var(--text-muted)] bg-kd-elevated border border-kd-border rounded-xl p-4 max-w-lg overflow-auto max-h-40">
+          <pre className="text-[12px] text-[var(--text-muted)] bg-kd-elevated border border-kd-border rounded-xl p-4 max-w-lg overflow-auto max-h-40">
             {this.state.error?.stack}
           </pre>
           <button

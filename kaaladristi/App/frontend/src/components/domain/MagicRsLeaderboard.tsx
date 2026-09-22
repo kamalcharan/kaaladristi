@@ -142,11 +142,11 @@ function LeaderboardRow({ stock, rank, side }: { stock: LeaderboardStock; rank: 
       onClick={() => navigate(`/chart/equity/${stock.equity_id}?name=${encodeURIComponent(toNavName(stock))}`)}
       className="w-full flex items-center gap-2 px-3 py-2 hover:bg-kd-elevated/40 transition-colors text-left border-b border-kd-border/30 last:border-b-0"
     >
-      <span className="text-[10px] font-mono text-muted w-5 text-right shrink-0">{rank}</span>
+      <span className="text-[12px] font-mono text-muted w-5 text-right shrink-0">{rank}</span>
       <span className="text-xs font-bold font-mono text-primary truncate min-w-[70px] max-w-[100px]">
         {heroName}
       </span>
-      <span className={cn('text-[8px] font-bold px-1.5 py-0.5 rounded border uppercase tracking-wider shrink-0', zone.color)}>
+      <span className={cn('text-[10px] font-bold px-1.5 py-0.5 rounded border uppercase tracking-wider shrink-0', zone.color)}>
         {zone.label}
       </span>
       <span className="flex-1" />
@@ -154,12 +154,12 @@ function LeaderboardRow({ stock, rank, side }: { stock: LeaderboardStock; rank: 
         {stock.magic_rs >= 0 ? '+' : ''}{stock.magic_rs.toFixed(1)}
       </span>
       {flow && (
-        <span className={cn('text-[9px] font-mono shrink-0 hidden sm:inline', flow.color)}>
+        <span className={cn('text-[11px] font-mono shrink-0 hidden sm:inline', flow.color)}>
           {flow.label}
         </span>
       )}
       {stock.rvol != null && stock.rvol > 0 && (
-        <span className="text-[9px] font-mono text-muted shrink-0 w-8 text-right hidden sm:inline">
+        <span className="text-[11px] font-mono text-muted shrink-0 w-8 text-right hidden sm:inline">
           {stock.rvol.toFixed(1)}x
         </span>
       )}
@@ -185,10 +185,10 @@ function LeaderboardPanel({
   return (
     <Card rounded="xxl" className="overflow-hidden flex-1 min-w-0">
       <div className="flex items-center justify-between px-4 py-3 border-b border-kd-border">
-        <h3 className="text-[10px] font-bold text-muted uppercase tracking-[0.15em]">
+        <h3 className="text-[12px] font-bold text-muted uppercase tracking-[0.15em]">
           {title}
         </h3>
-        <span className={cn('text-[9px] font-mono italic', subtitleColor)}>
+        <span className={cn('text-[11px] font-mono italic', subtitleColor)}>
           {subtitle}
         </span>
       </div>

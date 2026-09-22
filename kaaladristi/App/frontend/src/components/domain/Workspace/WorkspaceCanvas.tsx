@@ -68,7 +68,7 @@ function AddZone({ col, row, onClick }: { col: number; row: number; onClick: () 
         el.style.background = 'transparent'
       }}
     >
-      <span style={{ fontSize: 11, color: 'color-mix(in srgb, var(--text-primary) 18%, transparent)',
+      <span style={{ fontSize: 12, color: 'color-mix(in srgb, var(--text-primary) 18%, transparent)',
         fontFamily: 'var(--font-mono, monospace)' }}>+ block</span>
     </div>
   )
@@ -113,7 +113,7 @@ function GroupActiveIndicator({ tag }: { tag: string }) {
       + hist
     return (
       <span title={tip} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginLeft: 2, flexShrink: 0 }}>
-        <span style={{ fontSize: 10, color: 'color-mix(in srgb, var(--text-primary) 55%, transparent)', fontFamily: 'var(--font-mono,monospace)' }}>
+        <span style={{ fontSize: 12, color: 'color-mix(in srgb, var(--text-primary) 55%, transparent)', fontFamily: 'var(--font-mono,monospace)' }}>
           · {shortRuleName(active.display_name)}
         </span>
         <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--bull)',
@@ -202,7 +202,7 @@ function ColorPicker({
             padding: '4px 6px', borderRadius: 5,
             border: '1px solid color-mix(in srgb, var(--text-primary) 12%, transparent)',
             background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)',
-            color: 'color-mix(in srgb, var(--text-primary) 80%, transparent)', fontSize: 10,
+            color: 'color-mix(in srgb, var(--text-primary) 80%, transparent)', fontSize: 12,
             fontFamily: 'var(--font-mono, monospace)',
             outline: 'none',
           }}
@@ -214,9 +214,9 @@ function ColorPicker({
               display: 'flex', justifyContent: 'space-between', alignItems: 'center',
               marginBottom: 4,
             }}>
-              <span style={{ fontSize: 10, color: 'color-mix(in srgb, var(--text-primary) 40%, transparent)',
+              <span style={{ fontSize: 12, color: 'color-mix(in srgb, var(--text-primary) 40%, transparent)',
                 fontFamily: 'var(--font-mono, monospace)' }}>opacity</span>
-              <span style={{ fontSize: 10, color: 'color-mix(in srgb, var(--text-primary) 60%, transparent)',
+              <span style={{ fontSize: 12, color: 'color-mix(in srgb, var(--text-primary) 60%, transparent)',
                 fontFamily: 'var(--font-mono, monospace)' }}>
                 {Math.round((currentOpacity ?? 0.08) * 100)}%
               </span>
@@ -237,7 +237,7 @@ function ColorPicker({
             marginTop: 8, width: '100%', padding: '3px 0',
             borderRadius: 5, border: '1px solid color-mix(in srgb, var(--text-primary) 10%, transparent)',
             background: 'color-mix(in srgb, var(--text-primary) 4%, transparent)', color: 'color-mix(in srgb, var(--text-primary) 50%, transparent)',
-            fontSize: 10, cursor: 'pointer', fontFamily: 'inherit',
+            fontSize: 12, cursor: 'pointer', fontFamily: 'inherit',
           }}
         >
           done
@@ -446,7 +446,7 @@ export default function WorkspaceCanvas({ framework }: Props) {
                     <button onClick={() => toggleOverlayVisibility(o.catalog_item_id)}
                       style={{ display: 'inline-flex', alignItems: 'center', padding: '4px 6px 4px 4px',
                         border: 'none', background: 'transparent', cursor: 'pointer',
-                        fontSize: 11, fontFamily: 'var(--font-mono, monospace)',
+                        fontSize: 12, fontFamily: 'var(--font-mono, monospace)',
                         color: o.visible ? 'var(--text-primary)' : 'color-mix(in srgb, var(--text-primary) 30%, transparent)' }}
                     >{label}</button>
                     {o.catalog_item_id === 'gann_sq9' && (() => {
@@ -460,7 +460,7 @@ export default function WorkspaceCanvas({ framework }: Props) {
                             padding: '2px 6px', marginRight: 2, borderRadius: 4,
                             border: `1px solid ${showOrdinal ? 'rgba(245,166,35,0.5)' : 'color-mix(in srgb, var(--text-primary) 10%, transparent)'}`,
                             background: showOrdinal ? 'rgba(245,166,35,0.12)' : 'transparent',
-                            cursor: 'pointer', fontSize: 9,
+                            cursor: 'pointer', fontSize: 11,
                             fontFamily: 'var(--font-mono, monospace)',
                             color: showOrdinal ? '#F5A623' : 'color-mix(in srgb, var(--text-primary) 30%, transparent)',
                             transition: 'all .15s',
@@ -483,7 +483,7 @@ export default function WorkspaceCanvas({ framework }: Props) {
                         }}
                         style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                           width: 18, height: 18, border: 'none', background: 'transparent', cursor: 'pointer',
-                          fontSize: 11, color: 'rgba(157,143,249,.7)', transition: 'color .15s' }}
+                          fontSize: 12, color: 'rgba(157,143,249,.7)', transition: 'color .15s' }}
                         onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = '#9d8ff9' }}
                         onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = 'rgba(157,143,249,.7)' }}
                       >ⓘ</button>
@@ -492,7 +492,7 @@ export default function WorkspaceCanvas({ framework }: Props) {
                       style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                         width: 20, height: 20, borderRadius: '0 100px 100px 0',
                         border: 'none', background: 'transparent', cursor: 'pointer',
-                        fontSize: 9, color: 'color-mix(in srgb, var(--text-primary) 25%, transparent)', transition: 'color .15s' }}
+                        fontSize: 11, color: 'color-mix(in srgb, var(--text-primary) 25%, transparent)', transition: 'color .15s' }}
                       onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = 'var(--bear)' }}
                       onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = 'color-mix(in srgb, var(--text-primary) 25%, transparent)' }}
                     >✕</button>
@@ -526,12 +526,12 @@ export default function WorkspaceCanvas({ framework }: Props) {
                     title={allVisible ? 'Click to hide all' : 'Click to show all'}
                     style={{ display: 'inline-flex', alignItems: 'center', padding: '4px 6px 4px 4px',
                       border: 'none', background: 'transparent', cursor: 'pointer',
-                      fontSize: 11, fontFamily: 'var(--font-mono, monospace)',
+                      fontSize: 12, fontFamily: 'var(--font-mono, monospace)',
                       color: anyVisible ? 'var(--text-primary)' : 'color-mix(in srgb, var(--text-primary) 30%, transparent)' }}
                   >
                     {pillLabel}
                     {countBadge && (
-                      <span style={{ fontSize: 9, opacity: 0.5, marginLeft: 1 }}>{countBadge}</span>
+                      <span style={{ fontSize: 11, opacity: 0.5, marginLeft: 1 }}>{countBadge}</span>
                     )}
                   </button>
 
@@ -545,7 +545,7 @@ export default function WorkspaceCanvas({ framework }: Props) {
                     }}
                     style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                       width: 18, height: 18, border: 'none', background: 'transparent', cursor: 'pointer',
-                      fontSize: 11, color: 'rgba(157,143,249,.7)', transition: 'color .15s' }}
+                      fontSize: 12, color: 'rgba(157,143,249,.7)', transition: 'color .15s' }}
                     onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = '#9d8ff9' }}
                     onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = 'rgba(157,143,249,.7)' }}
                   >ⓘ</button>
@@ -557,7 +557,7 @@ export default function WorkspaceCanvas({ framework }: Props) {
                     style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                       width: 20, height: 20, borderRadius: '0 100px 100px 0',
                       border: 'none', background: 'transparent', cursor: 'pointer',
-                      fontSize: 9, color: 'color-mix(in srgb, var(--text-primary) 25%, transparent)', transition: 'color .15s' }}
+                      fontSize: 11, color: 'color-mix(in srgb, var(--text-primary) 25%, transparent)', transition: 'color .15s' }}
                     onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = 'var(--bear)' }}
                     onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = 'color-mix(in srgb, var(--text-primary) 25%, transparent)' }}
                   >✕</button>
@@ -573,7 +573,7 @@ export default function WorkspaceCanvas({ framework }: Props) {
               display: 'inline-flex', alignItems: 'center', gap: 4,
               padding: '4px 10px', borderRadius: 100, flexShrink: 0,
               border: '1px dashed color-mix(in srgb, var(--accent) 30%, transparent)', background: 'transparent',
-              cursor: 'pointer', fontSize: 11,
+              cursor: 'pointer', fontSize: 12,
               color: 'var(--accent)', fontFamily: 'var(--font-mono, monospace)',
               transition: 'all .15s',
             }}
@@ -603,7 +603,7 @@ export default function WorkspaceCanvas({ framework }: Props) {
           }}
           style={{
             padding: '6px 14px', borderRadius: 100, cursor: 'pointer', flexShrink: 0,
-            fontSize: 11, fontFamily: 'var(--font-mono, monospace)',
+            fontSize: 12, fontFamily: 'var(--font-mono, monospace)',
             border: '1px dashed color-mix(in srgb, var(--text-primary) 15%, transparent)',
             background: 'transparent',
             color: 'color-mix(in srgb, var(--text-primary) 40%, transparent)',

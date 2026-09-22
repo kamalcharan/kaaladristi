@@ -314,9 +314,9 @@ export default function StockAskPopover() {
           </span>
         )}
         {entity.pageContext && !s && (
-          <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>{entity.pageContext}</span>
+          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{entity.pageContext}</span>
         )}
-        <span style={{ marginLeft: 'auto', fontSize: 10, color: 'var(--text-faint)' }}>
+        <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--text-faint)' }}>
           {entity.asOfDate ? fmtDateLong(entity.asOfDate) : latestDataDateFormatted || fmtDateLong(latestDataDate || '')}
         </span>
         <button
@@ -394,7 +394,7 @@ export default function StockAskPopover() {
                   <ConfirmPill k="RS Zone" v={zoneLabel(s.magicRsZone).label} ok={rsOk} />
                   <ConfirmPill k="Delivery" v={s.deliveryPct != null ? `${s.deliveryPct}%` : '—'} ok={delivOk} />
                 </div>
-                <div style={{ fontSize: 10.5, color: 'var(--text-faint)' }}>
+                <div style={{ fontSize: 12, color: 'var(--text-faint)' }}>
                   <b style={{ color: 'var(--text-primary)' }}>{confirmCount} of 4</b> signals confirm
                 </div>
               </div>
@@ -418,7 +418,7 @@ export default function StockAskPopover() {
               key={i.intentId}
               onClick={() => ask(i.intentId)}
               style={{
-                padding: '4px 10px', borderRadius: 100, fontSize: 11, fontWeight: 500, cursor: 'pointer',
+                padding: '4px 10px', borderRadius: 100, fontSize: 12, fontWeight: 500, cursor: 'pointer',
                 border: `1px solid ${isActive ? 'var(--indigo)' : isPosition ? 'var(--accent, var(--gold-soft))' : 'var(--border)'}`,
                 background: isActive ? 'var(--indigo-bg)' : isPosition ? 'color-mix(in srgb, var(--accent, var(--gold-soft)) 10%, transparent)' : 'transparent',
                 color: isActive ? 'var(--indigo)' : isPosition ? 'var(--accent, var(--gold-soft))' : 'var(--text-muted)',
@@ -434,7 +434,7 @@ export default function StockAskPopover() {
           className="text-white"
           style={{
             marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 5,
-            padding: '4px 10px', borderRadius: 100, fontSize: 11, fontWeight: 600, cursor: 'pointer',
+            padding: '4px 10px', borderRadius: 100, fontSize: 12, fontWeight: 600, cursor: 'pointer',
             border: 'none', background: 'var(--indigo)', fontFamily: 'var(--font-body)',
           }}
         >
@@ -450,11 +450,11 @@ function ConfirmPill({ k, v, ok }: { k: string; v: string; ok: boolean }) {
   return (
     <div style={{
       display: 'flex', alignItems: 'center', gap: 5, padding: '4px 8px', borderRadius: 7,
-      background: 'var(--card)', border: '1px solid var(--border)', fontSize: 10.5,
+      background: 'var(--card)', border: '1px solid var(--border)', fontSize: 12,
     }}>
       <span style={{
         width: 12, height: 12, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontSize: 8, flexShrink: 0,
+        fontSize: 10, flexShrink: 0,
         background: ok ? 'color-mix(in srgb, var(--bull) 20%, transparent)' : 'color-mix(in srgb, var(--bear) 16%, transparent)',
         color: ok ? 'var(--bull)' : 'var(--bear)',
       }}>{ok ? '✓' : '–'}</span>
@@ -467,7 +467,7 @@ function ConfirmPill({ k, v, ok }: { k: string; v: string; ok: boolean }) {
 function MiniKv({ label, value, color }: { label: string; value: string; color?: string }) {
   return (
     <span style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-      <span style={{ fontSize: 9, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-faint)' }}>{label}</span>
+      <span style={{ fontSize: 11, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-faint)' }}>{label}</span>
       <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 600, color: color ?? 'var(--text-primary)' }}>{value}</span>
     </span>
   )
@@ -478,7 +478,7 @@ function MiniField({ label, value, onChange, type = 'text', placeholder }: {
 }) {
   return (
     <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-      <span style={{ fontSize: 9.5, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--text-faint)' }}>{label}</span>
+      <span style={{ fontSize: 11, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--text-faint)' }}>{label}</span>
       <input
         value={value} onChange={(e) => onChange(e.target.value)} type={type} placeholder={placeholder}
         style={{
@@ -545,18 +545,18 @@ function HoldThisBody({
 }) {
   if (position) {
     if (barsLoading || !thesis) {
-      return <div style={{ flex: '1 1 100%', fontSize: 11, color: 'var(--text-faint)' }}>Loading position risk…</div>
+      return <div style={{ flex: '1 1 100%', fontSize: 12, color: 'var(--text-faint)' }}>Loading position risk…</div>
     }
     return (
       <div style={{ flex: '1 1 100%' }}>
         <PositionRiskRead thesis={thesis} />
         <button
           onClick={onClear}
-          style={{ marginTop: 6, fontSize: 10.5, color: 'var(--text-faint)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+          style={{ marginTop: 6, fontSize: 12, color: 'var(--text-faint)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
         >
           ✕ Remove position
         </button>
-        {error && <div style={{ marginTop: 6, fontSize: 10, color: 'var(--bear)' }}>{error}</div>}
+        {error && <div style={{ marginTop: 6, fontSize: 12, color: 'var(--bear)' }}>{error}</div>}
       </div>
     )
   }
@@ -579,8 +579,8 @@ function HoldThisBody({
       >
         Save position
       </button>
-      {!canSave && <span style={{ fontSize: 10, color: 'var(--bear)' }}>Sign in to save positions.</span>}
-      {error && <span style={{ fontSize: 10, color: 'var(--bear)' }}>{error}</span>}
+      {!canSave && <span style={{ fontSize: 12, color: 'var(--bear)' }}>Sign in to save positions.</span>}
+      {error && <span style={{ fontSize: 12, color: 'var(--bear)' }}>{error}</span>}
     </div>
   )
 }
@@ -611,7 +611,7 @@ function CanIEnterBody({
   onSave: () => void
 }) {
   if (entryLoading || !entryThesis) {
-    return <div style={{ flex: '1 1 100%', fontSize: 11, color: 'var(--text-faint)' }}>Reading the setup…</div>
+    return <div style={{ flex: '1 1 100%', fontSize: 12, color: 'var(--text-faint)' }}>Reading the setup…</div>
   }
   const vColor = VERDICT_TONE_COLOR[entryThesis.verdict.tone]
   return (
@@ -621,15 +621,15 @@ function CanIEnterBody({
         <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>— {entryThesis.verdict.line}</span>
       </div>
       <PostureChart points={entryThesis.postureTrajectory.map((p) => p.posture)} />
-      <div style={{ fontSize: 10.5, color: 'var(--text-faint)', marginTop: 2, marginBottom: 10 }}>
+      <div style={{ fontSize: 12, color: 'var(--text-faint)', marginTop: 2, marginBottom: 10 }}>
         {entryThesis.alignedNow}/{entryThesis.total} pillars hold, trend {entryThesis.alignedTrend}
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', paddingTop: 10, borderTop: '1px dashed var(--border)' }}>
         <MiniField label="Qty (if entering)" value={qty} onChange={setQty} placeholder="optional" />
-        <span style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+        <span style={{ fontSize: 12, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
           at {latestClose != null ? `₹${latestClose.toFixed(2)}` : '—'}
-          <span style={{ fontSize: 9.5 }}> (last close{latestDate ? ` · ${latestDate}` : ''})</span>
+          <span style={{ fontSize: 11 }}> (last close{latestDate ? ` · ${latestDate}` : ''})</span>
         </span>
         <button
           onClick={onSave}
@@ -643,8 +643,8 @@ function CanIEnterBody({
         >
           Save as my position
         </button>
-        {!canSave && <span style={{ fontSize: 10, color: 'var(--bear)' }}>Sign in to save positions.</span>}
-        {error && <span style={{ fontSize: 10, color: 'var(--bear)' }}>{error}</span>}
+        {!canSave && <span style={{ fontSize: 12, color: 'var(--bear)' }}>Sign in to save positions.</span>}
+        {error && <span style={{ fontSize: 12, color: 'var(--bear)' }}>{error}</span>}
       </div>
     </div>
   )
@@ -664,7 +664,7 @@ function AlsoInScansStrip({
   currentPresetId?: string
 }) {
   if (isLoading) {
-    return <div style={{ fontSize: 10.5, color: 'var(--text-faint)', marginBottom: 8 }}>Checking other scans…</div>
+    return <div style={{ fontSize: 12, color: 'var(--text-faint)', marginBottom: 8 }}>Checking other scans…</div>
   }
   const others = matchedScans.filter((m) => m.id !== currentPresetId)
   if (others.length === 0) return null
@@ -674,7 +674,7 @@ function AlsoInScansStrip({
   const rest = others.length - shown.length
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 5, fontSize: 10.5, marginBottom: 10 }}>
+    <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 5, fontSize: 12, marginBottom: 10 }}>
       <span style={{ color: 'var(--text-faint)' }}>Also in:</span>
       {shown.map((m, i) => (
         <span key={m.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>

@@ -151,7 +151,7 @@ export default function WorkspaceActionIsland({ onOpen, onMorningBrief, bottomOf
       {/* Chips */}
       {chips.map((chip, i) => (
         <span key={i} style={{
-          fontSize: 10,
+          fontSize: 12,
           fontFamily: 'var(--font-mono, monospace)',
           padding: '2px 8px', borderRadius: 10,
           background: chip.type === 'caution' ? 'var(--caution-bg)' : 'var(--accent-glow)',
@@ -164,7 +164,7 @@ export default function WorkspaceActionIsland({ onOpen, onMorningBrief, bottomOf
       ))}
 
       {/* Chevron */}
-      <span style={{ fontSize: 11, color: 'color-mix(in srgb, var(--text-primary) 35%, transparent)', marginLeft: 2, flexShrink: 0 }}>
+      <span style={{ fontSize: 12, color: 'color-mix(in srgb, var(--text-primary) 35%, transparent)', marginLeft: 2, flexShrink: 0 }}>
         ›
       </span>
     </div>

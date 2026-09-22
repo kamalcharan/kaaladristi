@@ -212,7 +212,7 @@ export default function MasterFrameworksSection() {
                     right: 10,
                     padding: '3px 9px',
                     borderRadius: 100,
-                    fontSize: 9,
+                    fontSize: 11,
                     fontFamily: 'var(--font-mono, monospace)',
                     letterSpacing: '0.06em',
                     background: 'color-mix(in srgb, var(--gold) 12%, transparent)',
@@ -255,7 +255,7 @@ export default function MasterFrameworksSection() {
                         style={{
                           padding: '3px 8px',
                           borderRadius: 4,
-                          fontSize: 10,
+                          fontSize: 12,
                           fontFamily: 'var(--font-mono, monospace)',
                           border: '1px solid',
                           ...PILL_STYLE[kind],
@@ -271,7 +271,7 @@ export default function MasterFrameworksSection() {
                       style={{
                         padding: '3px 8px',
                         borderRadius: 4,
-                        fontSize: 10,
+                        fontSize: 12,
                         fontFamily: 'var(--font-mono, monospace)',
                         border: '1px solid',
                         ...PILL_STYLE.overlay,
@@ -286,7 +286,7 @@ export default function MasterFrameworksSection() {
                 <div style={{
                   display: 'flex',
                   gap: 16,
-                  fontSize: 10,
+                  fontSize: 12,
                   fontFamily: 'var(--font-mono, monospace)',
                   color: 'var(--text-muted)',
                 }}>
@@ -310,7 +310,7 @@ export default function MasterFrameworksSection() {
                 justifyContent: 'space-between',
               }}>
                 <span style={{
-                  fontSize: 10,
+                  fontSize: 12,
                   fontFamily: 'var(--font-mono, monospace)',
                   color: 'var(--text-muted)',
                 }}>

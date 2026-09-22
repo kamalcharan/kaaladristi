@@ -32,13 +32,13 @@ export default function ScanStatTile({ label, value, sub, accent, active, onClic
         transition: 'border-color 0.15s, box-shadow 0.15s',
       }}
     >
-      <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9.5, letterSpacing: '.07em', textTransform: 'uppercase', color: accent ? accentColor : active ? 'var(--accent)' : 'var(--text-faint)', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 5 }}>
+      <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '.07em', textTransform: 'uppercase', color: accent ? accentColor : active ? 'var(--accent)' : 'var(--text-faint)', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 5 }}>
         {label}
         {active && <span style={{ color: 'var(--accent)' }}>●</span>}
       </div>
       <div style={{ display: 'flex', flexWrap:'wrap', overflowWrap:'anywhere', minWidth:0, alignItems: 'baseline', gap: 6 }}>
         <span style={{ fontFamily: 'var(--font-display)', fontSize: 20, fontWeight: 500, color: 'var(--text-primary)' }}>{value}</span>
-        {sub && <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, color: 'var(--text-faint)' }}>{sub}</span>}
+        {sub && <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-faint)' }}>{sub}</span>}
       </div>
     </div>
   )

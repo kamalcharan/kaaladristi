@@ -177,7 +177,7 @@ function IndexTile({ tile }: { tile: IndexTileData }) {
       {/* Row 1: Name + Badge */}
       <div className="flex items-center justify-between mb-1.5">
         <span className="text-xs font-bold text-primary uppercase tracking-wide">{tile.shortName}</span>
-        <span className={cn('text-[9px] font-bold px-2 py-0.5 rounded-md border uppercase tracking-wider', badge.bg, badge.text)}>
+        <span className={cn('text-[11px] font-bold px-2 py-0.5 rounded-md border uppercase tracking-wider', badge.bg, badge.text)}>
           {tile.corrState.state}
         </span>
       </div>
@@ -189,13 +189,13 @@ function IndexTile({ tile }: { tile: IndexTileData }) {
         </span>
       </div>
       <div className="flex items-center gap-1.5 mb-2">
-        <span className={cn('text-[11px] font-bold font-mono', positive ? 'text-risk-green' : 'text-risk-red')}>
+        <span className={cn('text-[12px] font-bold font-mono', positive ? 'text-risk-green' : 'text-risk-red')}>
           {positive ? '\u25B2' : '\u25BC'} {positive ? '+' : ''}{tile.pct_chng.toFixed(2)}%
         </span>
       </div>
 
       {/* Row 3: Signal chips */}
-      <div className="flex items-center gap-2 flex-wrap text-[9px] font-mono">
+      <div className="flex items-center gap-2 flex-wrap text-[11px] font-mono">
         {tile.rssValue != null && (
           <span className={cn('font-bold', rssColor)}>
             RSS {tile.rssValue.toFixed(0)}
@@ -231,7 +231,7 @@ export default function IndexWatchlist() {
 
   return (
     <div>
-      <p className="text-[10px] font-bold text-muted uppercase tracking-[0.2em] mb-2">
+      <p className="text-[12px] font-bold text-muted uppercase tracking-[0.2em] mb-2">
         Indices &middot; Watchlist
       </p>
       {isLoading ? (

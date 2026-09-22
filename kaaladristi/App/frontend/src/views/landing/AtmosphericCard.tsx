@@ -63,8 +63,8 @@ export function AtmosphericCard({ atmo, loading }: { atmo: Atmo | null; loading:
 
       {/* Header row */}
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'baseline', marginBottom:12 }}>
-        <span style={{ fontFamily:MONO, fontSize:9, letterSpacing:'.24em', color:C.ink3 }}>ATMOSPHERIC READING</span>
-        <span style={{ fontFamily:MONO, fontSize:9, letterSpacing:'.14em', color: loading ? C.ink4 : color }}>
+        <span style={{ fontFamily:MONO, fontSize:11, letterSpacing:'.24em', color:C.ink3 }}>ATMOSPHERIC READING</span>
+        <span style={{ fontFamily:MONO, fontSize:11, letterSpacing:'.14em', color: loading ? C.ink4 : color }}>
           {loading ? '○ —' : '● LIVE'}
         </span>
       </div>
@@ -73,7 +73,7 @@ export function AtmosphericCard({ atmo, loading }: { atmo: Atmo | null; loading:
       <div style={{ fontFamily:SERIF, fontSize:28, color:C.ink1, lineHeight:1, marginBottom:4, letterSpacing:'-0.02em' }}>
         {loading ? '—' : atmo?.label}
       </div>
-      <div style={{ fontFamily:MONO, fontSize:10, letterSpacing:'.14em', color:C.ink3, marginBottom:14 }}>
+      <div style={{ fontFamily:MONO, fontSize:12, letterSpacing:'.14em', color:C.ink3, marginBottom:14 }}>
         today · {dateStr} · {timeStr}
       </div>
 
@@ -83,12 +83,12 @@ export function AtmosphericCard({ atmo, loading }: { atmo: Atmo | null; loading:
       {loading || !atmo ? (
         <div style={{ color:C.ink4, fontSize:12, fontStyle:'italic', fontFamily:SANS }}>Loading panchāngam…</div>
       ) : (
-        <div style={{ display:'grid', gridTemplateColumns:'auto 1fr', gap:'6px 14px', fontSize:11.5, fontFamily:SANS }}>
-          <span style={{ fontFamily:MONO, fontSize:9.5, letterSpacing:'.14em', color:C.ink3 }}>TITHI</span>
+        <div style={{ display:'grid', gridTemplateColumns:'auto 1fr', gap:'6px 14px', fontSize:12, fontFamily:SANS }}>
+          <span style={{ fontFamily:MONO, fontSize:11, letterSpacing:'.14em', color:C.ink3 }}>TITHI</span>
           <span style={{ color:C.ink1 }}>{atmo.tithi}</span>
-          <span style={{ fontFamily:MONO, fontSize:9.5, letterSpacing:'.14em', color:C.ink3 }}>NAKṢ.</span>
+          <span style={{ fontFamily:MONO, fontSize:11, letterSpacing:'.14em', color:C.ink3 }}>NAKṢ.</span>
           <span style={{ color:C.ink1 }}>{atmo.nakshatra}</span>
-          <span style={{ fontFamily:MONO, fontSize:9.5, letterSpacing:'.14em', color:C.ink3 }}>YOGA</span>
+          <span style={{ fontFamily:MONO, fontSize:11, letterSpacing:'.14em', color:C.ink3 }}>YOGA</span>
           <span style={{ color:C.ink1 }}>{atmo.yoga}</span>
         </div>
       )}
@@ -97,7 +97,7 @@ export function AtmosphericCard({ atmo, loading }: { atmo: Atmo | null; loading:
 
       {/* Attention bar */}
       <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:10 }}>
-        <span style={{ fontFamily:MONO, fontSize:9, letterSpacing:'.14em', color:C.ink3 }}>ATTN</span>
+        <span style={{ fontFamily:MONO, fontSize:11, letterSpacing:'.14em', color:C.ink3 }}>ATTN</span>
         {/* theme-agnostic: landing page is fixed-dark marketing */}
         <div style={{ flex:1, height:4, background:'rgba(255,255,255,0.05)', position:'relative' }}>
           <div style={{
@@ -107,14 +107,14 @@ export function AtmosphericCard({ atmo, loading }: { atmo: Atmo | null; loading:
             transition:'width .6s ease',
           }}/>
         </div>
-        <span style={{ fontFamily:MONO, fontSize:11, color: loading||!atmo ? C.ink4 : color }}>
+        <span style={{ fontFamily:MONO, fontSize:12, color: loading||!atmo ? C.ink4 : color }}>
           {loading||!atmo ? '—' : atmo.score}
         </span>
       </div>
 
       {/* Note */}
       {atmo && (
-        <p style={{ margin:0, fontSize:11.5, color:C.ink2, lineHeight:1.5, fontStyle:'italic', fontFamily:SANS }}>
+        <p style={{ margin:0, fontSize:12, color:C.ink2, lineHeight:1.5, fontStyle:'italic', fontFamily:SANS }}>
           {atmo.note}
         </p>
       )}

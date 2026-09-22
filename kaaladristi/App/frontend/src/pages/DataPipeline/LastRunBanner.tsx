@@ -57,7 +57,7 @@ export default function LastRunBanner() {
         )}
       </div>
       {hasError && data.error_msg && (
-        <p className="mt-1 font-mono" style={{ fontSize: 11, color: theme.color, opacity: 0.9, lineHeight: 1.5 }}>
+        <p className="mt-1 font-mono" style={{ fontSize: 12, color: theme.color, opacity: 0.9, lineHeight: 1.5 }}>
           {data.error_msg}
         </p>
       )}

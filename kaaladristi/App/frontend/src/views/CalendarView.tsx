@@ -117,7 +117,7 @@ function DayCell({ dayNum, weekday, events, signal, isToday, isWeekend, isSelect
           </span>
           <span style={{
             fontFamily: 'var(--font-mono)',
-            fontSize: 8,
+            fontSize: 10,
             color: 'var(--text-faint)',
             textTransform: 'uppercase',
             letterSpacing: '0.1em',
@@ -126,12 +126,12 @@ function DayCell({ dayNum, weekday, events, signal, isToday, isWeekend, isSelect
           </span>
         </div>
         <div style={{ display: 'flex', gap: 3, alignItems: 'center' }}>
-          {turning && <span style={{ color: 'var(--gold)', fontSize: 9 }} title="Turning date">◈</span>}
-          {isMajor && <span style={{ color: 'var(--gold)', fontSize: 9 }} title="Major event">★</span>}
+          {turning && <span style={{ color: 'var(--gold)', fontSize: 11 }} title="Turning date">◈</span>}
+          {isMajor && <span style={{ color: 'var(--gold)', fontSize: 11 }} title="Major event">★</span>}
           {isToday && (
             <span style={{
               fontFamily: 'var(--font-mono)',
-              fontSize: 7,
+              fontSize: 10,
               color: 'var(--gold)',
               padding: '1px 3px',
               border: '1px solid rgba(212,168,75,0.45)',
@@ -151,7 +151,7 @@ function DayCell({ dayNum, weekday, events, signal, isToday, isWeekend, isSelect
           border: '1px solid var(--border)',
           borderRadius: 4,
         }}>
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 8, color: 'var(--text-faint)', letterSpacing: '0.22em' }}>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-faint)', letterSpacing: '0.22em' }}>
             CLOSED
           </span>
         </div>
@@ -171,7 +171,7 @@ function DayCell({ dayNum, weekday, events, signal, isToday, isWeekend, isSelect
             >
               <span style={{
                 fontFamily: 'var(--font-mono)',
-                fontSize: 7,
+                fontSize: 10,
                 color: 'color-mix(in srgb, var(--text-primary) 35%, transparent)',
                 fontWeight: 700,
                 letterSpacing: '0.06em',
@@ -187,7 +187,7 @@ function DayCell({ dayNum, weekday, events, signal, isToday, isWeekend, isSelect
       {!isWeekend && (
         <div style={{
           fontFamily: 'var(--font-mono)',
-          fontSize: 8.5,
+          fontSize: 10,
           color: bias.border !== 'transparent' ? bias.border : 'var(--text-faint)',
           textAlign: 'center',
           marginTop: 3,
@@ -201,7 +201,7 @@ function DayCell({ dayNum, weekday, events, signal, isToday, isWeekend, isSelect
       {!isWeekend && signal && signal.signals.length > 0 && (
         <div style={{
           fontFamily: 'var(--font-mono)',
-          fontSize: 8,
+          fontSize: 10,
           color: 'var(--text-faint)',
           textAlign: 'center',
           marginTop: 2,
@@ -215,7 +215,7 @@ function DayCell({ dayNum, weekday, events, signal, isToday, isWeekend, isSelect
       {topEvent && !isWeekend && (
         <div style={{ marginTop: 5, display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 3 }}>
           <div style={{
-            fontSize: 9.5,
+            fontSize: 11,
             color: isMajor ? 'var(--gold)' : 'var(--text-faint)',
             overflow: 'hidden',
             textOverflow: 'ellipsis',
@@ -232,7 +232,7 @@ function DayCell({ dayNum, weekday, events, signal, isToday, isWeekend, isSelect
               title="Edit event"
               style={{
                 background: 'none', border: 'none', cursor: 'pointer',
-                color: 'var(--gold)', fontSize: 10, padding: '0 1px',
+                color: 'var(--gold)', fontSize: 12, padding: '0 1px',
                 lineHeight: 1, flexShrink: 0, opacity: 0.7,
               }}
             >
@@ -252,7 +252,7 @@ function BiasLegend() {
   const items = IMPACT_OPTIONS.map((key) => ({ key, label: ASTRO_SIGNAL_LABELS[key] }));
   return (
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px 18px', alignItems: 'center', marginTop: 16 }}>
-      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-faint)', letterSpacing: '0.14em', textTransform: 'uppercase' }}>
+      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-faint)', letterSpacing: '0.14em', textTransform: 'uppercase' }}>
         Legend
       </span>
       {items.map(({ key, label }) => {
@@ -266,19 +266,19 @@ function BiasLegend() {
               borderBottom: `2px solid ${b.border !== 'transparent' ? b.border : 'color-mix(in srgb, var(--text-primary) 10%, transparent)'}`,
               borderRadius: 2,
             }} />
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-faint)', letterSpacing: '0.1em' }}>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-faint)', letterSpacing: '0.1em' }}>
               {label}
             </span>
           </div>
         );
       })}
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        <span style={{ color: 'var(--gold)', fontSize: 11 }}>◈</span>
-        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-faint)', letterSpacing: '0.1em' }}>Turning date</span>
+        <span style={{ color: 'var(--gold)', fontSize: 12 }}>◈</span>
+        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-faint)', letterSpacing: '0.1em' }}>Turning date</span>
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        <span style={{ color: 'var(--gold)', fontSize: 11 }}>★</span>
-        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-faint)', letterSpacing: '0.1em' }}>Major event</span>
+        <span style={{ color: 'var(--gold)', fontSize: 12 }}>★</span>
+        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-faint)', letterSpacing: '0.1em' }}>Major event</span>
       </div>
     </div>
   );
@@ -313,12 +313,12 @@ function MonthSummary({
         {/* Key events */}
         {keyEvents.length > 0 && (
           <div className="flex-1 min-w-0">
-            <p className="text-[10px] uppercase tracking-widest font-bold text-muted mb-2">Key Events</p>
+            <p className="text-[12px] uppercase tracking-widest font-bold text-muted mb-2">Key Events</p>
             <div className="flex flex-wrap gap-2">
               {keyEvents.map(e => {
                 const c = ASTRO_SIGNAL_CLASSES[impactToColor(e.market_impact)];
                 return (
-                  <div key={e.id} className={cn('flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[11px]', c.bg, c.border)}>
+                  <div key={e.id} className={cn('flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[12px]', c.bg, c.border)}>
                     <span className={cn('font-bold', c.text)}>{fmtDate(e.start_date)}</span>
                     <span className="text-[var(--text-secondary)]">{e.display_name}</span>
                     {e.market_impact === 'turning' && <span className="text-risk-amber">◈</span>}
@@ -337,7 +337,7 @@ function Stat({ value, label, color }: { value: number; label: string; color: st
   return (
     <div className="text-center">
       <p className={cn('text-2xl font-bold mono', color)}>{value}</p>
-      <p className="text-[10px] text-muted uppercase tracking-wide">{label}</p>
+      <p className="text-[12px] text-muted uppercase tracking-wide">{label}</p>
     </div>
   );
 }
@@ -353,8 +353,8 @@ function CountPill({ label, value, color }: { label: string; value: number; colo
       borderRadius: 4,
       background: `color-mix(in srgb, ${color} 6%, transparent)`,
     }}>
-      <span style={{ fontSize: 8, color }}>{label}</span>
-      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color }}>{value}</span>
+      <span style={{ fontSize: 10, color }}>{label}</span>
+      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color }}>{value}</span>
     </div>
   );
 }
@@ -367,7 +367,7 @@ function EventGroup({ label, items, onEdit }: {
   return (
     <div style={{ marginBottom: 14 }}>
       <div style={{
-        fontFamily: 'var(--font-mono)', fontSize: 8.5, letterSpacing: '0.2em',
+        fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.2em',
         color: 'var(--text-faint)', textTransform: 'uppercase', marginBottom: 8,
       }}>
         {label} ({items.length})
@@ -381,13 +381,13 @@ function EventGroup({ label, items, onEdit }: {
               <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 7, marginBottom: 2 }}>
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 7 }}>
                   <span style={{
-                    fontFamily: 'var(--font-mono)', fontSize: 8.5,
+                    fontFamily: 'var(--font-mono)', fontSize: 10,
                     color: col, letterSpacing: '0.1em', textTransform: 'uppercase',
                   }}>
                     {ev.market_impact.replace(/_/g, ' ')}
                   </span>
                   {ev.end_date && ev.end_date !== ev.start_date && (
-                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 8, color: 'var(--text-faint)' }}>
+                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-faint)' }}>
                       → {ev.end_date.slice(5)}
                     </span>
                   )}
@@ -396,7 +396,7 @@ function EventGroup({ label, items, onEdit }: {
                   <button
                     onClick={() => onEdit(ev)}
                     style={{
-                      fontFamily: 'var(--font-mono)', fontSize: 8.5,
+                      fontFamily: 'var(--font-mono)', fontSize: 10,
                       color: 'var(--gold)', background: 'transparent',
                       border: '1px solid rgba(212,168,75,0.3)', borderRadius: 4,
                       padding: '1px 7px', cursor: 'pointer', letterSpacing: '0.12em',
@@ -411,7 +411,7 @@ function EventGroup({ label, items, onEdit }: {
                 {ev.display_name}
               </div>
               {desc && (
-                <div style={{ fontSize: 10.5, color: 'var(--text-faint)', lineHeight: 1.5 }}>
+                <div style={{ fontSize: 12, color: 'var(--text-faint)', lineHeight: 1.5 }}>
                   {desc}
                 </div>
               )}
@@ -471,7 +471,7 @@ function DayInspector({
       }}>
         <div>
           <div style={{
-            fontFamily: 'var(--font-mono)', fontSize: 9,
+            fontFamily: 'var(--font-mono)', fontSize: 11,
             color: 'var(--text-faint)', letterSpacing: '0.2em', textTransform: 'uppercase', marginBottom: 4,
           }}>
             {MONTH_FULL[m - 1]} · {weekdayFull}
@@ -484,7 +484,7 @@ function DayInspector({
           </div>
           {isToday && (
             <span style={{
-              fontFamily: 'var(--font-mono)', fontSize: 8, color: 'var(--gold)',
+              fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--gold)',
               letterSpacing: '0.2em', border: '1px solid rgba(212,168,75,0.4)',
               padding: '1px 5px', marginTop: 5, display: 'inline-block',
             }}>
@@ -512,7 +512,7 @@ function DayInspector({
             }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <span style={{
-                  fontFamily: 'var(--font-mono)', fontSize: 10,
+                  fontFamily: 'var(--font-mono)', fontSize: 12,
                   color: bias.border !== 'transparent' ? bias.border : 'var(--text-faint)',
                   letterSpacing: '0.14em', textTransform: 'uppercase',
                 }}>
@@ -528,7 +528,7 @@ function DayInspector({
                 )}
               </div>
               {turning && (
-                <div style={{ marginTop: 4, fontFamily: 'var(--font-mono)', fontSize: 8.5, color: 'var(--gold)', letterSpacing: '0.12em' }}>
+                <div style={{ marginTop: 4, fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--gold)', letterSpacing: '0.12em' }}>
                   ◈ TURNING DATE
                 </div>
               )}
@@ -544,7 +544,7 @@ function DayInspector({
             </div>
           </>
         ) : (
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-faint)', fontStyle: 'italic' }}>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-faint)', fontStyle: 'italic' }}>
             {isWeekend ? 'Market closed' : 'No signal data'}
           </div>
         )}
@@ -554,7 +554,7 @@ function DayInspector({
       {signal && signal.signals.length > 0 && (
         <div style={{ padding: '12px 18px', borderBottom: '1px solid var(--border)' }}>
           <div style={{
-            fontFamily: 'var(--font-mono)', fontSize: 8.5, letterSpacing: '0.2em',
+            fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.2em',
             color: 'var(--text-faint)', textTransform: 'uppercase', marginBottom: 8,
           }}>
             Nak-Vara Rules · {signal.signals.length}
@@ -564,12 +564,12 @@ function DayInspector({
               const om = OUTCOME_MAP[s.outcome] ?? { label: s.outcome, color: 'var(--text-faint)' };
               return (
                 <div key={s.rule_id} style={{ borderLeft: `2px solid color-mix(in srgb, ${om.color} 25%, transparent)`, paddingLeft: 10 }}>
-                  <div style={{ fontSize: 11.5, color: 'var(--text-primary)', lineHeight: 1.4, marginBottom: 3 }}>
+                  <div style={{ fontSize: 12, color: 'var(--text-primary)', lineHeight: 1.4, marginBottom: 3 }}>
                     {s.rule_name}
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                     <span style={{
-                      fontFamily: 'var(--font-mono)', fontSize: 8, fontWeight: 700,
+                      fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700,
                       letterSpacing: '0.1em', textTransform: 'uppercase',
                       color: om.color,
                       background: `color-mix(in srgb, ${om.color} 9%, transparent)`,
@@ -579,12 +579,12 @@ function DayInspector({
                       {om.label}
                     </span>
                     {s.confidence != null && (
-                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 8, color: 'var(--text-faint)', letterSpacing: '0.06em' }}>
+                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-faint)', letterSpacing: '0.06em' }}>
                         {s.confidence.toFixed(0)}% conf
                       </span>
                     )}
                     {s.probability_label && (
-                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 8, color: 'var(--text-faint)', letterSpacing: '0.06em' }}>
+                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-faint)', letterSpacing: '0.06em' }}>
                         · {s.probability_label}
                       </span>
                     )}
@@ -599,7 +599,7 @@ function DayInspector({
       {/* Events list */}
       <div style={{ padding: '14px 18px', maxHeight: 440, overflowY: 'auto' }}>
         {events.length === 0 ? (
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-faint)', fontStyle: 'italic', textAlign: 'center', padding: '20px 0' }}>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-faint)', fontStyle: 'italic', textAlign: 'center', padding: '20px 0' }}>
             No events this day
           </div>
         ) : (
@@ -715,7 +715,7 @@ function TimelineView({ events, year, month }: { events: AstroCalendarEvent[]; y
 
   return (
     <div className="glass-card rounded-3xl p-4 sm:p-6">
-      <p className="text-[10px] text-muted uppercase tracking-widest font-bold mb-5">
+      <p className="text-[12px] text-muted uppercase tracking-widest font-bold mb-5">
         Market Sentiment Timeline · {MONTH_FULL[month - 1]} {year}
       </p>
 
@@ -729,7 +729,7 @@ function TimelineView({ events, year, month }: { events: AstroCalendarEvent[]; y
                 <span className="text-[12px] font-mono font-bold text-[var(--text-secondary)]">
                   {wStart}–{wEnd}
                 </span>
-                <span className="text-[9px] uppercase tracking-widest text-muted mt-0.5">
+                <span className="text-[11px] uppercase tracking-widest text-muted mt-0.5">
                   {MONTH_ABBR[month - 1]}
                 </span>
               </div>
@@ -746,7 +746,7 @@ function TimelineView({ events, year, month }: { events: AstroCalendarEvent[]; y
                       <span
                         key={d}
                         className={cn(
-                          'absolute text-[9px] font-mono -translate-x-1/2',
+                          'absolute text-[11px] font-mono -translate-x-1/2',
                           isWeekend ? 'text-muted' : 'text-[var(--text-secondary)]',
                         )}
                         style={{ left: `${((i + 0.5) / wDays) * 100}%` }}
@@ -815,7 +815,7 @@ function TimelineView({ events, year, month }: { events: AstroCalendarEvent[]; y
                         onMouseEnter={ev => onEnter(event, ev)}
                         onMouseLeave={onLeave}
                       >
-                        <span className={cn('text-[11px] font-medium truncate leading-tight', c.text)}>
+                        <span className={cn('text-[12px] font-medium truncate leading-tight', c.text)}>
                           {event.inference ?? event.display_name}
                         </span>
                       </div>
@@ -860,7 +860,7 @@ function TimelineView({ events, year, month }: { events: AstroCalendarEvent[]; y
 
                   {/* Empty state */}
                   {!hasEvents && (
-                    <span className="absolute inset-0 flex items-center px-3 text-[11px] text-muted">
+                    <span className="absolute inset-0 flex items-center px-3 text-[12px] text-muted">
                       No events
                     </span>
                   )}
@@ -889,14 +889,14 @@ function TimelineView({ events, year, month }: { events: AstroCalendarEvent[]; y
             onMouseLeave={onLeave}
           >
             <div className="p-3.5">
-              <span className={cn('inline-flex items-center text-[10px] font-bold px-2 py-0.5 rounded-full border mb-2', c.bg, c.text, c.border)}>
+              <span className={cn('inline-flex items-center text-[12px] font-bold px-2 py-0.5 rounded-full border mb-2', c.bg, c.text, c.border)}>
                 {label}
               </span>
               <p className="text-[12px] text-[var(--text-primary)] leading-relaxed mb-2.5">
                 {hoveredEvent.inference ?? hoveredEvent.display_name}
               </p>
               <div className="pt-2 border-t border-kd-border">
-                <span className="text-[10px] font-mono text-muted">
+                <span className="text-[12px] font-mono text-muted">
                   {fmtDate(hoveredEvent.start_date)}
                   {hoveredEvent.end_date && hoveredEvent.end_date !== hoveredEvent.start_date
                     ? ` → ${fmtDate(hoveredEvent.end_date)}` : ''}
@@ -909,13 +909,13 @@ function TimelineView({ events, year, month }: { events: AstroCalendarEvent[]; y
 
       {/* Impact legend */}
       <div className="flex flex-wrap gap-x-4 gap-y-1.5 mt-6 pt-4 border-t border-kd-border">
-        <span className="text-[10px] uppercase tracking-widest font-bold text-muted self-center">Legend</span>
+        <span className="text-[12px] uppercase tracking-widest font-bold text-muted self-center">Legend</span>
         {Object.entries(ASTRO_SIGNAL_LABELS).map(([key, label]) => {
           const c = ASTRO_SIGNAL_CLASSES[impactToColor(key)];
           return (
             <div key={key} className="flex items-center gap-1.5">
               <div className={cn('w-3 h-3 rounded-sm border', c.bg, c.border)} />
-              <span className="text-[11px] text-[var(--text-secondary)]">{label}</span>
+              <span className="text-[12px] text-[var(--text-secondary)]">{label}</span>
             </div>
           );
         })}
@@ -941,7 +941,7 @@ const inputStyle: React.CSSProperties = {
 const btnStyle: React.CSSProperties = {
   padding: '7px 14px',
   fontFamily: 'var(--font-mono)',
-  fontSize: 10,
+  fontSize: 12,
   letterSpacing: '0.12em',
   textTransform: 'uppercase' as const,
   border: '1px solid var(--border)',
@@ -954,7 +954,7 @@ const btnStyle: React.CSSProperties = {
 const labelStyle: React.CSSProperties = {
   display: 'block',
   fontFamily: 'var(--font-mono)',
-  fontSize: 9.5,
+  fontSize: 11,
   letterSpacing: '0.18em',
   color: 'var(--text-faint)',
   textTransform: 'uppercase' as const,
@@ -1046,7 +1046,7 @@ function ItemModal({ item, onSave, onCancel }: {
       >
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 20px', borderBottom: '1px solid var(--border)' }}>
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.2em', color: 'var(--gold)', textTransform: 'uppercase' }}>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, letterSpacing: '0.2em', color: 'var(--gold)', textTransform: 'uppercase' }}>
             {item ? 'Edit Event' : 'New Event'}
           </span>
           <button onClick={onCancel} style={{ ...btnStyle, border: 'none', padding: '4px 8px' }}>× Close</button>
@@ -1054,7 +1054,7 @@ function ItemModal({ item, onSave, onCancel }: {
 
         {/* Body */}
         <div style={{ padding: '20px 22px', display: 'grid', gap: 14 }}>
-          {err && <div style={{ color: 'var(--bear)', fontFamily: 'var(--font-mono)', fontSize: 10 }}>{err}</div>}
+          {err && <div style={{ color: 'var(--bear)', fontFamily: 'var(--font-mono)', fontSize: 12 }}>{err}</div>}
 
           <div>
             <label style={labelStyle}>Name</label>
@@ -1089,7 +1089,7 @@ function ItemModal({ item, onSave, onCancel }: {
                     key={String(v)}
                     onClick={() => set('is_transit', v)}
                     style={{
-                      flex: 1, padding: '8px', fontFamily: 'var(--font-mono)', fontSize: 10,
+                      flex: 1, padding: '8px', fontFamily: 'var(--font-mono)', fontSize: 12,
                       letterSpacing: '0.12em', textTransform: 'uppercase',
                       background: form.is_transit === v ? 'rgba(212,168,75,0.12)' : 'transparent',
                       border: '1px solid var(--border)',
@@ -1183,7 +1183,7 @@ function AdminSection({ events, year, month, onRefresh }: {
       {/* Toolbar */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 20px', borderBottom: '1px solid var(--border)', flexWrap: 'wrap', gap: 12 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.2em', color: 'var(--gold)', textTransform: 'uppercase' }}>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, letterSpacing: '0.2em', color: 'var(--gold)', textTransform: 'uppercase' }}>
             ◇ Registry · Admin · {events.length} rows
           </span>
           <div style={{ display: 'flex', gap: 3 }}>
@@ -1192,7 +1192,7 @@ function AdminSection({ events, year, month, onRefresh }: {
                 key={t}
                 onClick={() => setTab(t)}
                 style={{
-                  padding: '5px 10px', fontFamily: 'var(--font-mono)', fontSize: 9.5,
+                  padding: '5px 10px', fontFamily: 'var(--font-mono)', fontSize: 11,
                   letterSpacing: '0.14em', textTransform: 'uppercase',
                   background: tab === t ? 'rgba(212,168,75,0.12)' : 'transparent',
                   border: '1px solid var(--border)',
@@ -1227,7 +1227,7 @@ function AdminSection({ events, year, month, onRefresh }: {
           display: 'grid',
           gridTemplateColumns: '80px 1fr 140px 130px 1fr 90px',
           gap: 12, padding: '10px 20px',
-          fontFamily: 'var(--font-mono)', fontSize: 9.5, letterSpacing: '0.16em',
+          fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.16em',
           color: 'var(--text-faint)', textTransform: 'uppercase',
           borderBottom: '1px solid var(--border)',
         }}
@@ -1242,7 +1242,7 @@ function AdminSection({ events, year, month, onRefresh }: {
 
       {/* Rows */}
       {filtered.length === 0 ? (
-        <div style={{ padding: '32px 20px', textAlign: 'center', color: 'var(--text-faint)', fontFamily: 'var(--font-mono)', fontSize: 11, fontStyle: 'italic' }}>
+        <div style={{ padding: '32px 20px', textAlign: 'center', color: 'var(--text-faint)', fontFamily: 'var(--font-mono)', fontSize: 12, fontStyle: 'italic' }}>
           No records match
         </div>
       ) : (
@@ -1258,7 +1258,7 @@ function AdminSection({ events, year, month, onRefresh }: {
           >
             <span
               style={{
-                fontFamily: 'var(--font-mono)', fontSize: 9, padding: '2px 6px',
+                fontFamily: 'var(--font-mono)', fontSize: 11, padding: '2px 6px',
                 border: `1px solid ${ev.is_transit ? 'var(--border-indigo)' : 'rgba(212,168,75,0.3)'}`,
                 color: ev.is_transit ? 'var(--indigo)' : 'var(--gold)',
                 textTransform: 'uppercase', letterSpacing: '0.1em', borderRadius: 4,
@@ -1272,24 +1272,24 @@ function AdminSection({ events, year, month, onRefresh }: {
               {ev.display_name}
             </span>
 
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-secondary)' }}>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-secondary)' }}>
               {ev.start_date}
               {ev.end_date && ev.end_date !== ev.start_date ? ` → ${ev.end_date.slice(5)}` : ''}
             </span>
 
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9.5, color: impactColor(ev.market_impact), textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: impactColor(ev.market_impact), textTransform: 'uppercase', letterSpacing: '0.08em' }}>
               {ev.market_impact.replace(/_/g, ' ')}
             </span>
 
-            <span style={{ fontSize: 11, color: 'var(--text-faint)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <span style={{ fontSize: 12, color: 'var(--text-faint)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {ev.narrative ?? ev.inference ?? '—'}
             </span>
 
             <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end' }}>
-              <button onClick={() => setEditing(ev)} style={{ ...btnStyle, fontSize: 10, padding: '4px 8px' }}>Edit</button>
+              <button onClick={() => setEditing(ev)} style={{ ...btnStyle, fontSize: 12, padding: '4px 8px' }}>Edit</button>
               <button
                 onClick={() => setDeleting(ev.id)}
-                style={{ ...btnStyle, fontSize: 10, padding: '4px 8px', color: 'var(--bear)', borderColor: 'rgba(200,60,60,0.3)' }}
+                style={{ ...btnStyle, fontSize: 12, padding: '4px 8px', color: 'var(--bear)', borderColor: 'rgba(200,60,60,0.3)' }}
               >
                 Del
               </button>
@@ -1431,7 +1431,7 @@ export default function DCCalendarView() {
                   style={{
                     padding: '7px 14px',
                     fontFamily: 'var(--font-mono)',
-                    fontSize: 10,
+                    fontSize: 12,
                     letterSpacing: '0.14em',
                     textTransform: 'uppercase',
                     border: '1px solid var(--border)',
@@ -1505,7 +1505,7 @@ export default function DCCalendarView() {
                       {/* Day headers */}
                       <div className="grid grid-cols-7 mb-3">
                         {DAY_ABBR.map(d => (
-                          <div key={d} className="text-center text-[11px] uppercase tracking-widest font-bold text-muted py-2">
+                          <div key={d} className="text-center text-[12px] uppercase tracking-widest font-bold text-muted py-2">
                             {d}
                           </div>
                         ))}
@@ -1539,7 +1539,7 @@ export default function DCCalendarView() {
                     <BiasLegend />
 
                     {/* Footer */}
-                    <p className="text-[10px] text-muted text-right mt-4 mono">
+                    <p className="text-[12px] text-muted text-right mt-4 mono">
                       DristiQ · {events.length} events · {MONTH_FULL[month - 1]} {year}
                     </p>
                   </div>

@@ -100,13 +100,13 @@ export default function AlmanacTab({ ruleId }: { ruleId: number }) {
     <div>
       {/* Year chips */}
       <div className="flex items-center gap-1.5 px-4 py-2.5 border-b border-kd-border/60 overflow-x-auto">
-        <span className="text-[10px] font-mono text-muted uppercase tracking-wider mr-1 shrink-0">Year</span>
+        <span className="text-[12px] font-mono text-muted uppercase tracking-wider mr-1 shrink-0">Year</span>
         {years.map(y => (
           <button
             key={y}
             onClick={() => setYear(y)}
             className={cn(
-              'px-2.5 py-1 rounded-full text-[11px] font-mono transition-colors shrink-0',
+              'px-2.5 py-1 rounded-full text-[12px] font-mono transition-colors shrink-0',
               y === effectiveYear
                 ? 'bg-accent-gold/15 text-accent-gold border border-accent-gold/40'
                 : 'text-muted border border-kd-border hover:text-secondary',
@@ -123,7 +123,7 @@ export default function AlmanacTab({ ruleId }: { ruleId: number }) {
           <thead>
             <tr className="border-b border-kd-border bg-kd-elevated/60">
               {['Start Date', 'End Date', 'Total Days', ...(hasDetail ? ['Detail'] : []), 'Lord'].map(h => (
-                <th key={h} className="text-left text-[10px] font-mono text-muted px-3 py-2.5 uppercase tracking-wider whitespace-nowrap">{h}</th>
+                <th key={h} className="text-left text-[12px] font-mono text-muted px-3 py-2.5 uppercase tracking-wider whitespace-nowrap">{h}</th>
               ))}
             </tr>
           </thead>
@@ -141,7 +141,7 @@ export default function AlmanacTab({ ruleId }: { ruleId: number }) {
                 >
                   <td className="px-3 py-2.5 text-xs font-mono text-white whitespace-nowrap tabular-nums">
                     {w.start_date}
-                    {live && <span className="ml-2 text-[9px] font-mono text-accent-gold animate-pulse">◉ ACTIVE</span>}
+                    {live && <span className="ml-2 text-[11px] font-mono text-accent-gold animate-pulse">◉ ACTIVE</span>}
                   </td>
                   <td className="px-3 py-2.5 text-xs font-mono text-secondary whitespace-nowrap tabular-nums">{w.end_date}</td>
                   <td className="px-3 py-2.5 text-xs tabular-nums text-center text-muted">{w.duration_days}</td>
@@ -158,7 +158,7 @@ export default function AlmanacTab({ ruleId }: { ruleId: number }) {
         </table>
       </div>
 
-      <p className="px-4 py-2.5 text-[10px] text-muted border-t border-kd-border/40">
+      <p className="px-4 py-2.5 text-[12px] text-muted border-t border-kd-border/40">
         Lord = weekday lord of the window's start date. Dates are ephemeris-day precision; exact start/end times not yet computed.
       </p>
     </div>

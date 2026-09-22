@@ -25,7 +25,7 @@ export default function VaNiHeader({ date, barPosition, isThinking }: VaNiHeader
           VaNi &middot; <span style={{ fontWeight: 400 }}>वाणी</span>
         </div>
         <div style={{
-          fontSize: 9, fontFamily: 'var(--font-mono, monospace)',
+          fontSize: 11, fontFamily: 'var(--font-mono, monospace)',
           letterSpacing: 1, color: 'var(--text-muted)',
           opacity: isThinking ? undefined : 1,
           animation: isThinking ? 'vani-pulse 1.2s ease infinite' : undefined,

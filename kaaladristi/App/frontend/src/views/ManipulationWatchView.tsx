@@ -39,7 +39,7 @@ function SuspectCard({ stock, variant }: { stock: ManipulationWatchStock; varian
             <ExchangeBadge exchange={stock.exchange} />
             {stock.triggerCount > 1 && (
               <span className={cn(
-                'text-[9px] font-bold px-1.5 py-0.5 rounded',
+                'text-[11px] font-bold px-1.5 py-0.5 rounded',
                 variant === 'pump'
                   ? 'bg-risk-amber/15 text-risk-amber'
                   : 'bg-risk-red/15 text-risk-red',
@@ -49,11 +49,11 @@ function SuspectCard({ stock, variant }: { stock: ManipulationWatchStock; varian
             )}
           </div>
           <div className="flex items-center gap-1.5 flex-wrap pl-[22px]">
-            {subName && <span className="text-[10px] text-muted truncate">{subName}</span>}
-            {subName && stock.industry && <span className="text-[10px] text-muted">·</span>}
-            {stock.industry && <span className="text-[10px] text-muted">{stock.industry}</span>}
+            {subName && <span className="text-[12px] text-muted truncate">{subName}</span>}
+            {subName && stock.industry && <span className="text-[12px] text-muted">·</span>}
+            {stock.industry && <span className="text-[12px] text-muted">{stock.industry}</span>}
             {flowConfig && (
-              <span className={cn('text-[9px] font-bold px-1.5 py-0.5 rounded', flowConfig.color, 'bg-kd-elevated/50')}>
+              <span className={cn('text-[11px] font-bold px-1.5 py-0.5 rounded', flowConfig.color, 'bg-kd-elevated/50')}>
                 {flowConfig.label}
               </span>
             )}
@@ -65,7 +65,7 @@ function SuspectCard({ stock, variant }: { stock: ManipulationWatchStock; varian
               {stock.close != null ? stock.close.toFixed(2) : '—'}
             </p>
             <p className={cn(
-              'text-[11px] font-bold font-mono',
+              'text-[12px] font-bold font-mono',
               (stock.pct_chng ?? 0) >= 0 ? 'text-risk-green' : 'text-risk-red',
             )}>
               {(stock.pct_chng ?? 0) >= 0 ? '+' : ''}{(stock.pct_chng ?? 0).toFixed(2)}%
@@ -77,7 +77,7 @@ function SuspectCard({ stock, variant }: { stock: ManipulationWatchStock; varian
 
       {/* Row 2: Why flagged */}
       <div className={cn(
-        'text-[10px] leading-relaxed pl-[22px] mb-2',
+        'text-[12px] leading-relaxed pl-[22px] mb-2',
         variant === 'pump' ? 'text-risk-amber/80' : 'text-risk-red/80',
       )}>
         {stock.whyFlagged.join(' + ')}
@@ -105,7 +105,7 @@ function SuspectCard({ stock, variant }: { stock: ManipulationWatchStock; varian
           value={stock.rvol?.toFixed(1) ?? '—'}
           color={(stock.rvol ?? 0) > 2 ? 'text-risk-green' : undefined}
         />
-        <span className="text-[9px] font-mono text-muted ml-auto">{stock.latestTrigger}</span>
+        <span className="text-[11px] font-mono text-muted ml-auto">{stock.latestTrigger}</span>
       </div>
     </Card>
   );
@@ -194,7 +194,7 @@ export default function ManipulationWatchView() {
             )}
           >
             Pump Suspects
-            {!isLoading && <span className="ml-1.5 text-[10px] opacity-70">{pumpCount}</span>}
+            {!isLoading && <span className="ml-1.5 text-[12px] opacity-70">{pumpCount}</span>}
           </button>
           <button
             onClick={() => setActiveTab('dump')}
@@ -206,7 +206,7 @@ export default function ManipulationWatchView() {
             )}
           >
             Dump Suspects
-            {!isLoading && <span className="ml-1.5 text-[10px] opacity-70">{dumpCount}</span>}
+            {!isLoading && <span className="ml-1.5 text-[12px] opacity-70">{dumpCount}</span>}
           </button>
         </div>
 
@@ -218,7 +218,7 @@ export default function ManipulationWatchView() {
                 key={opt.days}
                 onClick={() => setLookbackDays(opt.days)}
                 className={cn(
-                  'px-2 py-1 rounded-lg text-[10px] font-bold transition-all border',
+                  'px-2 py-1 rounded-lg text-[12px] font-bold transition-all border',
                   lookbackDays === opt.days
                     ? 'bg-risk-amber/15 text-risk-amber border-risk-amber/30'
                     : 'text-muted border-transparent hover:text-secondary',
@@ -229,7 +229,7 @@ export default function ManipulationWatchView() {
             ))}
           </div>
           {data?.latestDate && (
-            <span className="text-[10px] text-muted font-mono">as of {data.latestDate}</span>
+            <span className="text-[12px] text-muted font-mono">as of {data.latestDate}</span>
           )}
         </div>
       </div>
@@ -258,7 +258,7 @@ export default function ManipulationWatchView() {
                 <SuspectCard key={stock.equity_id} stock={stock} variant={activeTab} />
               ))}
               <div className="mt-2 text-center">
-                <span className="text-[10px] text-muted font-mono">
+                <span className="text-[12px] text-muted font-mono">
                   {stocks.length} suspect{stocks.length !== 1 ? 's' : ''} in last {lookbackDays} trading days
                 </span>
               </div>

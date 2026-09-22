@@ -46,7 +46,7 @@ function resolveEndSec(endTime: string, nextDay: boolean): { sec: number; nextDa
 
 function Badge({ children, className }: { children: React.ReactNode; className?: string }) {
   return (
-    <span className={cn('px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border', className)}>
+    <span className={cn('px-2 py-0.5 rounded text-[11px] font-bold uppercase tracking-wider border', className)}>
       {children}
     </span>
   );
@@ -86,18 +86,18 @@ function Row({
 
   return (
     <div className="flex items-baseline justify-between gap-2 py-1 border-b border-kd-border last:border-b-0">
-      <span className="text-[10px] uppercase tracking-widest text-muted font-bold shrink-0"><GlossaryTerm term={label} /></span>
+      <span className="text-[12px] uppercase tracking-widest text-muted font-bold shrink-0"><GlossaryTerm term={label} /></span>
       <div className="flex items-center gap-1.5 min-w-0">
         <span className="text-[12px] font-medium text-right truncate text-[var(--text-primary)]">
           {displayValue}
         </span>
         {endTime && isPast && (
-          <span className="text-[9px] font-mono shrink-0 text-muted" title={`Changed at ${endTime} IST${nextDay ? ' (next day)' : ''}`}>
+          <span className="text-[11px] font-mono shrink-0 text-muted" title={`Changed at ${endTime} IST${nextDay ? ' (next day)' : ''}`}>
             since {endTime.slice(0, 5)}{nextDay ? ' +1' : ''}
           </span>
         )}
         {endTime && !isPast && (
-          <span className="text-[9px] font-mono shrink-0 text-muted" title={`Changes at ${endTime} IST${nextDay ? ' (next day)' : ''}`}>
+          <span className="text-[11px] font-mono shrink-0 text-muted" title={`Changes at ${endTime} IST${nextDay ? ' (next day)' : ''}`}>
             until {displayEnd}{remaining ? ` (${remaining})` : ''}
           </span>
         )}
@@ -128,19 +128,19 @@ function PanchangContent({ p, istTime }: { p: DailyPanchang; istTime: string }) 
       {/* Sunrise → Live clock → Sunset */}
       <div className="mb-3 pb-2.5 border-b border-kd-border space-y-1.5">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-1.5 text-[11px] text-risk-amber">
+          <div className="flex items-center gap-1.5 text-[12px] text-risk-amber">
             <Sun className="w-3 h-3" />
             <span className="mono font-medium">{p.sunrise_ist ?? '—'}</span>
           </div>
 
           {/* Ticking clock */}
-          <div className="flex items-center gap-1 text-[11px]">
+          <div className="flex items-center gap-1 text-[12px]">
             <Clock className="w-2.5 h-2.5 text-muted" />
             <span className="mono font-semibold text-[var(--text-secondary)] tabular-nums">{istTime}</span>
-            <span className="text-[9px] text-muted font-bold">IST</span>
+            <span className="text-[11px] text-muted font-bold">IST</span>
           </div>
 
-          <div className="flex items-center gap-1.5 text-[11px] text-accent-indigo">
+          <div className="flex items-center gap-1.5 text-[12px] text-accent-indigo">
             <span className="mono font-medium">{p.sunset_ist ?? '—'}</span>
             <Moon className="w-3 h-3" />
           </div>
@@ -157,9 +157,9 @@ function PanchangContent({ p, istTime }: { p: DailyPanchang; istTime: string }) 
         )}
 
         <div className="flex justify-between">
-          <span className="text-[9px] text-muted"><GlossaryTerm term="Paksha">{`${paksha} Paksha`}</GlossaryTerm></span>
+          <span className="text-[11px] text-muted"><GlossaryTerm term="Paksha">{`${paksha} Paksha`}</GlossaryTerm></span>
           {progress !== null && (
-            <span className="text-[9px] text-muted mono">{progress}% of day</span>
+            <span className="text-[11px] text-muted mono">{progress}% of day</span>
           )}
         </div>
       </div>
@@ -209,7 +209,7 @@ export default function PanchangamCard({ date }: { date: string }) {
       <div className="flex items-center gap-2 mb-3">
         <span className="text-base">🪐</span>
         <h3 className="text-[13px] font-bold text-[var(--text-primary)]"><GlossaryTerm term="Panchangam" position="right" /></h3>
-        <span className="ml-auto text-[10px] text-muted mono">{date}</span>
+        <span className="ml-auto text-[12px] text-muted mono">{date}</span>
       </div>
 
       {isLoading ? (
@@ -219,7 +219,7 @@ export default function PanchangamCard({ date }: { date: string }) {
           ))}
         </div>
       ) : isError || !data ? (
-        <p className="text-[11px] text-muted text-center py-4">
+        <p className="text-[12px] text-muted text-center py-4">
           {isError ? 'Failed to load panchang data' : `No panchang data for ${date}`}
         </p>
       ) : (

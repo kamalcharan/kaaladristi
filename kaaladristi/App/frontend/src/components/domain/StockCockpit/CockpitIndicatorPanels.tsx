@@ -69,12 +69,12 @@ function Panel({ def, rows }: { def: PanelDef; rows: IndicatorRow[] }) {
         className="w-full flex items-center gap-2 text-left"
       >
         {open ? <ChevronDown className="w-3 h-3 text-muted" /> : <ChevronRight className="w-3 h-3 text-muted" />}
-        <span className="text-[10px] font-mono font-bold uppercase tracking-widest text-muted">
+        <span className="text-[12px] font-mono font-bold uppercase tracking-widest text-muted">
           {def.title}
         </span>
         <span className="ml-auto flex items-center gap-3">
           {def.series.map((sr) => (
-            <span key={String(sr.key)} className="flex items-center gap-1 text-[9px] text-muted">
+            <span key={String(sr.key)} className="flex items-center gap-1 text-[11px] text-muted">
               <span className="inline-block w-3 h-0.5 rounded" style={{ background: sr.color }} />
               {sr.label}
             </span>
@@ -89,14 +89,14 @@ function Panel({ def, rows }: { def: PanelDef; rows: IndicatorRow[] }) {
               <YAxis
                 domain={def.domain}
                 width={30}
-                tick={{ fontSize: 9, fill: 'var(--text-faint)' }}
+                tick={{ fontSize: 11, fill: 'var(--text-faint)' }}
                 axisLine={false}
                 tickLine={false}
               />
               <Tooltip
                 contentStyle={{
                   background: 'var(--card)', border: '1px solid var(--border)',
-                  borderRadius: 4, fontFamily: 'var(--font-mono)', fontSize: 10,
+                  borderRadius: 4, fontFamily: 'var(--font-mono)', fontSize: 12,
                 }}
                 labelFormatter={(l: unknown, payload: unknown) => {
                   const p = payload as Array<{ payload?: { trade_date?: string } }>;

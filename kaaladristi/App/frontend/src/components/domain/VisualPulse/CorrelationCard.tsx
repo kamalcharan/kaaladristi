@@ -16,7 +16,7 @@ function ScoreBar({ label, score, max }: { label: string; score: number; max: nu
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
       <span style={{
-        width: 64, flexShrink: 0, fontFamily: 'var(--font-mono, monospace)', fontSize: 8,
+        width: 64, flexShrink: 0, fontFamily: 'var(--font-mono, monospace)', fontSize: 10,
         letterSpacing: 0.5, color: 'var(--text-muted)', textTransform: 'uppercase',
       }}>{label}</span>
       <div style={{
@@ -29,7 +29,7 @@ function ScoreBar({ label, score, max }: { label: string; score: number; max: nu
       </div>
       <span style={{
         width: 32, textAlign: 'right', fontFamily: 'var(--font-mono, monospace)',
-        fontSize: 11, color,
+        fontSize: 12, color,
         transition: 'color 0.4s ease',
       }}>
         {score > 0 ? '+' : ''}{score}
@@ -51,15 +51,15 @@ function LayerChip({ name, verdict, score, color }: {
       transition: 'all 0.4s ease',
     }}>
       <div style={{
-        fontSize: 8, fontFamily: 'var(--font-mono, monospace)',
+        fontSize: 10, fontFamily: 'var(--font-mono, monospace)',
         textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 2,
       }}>{name}</div>
       <div style={{
-        fontSize: 10, fontWeight: 600, fontFamily: 'var(--font-mono, monospace)',
+        fontSize: 12, fontWeight: 600, fontFamily: 'var(--font-mono, monospace)',
         color, transition: 'color 0.4s ease',
       }}>{verdict}</div>
       <div style={{
-        fontSize: 8, fontFamily: 'var(--font-mono, monospace)',
+        fontSize: 10, fontFamily: 'var(--font-mono, monospace)',
         color, opacity: 0.88,
       }}>
         {score > 0 ? '+' : ''}{score}
@@ -134,7 +134,7 @@ export default function CorrelationCard({
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
           <div>
             <div style={{
-              fontSize: 8, fontFamily: 'var(--font-mono, monospace)',
+              fontSize: 10, fontFamily: 'var(--font-mono, monospace)',
               textTransform: 'uppercase', letterSpacing: 3, color: 'var(--text-muted)',
               marginBottom: 4,
             }}>Correlation Verdict</div>
@@ -144,7 +144,7 @@ export default function CorrelationCard({
               transition: 'color 0.4s ease',
             }}>{corrState.state}</div>
             <div style={{
-              fontSize: 11, fontStyle: 'italic', color: 'var(--text-secondary)',
+              fontSize: 12, fontStyle: 'italic', color: 'var(--text-secondary)',
               marginTop: 4, maxWidth: 280, lineHeight: 1.4,
               transition: 'opacity 0.3s ease',
             }}>{corrState.tagline}</div>
@@ -157,7 +157,7 @@ export default function CorrelationCard({
                 onClick={() => onStyleChange(s)}
                 style={{
                   padding: '4px 10px', borderRadius: 14,
-                  fontFamily: 'var(--font-mono, monospace)', fontSize: 9,
+                  fontFamily: 'var(--font-mono, monospace)', fontSize: 11,
                   fontWeight: 600, letterSpacing: 1, cursor: 'pointer',
                   border: `1px solid ${selectedStyle === s
                     ? `color-mix(in srgb, ${STYLE_COLORS[s]} 44%, transparent)`
@@ -191,11 +191,11 @@ export default function CorrelationCard({
             display: 'flex', justifyContent: 'space-between', marginBottom: 4,
           }}>
             <span style={{
-              fontSize: 8, fontFamily: 'var(--font-mono, monospace)',
+              fontSize: 10, fontFamily: 'var(--font-mono, monospace)',
               textTransform: 'uppercase', letterSpacing: 2, color: 'var(--text-muted)',
             }}>Alignment Gap</span>
             <span style={{
-              fontSize: 9, fontFamily: 'var(--font-mono, monospace)',
+              fontSize: 11, fontFamily: 'var(--font-mono, monospace)',
               color: corrState.state === 'Aligned' ? 'var(--risk-green)' : 'var(--accent-gold)',
               letterSpacing: 1,
             }}>

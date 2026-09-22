@@ -98,7 +98,7 @@ export default function HealthGrid({ onCellSelect }: Props) {
   };
 
   const rangeToggle = (
-    <div className="flex items-center gap-1 text-[10px]">
+    <div className="flex items-center gap-1 text-[12px]">
       <span className="text-muted mr-1">Range:</span>
       {DAY_CHOICES.map(n => (
         <button
@@ -155,7 +155,7 @@ export default function HealthGrid({ onCellSelect }: Props) {
   return (
     <div className="bg-kd-surface/30 rounded-lg border border-kd-border/30">
       <div className="flex items-center justify-between px-3 py-2 border-b border-kd-border/30">
-        <span className="text-[11px] text-muted">
+        <span className="text-[12px] text-muted">
           {data.dimensions.length} dimensions · {headerDays.length} trading days
         </span>
         {rangeToggle}
@@ -173,7 +173,7 @@ export default function HealthGrid({ onCellSelect }: Props) {
             {headerDays.map(d => (
               <th
                 key={d.trade_date}
-                className="font-normal text-[10px] text-muted px-0.5 py-1"
+                className="font-normal text-[12px] text-muted px-0.5 py-1"
                 title={d.trade_date}
               >
                 {d.trade_date.slice(5)}
@@ -226,7 +226,7 @@ export default function HealthGrid({ onCellSelect }: Props) {
                     {dim.latest_ok ? (
                       <span className="text-muted mono">{dim.latest_ok}</span>
                     ) : (
-                      <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-medium bg-rose-500/20 text-risk-red">
+                      <span className="inline-block px-1.5 py-0.5 rounded text-[12px] font-medium bg-rose-500/20 text-risk-red">
                         never
                       </span>
                     )}
@@ -239,7 +239,7 @@ export default function HealthGrid({ onCellSelect }: Props) {
       </table>
       </div>
 
-      <div className="flex items-center gap-4 text-[10px] text-muted p-2 border-t border-kd-border/30">
+      <div className="flex items-center gap-4 text-[12px] text-muted p-2 border-t border-kd-border/30">
         <Legend color="bg-emerald-500/70" label="ok ≥ threshold" />
         <Legend color="bg-amber-500/70"   label="partial" />
         <Legend color="bg-rose-500/70"    label="missing" />
@@ -250,7 +250,7 @@ export default function HealthGrid({ onCellSelect }: Props) {
         </span>
       </div>
       {markErr && (
-        <div className="text-[10px] text-risk-red bg-rose-500/10 border-t border-rose-500/30 px-3 py-1">
+        <div className="text-[12px] text-risk-red bg-rose-500/10 border-t border-rose-500/30 px-3 py-1">
           Mark failed: {markErr}
         </div>
       )}
@@ -288,7 +288,7 @@ function CellContextMenu({ state, onMark, onClose }: {
         top: Math.min(state.y, window.innerHeight - 160),
       }}
     >
-      <div className="px-3 py-1.5 bg-kd-bg/50 border-b border-kd-border/40 text-[10px]">
+      <div className="px-3 py-1.5 bg-kd-bg/50 border-b border-kd-border/40 text-[12px]">
         <span className="text-muted">Mark </span>
         <span className="text-secondary mono">{state.date}</span>
         <span className="text-muted"> as…</span>
@@ -316,7 +316,7 @@ function CellContextMenu({ state, onMark, onClose }: {
       )}
       <button
         onClick={onClose}
-        className="w-full px-3 py-1.5 text-[10px] text-muted hover:bg-kd-bg/50
+        className="w-full px-3 py-1.5 text-[12px] text-muted hover:bg-kd-bg/50
                    border-t border-kd-border/30 text-left"
       >
         Cancel
@@ -344,7 +344,7 @@ function MenuItem({ icon, label, sub, onClick, danger }: {
       <span className="mt-0.5 text-muted">{icon}</span>
       <span className="flex-1">
         <span className="block text-secondary">{label}</span>
-        {sub && <span className="block text-[10px] text-muted">{sub}</span>}
+        {sub && <span className="block text-[12px] text-muted">{sub}</span>}
       </span>
     </button>
   );

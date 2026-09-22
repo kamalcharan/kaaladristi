@@ -43,13 +43,13 @@ function Pill({ label, delta, currentRs }: PillProps) {
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
-      <span className="text-[10px] font-mono text-secondary">{label}</span>
+      <span className="text-[12px] font-mono text-secondary">{label}</span>
       <span className={`w-2 h-2 rounded-full ${dotColor}`} />
 
       {/* Tooltip */}
       {hovered && (
         <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-md bg-kd-elevated border border-kd-border shadow-lg z-50 whitespace-nowrap">
-          <span className="text-[10px] font-mono text-primary">
+          <span className="text-[12px] font-mono text-primary">
             {isNull ? (
               'Insufficient data'
             ) : (
@@ -86,7 +86,7 @@ export default function MultiTimeframePills({
 
   return (
     <div className="flex items-center gap-3 flex-wrap">
-      <span className="text-[11px] font-serif font-semibold text-primary">
+      <span className="text-[12px] font-serif font-semibold text-primary">
         Magic RS vs {benchmarkLabel}
       </span>
       <div

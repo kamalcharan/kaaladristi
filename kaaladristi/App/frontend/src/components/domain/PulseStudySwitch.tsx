@@ -48,7 +48,7 @@ export default function PulseStudySwitch({ active, type, id, name }: PulseStudyS
           borderRadius: 100,
           border: 'none',
           cursor: isActive ? 'default' : 'pointer',
-          fontSize: 10,
+          fontSize: 12,
           fontWeight: isActive ? 700 : 500,
           letterSpacing: '0.06em',
           textTransform: 'uppercase',
@@ -105,7 +105,7 @@ export function PulseStudyHint() {
         background: 'rgba(99,102,241,0.06)', border: '1px solid rgba(99,102,241,0.2)',
       }}
     >
-      <span style={{ fontSize: 11.5, color: 'var(--text-secondary)', flex: 1, lineHeight: 1.5 }}>
+      <span style={{ fontSize: 12, color: 'var(--text-secondary)', flex: 1, lineHeight: 1.5 }}>
         <strong style={{ color: 'var(--text-primary)' }}>Pulse</strong> gives the 5-second verdict —{' '}
         <strong style={{ color: 'var(--text-primary)' }}>Study</strong> is where you verify it with
         your own overlays and timeframes. Switch anytime with the control above.

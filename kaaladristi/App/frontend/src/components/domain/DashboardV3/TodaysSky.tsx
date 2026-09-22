@@ -89,7 +89,7 @@ export default function TodaysSky({ date }: TodaysSkyProps) {
             <span
               style={{
                 fontFamily: 'var(--font-mono)',
-                fontSize: 10,
+                fontSize: 12,
                 color: 'var(--text-faint)',
                 letterSpacing: '0.16em',
                 textTransform: 'uppercase',
@@ -102,7 +102,7 @@ export default function TodaysSky({ date }: TodaysSkyProps) {
               <span
                 style={{
                   fontFamily: 'var(--font-mono)',
-                  fontSize: 9,
+                  fontSize: 11,
                   padding: '2px 8px',
                   background: 'var(--indigo-bg)',
                   border: '1px solid var(--border-indigo)',
@@ -160,7 +160,7 @@ export default function TodaysSky({ date }: TodaysSkyProps) {
             <div
               style={{
                 fontFamily: 'var(--font-mono)',
-                fontSize: 9.5,
+                fontSize: 11,
                 letterSpacing: '0.14em',
                 color: 'var(--text-faint)',
                 textTransform: 'uppercase',
@@ -193,7 +193,7 @@ export default function TodaysSky({ date }: TodaysSkyProps) {
           <div
             style={{
               fontFamily: 'var(--font-mono)',
-              fontSize: 9.5,
+              fontSize: 11,
               letterSpacing: '0.14em',
               color: 'var(--text-faint)',
               textTransform: 'uppercase',
@@ -210,7 +210,7 @@ export default function TodaysSky({ date }: TodaysSkyProps) {
               background: 'var(--bull-bg)',
               border: '1px solid var(--bull-dim)',
               borderRadius: 4,
-              fontSize: 10,
+              fontSize: 12,
               color: 'var(--bull)',
               letterSpacing: '0.1em',
               whiteSpace: 'nowrap',
@@ -226,7 +226,7 @@ export default function TodaysSky({ date }: TodaysSkyProps) {
               background: 'var(--gold-bg)',
               border: '1px solid rgba(212,168,75,0.2)',
               borderRadius: 4,
-              fontSize: 10,
+              fontSize: 12,
               color: 'var(--gold)',
               letterSpacing: '0.1em',
               whiteSpace: 'nowrap',
@@ -239,7 +239,7 @@ export default function TodaysSky({ date }: TodaysSkyProps) {
             <div
               style={{
                 fontFamily: 'var(--font-mono)',
-                fontSize: 10,
+                fontSize: 12,
                 color: astroSignal.turning_date ? 'var(--gold-soft)' : 'var(--text-faint)',
                 marginTop: 2,
                 letterSpacing: '0.14em',
@@ -265,7 +265,7 @@ export default function TodaysSky({ date }: TodaysSkyProps) {
         <span
           style={{
             fontFamily: 'var(--font-mono)',
-            fontSize: 10,
+            fontSize: 12,
             letterSpacing: '0.16em',
             color: 'var(--text-faint)',
             textTransform: 'uppercase',
@@ -295,7 +295,7 @@ export default function TodaysSky({ date }: TodaysSkyProps) {
                 <span
                   style={{
                     fontFamily: 'var(--font-mono)',
-                    fontSize: 9.5,
+                    fontSize: 11,
                     letterSpacing: '0.14em',
                     color: 'var(--text-faint)',
                     textTransform: 'uppercase',
@@ -318,7 +318,7 @@ export default function TodaysSky({ date }: TodaysSkyProps) {
               style={{
                 fontFamily: 'var(--font-display)',
                 fontStyle: 'italic',
-                fontSize: 11.5,
+                fontSize: 12,
                 color: 'var(--text-muted)',
               }}
             >

@@ -104,20 +104,20 @@ export default function IndexBreakdown({ indexId, indexName, onBack }: Props) {
           <div className="flex flex-col gap-2.5">
             {industryBreakdown.slice(0, 12).map(({ industry, count, pct }) => (
               <div key={industry} className="flex items-center gap-3">
-                <span className="text-[11px] text-[var(--text-secondary)] w-[160px] truncate shrink-0">{industry}</span>
+                <span className="text-[12px] text-[var(--text-secondary)] w-[160px] truncate shrink-0">{industry}</span>
                 <div className="flex-1 h-5 bg-kd-elevated rounded-md overflow-hidden">
                   <div
                     className="h-full rounded-md bg-gradient-to-r from-accent-indigo/40 to-accent-indigo flex items-center justify-end px-2"
                     style={{ width: `${Math.max(pct, 4)}%` }}
                   >
-                    <span className="text-[10px] font-semibold text-white/90">{count}</span>
+                    <span className="text-[12px] font-semibold text-white/90">{count}</span>
                   </div>
                 </div>
-                <span className="text-[10px] text-muted mono w-10 text-right shrink-0">{pct.toFixed(1)}%</span>
+                <span className="text-[12px] text-muted mono w-10 text-right shrink-0">{pct.toFixed(1)}%</span>
               </div>
             ))}
             {industryBreakdown.length > 12 && (
-              <p className="text-[10px] text-muted mt-1">+ {industryBreakdown.length - 12} more industries</p>
+              <p className="text-[12px] text-muted mt-1">+ {industryBreakdown.length - 12} more industries</p>
             )}
           </div>
         </div>
@@ -128,21 +128,21 @@ export default function IndexBreakdown({ indexId, indexName, onBack }: Props) {
           <div className="grid grid-cols-2 gap-4">
             <div className="bg-kd-elevated rounded-xl p-4 text-center">
               <div className="text-2xl font-bold text-accent-indigo mono">{rows.length}</div>
-              <div className="text-[10px] text-muted mt-1">Total Stocks</div>
+              <div className="text-[12px] text-muted mt-1">Total Stocks</div>
             </div>
             <div className="bg-kd-elevated rounded-xl p-4 text-center">
               <div className="text-2xl font-bold text-accent-violet mono">{industryBreakdown.length}</div>
-              <div className="text-[10px] text-muted mt-1">Industries</div>
+              <div className="text-[12px] text-muted mt-1">Industries</div>
             </div>
             <div className="bg-kd-elevated rounded-xl p-4 text-center">
               <div className="text-2xl font-bold text-risk-green mono">{rows.filter(r => r.isFno).length}</div>
-              <div className="text-[10px] text-muted mt-1">F&O Stocks</div>
+              <div className="text-[12px] text-muted mt-1">F&O Stocks</div>
             </div>
             <div className="bg-kd-elevated rounded-xl p-4 text-center">
               <div className="text-2xl font-bold text-risk-amber mono">
                 {rows.filter(r => r.industry === 'Unknown').length}
               </div>
-              <div className="text-[10px] text-muted mt-1">Unclassified</div>
+              <div className="text-[12px] text-muted mt-1">Unclassified</div>
             </div>
           </div>
         </div>
@@ -166,7 +166,7 @@ export default function IndexBreakdown({ indexId, indexName, onBack }: Props) {
       {/* Constituent Table */}
       <div className="bg-kd-surface border-2 border-kd-border rounded-2xl overflow-hidden">
         {/* Header */}
-        <div className="flex items-center gap-3 px-4 py-2.5 border-b border-kd-border bg-kd-elevated/50 text-[10px] text-muted font-semibold uppercase tracking-wider">
+        <div className="flex items-center gap-3 px-4 py-2.5 border-b border-kd-border bg-kd-elevated/50 text-[12px] text-muted font-semibold uppercase tracking-wider">
           <span className="w-8 text-center">#</span>
           <button onClick={() => handleSort('symbol')} className="flex-1 min-w-[120px] text-left hover:text-[var(--text-primary)] transition-colors">
             Symbol <SortIcon col="symbol" />
@@ -187,26 +187,26 @@ export default function IndexBreakdown({ indexId, indexName, onBack }: Props) {
             key={row.id}
             className="flex items-center gap-3 px-4 py-2 border-b border-kd-border last:border-b-0 hover:bg-kd-elevated/40 transition-all"
           >
-            <span className="w-8 text-center text-[10px] text-muted mono">{i + 1}</span>
+            <span className="w-8 text-center text-[12px] text-muted mono">{i + 1}</span>
             <div className="flex-1 min-w-[120px]">
               <span className="text-[12px] font-semibold text-[var(--text-primary)]">{row.symbol}</span>
             </div>
-            <span className="hidden md:inline w-[200px] text-[11px] text-[var(--text-secondary)] truncate">
+            <span className="hidden md:inline w-[200px] text-[12px] text-[var(--text-secondary)] truncate">
               {row.companyName}
             </span>
             <span className="w-[160px] hidden sm:inline">
-              <span className="text-[10px] px-1.5 py-0.5 rounded bg-kd-elevated border border-kd-border text-[var(--text-secondary)]">
+              <span className="text-[12px] px-1.5 py-0.5 rounded bg-kd-elevated border border-kd-border text-[var(--text-secondary)]">
                 {row.industry}
               </span>
             </span>
             <span className="w-12 text-center">
               {row.isFno && (
-                <span className="text-[9px] px-1.5 py-px rounded bg-risk-green/10 border border-risk-green/20 text-risk-green font-semibold">
+                <span className="text-[11px] px-1.5 py-px rounded bg-risk-green/10 border border-risk-green/20 text-risk-green font-semibold">
                   F&O
                 </span>
               )}
             </span>
-            <span className="w-16 text-right text-[11px] mono text-[var(--text-secondary)]">
+            <span className="w-16 text-right text-[12px] mono text-[var(--text-secondary)]">
               {row.weightPct != null ? `${row.weightPct.toFixed(2)}%` : '—'}
             </span>
           </div>
@@ -219,7 +219,7 @@ export default function IndexBreakdown({ indexId, indexName, onBack }: Props) {
         )}
       </div>
 
-      <p className="text-[10px] text-muted mt-3 text-right mono">
+      <p className="text-[12px] text-muted mt-3 text-right mono">
         {rows.length} constituents &middot; snapshot {constituents[0]?.snapshot_date || '—'}
       </p>
     </div>

@@ -62,7 +62,7 @@ export default function MarketsView() {
           <div className="glass-card rounded-3xl p-4 sm:p-6 mb-6">
             <div className="flex flex-wrap items-end gap-x-6 sm:gap-x-10 gap-y-4">
               <div>
-                <p className="text-[10px] uppercase tracking-widest text-muted font-bold mb-1">{indexName}</p>
+                <p className="text-[12px] uppercase tracking-widest text-muted font-bold mb-1">{indexName}</p>
                 <div className="flex items-baseline gap-4">
                   <span className="text-2xl sm:text-3xl font-bold mono text-[var(--text-primary)]">
                     {currentClose.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
@@ -107,7 +107,7 @@ export default function MarketsView() {
                   key={r}
                   onClick={() => setRange(r)}
                   className={cn(
-                    'px-4 py-1.5 rounded-lg text-[11px] font-bold uppercase tracking-wider transition-all duration-200',
+                    'px-4 py-1.5 rounded-lg text-[12px] font-bold uppercase tracking-wider transition-all duration-200',
                     range === r
                       ? 'bg-accent-indigo/20 text-accent-indigo border border-accent-indigo/30'
                       : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)] hover:bg-kd-elevated'
@@ -199,7 +199,7 @@ export default function MarketsView() {
 
         {/* Data summary */}
         {rows.length > 0 && (
-          <p className="text-[10px] text-muted mt-3 text-right mono">
+          <p className="text-[12px] text-muted mt-3 text-right mono">
             {rows.length} trading days &middot; {rows[0].trade_date} to {rows[rows.length - 1].trade_date}
           </p>
         )}

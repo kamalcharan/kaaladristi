@@ -141,7 +141,7 @@ function YearlyBars({ rows }: { rows: RuleConfYearly[] }) {
             <text
               x={x + BAR_W / 2} y={H + 12}
               textAnchor="middle"
-              fontSize={7}
+              fontSize={10}
               fill="color-mix(in srgb, var(--text-primary) 30%, transparent)"
               fontFamily="monospace"
             >
@@ -198,7 +198,7 @@ function AstroRuleBody({ item, onClose }: { item: DeepDiveAstroRule; onClose: ()
                 style={{
                   padding: '3px 8px',
                   borderRadius: 4,
-                  fontSize: 10,
+                  fontSize: 12,
                   fontFamily: 'var(--font-mono, monospace)',
                   background: 'color-mix(in srgb, var(--text-primary) 4%, transparent)',
                   border: '1px solid var(--border)',
@@ -219,10 +219,10 @@ function AstroRuleBody({ item, onClose }: { item: DeepDiveAstroRule; onClose: ()
         borderRadius: 6,
         background: isRange ? 'var(--accent-glow)' : 'var(--gold-bg)',
         border: `1px solid ${isRange ? 'var(--accent-dim)' : 'var(--gold-bg)'}`,
-        fontSize: 11,
+        fontSize: 12,
         color: 'var(--text-secondary)',
       }}>
-        <span style={{ color: isRange ? 'var(--accent)' : 'var(--gold)', fontFamily: 'var(--font-mono, monospace)', fontSize: 9 }}>
+        <span style={{ color: isRange ? 'var(--accent)' : 'var(--gold)', fontFamily: 'var(--font-mono, monospace)', fontSize: 11 }}>
           {isRange ? 'CHART OVERLAY' : 'PANEL BLOCK'}
         </span>
         {' — '}
@@ -269,7 +269,7 @@ function AstroRuleBody({ item, onClose }: { item: DeepDiveAstroRule; onClose: ()
                   {value}
                 </div>
                 <div style={{
-                  fontSize: 9,
+                  fontSize: 11,
                   fontFamily: 'var(--font-mono, monospace)',
                   color: 'var(--text-muted)',
                 }}>
@@ -305,7 +305,7 @@ function AstroRuleBody({ item, onClose }: { item: DeepDiveAstroRule; onClose: ()
                 <div key={row.year} style={{
                   display: 'flex',
                   justifyContent: 'space-between',
-                  fontSize: 10,
+                  fontSize: 12,
                   fontFamily: 'var(--font-mono, monospace)',
                 }}>
                   <span style={{ color: 'var(--text-muted)' }}>{row.year}</span>
@@ -420,7 +420,7 @@ function CatalogItemBody({ item }: { item: CatalogItem }) {
               </div>
             )}
           </div>
-          <p style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.5 }}>
+          <p style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5 }}>
             {isSupertrend
               ? 'SuperTrend uses bull/bear colors from your theme — not configurable.'
               : 'This color appears on your chart. You can change it anytime from the overlay pill strip.'}
@@ -442,13 +442,13 @@ function CatalogItemBody({ item }: { item: CatalogItem }) {
           ].map(({ label, value }) => (
             <div key={label} style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
               <span style={{
-                fontSize: 11, color: 'var(--text-muted)',
+                fontSize: 12, color: 'var(--text-muted)',
                 fontFamily: 'var(--font-mono, monospace)', flexShrink: 0,
               }}>
                 {label}
               </span>
               <span style={{
-                fontSize: 11, color: 'var(--text-secondary)',
+                fontSize: 12, color: 'var(--text-secondary)',
                 fontFamily: 'var(--font-mono, monospace)', textAlign: 'right',
               }}>
                 {value}
@@ -467,15 +467,15 @@ function CatalogItemBody({ item }: { item: CatalogItem }) {
                 width: 22, height: 22, borderRadius: 6, flexShrink: 0,
                 background: 'linear-gradient(135deg,#9d8ff9,#5b4fd4)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 9, fontWeight: 700, color: '#fff',
+                fontSize: 11, fontWeight: 700, color: '#fff',
                 fontFamily: 'var(--font-mono, monospace)',
               }}>
                 Vᴺ
               </div>
-              <span style={{ fontSize: 11, color: 'var(--text-secondary)', fontWeight: 500 }}>VaNi explains</span>
+              <span style={{ fontSize: 12, color: 'var(--text-secondary)', fontWeight: 500 }}>VaNi explains</span>
             </div>
             <span style={{
-              fontSize: 9, fontFamily: 'var(--font-mono, monospace)',
+              fontSize: 11, fontFamily: 'var(--font-mono, monospace)',
               color: 'var(--text-faint)', letterSpacing: '0.04em',
             }}>
               cached · updated rarely
@@ -500,7 +500,7 @@ function CatalogItemBody({ item }: { item: CatalogItem }) {
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
                 {item.vani_tags.map((tag, i) => (
                   <span key={i} style={{
-                    padding: '3px 8px', borderRadius: 4, fontSize: 10,
+                    padding: '3px 8px', borderRadius: 4, fontSize: 12,
                     fontFamily: 'var(--font-mono, monospace)',
                     background: tag.type === 'works' ? 'var(--bull-bg)' : 'var(--bear-bg)',
                     border: `1px solid ${tag.type === 'works' ? 'var(--bull-dim)' : 'var(--bear-dim)'}`,
@@ -526,7 +526,7 @@ function CatalogItemBody({ item }: { item: CatalogItem }) {
             width: 22, height: 22, borderRadius: 6, flexShrink: 0,
             background: 'linear-gradient(135deg,#9d8ff9,#5b4fd4)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 9, fontWeight: 700, color: '#fff',
+            fontSize: 11, fontWeight: 700, color: '#fff',
             fontFamily: 'var(--font-mono, monospace)',
           }}>
             Vᴺ
@@ -544,7 +544,7 @@ function CatalogItemBody({ item }: { item: CatalogItem }) {
 // ── Styles ────────────────────────────────────────────────────────────────────
 
 const SEC_LABEL: React.CSSProperties = {
-  fontSize: 9,
+  fontSize: 11,
   fontFamily: 'var(--font-mono, monospace)',
   letterSpacing: '0.1em',
   textTransform: 'uppercase',
@@ -695,7 +695,7 @@ export default function DeepDivePanel({ item, onClose }: DeepDivePanelProps) {
             <>
               {/* Type label */}
               <div style={{
-                fontSize: 9,
+                fontSize: 11,
                 fontFamily: 'var(--font-mono, monospace)',
                 color: 'var(--text-muted)',
                 letterSpacing: '0.1em',
@@ -724,7 +724,7 @@ export default function DeepDivePanel({ item, onClose }: DeepDivePanelProps) {
               {item.mode === 'astro_rule' && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                   <span style={{
-                    fontSize: 11,
+                    fontSize: 12,
                     color: outcomeColor(item.outcome || item.base_bias),
                   }}>
                     {(item.outcome || item.base_bias || 'neutral')
@@ -733,7 +733,7 @@ export default function DeepDivePanel({ item, onClose }: DeepDivePanelProps) {
                   </span>
                   {item.probability_label && (
                     <span style={{
-                      fontSize: 10,
+                      fontSize: 12,
                       fontFamily: 'var(--font-mono, monospace)',
                       color: 'var(--text-muted)',
                     }}>
@@ -742,7 +742,7 @@ export default function DeepDivePanel({ item, onClose }: DeepDivePanelProps) {
                   )}
                   {/* Catalog status badge */}
                   <span style={{
-                    fontSize: 9,
+                    fontSize: 11,
                     fontFamily: 'var(--font-mono, monospace)',
                     padding: '1px 6px',
                     borderRadius: 3,

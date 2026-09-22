@@ -27,7 +27,7 @@ export default function ConflictEngineCard({ result }: Props) {
       background: `color-mix(in srgb, ${color} 5%, transparent)`,
     }}>
       <div style={{
-        fontFamily: 'var(--font-mono, monospace)', fontSize: 9,
+        fontFamily: 'var(--font-mono, monospace)', fontSize: 11,
         color: 'var(--text-faint)', letterSpacing: '0.12em',
         textTransform: 'uppercase', marginBottom: 6,
       }}>Conflict Engine</div>
@@ -45,7 +45,7 @@ export default function ConflictEngineCard({ result }: Props) {
           fontWeight: 700, color, letterSpacing: '0.05em',
         }}>{result.label}</div>
         <div style={{
-          fontFamily: 'var(--font-mono, monospace)', fontSize: 10,
+          fontFamily: 'var(--font-mono, monospace)', fontSize: 12,
           color: 'var(--text-primary)', marginTop: 4, fontWeight: 600,
         }}>{result.action}</div>
       </div>
@@ -53,7 +53,7 @@ export default function ConflictEngineCard({ result }: Props) {
       {/* Rule */}
       <div style={{
         marginTop: 8,
-        fontFamily: 'var(--font-mono, monospace)', fontSize: 10,
+        fontFamily: 'var(--font-mono, monospace)', fontSize: 12,
         color: 'var(--text-muted)', lineHeight: 1.4,
       }}>{result.rule}</div>
 
@@ -62,7 +62,7 @@ export default function ConflictEngineCard({ result }: Props) {
         <div style={{
           marginTop: 4,
           display: 'flex', gap: 8, flexWrap: 'wrap',
-          fontFamily: 'var(--font-mono, monospace)', fontSize: 9,
+          fontFamily: 'var(--font-mono, monospace)', fontSize: 11,
         }}>
           {result.stats && (
             <span style={{

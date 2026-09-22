@@ -20,7 +20,7 @@ export default function LiveIntroCard() {
   return (
     <div data-tour="onboarding-intro-card" style={{ width: 'min(560px, 100%)', margin: '0 auto 24px', textAlign: 'left',
       animation: 'text-in .6s ease 1.15s both' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: MONO, fontSize: 10,
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: MONO, fontSize: 12,
         letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 8 }}>
         <span>Live on DristiQ · {name}</span>
         <span>{stock.trade_date ?? ''}</span>

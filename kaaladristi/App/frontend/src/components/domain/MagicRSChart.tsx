@@ -145,7 +145,7 @@ function RSTooltip({ active, payload, label }: {
   return (
     <div style={{
       background: 'var(--card)', border: '1px solid var(--border)',
-      borderRadius: 6, padding: '8px 12px', fontSize: 11,
+      borderRadius: 6, padding: '8px 12px', fontSize: 12,
       fontFamily: 'var(--font-mono)',
     }}>
       <div style={{ color: COL.text, marginBottom: 4 }}>{label}</div>
@@ -190,7 +190,7 @@ export default function MagicRSChart({ data, latest, symbol, height = 320 }: Mag
             border: `1px solid color-mix(in srgb, ${signalStyle.text} 27%, transparent)`,
             borderRadius: 4,
             padding: '2px 8px',
-            fontSize: 10,
+            fontSize: 12,
             fontFamily: 'var(--font-mono)',
             letterSpacing: '0.06em',
           }}>
@@ -198,7 +198,7 @@ export default function MagicRSChart({ data, latest, symbol, height = 320 }: Mag
           </span>
         )}
         {latest && (
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: COL.text, textAlign: 'right' }}>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: COL.text, textAlign: 'right' }}>
             <span style={{ color: latest.long_rs != null && latest.long_ma != null && latest.long_rs >= latest.long_ma ? COL.green : COL.red }}>
               L {fmt(latest.long_rs)}
             </span>
@@ -211,7 +211,7 @@ export default function MagicRSChart({ data, latest, symbol, height = 320 }: Mag
       {/* Symbol label top-left */}
       <div style={{
         position: 'absolute', top: 12, left: 16, zIndex: 10,
-        fontFamily: 'var(--font-mono)', fontSize: 10,
+        fontFamily: 'var(--font-mono)', fontSize: 12,
         letterSpacing: '0.1em', color: COL.text, textTransform: 'uppercase',
       }}>
         {symbol} · MagicRS
@@ -224,12 +224,12 @@ export default function MagicRSChart({ data, latest, symbol, height = 320 }: Mag
             dataKey="trade_date"
             tickFormatter={fmtDate}
             interval={tickInterval}
-            tick={{ fill: COL.text, fontSize: 9, fontFamily: 'var(--font-mono)' }}
+            tick={{ fill: COL.text, fontSize: 11, fontFamily: 'var(--font-mono)' }}
             axisLine={{ stroke: COL.grid }}
             tickLine={false}
           />
           <YAxis
-            tick={{ fill: COL.text, fontSize: 9, fontFamily: 'var(--font-mono)' }}
+            tick={{ fill: COL.text, fontSize: 11, fontFamily: 'var(--font-mono)' }}
             axisLine={false}
             tickLine={false}
             tickFormatter={v => (v > 0 ? '+' : '') + v.toFixed(0)}
@@ -294,7 +294,7 @@ export default function MagicRSChart({ data, latest, symbol, height = 320 }: Mag
       {/* Legend */}
       <div style={{
         display: 'flex', gap: 14, padding: '0 16px 4px',
-        fontFamily: 'var(--font-mono)', fontSize: 9, color: COL.text,
+        fontFamily: 'var(--font-mono)', fontSize: 11, color: COL.text,
       }}>
         <span><span style={{ color: COL.green }}>──</span> Long RS</span>
         <span><span style={{ color: COL.blue }}>──</span> Long MA</span>

@@ -85,7 +85,7 @@ export default function AlertStrip({
           ? 'var(--bull-bg)'
           : 'transparent',
       borderBottom: '1px solid var(--kd-border)',
-      fontFamily: 'var(--font-mono, monospace)', fontSize: 10,
+      fontFamily: 'var(--font-mono, monospace)', fontSize: 12,
       flexShrink: 0,
     }}>
       <span style={{ color: leftColor, fontWeight: inRahu || inAbhijit ? 700 : 400 }}>

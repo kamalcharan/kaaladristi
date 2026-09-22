@@ -180,7 +180,7 @@ function Card({ ticker, entry }: { ticker: TickerConfig; entry?: TickerEntry }) 
       {/* Label */}
       <span style={{
         fontFamily: 'var(--font-mono)',
-        fontSize: 10,
+        fontSize: 12,
         letterSpacing: '0.14em',
         color: 'var(--text-muted)',
         textTransform: 'uppercase',
@@ -205,7 +205,7 @@ function Card({ ticker, entry }: { ticker: TickerConfig; entry?: TickerEntry }) 
       {/* Change */}
       <span style={{
         fontFamily: 'var(--font-mono)',
-        fontSize: 11,
+        fontSize: 12,
         fontWeight: 600,
         color: changeClr,
       }}>
@@ -219,7 +219,7 @@ function Card({ ticker, entry }: { ticker: TickerConfig; entry?: TickerEntry }) 
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
           <span style={{
             fontFamily: 'var(--font-mono)',
-            fontSize: 9,
+            fontSize: 11,
             color: 'var(--text-faint)',
             letterSpacing: '0.08em',
           }}>
@@ -228,10 +228,10 @@ function Card({ ticker, entry }: { ticker: TickerConfig; entry?: TickerEntry }) 
               {rsi != null ? rsi.toFixed(0) : '—'}
             </span>
           </span>
-          <span style={{ color: 'color-mix(in srgb, var(--text-primary) 12%, transparent)', fontSize: 10 }}>│</span>
+          <span style={{ color: 'color-mix(in srgb, var(--text-primary) 12%, transparent)', fontSize: 12 }}>│</span>
           <span style={{
             fontFamily: 'var(--font-mono)',
-            fontSize: 9,
+            fontSize: 11,
             color: zoneColor(zone),
             letterSpacing: '0.06em',
           }}>
@@ -249,7 +249,7 @@ function Card({ ticker, entry }: { ticker: TickerConfig; entry?: TickerEntry }) 
       {data?.trade_date && (
         <span style={{
           fontFamily: 'var(--font-mono)',
-          fontSize: 8,
+          fontSize: 10,
           color: 'var(--text-faint)',
           letterSpacing: '0.08em',
           marginTop: 2,

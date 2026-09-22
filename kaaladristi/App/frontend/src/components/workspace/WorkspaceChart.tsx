@@ -105,7 +105,7 @@ export default function WorkspaceChart({ instrument, overlays: overlaysProp, sta
         <div style={{
           position: 'absolute', top: HEADER_H, left: 0, right: 0,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: 11, color: 'color-mix(in srgb, var(--text-primary) 20%, transparent)',
+          fontSize: 12, color: 'color-mix(in srgb, var(--text-primary) 20%, transparent)',
           fontFamily: 'var(--font-mono, monospace)', padding: 16,
         }}>
           loading…

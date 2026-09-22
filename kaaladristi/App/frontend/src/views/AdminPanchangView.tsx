@@ -30,7 +30,7 @@ function LabelPill({ label }: { label: MarketImpact }) {
   const cls = SIGNAL_CLASSES[impactToColor(label)];
   return (
     <span className={cn(
-      'text-[10px] font-semibold px-1.5 py-0.5 rounded border leading-none shrink-0',
+      'text-[12px] font-semibold px-1.5 py-0.5 rounded border leading-none shrink-0',
       cls.text, cls.bg, cls.border,
     )}>
       {SIGNAL_LABELS[label] ?? label}
@@ -75,7 +75,7 @@ function SectorCheckboxList({ value, onChange }: { value: string; onChange: (v: 
   return (
     <div className="flex flex-col gap-0.5 max-h-40 overflow-y-auto rounded border border-white/10 bg-kd-card px-2 py-1.5 w-full">
       {sectors.length === 0 && (
-        <span className="text-[11px] text-muted italic">Loading sectors…</span>
+        <span className="text-[12px] text-muted italic">Loading sectors…</span>
       )}
       {sectors.map(s => (
         <label key={s} className="flex items-center gap-2 cursor-pointer group">
@@ -86,7 +86,7 @@ function SectorCheckboxList({ value, onChange }: { value: string; onChange: (v: 
             className="accent-indigo-400 w-3 h-3 shrink-0"
           />
           <span className={cn(
-            'text-[11px] leading-snug',
+            'text-[12px] leading-snug',
             selected.includes(s) ? 'text-white' : 'text-secondary group-hover:text-white',
           )}>
             {s}
@@ -140,22 +140,22 @@ function NoteRow({ note, onSave, onDelete, saving }: NoteRowProps) {
           <div className="flex items-center gap-2 flex-wrap">
             <LabelPill label={note.calendar_label} />
             {note.scope !== 'market' && (
-              <span className="text-[10px] text-muted uppercase tracking-wide">
+              <span className="text-[12px] text-muted uppercase tracking-wide">
                 {note.scope}:
               </span>
             )}
             {note.scope_value && (
-              <span className="text-secondary text-[11px] font-medium">{note.scope_value}</span>
+              <span className="text-secondary text-[12px] font-medium">{note.scope_value}</span>
             )}
           </div>
           {note.annotation && (
-            <span className="text-muted italic text-[11px] leading-snug">{note.annotation}</span>
+            <span className="text-muted italic text-[12px] leading-snug">{note.annotation}</span>
           )}
         </div>
         <div className="flex gap-1 shrink-0">
           <button
             onClick={() => setEditing(true)}
-            className="text-[10px] text-muted hover:text-white px-1.5 py-0.5 rounded border border-white/10 hover:bg-white/10 transition-colors"
+            className="text-[12px] text-muted hover:text-white px-1.5 py-0.5 rounded border border-white/10 hover:bg-white/10 transition-colors"
           >
             Edit
           </button>
@@ -338,7 +338,7 @@ function AdminPanchangRow({ row, onAddNote, onSaveNote, onDeleteNote, saving }: 
       <td className="px-3 py-2 align-top whitespace-nowrap w-20">
         <div className="flex flex-col">
           <span className="text-xs font-semibold text-white">{dd} {mmm}</span>
-          <span className="text-[10px] text-muted">{row.weekday.slice(0, 3)}</span>
+          <span className="text-[12px] text-muted">{row.weekday.slice(0, 3)}</span>
         </div>
       </td>
 
@@ -359,7 +359,7 @@ function AdminPanchangRow({ row, onAddNote, onSaveNote, onDeleteNote, saving }: 
       {/* Nakshatra */}
       <td className="px-3 py-2 align-top w-52">
         <span className="text-xs text-secondary">{nakStr()}</span>
-        <div className="text-[10px] text-muted mt-0.5">{row.nak_lord}</div>
+        <div className="text-[12px] text-muted mt-0.5">{row.nak_lord}</div>
       </td>
 
       {/* Signals / Annotations */}
@@ -543,7 +543,7 @@ export default function AdminPanchangView() {
               <thead>
                 <tr className="border-b border-white/10">
                   {['Date', 'Tithi', 'Moon Rashi', 'Nakshatra / Lord', 'Signals / Annotations'].map(h => (
-                    <th key={h} className="px-3 py-2.5 text-[11px] font-semibold text-muted uppercase tracking-wide">
+                    <th key={h} className="px-3 py-2.5 text-[12px] font-semibold text-muted uppercase tracking-wide">
                       {h}
                     </th>
                   ))}

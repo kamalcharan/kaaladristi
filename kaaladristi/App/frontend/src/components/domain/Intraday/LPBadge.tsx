@@ -23,7 +23,7 @@ export default function LPBadge({ lpScore, lpDot }: LPBadgeProps) {
       background: 'var(--panel-recess)',
     }}>
       <div style={{
-        fontFamily: 'var(--font-mono, monospace)', fontSize: 9,
+        fontFamily: 'var(--font-mono, monospace)', fontSize: 11,
         color: 'var(--text-faint)', letterSpacing: '0.12em',
         textTransform: 'uppercase', marginBottom: 6,
         display: 'flex', justifyContent: 'space-between',
@@ -34,7 +34,7 @@ export default function LPBadge({ lpScore, lpDot }: LPBadgeProps) {
 
       {hasSignal ? (
         <div style={{
-          fontFamily: 'var(--font-mono, monospace)', fontSize: 10,
+          fontFamily: 'var(--font-mono, monospace)', fontSize: 12,
           color: 'var(--text-primary)', lineHeight: 1.5,
         }}>
           <div>Score: <strong style={{ color: lpScore! > 0 ? 'var(--risk-green)' : lpScore! < 0 ? 'var(--risk-red)' : 'var(--text-muted)' }}>
@@ -44,20 +44,20 @@ export default function LPBadge({ lpScore, lpDot }: LPBadgeProps) {
             <div>Dot: <strong style={{ color: 'var(--accent-violet)' }}>● {lpDot}</strong></div>
           )}
           <div style={{
-            fontSize: 9, color: 'var(--text-faint)', marginTop: 4,
+            fontSize: 11, color: 'var(--text-faint)', marginTop: 4,
             fontStyle: 'italic',
           }}>(dev toggle — webhook not yet wired)</div>
         </div>
       ) : (
         <div style={{
-          fontFamily: 'var(--font-mono, monospace)', fontSize: 10,
+          fontFamily: 'var(--font-mono, monospace)', fontSize: 12,
           color: 'var(--text-muted)', lineHeight: 1.5,
         }}>
           <div>Status: <span style={{ color: 'var(--text-faint)' }}>awaiting signal</span></div>
-          <div style={{ marginTop: 6, fontSize: 9, color: 'var(--text-faint)' }}>
+          <div style={{ marginTop: 6, fontSize: 11, color: 'var(--text-faint)' }}>
             Configure TradingView webhook →<br/>
             <code style={{
-              fontSize: 9, background: 'var(--kd-bg)', padding: '1px 4px',
+              fontSize: 11, background: 'var(--kd-bg)', padding: '1px 4px',
               borderRadius: 2,
             }}>POST /luckypop/signal</code>
           </div>

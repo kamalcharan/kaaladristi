@@ -137,7 +137,7 @@ export default function CatalogPage() {
                   {section.comingSoon && (
                     <span style={{
                       marginLeft: 'auto',
-                      fontSize: 9,
+                      fontSize: 11,
                       fontFamily: 'var(--font-mono)',
                       color: 'var(--text-faint)',
                       letterSpacing: '0.06em',
@@ -152,7 +152,7 @@ export default function CatalogPage() {
                 </>
               )}
               {collapsed && (
-                <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'inherit' }}>
+                <span style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: 'inherit' }}>
                   {section.label.slice(0, 2).toUpperCase()}
                 </span>
               )}

@@ -95,7 +95,7 @@ function RocTooltip({ active, payload, researchMode }: any) {
   const alignment = rocAlignmentReading(d.roc_13, d.roc_55);
 
   return (
-    <div className="glass-card rounded-xl p-3 text-[11px] border border-kd-border min-w-[170px]">
+    <div className="glass-card rounded-xl p-3 text-[12px] border border-kd-border min-w-[170px]">
       <div className="font-bold text-[var(--text-primary)] mb-2">{fmtDate(d.trade_date)}</div>
       <div className="flex justify-between gap-4 mb-0.5">
         <span className="text-muted">ROC 13</span>
@@ -174,7 +174,7 @@ export default function BreadthRocChart({
           <h3 className="text-[13px] font-bold text-[var(--text-primary)]">{title}</h3>
           {indexName && <p className="text-xs text-muted mt-1">{indexName}</p>}
           {displayStockCount != null && (
-            <p className="text-[10px] text-muted mt-0.5">
+            <p className="text-[12px] text-muted mt-0.5">
               {displayStockCount.toLocaleString()}{indexName ? ' constituents · average ROC' : '+ stocks · GroupAvg ROC oscillator'}
             </p>
           )}
@@ -188,7 +188,7 @@ export default function BreadthRocChart({
                 key={p.label}
                 onClick={() => onPeriodChange ? onPeriodChange(p.days) : setPeriod(p.label)}
                 className={cn(
-                  'px-2.5 py-1 rounded-md text-[10px] font-bold transition-all',
+                  'px-2.5 py-1 rounded-md text-[12px] font-bold transition-all',
                   period === p.label
                     ? 'bg-accent-indigo text-white'
                     : 'text-muted hover:text-[var(--text-secondary)]',
@@ -203,19 +203,19 @@ export default function BreadthRocChart({
           {latest && (
             <div className="flex items-center gap-4 pl-2 border-l border-kd-border">
               <div className="text-center">
-                <div className="text-[9px] text-muted font-bold uppercase tracking-wider mb-0.5">ROC 13</div>
+                <div className="text-[11px] text-muted font-bold uppercase tracking-wider mb-0.5">ROC 13</div>
                 <div className={cn('text-[12px] font-bold mono', researchMode ? 'text-[var(--text-primary)]' : (latest.roc_13 ?? 0) >= 0 ? 'text-risk-green' : 'text-risk-red')}>
                   {fmtRoc(latest.roc_13)}
                 </div>
               </div>
               <div className="text-center">
-                <div className="text-[9px] text-muted font-bold uppercase tracking-wider mb-0.5">ROC 55</div>
+                <div className="text-[11px] text-muted font-bold uppercase tracking-wider mb-0.5">ROC 55</div>
                 <div className={cn('text-[12px] font-bold mono', researchMode ? 'text-[var(--text-primary)]' : (latest.roc_55 ?? 0) >= 0 ? 'text-risk-green' : 'text-risk-red')}>
                   {fmtRoc(latest.roc_55)}
                 </div>
               </div>
               <div className="text-center">
-                <div className="text-[9px] text-muted font-bold uppercase tracking-wider mb-0.5">SMA 5</div>
+                <div className="text-[11px] text-muted font-bold uppercase tracking-wider mb-0.5">SMA 5</div>
                 <div className={cn('text-[12px] font-bold mono', researchMode ? 'text-[var(--text-primary)]' : (latest.sma_breadth ?? 0) >= 0 ? 'text-risk-green' : 'text-risk-red')}>
                   {fmtRoc(latest.sma_breadth)}
                 </div>
@@ -227,7 +227,7 @@ export default function BreadthRocChart({
           {latest && (
             <span
               style={rocStatus.style}
-              className="px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider"
+              className="px-2.5 py-1 rounded-lg text-[12px] font-bold uppercase tracking-wider"
             >
               {rocStatus.label}
             </span>
@@ -238,8 +238,8 @@ export default function BreadthRocChart({
       {/* ── Chart subtitle ── */}
       <div className="flex items-start justify-between mb-2">
         <div>
-          <div className="text-[11px] font-bold text-[var(--text-secondary)]">Momentum Breadth Oscillator</div>
-          <div className="text-[9px] text-muted">Above zero = positive ROC · Compare ROC 13 with its signal to assess momentum</div>
+          <div className="text-[12px] font-bold text-[var(--text-secondary)]">Momentum Breadth Oscillator</div>
+          <div className="text-[11px] text-muted">Above zero = positive ROC · Compare ROC 13 with its signal to assess momentum</div>
         </div>
       </div>
 
@@ -284,14 +284,14 @@ export default function BreadthRocChart({
             <XAxis
               dataKey="trade_date"
               tickFormatter={fmtDate}
-              tick={{ fontSize: 9, fill: 'var(--text-muted)' }}
+              tick={{ fontSize: 11, fill: 'var(--text-muted)' }}
               tickLine={false}
               axisLine={false}
               interval="preserveStartEnd"
             />
             <YAxis
               domain={yDomain}
-              tick={{ fontSize: 9, fill: 'var(--text-muted)' }}
+              tick={{ fontSize: 11, fill: 'var(--text-muted)' }}
               tickLine={false}
               axisLine={false}
               tickFormatter={v => v.toFixed(3)}
@@ -308,7 +308,7 @@ export default function BreadthRocChart({
             <Tooltip content={<RocTooltip researchMode={researchMode} />} />
             {focusedDate && data.some(row => row.trade_date === focusedDate) && <ReferenceLine
               x={focusedDate} stroke="var(--text-primary)" strokeWidth={2} strokeDasharray="3 3"
-              label={{ value: fmtDate(focusedDate), position: 'insideTopRight', fill: 'var(--text-primary)', fontSize: 10 }} />}
+              label={{ value: fmtDate(focusedDate), position: 'insideTopRight', fill: 'var(--text-primary)', fontSize: 12 }} />}
 
             {/* ROC 55 — slow structural line */}
             <Line
@@ -345,7 +345,7 @@ export default function BreadthRocChart({
       )}
 
       {/* ── Legend ── */}
-      {onDateFocus && <p className="text-[11px] text-muted mt-2">Oldest → latest on the right · Hover or tap to link the date with the heatmaps.</p>}
+      {onDateFocus && <p className="text-[12px] text-muted mt-2">Oldest → latest on the right · Hover or tap to link the date with the heatmaps.</p>}
       <div className="flex items-center justify-center gap-5 mt-2">
         {[
           { color: 'bg-accent-indigo',  label: 'ROC 13 (fast)'    },
@@ -354,7 +354,7 @@ export default function BreadthRocChart({
         ].map(({ color, label }) => (
           <div key={label} className="flex items-center gap-1.5">
             <span className={cn('w-2 h-2 rounded-full', color)} />
-            <span className="text-[9px] text-muted">{label}</span>
+            <span className="text-[11px] text-muted">{label}</span>
           </div>
         ))}
       </div>

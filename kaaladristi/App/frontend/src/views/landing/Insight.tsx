@@ -27,7 +27,7 @@ export function InsightSection() {
           {CARDS.map((c,i) => (
             <FadeUp key={c.n} delay={i*80}>
               <div style={{ background:C.bg1, padding:'42px 36px', height:'100%' }}>
-                <div style={{ fontFamily:MONO, fontSize:11, letterSpacing:'.22em', color:C.g2, marginBottom:22 }}>◇ {c.n}</div>
+                <div style={{ fontFamily:MONO, fontSize:12, letterSpacing:'.22em', color:C.g2, marginBottom:22 }}>◇ {c.n}</div>
                 <h3 style={{ fontFamily:SERIF, fontSize:28, color:C.ink1, margin:'0 0 16px', lineHeight:1.15, letterSpacing:'-0.01em' }}>{c.t}</h3>
                 <p style={{ margin:0, color:C.ink2, fontSize:14, lineHeight:1.6, fontFamily:SANS }}>{c.b}</p>
               </div>
@@ -47,7 +47,7 @@ export function InsightSection() {
           <FadeUp>
             {/* theme-agnostic: landing page is fixed-dark marketing */}
             <div style={{ padding:'40px 36px', border:'1px solid rgba(255,255,255,0.06)', background:'rgba(255,255,255,0.01)', height:'100%' }}>
-              <div style={{ fontFamily:MONO, fontSize:11, letterSpacing:'.22em', color:C.ink4, marginBottom:18 }}>✗ WHAT WE ARE NOT</div>
+              <div style={{ fontFamily:MONO, fontSize:12, letterSpacing:'.22em', color:C.ink4, marginBottom:18 }}>✗ WHAT WE ARE NOT</div>
               <ul style={{ listStyle:'none', padding:0, margin:0 }}>
                 {NOT_LIST.map((x,i) => (
                   <li key={x} style={{ padding:'14px 0', borderBottom: i<3 ? '1px solid rgba(255,255,255,0.04)' : 'none', color:C.ink3, fontSize:15, display:'flex', alignItems:'center', gap:14, fontFamily:SANS }}>
@@ -62,14 +62,14 @@ export function InsightSection() {
           {/* Divider */}
           <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:12 }}>
             <div style={{ width:1, flex:1, background:C.rule }}/>
-            <div style={{ fontFamily:MONO, fontSize:10, letterSpacing:'.24em', color:C.g2, writingMode:'vertical-rl' as const, transform:'rotate(180deg)', padding:'8px 0' }}>· vs ·</div>
+            <div style={{ fontFamily:MONO, fontSize:12, letterSpacing:'.24em', color:C.g2, writingMode:'vertical-rl' as const, transform:'rotate(180deg)', padding:'8px 0' }}>· vs ·</div>
             <div style={{ width:1, flex:1, background:C.rule }}/>
           </div>
 
           {/* ARE column */}
           <FadeUp delay={120}>
             <div style={{ padding:'40px 36px', border:`1px solid ${C.rule}`, background:'linear-gradient(180deg,rgba(245,166,35,0.04),rgba(245,166,35,0.01))', height:'100%', boxShadow:`inset 0 0 40px rgba(245,166,35,0.03)` }}>
-              <div style={{ fontFamily:MONO, fontSize:11, letterSpacing:'.22em', color:C.g2, marginBottom:18 }}>✓ WHAT WE ARE</div>
+              <div style={{ fontFamily:MONO, fontSize:12, letterSpacing:'.22em', color:C.g2, marginBottom:18 }}>✓ WHAT WE ARE</div>
               <ul style={{ listStyle:'none', padding:0, margin:0 }}>
                 {ARE_LIST.map((x,i) => (
                   <li key={x} style={{ padding:'14px 0', borderBottom: i<3 ? `1px solid rgba(245,166,35,0.08)` : 'none', color:C.ink1, fontSize:15, display:'flex', alignItems:'center', gap:14, fontFamily:SANS }}>
@@ -85,7 +85,7 @@ export function InsightSection() {
         {/* Analogy pull-quote */}
         <FadeUp delay={200}>
           <div style={{ marginTop:80, padding:'48px 0', borderTop:`1px solid ${C.rule}`, borderBottom:`1px solid ${C.rule}`, textAlign:'center' }}>
-            <div style={{ fontFamily:MONO, fontSize:10, letterSpacing:'.24em', color:C.g2, marginBottom:20 }}>THE ANALOGY</div>
+            <div style={{ fontFamily:MONO, fontSize:12, letterSpacing:'.24em', color:C.g2, marginBottom:20 }}>THE ANALOGY</div>
             <p style={{ fontFamily:SERIF, margin:'0 auto', maxWidth:'26ch', fontSize:'clamp(28px,3.6vw,44px)', lineHeight:1.18, color:C.ink1, letterSpacing:'-0.015em' }}>
               The IMD tells you a cyclone is forming.<br/>
               <span style={{ color:C.ink3 }}>It does not tell you whether to travel.</span><br/>

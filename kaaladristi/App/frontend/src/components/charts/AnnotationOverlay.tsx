@@ -415,9 +415,9 @@ export function AnnotationOverlay({ chart, series, container, cycleBands = [], l
               <line x1={segX0 - 3} y1={l.y} x2={segX0 - 26} y2={l.labelY - 3} stroke={l.color} strokeWidth={0.5} opacity={0.5} />
             )}
             <text x={segX0 - 30} y={l.labelY} textAnchor="end"
-              fontFamily="'JetBrains Mono', ui-monospace, monospace" fontSize={9} fontWeight={600} fill={l.color}>
+              fontFamily="'JetBrains Mono', ui-monospace, monospace" fontSize={11} fontWeight={600} fill={l.color}>
               {Math.round(l.price)}
-              <tspan dx={5} fontFamily="Inter, system-ui, sans-serif" fontSize={7.5} fontWeight={600} letterSpacing="0.1em" fill={TOK.ink3}>
+              <tspan dx={5} fontFamily="Inter, system-ui, sans-serif" fontSize={10} fontWeight={600} letterSpacing="0.1em" fill={TOK.ink3}>
                 {l.label}
               </tspan>
             </text>
@@ -441,7 +441,7 @@ export function AnnotationOverlay({ chart, series, container, cycleBands = [], l
               <rect x={b.x - b.boxW / 2} y={badgeY - 6} width={b.boxW} height={14} rx={2}
                 fill={TOK.ground} stroke={TOK.gold} strokeWidth={0.8} opacity={0.97} />
               <text x={b.x} y={badgeY + 4} textAnchor="middle"
-                fontFamily="'JetBrains Mono', ui-monospace, monospace" fontSize={9} fontWeight={700} fill={TOK.gold}>
+                fontFamily="'JetBrains Mono', ui-monospace, monospace" fontSize={11} fontWeight={700} fill={TOK.gold}>
                 {b.text}
               </text>
             </g>
@@ -460,7 +460,7 @@ export function AnnotationOverlay({ chart, series, container, cycleBands = [], l
               <circle cx={m.ax} cy={m.ay} r={9} fill={m.color} opacity={0.95}
                 stroke={`color-mix(in srgb, ${TOK.ground} 60%, transparent)`} strokeWidth={0.5} />
               <text x={m.ax} y={m.ay + 3.5} textAnchor="middle"
-                fontFamily="'JetBrains Mono', ui-monospace, monospace" fontSize={10} fontWeight={700} fill={TOK.ground}>
+                fontFamily="'JetBrains Mono', ui-monospace, monospace" fontSize={12} fontWeight={700} fill={TOK.ground}>
                 {m.n}
               </text>
             </g>
@@ -493,12 +493,12 @@ export function AnnotationOverlay({ chart, series, container, cycleBands = [], l
           borderRadius: 8, padding: '5px 9px', boxShadow: 'var(--card-shadow)',
           boxSizing: 'border-box', overflow: 'hidden',
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 700, whiteSpace: 'nowrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap' }}>
             <span style={{ width: 6, height: 6, borderRadius: '50%', background: m.color, flexShrink: 0 }} />
             <span style={{ color: m.color }}>{m.persona === 'lt' ? 'LT' : 'SW'}-{m.n}</span>
             <span style={{ color: TOK.bubbleText, fontWeight: 600 }}>{m.labelShort}</span>
           </div>
-          <div style={{ fontSize: 10.5, color: TOK.bubbleMuted, marginTop: 2, fontFamily: 'var(--font-mono, monospace)' }}>
+          <div style={{ fontSize: 12, color: TOK.bubbleMuted, marginTop: 2, fontFamily: 'var(--font-mono, monospace)' }}>
             ₹{Math.round(m.price)} zone
           </div>
         </div>
@@ -515,8 +515,8 @@ export function AnnotationOverlay({ chart, series, container, cycleBands = [], l
           boxSizing: 'border-box', overflow: 'hidden',
           display: 'flex', alignItems: 'center', gap: 5,
         }}>
-          <span style={{ color: m.glyphColor, fontSize: 9, flexShrink: 0 }}>{m.glyph}</span>
-          <span style={{ fontSize: 10.5, fontWeight: 600, color: m.color, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          <span style={{ color: m.glyphColor, fontSize: 11, flexShrink: 0 }}>{m.glyph}</span>
+          <span style={{ fontSize: 12, fontWeight: 600, color: m.color, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
             {m.title}
           </span>
         </div>

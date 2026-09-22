@@ -62,7 +62,7 @@ export default function PipelineHealthBar() {
       <button
         onClick={() => navigate('/data-pipeline')}
         style={{
-          fontSize: 11, fontWeight: 600, fontFamily: 'inherit', cursor: 'pointer',
+          fontSize: 12, fontWeight: 600, fontFamily: 'inherit', cursor: 'pointer',
           color: 'var(--risk-amber, #f59e0b)', background: 'transparent',
           border: '1px solid color-mix(in srgb, var(--risk-amber, #f59e0b) 40%, transparent)',
           borderRadius: 6, padding: '2px 10px', whiteSpace: 'nowrap',

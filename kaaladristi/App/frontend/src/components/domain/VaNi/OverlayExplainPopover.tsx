@@ -80,7 +80,7 @@ export default function OverlayExplainPopover({
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
         <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{headerLabel}</span>
-        <span style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono,monospace)' }}>
+        <span style={{ fontSize: 12, color: 'var(--text-muted)', fontFamily: 'var(--font-mono,monospace)' }}>
           {focusRuleId ? tag : 'overlay'}
         </span>
         <button
@@ -92,7 +92,7 @@ export default function OverlayExplainPopover({
 
       {/* Active / upcoming context — tag mode only (pill click) */}
       {!focusRuleId && (isLoading ? (
-        <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Checking what's active…</div>
+        <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Checking what's active…</div>
       ) : active ? (
         <div style={{ marginBottom: 8, padding: '8px 10px', borderRadius: 8,
           background: 'color-mix(in srgb, var(--bull) 8%, transparent)', border: '1px solid color-mix(in srgb, var(--bull) 20%, transparent)' }}>
@@ -103,21 +103,21 @@ export default function OverlayExplainPopover({
               {active.display_name}
             </span>
           </div>
-          <div style={{ fontSize: 10, color: 'var(--text-secondary)', fontFamily: 'var(--font-mono,monospace)' }}>
+          <div style={{ fontSize: 12, color: 'var(--text-secondary)', fontFamily: 'var(--font-mono,monospace)' }}>
             Active now{active.end_date ? ` · ends ${fmtDate(active.end_date)}` : ''}
             {active.days_remaining != null ? ` (${active.days_remaining}d left)` : ''}
             {active.base_bias ? ` · ${active.base_bias}` : ''}
           </div>
         </div>
       ) : (
-        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 8 }}>
+        <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 8 }}>
           No {tag} rule active today.
         </div>
       ))}
 
       {/* Upcoming — tag mode only */}
       {!focusRuleId && upcoming && (
-        <div style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono,monospace)' }}>
+        <div style={{ fontSize: 12, color: 'var(--text-muted)', fontFamily: 'var(--font-mono,monospace)' }}>
           Next: {upcoming.display_name}
           {upcoming.start_date ? ` · ${fmtDate(upcoming.start_date)}` : ''}
           {upcoming.days_until != null ? ` (in ${upcoming.days_until}d)` : ''}
@@ -128,7 +128,7 @@ export default function OverlayExplainPopover({
           click to switch the insight without closing the popover */}
       {cluster.length > 1 && (
         <div style={{ marginTop: 10 }}>
-          <div style={{ fontSize: 9, letterSpacing: '0.12em', textTransform: 'uppercase',
+          <div style={{ fontSize: 11, letterSpacing: '0.12em', textTransform: 'uppercase',
             color: 'var(--text-muted)', fontFamily: 'var(--font-mono,monospace)', marginBottom: 5 }}>
             Also at this point
           </div>
@@ -140,7 +140,7 @@ export default function OverlayExplainPopover({
                   key={c.ruleId}
                   onClick={() => setFocus({ id: c.ruleId, label: c.label })}
                   style={{
-                    fontSize: 10, padding: '3px 8px', borderRadius: 8, cursor: 'pointer',
+                    fontSize: 12, padding: '3px 8px', borderRadius: 8, cursor: 'pointer',
                     background: isFocused ? 'color-mix(in srgb, var(--vani) 15%, transparent)' : 'transparent',
                     border: `1px solid ${isFocused ? 'color-mix(in srgb, var(--vani) 50%, transparent)' : 'color-mix(in srgb, var(--text-primary) 12%, transparent)'}`,
                     color: isFocused ? 'var(--text-primary)' : 'var(--text-secondary)',

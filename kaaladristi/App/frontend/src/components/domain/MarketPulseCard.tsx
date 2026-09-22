@@ -18,7 +18,7 @@ function FlowBadge({ flow }: { flow: string | null }) {
   const cfg = FLOW_CONFIG[flow ?? ''] ?? FLOW_CONFIG.MIXED;
   return (
     <span className={cn(
-      'inline-flex items-center px-2 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-wider border',
+      'inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-bold uppercase tracking-wider border',
       cfg.color, cfg.bg, cfg.border,
     )}>
       {cfg.label}
@@ -38,7 +38,7 @@ function ParticipationLabel({ profile }: { profile: string }) {
     'unknown':             { label: '—',     color: 'text-[var(--text-muted)]' },
   };
   const c = config[profile] ?? config.unknown;
-  return <span className={cn('text-[9px] font-bold uppercase tracking-wider', c.color)}>{c.label}</span>;
+  return <span className={cn('text-[11px] font-bold uppercase tracking-wider', c.color)}>{c.label}</span>;
 }
 
 // ── Astro config ─────────────────────────────────────────────────────────────
@@ -69,13 +69,13 @@ function IndexRow({ idx }: { idx: IndexSummary }) {
   return (
     <div className="flex items-center gap-3 py-2.5 px-3 rounded-xl hover:bg-kd-elevated/40 transition-colors">
       <div className="w-20 shrink-0">
-        <div className="text-[10px] font-bold text-accent-indigo uppercase tracking-wider truncate">{shortName}</div>
+        <div className="text-[12px] font-bold text-accent-indigo uppercase tracking-wider truncate">{shortName}</div>
         <div className="text-[12px] font-bold mono text-[var(--text-primary)]">
           {idx.close.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
         </div>
       </div>
 
-      <div className={cn('w-14 text-[11px] font-bold mono flex items-center gap-0.5',
+      <div className={cn('w-14 text-[12px] font-bold mono flex items-center gap-0.5',
         isUp ? 'text-risk-green' : 'text-risk-red'
       )}>
         {isUp ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
@@ -92,7 +92,7 @@ function IndexRow({ idx }: { idx: IndexSummary }) {
 
       <div className="w-16 text-right">
         {idx.magic_rs_zone ? (
-          <span className={cn('text-[9px] font-bold uppercase',
+          <span className={cn('text-[11px] font-bold uppercase',
             idx.magic_rs_zone.includes('Bull') ? 'text-risk-green' :
             idx.magic_rs_zone.includes('Bear') ? 'text-risk-red' :
             'text-[var(--text-muted)]'
@@ -100,7 +100,7 @@ function IndexRow({ idx }: { idx: IndexSummary }) {
             {idx.magic_rs_zone}
           </span>
         ) : (
-          <span className="text-[9px] text-muted">—</span>
+          <span className="text-[11px] text-muted">—</span>
         )}
       </div>
     </div>
@@ -165,7 +165,7 @@ export default function MarketPulseCard({ date }: MarketPulseCardProps) {
         </div>
         <div className="flex items-center gap-2">
           <span className={cn('w-2 h-2 rounded-full', astroCfg.dot)} />
-          <span className="text-[9px] font-bold uppercase tracking-wider text-muted">
+          <span className="text-[11px] font-bold uppercase tracking-wider text-muted">
             Cycle: {astroCfg.label}
           </span>
         </div>
@@ -173,7 +173,7 @@ export default function MarketPulseCard({ date }: MarketPulseCardProps) {
 
       {indexes.length > 0 && (
         <>
-          <div className="flex items-center gap-3 px-3 mb-1 text-[8px] font-bold uppercase tracking-widest text-muted">
+          <div className="flex items-center gap-3 px-3 mb-1 text-[10px] font-bold uppercase tracking-widest text-muted">
             <div className="w-20">Index</div>
             <div className="w-14">Chg</div>
             <div className="flex-1">Flow</div>

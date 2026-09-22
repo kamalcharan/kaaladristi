@@ -76,7 +76,7 @@ function CondCard({
     }}>
       <div style={{
         fontFamily: 'var(--font-mono)',
-        fontSize: 8,
+        fontSize: 10,
         letterSpacing: '0.18em',
         textTransform: 'uppercase',
         color: 'var(--text-muted)',
@@ -90,14 +90,14 @@ function CondCard({
             {value}
           </div>
           {valueSub && (
-            <div style={{ fontFamily: 'var(--font-body)', fontSize: 10, color: 'var(--text-muted)', marginTop: 3 }}>
+            <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--text-muted)', marginTop: 3 }}>
               {valueSub}
             </div>
           )}
         </div>
         <div style={{
           fontFamily: 'var(--font-mono)',
-          fontSize: 10,
+          fontSize: 12,
           fontWeight: 700,
           letterSpacing: '0.1em',
           textTransform: 'uppercase',
@@ -116,8 +116,8 @@ function CondCard({
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4, paddingTop: 8, borderTop: '1px solid color-mix(in srgb, var(--text-primary) 5%, transparent)' }}>
           {rows.map(r => (
             <div key={r.k} style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
-              <span style={{ fontFamily: 'var(--font-body)', fontSize: 10, color: 'var(--text-muted)' }}>{r.k}</span>
-              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: r.color ?? 'var(--text-secondary)', fontWeight: 600 }}>{r.v}</span>
+              <span style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--text-muted)' }}>{r.k}</span>
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: r.color ?? 'var(--text-secondary)', fontWeight: 600 }}>{r.v}</span>
             </div>
           ))}
         </div>
@@ -139,7 +139,7 @@ function PatternBlock({ pattern }: { pattern: ConfluencePattern | null }) {
         textAlign: 'center',
         color: 'var(--text-muted)',
         fontFamily: 'var(--font-mono)',
-        fontSize: 11,
+        fontSize: 12,
       }}>
         No pattern data — insufficient historical instances for this combination
       </div>
@@ -170,7 +170,7 @@ function PatternBlock({ pattern }: { pattern: ConfluencePattern | null }) {
             key={t.k}
             style={{
               fontFamily: 'var(--font-mono)',
-              fontSize: 9,
+              fontSize: 11,
               letterSpacing: '0.12em',
               padding: '3px 9px',
               borderRadius: 4,
@@ -190,7 +190,7 @@ function PatternBlock({ pattern }: { pattern: ConfluencePattern | null }) {
           <div style={{ fontFamily: 'var(--font-mono)', fontSize: 36, fontWeight: 700, color, lineHeight: 1 }}>
             {pct != null ? `${pct.toFixed(1)}%` : '—'}
           </div>
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 8, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--text-muted)', marginTop: 3 }}>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--text-muted)', marginTop: 3 }}>
             Positive Days
           </div>
         </div>
@@ -198,7 +198,7 @@ function PatternBlock({ pattern }: { pattern: ConfluencePattern | null }) {
           <div style={{ fontFamily: 'var(--font-mono)', fontSize: 20, fontWeight: 700, color: (ret ?? 0) >= 0 ? 'var(--bull)' : 'var(--bear)', lineHeight: 1 }}>
             {ret != null ? `${ret >= 0 ? '+' : ''}${ret.toFixed(2)}%` : '—'}
           </div>
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 8, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--text-muted)', marginTop: 3 }}>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--text-muted)', marginTop: 3 }}>
             Avg Day Return
           </div>
         </div>
@@ -206,14 +206,14 @@ function PatternBlock({ pattern }: { pattern: ConfluencePattern | null }) {
           <div style={{ fontFamily: 'var(--font-mono)', fontSize: 16, fontWeight: 600, color: 'var(--text-secondary)', lineHeight: 1 }}>
             {pattern.signal_count.toLocaleString()}
           </div>
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 8, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--text-muted)', marginTop: 3 }}>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--text-muted)', marginTop: 3 }}>
             Historical Signals
           </div>
         </div>
       </div>
 
       {pattern.signal_count < 20 && (
-        <div style={{ marginTop: 10, fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--caution)' }}>
+        <div style={{ marginTop: 10, fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--caution)' }}>
           ⚠ Small sample — interpret with caution
         </div>
       )}
@@ -338,28 +338,28 @@ function HistoricalObservations() {
 
           <div>
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: 7, marginBottom: 4 }}>
-              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: ins.color, fontWeight: 700, lineHeight: 1.4 }}>{ins.icon}</span>
-              <span style={{ fontFamily: 'var(--font-body)', fontSize: 11, color: 'var(--text-primary)', fontWeight: 600, lineHeight: 1.4 }}>{ins.title}</span>
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: ins.color, fontWeight: 700, lineHeight: 1.4 }}>{ins.icon}</span>
+              <span style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--text-primary)', fontWeight: 600, lineHeight: 1.4 }}>{ins.title}</span>
             </div>
-            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.1em', textTransform: 'uppercase', color: ins.color }}>{ins.sub}</div>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.1em', textTransform: 'uppercase', color: ins.color }}>{ins.sub}</div>
           </div>
 
           <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
             <div>
               <div style={{ fontFamily: 'var(--font-mono)', fontSize: 19, fontWeight: 700, color: ins.color, lineHeight: 1 }}>{ins.acc}</div>
-              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 8, color: 'var(--text-muted)', letterSpacing: '0.1em', marginTop: 2 }}>POSITIVE DAYS</div>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)', letterSpacing: '0.1em', marginTop: 2 }}>POSITIVE DAYS</div>
             </div>
             <div>
               <div style={{ fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 600, color: ins.color, lineHeight: 1 }}>{ins.ret}</div>
-              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 8, color: 'var(--text-muted)', letterSpacing: '0.1em', marginTop: 2 }}>AVG DAY RETURN</div>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)', letterSpacing: '0.1em', marginTop: 2 }}>AVG DAY RETURN</div>
             </div>
           </div>
 
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-muted)', letterSpacing: '0.06em' }}>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)', letterSpacing: '0.06em' }}>
             {ins.n} of evidence
           </div>
 
-          <div style={{ fontFamily: 'var(--font-body)', fontSize: 10, color: 'var(--text-secondary)', lineHeight: 1.6, borderTop: '1px solid color-mix(in srgb, var(--text-primary) 5%, transparent)', paddingTop: 8 }}>
+          <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.6, borderTop: '1px solid color-mix(in srgb, var(--text-primary) 5%, transparent)', paddingTop: 8 }}>
             {ins.verdict}
           </div>
         </div>
@@ -374,8 +374,8 @@ function Section({ title, sub, children }: { title: string; sub?: string; childr
   return (
     <div style={{ background: 'var(--card)', border: '1px solid color-mix(in srgb, var(--text-primary) 6%, transparent)', borderRadius: 12, overflow: 'hidden' }}>
       <div style={{ padding: '13px 18px 11px', borderBottom: '1px solid color-mix(in srgb, var(--text-primary) 6%, transparent)' }}>
-        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.16em', textTransform: 'uppercase', color: 'var(--text-faint)' }}>{title}</div>
-        {sub && <div style={{ fontFamily: 'var(--font-body)', fontSize: 11, color: 'var(--text-secondary)', marginTop: 2 }}>{sub}</div>}
+        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.16em', textTransform: 'uppercase', color: 'var(--text-faint)' }}>{title}</div>
+        {sub && <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>{sub}</div>}
       </div>
       <div style={{ padding: '16px 18px' }}>{children}</div>
     </div>
@@ -436,7 +436,7 @@ function HistoricalConfluenceTab({ date }: { date: string }) {
       {/* Footer disclaimer */}
       <div style={{
         fontFamily: 'var(--font-body)',
-        fontSize: 10,
+        fontSize: 12,
         color: 'var(--text-secondary)',
         lineHeight: 1.6,
         padding: '12px 16px',
@@ -539,7 +539,7 @@ export default function MarketStructureView() {
             onClick={() => setActiveTab(t.id)}
             style={{
               fontFamily: 'var(--font-mono)',
-              fontSize: 10,
+              fontSize: 12,
               letterSpacing: '0.08em',
               textTransform: 'uppercase',
               padding: '6px 16px',

@@ -147,13 +147,13 @@ export function Pillars() {
               <ModernLens/>
             </div>
             <div>
-              <div style={{ fontFamily:MONO, fontSize:10, letterSpacing:'.24em', color:C.g2, marginBottom:12 }}>◇ 02.0 — FOUNDATIONAL</div>
+              <div style={{ fontFamily:MONO, fontSize:12, letterSpacing:'.24em', color:C.g2, marginBottom:12 }}>◇ 02.0 — FOUNDATIONAL</div>
               <h3 style={{ fontFamily:SERIF, fontSize:30, color:C.ink1, margin:'0 0 14px', lineHeight:1.15, letterSpacing:'-0.01em' }}>Two independent lenses. <em style={{ color:C.g1 }}>One convergence.</em></h3>
               <p style={{ margin:0, color:C.ink2, fontSize:14.5, lineHeight:1.6, maxWidth:'70ch', fontFamily:SANS }}>
                 DristiQ runs two parallel engines — a Panchāṅgam time-cycle engine drawing from Vedic astronomy, and a technical market data engine tracking price action, volume, and momentum on NSE/BSE. <em style={{ color:C.g1, fontStyle:'italic' }}>When both point in the same direction — that is atmospheric data worth paying attention to.</em>
               </p>
             </div>
-            <div style={{ fontFamily:MONO, fontSize:10, letterSpacing:'.22em', color:C.ink4, textAlign:'right' as const, lineHeight:1.8 }}>
+            <div style={{ fontFamily:MONO, fontSize:12, letterSpacing:'.22em', color:C.ink4, textAlign:'right' as const, lineHeight:1.8 }}>
               LENS I · PANCHĀṄGAM<br/>LENS II · TECHNICAL<br/><span style={{ color:C.g2 }}>⟶ CONVERGENCE</span>
             </div>
           </div>
@@ -166,7 +166,7 @@ export function Pillars() {
               <div className="dq-pillar-card" style={{ background:C.bg1, padding:'44px 40px', height:'100%', position:'relative' }}>
                 <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:28 }}>
                   <div style={{ width:64, height:64 }}>{p.glyph}</div>
-                  <div style={{ fontFamily:MONO, fontSize:10, letterSpacing:'.24em', color:C.ink4 }}>§ {p.n}</div>
+                  <div style={{ fontFamily:MONO, fontSize:12, letterSpacing:'.24em', color:C.ink4 }}>§ {p.n}</div>
                 </div>
                 <h3 style={{ fontFamily:SERIF, fontSize:30, color:C.ink1, margin:'0 0 18px', lineHeight:1.12, letterSpacing:'-0.01em', maxWidth:'18ch' }}>{p.title}</h3>
                 <p style={{ margin:'0 0 16px', color:C.ink2, fontSize:14.5, lineHeight:1.6, maxWidth:'42ch', fontFamily:SANS }}>{p.body}</p>
@@ -174,7 +174,7 @@ export function Pillars() {
                   <p style={{ margin:'0 0 24px', color:C.g2, fontSize:12.5, lineHeight:1.5, maxWidth:'42ch', fontFamily:SANS, fontStyle:'italic' }}>{p.subtext}</p>
                 )}
                 <hr style={{ border:0, height:1, background:C.rs, margin:'0 0 16px' }}/>
-                <div style={{ fontFamily:MONO, fontSize:10, letterSpacing:'.18em', color:C.g2 }}>{p.meta}</div>
+                <div style={{ fontFamily:MONO, fontSize:12, letterSpacing:'.18em', color:C.g2 }}>{p.meta}</div>
               </div>
             </FadeUp>
           ))}

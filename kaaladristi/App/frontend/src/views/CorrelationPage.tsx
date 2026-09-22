@@ -101,11 +101,11 @@ function resolveDescription(id: string): string {
 }
 
 function OutcomeBadge({ returnVal }: { returnVal: number | null }) {
-  if (returnVal == null) return <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>—</span>
+  if (returnVal == null) return <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>—</span>
   const bull = returnVal > 0
   return (
     <span style={{
-      fontSize: 10, fontFamily: 'var(--font-mono, monospace)',
+      fontSize: 12, fontFamily: 'var(--font-mono, monospace)',
       color: bull ? 'var(--bull)' : 'var(--bear)',
       background: bull ? 'var(--bull-bg)' : 'var(--bear-bg)',
       border: `1px solid ${bull ? 'var(--bull-dim)' : 'var(--bear-dim)'}`,
@@ -146,7 +146,7 @@ function InstanceGrid({ instances }: { instances: CorrelationInstance[] }) {
             }}>
               {value}
             </div>
-            <div style={{ fontSize: 9, color: 'var(--text-muted)', fontFamily: 'var(--font-mono, monospace)', marginTop: 2 }}>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-mono, monospace)', marginTop: 2 }}>
               {label.toUpperCase()}
             </div>
           </div>
@@ -196,7 +196,7 @@ function InstanceGrid({ instances }: { instances: CorrelationInstance[] }) {
           border: '1px solid var(--border)',
           borderRadius: 6,
           padding: '7px 10px',
-          fontSize: 11,
+          fontSize: 12,
           fontFamily: 'var(--font-mono, monospace)',
           color: 'var(--text-secondary)',
           pointerEvents: 'none',
@@ -216,7 +216,7 @@ function InstanceGrid({ instances }: { instances: CorrelationInstance[] }) {
         color: 'var(--text-secondary)', lineHeight: 1.6,
       }}>
         {instances.length} times this combination appeared.
-        {' '}<span style={{ fontSize: 10, fontFamily: 'var(--font-mono, monospace)', color: 'var(--text-muted)' }}>
+        {' '}<span style={{ fontSize: 12, fontFamily: 'var(--font-mono, monospace)', color: 'var(--text-muted)' }}>
           Green = positive 5D return · Red = negative · Blue = approaching or active
         </span>
       </p>
@@ -229,7 +229,7 @@ function InstanceGrid({ instances }: { instances: CorrelationInstance[] }) {
               {['Date', 'Duration', '5D Return', 'Outcome'].map(col => (
                 <th key={col} style={{
                   padding: '4px 10px', textAlign: 'left',
-                  fontSize: 9, fontFamily: 'var(--font-mono, monospace)',
+                  fontSize: 11, fontFamily: 'var(--font-mono, monospace)',
                   color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em',
                   fontWeight: 400,
                 }}>
@@ -244,16 +244,16 @@ function InstanceGrid({ instances }: { instances: CorrelationInstance[] }) {
               .sort((a, b) => b.start_date.localeCompare(a.start_date))
               .map((inst, i) => (
                 <tr key={i} style={{ borderTop: '1px solid color-mix(in srgb, var(--text-primary) 4%, transparent)' }}>
-                  <td style={{ padding: '6px 10px', fontSize: 11, fontFamily: 'var(--font-mono, monospace)', color: 'var(--text-secondary)' }}>
+                  <td style={{ padding: '6px 10px', fontSize: 12, fontFamily: 'var(--font-mono, monospace)', color: 'var(--text-secondary)' }}>
                     {fmtDate(inst.start_date)}
                   </td>
-                  <td style={{ padding: '6px 10px', fontSize: 11, fontFamily: 'var(--font-mono, monospace)', color: 'var(--text-muted)' }}>
+                  <td style={{ padding: '6px 10px', fontSize: 12, fontFamily: 'var(--font-mono, monospace)', color: 'var(--text-muted)' }}>
                     {inst.duration_days}d
                   </td>
-                  <td style={{ padding: '6px 10px', fontSize: 11, fontFamily: 'var(--font-mono, monospace)', color: (inst.return_5d ?? 0) > 0 ? 'var(--bull)' : 'var(--bear)' }}>
+                  <td style={{ padding: '6px 10px', fontSize: 12, fontFamily: 'var(--font-mono, monospace)', color: (inst.return_5d ?? 0) > 0 ? 'var(--bull)' : 'var(--bear)' }}>
                     {fmtPct(inst.return_5d)}
                   </td>
-                  <td style={{ padding: '6px 10px', fontSize: 11, fontFamily: 'var(--font-mono, monospace)', color: (inst.return_5d ?? 0) > 0 ? 'var(--bull)' : 'var(--bear)' }}>
+                  <td style={{ padding: '6px 10px', fontSize: 12, fontFamily: 'var(--font-mono, monospace)', color: (inst.return_5d ?? 0) > 0 ? 'var(--bull)' : 'var(--bear)' }}>
                     {(inst.return_5d ?? 0) > 0 ? '↑' : '↓'}
                   </td>
                 </tr>
@@ -299,7 +299,7 @@ function GanttTimeline({ instances }: { instances: CorrelationInstance[] }) {
               <text
                 x={LABEL_W - 6} y={y + BAR_H / 2 + 3}
                 textAnchor="end"
-                fontSize={7.5}
+                fontSize={10}
                 fontFamily="monospace"
                 fill="color-mix(in srgb, var(--text-primary) 30%, transparent)"
               >
@@ -345,7 +345,7 @@ function Distribution({ instances }: { instances: CorrelationInstance[] }) {
           const barH = (counts[i] / maxCount) * 80
           return (
             <div key={b.label} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
-              <div style={{ fontSize: 9, fontFamily: 'var(--font-mono, monospace)', color: 'var(--text-faint)' }}>
+              <div style={{ fontSize: 11, fontFamily: 'var(--font-mono, monospace)', color: 'var(--text-faint)' }}>
                 {counts[i]}
               </div>
               <div style={{
@@ -363,7 +363,7 @@ function Distribution({ instances }: { instances: CorrelationInstance[] }) {
       <div style={{ display: 'flex', gap: 4, marginBottom: 12 }}>
         {buckets.map(b => (
           <div key={b.label} style={{
-            flex: 1, textAlign: 'center', fontSize: 8,
+            flex: 1, textAlign: 'center', fontSize: 10,
             fontFamily: 'var(--font-mono, monospace)', color: 'var(--text-muted)',
           }}>
             {b.label}
@@ -391,7 +391,7 @@ function InstanceTable({ instances }: { instances: CorrelationInstance[] }) {
             {['Start', 'Duration', '5D', '22D', 'Outcome'].map(col => (
               <th key={col} style={{
                 padding: '8px 10px', textAlign: 'left',
-                fontSize: 9, fontFamily: 'var(--font-mono, monospace)',
+                fontSize: 11, fontFamily: 'var(--font-mono, monospace)',
                 color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em',
                 fontWeight: 400,
               }}>
@@ -409,15 +409,15 @@ function InstanceTable({ instances }: { instances: CorrelationInstance[] }) {
                 background: isActive ? 'rgba(124,106,247,0.05)' : undefined,
                 borderLeft: isActive ? '2px solid var(--accent)' : '2px solid transparent',
               }}>
-                <td style={{ padding: '8px 10px', fontSize: 11, fontFamily: 'var(--font-mono, monospace)', color: 'var(--text-secondary)' }}>
+                <td style={{ padding: '8px 10px', fontSize: 12, fontFamily: 'var(--font-mono, monospace)', color: 'var(--text-secondary)' }}>
                   {fmtDate(inst.start_date)}
                 </td>
-                <td style={{ padding: '8px 10px', fontSize: 11, fontFamily: 'var(--font-mono, monospace)', color: 'var(--text-muted)' }}>
+                <td style={{ padding: '8px 10px', fontSize: 12, fontFamily: 'var(--font-mono, monospace)', color: 'var(--text-muted)' }}>
                   {inst.duration_days}d
                 </td>
                 <td style={{ padding: '8px 10px' }}>
                   <span style={{
-                    fontSize: 11, fontFamily: 'var(--font-mono, monospace)',
+                    fontSize: 12, fontFamily: 'var(--font-mono, monospace)',
                     color: inst.return_5d == null ? 'var(--text-muted)' : inst.return_5d > 0 ? 'var(--bull)' : 'var(--bear)',
                   }}>
                     {fmtPct(inst.return_5d)}
@@ -425,7 +425,7 @@ function InstanceTable({ instances }: { instances: CorrelationInstance[] }) {
                 </td>
                 <td style={{ padding: '8px 10px' }}>
                   <span style={{
-                    fontSize: 11, fontFamily: 'var(--font-mono, monospace)',
+                    fontSize: 12, fontFamily: 'var(--font-mono, monospace)',
                     color: inst.return_22d == null ? 'var(--text-muted)' : inst.return_22d > 0 ? 'var(--bull)' : 'var(--bear)',
                   }}>
                     {fmtPct(inst.return_22d)}
@@ -433,7 +433,7 @@ function InstanceTable({ instances }: { instances: CorrelationInstance[] }) {
                 </td>
                 <td style={{ padding: '8px 10px' }}>
                   {isActive
-                    ? <span style={{ fontSize: 10, color: 'var(--accent)', fontFamily: 'var(--font-mono, monospace)' }}>Approaching</span>
+                    ? <span style={{ fontSize: 12, color: 'var(--accent)', fontFamily: 'var(--font-mono, monospace)' }}>Approaching</span>
                     : <OutcomeBadge returnVal={inst.return_5d} />}
                 </td>
               </tr>
@@ -574,7 +574,7 @@ export default function CorrelationPage() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1 }}>
           <span style={{
             fontFamily: 'var(--font-mono, monospace)',
-            fontSize: 11, color: 'var(--accent)',
+            fontSize: 12, color: 'var(--accent)',
             background: 'var(--accent-glow)',
             border: '1px solid var(--accent-dim)',
             padding: '2px 8px', borderRadius: 4,
@@ -584,7 +584,7 @@ export default function CorrelationPage() {
           <span style={{ color: 'var(--text-faint)', fontSize: 12 }}>∩</span>
           <span style={{
             fontFamily: 'var(--font-mono, monospace)',
-            fontSize: 11, color: 'var(--accent)',
+            fontSize: 12, color: 'var(--accent)',
             background: 'var(--accent-glow)',
             border: '1px solid var(--accent-dim)',
             padding: '2px 8px', borderRadius: 4,
@@ -593,7 +593,7 @@ export default function CorrelationPage() {
           </span>
           {shapeLabel && (
             <span style={{
-              fontSize: 9, fontFamily: 'var(--font-mono, monospace)',
+              fontSize: 11, fontFamily: 'var(--font-mono, monospace)',
               color: 'var(--text-muted)', letterSpacing: '0.08em',
               background: 'color-mix(in srgb, var(--text-primary) 4%, transparent)',
               border: '1px solid var(--border)',
@@ -604,7 +604,7 @@ export default function CorrelationPage() {
           )}
           {result?.currently_active && (
             <span style={{
-              fontSize: 9, fontFamily: 'var(--font-mono, monospace)',
+              fontSize: 11, fontFamily: 'var(--font-mono, monospace)',
               color: 'var(--caution)', background: 'var(--caution-bg)',
               border: '1px solid var(--caution-dim)',
               padding: '1px 6px', borderRadius: 3,
@@ -680,13 +680,13 @@ export default function CorrelationPage() {
                 >
                   <div style={{ position: 'relative', width: 28, height: 28, flexShrink: 0 }}>
                     <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: 'linear-gradient(135deg,#9d8ff9,#5b4fd4)', opacity: 0.2 }} />
-                    <div style={{ position: 'absolute', inset: 4, borderRadius: '50%', background: 'linear-gradient(135deg,#9d8ff9,#5b4fd4)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 8, fontWeight: 700, color: '#fff', fontFamily: 'var(--font-mono,monospace)' }}>
+                    <div style={{ position: 'absolute', inset: 4, borderRadius: '50%', background: 'linear-gradient(135deg,#9d8ff9,#5b4fd4)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: '#fff', fontFamily: 'var(--font-mono,monospace)' }}>
                       Vᴺ
                     </div>
                   </div>
                   <div>
-                    <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--accent)', fontFamily: 'var(--font-mono,monospace)', letterSpacing: '0.08em' }}>Ask VaNi</div>
-                    <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 1 }}>What does this combination mean?</div>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--accent)', fontFamily: 'var(--font-mono,monospace)', letterSpacing: '0.08em' }}>Ask VaNi</div>
+                    <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 1 }}>What does this combination mean?</div>
                   </div>
                 </button>
               )}
@@ -718,7 +718,7 @@ export default function CorrelationPage() {
                       {value}
                     </div>
                     <div style={{
-                      fontSize: 9, fontFamily: 'var(--font-mono, monospace)',
+                      fontSize: 11, fontFamily: 'var(--font-mono, monospace)',
                       color: 'var(--text-muted)', marginTop: 2,
                     }}>
                       {label.toUpperCase()}
@@ -743,7 +743,7 @@ export default function CorrelationPage() {
               {total > 0 && (
                 <div style={{ marginBottom: 20 }}>
                   <div style={{
-                    fontSize: 9, fontFamily: 'var(--font-mono, monospace)',
+                    fontSize: 11, fontFamily: 'var(--font-mono, monospace)',
                     color: 'var(--text-muted)', letterSpacing: '0.1em',
                     textTransform: 'uppercase', marginBottom: 8,
                   }}>
@@ -761,7 +761,7 @@ export default function CorrelationPage() {
                   </div>
                   <div style={{
                     display: 'flex', justifyContent: 'space-between',
-                    marginTop: 5, fontSize: 10, fontFamily: 'var(--font-mono, monospace)',
+                    marginTop: 5, fontSize: 12, fontFamily: 'var(--font-mono, monospace)',
                   }}>
                     <span style={{ color: 'var(--bull)' }}>{bullCount} up</span>
                     <span style={{ color: 'var(--bear)' }}>{bearCount} down</span>
@@ -787,7 +787,7 @@ export default function CorrelationPage() {
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
                     <span style={{ color: 'var(--accent)', fontSize: 12 }}>✦</span>
                     <span style={{
-                      fontSize: 9, letterSpacing: '0.12em', textTransform: 'uppercase',
+                      fontSize: 11, letterSpacing: '0.12em', textTransform: 'uppercase',
                       color: 'var(--accent)', fontWeight: 600,
                       fontFamily: 'var(--font-mono,monospace)',
                     }}>VaNi</span>
@@ -807,7 +807,7 @@ export default function CorrelationPage() {
                         style={{
                           marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 3,
                           background: 'none', border: 'none', cursor: 'pointer',
-                          fontSize: 8, fontFamily: 'var(--font-mono,monospace)',
+                          fontSize: 10, fontFamily: 'var(--font-mono,monospace)',
                           color: 'color-mix(in srgb, var(--bear) 35%, transparent)', padding: 0,
                         }}
                         onMouseEnter={e => (e.currentTarget.style.color = 'color-mix(in srgb, var(--bear) 80%, transparent)')}
@@ -860,7 +860,7 @@ export default function CorrelationPage() {
               <button
                 onClick={() => { dismissCorrelation(itemA ?? '', itemB ?? ''); navigate('/workspace') }}
                 style={{
-                  width: '100%', padding: '8px', borderRadius: 7, fontSize: 11,
+                  width: '100%', padding: '8px', borderRadius: 7, fontSize: 12,
                   border: '1px solid var(--border)', background: 'transparent',
                   color: 'var(--text-muted)', cursor: 'pointer', fontFamily: 'inherit',
                   marginTop: 8,
@@ -888,7 +888,7 @@ export default function CorrelationPage() {
               {vizOptions.length > 0 && (
                 <div style={{ marginBottom: 20 }}>
                   <div style={{
-                    fontSize: 10, fontFamily: 'var(--font-mono, monospace)',
+                    fontSize: 12, fontFamily: 'var(--font-mono, monospace)',
                     color: 'var(--text-muted)', marginBottom: 8,
                   }}>
                     <span style={{ color: 'var(--accent)' }}>✦</span> VaNi suggests for {result.shape} · n={result.n_instances}:
@@ -900,7 +900,7 @@ export default function CorrelationPage() {
                           <span style={{
                             position: 'absolute', top: -14, left: '50%',
                             transform: 'translateX(-50%)',
-                            fontSize: 8, fontFamily: 'var(--font-mono, monospace)',
+                            fontSize: 10, fontFamily: 'var(--font-mono, monospace)',
                             color: 'var(--accent)', whiteSpace: 'nowrap',
                           }}>
                             VaNi pick
@@ -909,7 +909,7 @@ export default function CorrelationPage() {
                         <button
                           onClick={() => selectViz(opt.id)}
                           style={{
-                            padding: '6px 12px', borderRadius: 6, fontSize: 11, cursor: 'pointer',
+                            padding: '6px 12px', borderRadius: 6, fontSize: 12, cursor: 'pointer',
                             border: `1px solid ${vizId === opt.id ? 'var(--accent)' : 'var(--border)'}`,
                             background: vizId === opt.id ? 'var(--accent-glow)' : 'color-mix(in srgb, var(--text-primary) 2%, transparent)',
                             color: vizId === opt.id ? 'var(--accent)' : 'var(--text-muted)',

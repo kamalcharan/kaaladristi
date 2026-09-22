@@ -16,9 +16,9 @@ const badgeVariants = cva(
         muted:      'bg-kd-elevated border-kd-border text-muted',
       },
       size: {
-        sm: 'px-2.5 py-1 text-[9px] rounded-lg',
-        md: 'px-3.5 py-1.5 text-[10px] rounded-full',
-        lg: 'px-4 py-2 text-[11px] rounded-full',
+        sm: 'px-2.5 py-1 text-[11px] rounded-lg',
+        md: 'px-3.5 py-1.5 text-[12px] rounded-full',
+        lg: 'px-4 py-2 text-[12px] rounded-full',
       },
     },
     defaultVariants: {

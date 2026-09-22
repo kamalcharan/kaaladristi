@@ -129,7 +129,7 @@ export default function JourneyStrip({
       }}
     >
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 9, flexWrap: 'wrap' }}>
-        <span style={{ ...MONO, fontSize: 9, letterSpacing: '.11em', textTransform: 'uppercase', color: 'var(--text-faint)' }}>
+        <span style={{ ...MONO, fontSize: 11, letterSpacing: '.11em', textTransform: 'uppercase', color: 'var(--text-faint)' }}>
           Journey
         </span>
         {state && (
@@ -138,12 +138,12 @@ export default function JourneyStrip({
           </span>
         )}
         {j.base_years != null && (
-          <span style={{ ...MONO, fontSize: 11, color: 'var(--text-muted)' }}>
+          <span style={{ ...MONO, fontSize: 12, color: 'var(--text-muted)' }}>
             {j.base_years}-year base{j.base_start ? ` from ${fmtDate(j.base_start)}` : ''}
           </span>
         )}
         {j.resting && !slept && (
-          <span style={{ ...MONO, fontSize: 9.5, letterSpacing: '.06em', textTransform: 'uppercase',
+          <span style={{ ...MONO, fontSize: 11, letterSpacing: '.06em', textTransform: 'uppercase',
             color: 'var(--risk-amber)', border: '1px solid var(--risk-amber)', borderRadius: 3, padding: '1px 5px' }}>
             Resting
           </span>
@@ -169,12 +169,12 @@ export default function JourneyStrip({
                 background: done && !slept ? accent : done ? 'var(--text-faint)' : 'var(--border)',
                 opacity: done ? 1 : 0.55,
               }} />
-              <div style={{ ...MONO, fontSize: 9, letterSpacing: '.05em', textTransform: 'uppercase',
+              <div style={{ ...MONO, fontSize: 11, letterSpacing: '.05em', textTransform: 'uppercase',
                 color: now ? 'var(--text-primary)' : done ? 'var(--text-muted)' : 'var(--text-faint)',
                 whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                 {s.label}
               </div>
-              <div style={{ ...MONO, fontSize: 9.5, color: 'var(--text-faint)',
+              <div style={{ ...MONO, fontSize: 11, color: 'var(--text-faint)',
                 whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                 {s.key === 'stir' ? stirLabel(j) : fmtDate(date)}
               </div>
@@ -197,7 +197,7 @@ export default function JourneyStrip({
         {j.sleep_date && <Fact k="Closed" v={fmtDate(j.sleep_date)} />}
       </div>
 
-      <p style={{ fontSize: 11.5, lineHeight: 1.55, color: 'var(--text-muted)', margin: 0 }}>
+      <p style={{ fontSize: 12, lineHeight: 1.55, color: 'var(--text-muted)', margin: 0 }}>
         {baseRateLine(j, rates, gap)}
         {' '}Observational — recorded frequencies, not a forecast.
       </p>
@@ -208,7 +208,7 @@ export default function JourneyStrip({
 function Fact({ k, v, tone }: { k: string; v: string; tone?: 'bull' | 'bear' }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-      <span style={{ ...MONO, fontSize: 9, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--text-faint)' }}>{k}</span>
+      <span style={{ ...MONO, fontSize: 11, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--text-faint)' }}>{k}</span>
       <span style={{ ...MONO, fontSize: 12.5, fontWeight: 650,
         color: tone === 'bull' ? 'var(--bull)' : tone === 'bear' ? 'var(--bear)' : 'var(--text-primary)' }}>{v}</span>
     </div>

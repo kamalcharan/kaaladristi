@@ -138,7 +138,7 @@ export default function MarketStructureHistory({ breadth, roc, mode, onSelectDat
     </div>
     <p className="text-xs text-muted my-3">Latest on the left ← · {dates.length} sessions · Hover, focus or tap a cell to inspect. Charts keep latest on the right.</p>
     {Array.from(warnings.keys()).some(date => dates.includes(date)) && <p role="status" className="text-xs text-muted mb-3">⚠ Striped cells have missing or sharply reduced coverage. Treat their values cautiously.</p>}
-    <div className="flex flex-wrap items-center justify-between gap-3 mb-2 text-[11px] text-muted">
+    <div className="flex flex-wrap items-center justify-between gap-3 mb-2 text-[12px] text-muted">
       <span>Latest {dates.at(-1) ? sessionDate(dates.at(-1)!) : '—'}</span>
       {(scrollable.newer || scrollable.older) && <nav aria-label={`${mode} history navigation`} className="flex gap-2">
         <button type="button" disabled={!scrollable.newer} onClick={() => scrollSessions(-1)} className="rounded border border-[var(--border)] px-2 py-1 disabled:opacity-40">← Newer sessions</button>
@@ -149,10 +149,10 @@ export default function MarketStructureHistory({ breadth, roc, mode, onSelectDat
     <div ref={scrollRef} onScroll={updateScroll} className="market-structure-history-scroll overflow-x-auto" tabIndex={0} aria-label="Scrollable historical readings" onMouseLeave={() => onDateFocus?.(null)}>
       <table className="heatmap-values" style={{ minWidth: 144 + dates.length * 68, '--heatmap-session-count': dates.length } as CSSProperties}>
         <caption className="sr-only">{mode} historical values, latest session first</caption>
-        <thead><tr><th className="heatmap-label text-xs">Measure</th>{displayOrder.map(i => <th key={dates[i]} className="text-[10px] font-normal">
+        <thead><tr><th className="heatmap-label text-xs">Measure</th>{displayOrder.map(i => <th key={dates[i]} className="text-[12px] font-normal">
           <button type="button" className="text-accent-indigo underline" onClick={() => selectCell(dates[i], rows[0].label, true)}>{dates[i].slice(8)} {MONTH_FULL[Number(dates[i].slice(5, 7)) - 1].slice(0, 3)}</button>
         </th>)}</tr></thead>
-        <tbody>{rows.map(row => <tr key={row.label}><th scope="row" className="heatmap-label text-[11px] text-[var(--text-secondary)]">{row.label}</th>{displayOrder.map(i => {
+        <tbody>{rows.map(row => <tr key={row.label}><th scope="row" className="heatmap-label text-[12px] text-[var(--text-secondary)]">{row.label}</th>{displayOrder.map(i => {
           const value = row.values[i]; const missing = value == null || !Number.isFinite(value);
           const warning = warnings.get(dates[i]) ?? row.windowWarning?.(i); const transition = row.transition(i);
           const description = `${sessionDate(dates[i])} · ${row.label}: ${formatted(row, i)}. ${row.detail(i)} ${warning ?? transition?.description ?? ''}`;
@@ -177,7 +177,7 @@ export default function MarketStructureHistory({ breadth, roc, mode, onSelectDat
         <button type="button" className="text-accent-indigo underline mt-2" onClick={() => onSelectDate(dates[inspectedIndex])}>Read this session with VaNi →</button>
       </> : <p className="text-muted">{selectedDate ? `No ${mode === 'breadth' ? 'participation' : 'momentum'} observation for ${sessionDate(selectedDate)} in this window.` : 'Point to a cell to see its exact value and change. Tap to keep that date highlighted on both charts.'}</p>}
     </div>
-    <div className="mt-3 text-[11px] text-muted space-y-2">
+    <div className="mt-3 text-[12px] text-muted space-y-2">
       {mode === 'breadth' ? <>
         <p><span className="text-risk-red">●</span> Entered Greed (score crossed above 55) · <span className="text-risk-green">●</span> Entered Fear (score crossed below 35). An amber ring means reduced coverage makes the crossing provisional. Balls are observations, not buy or sell confirmation.</p>
         <p>EMA bands become stricter with horizon. Red = extended, light red = elevated, amber = transition, dark green = opportunity watch, light green = extreme fear. Select a cell for its band and exact change.</p>

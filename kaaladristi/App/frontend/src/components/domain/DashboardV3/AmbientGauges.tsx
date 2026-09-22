@@ -32,7 +32,7 @@ function GaugeCard({ label, value, sub, color, sparkValues = [], expanded, onTog
       <div
         style={{
           fontFamily: 'var(--font-mono)',
-          fontSize: 9,
+          fontSize: 11,
           letterSpacing: '0.14em',
           color: 'var(--text-faint)',
           textTransform: 'uppercase',
@@ -56,7 +56,7 @@ function GaugeCard({ label, value, sub, color, sparkValues = [], expanded, onTog
           >
             {value}
           </div>
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-faint)', marginTop: 5 }}>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-faint)', marginTop: 5 }}>
             {sub}
           </div>
         </div>
@@ -145,7 +145,7 @@ export default function AmbientGauges() {
             { lbl: 'above 150d', val: latestB?.pct_above_150, isCount: false },
             { lbl: 'stocks', val: latestB?.stock_count, isCount: true },
           ] as const).map(({ lbl, val, isCount }) => (
-            <div key={lbl} style={{ fontFamily: 'var(--font-mono)', fontSize: 10, display: 'flex', justifyContent: 'space-between' }}>
+            <div key={lbl} style={{ fontFamily: 'var(--font-mono)', fontSize: 12, display: 'flex', justifyContent: 'space-between' }}>
               <span style={{ color: 'var(--text-faint)' }}>{lbl}</span>
               <span style={{ color: 'var(--text-primary)' }}>
                 {val != null ? (isCount ? val : `${(val as number).toFixed(0)}%`) : '—'}
@@ -171,7 +171,7 @@ export default function AmbientGauges() {
             { lbl: 'roc-55', val: latestR?.roc_55 },
             { lbl: 'sma-5', val: latestR?.sma_breadth },
           ] as const).map(({ lbl, val }) => (
-            <div key={lbl} style={{ fontFamily: 'var(--font-mono)', fontSize: 10, display: 'flex', justifyContent: 'space-between' }}>
+            <div key={lbl} style={{ fontFamily: 'var(--font-mono)', fontSize: 12, display: 'flex', justifyContent: 'space-between' }}>
               <span style={{ color: 'var(--text-faint)' }}>{lbl}</span>
               <span style={{ color: val != null && val > 0 ? 'var(--bull)' : val != null && val < 0 ? 'var(--bear)' : 'var(--text-faint)' }}>
                 {val != null ? val.toFixed(3) : '—'}
@@ -192,7 +192,7 @@ export default function AmbientGauges() {
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           {rotationData?.rotatingIn.map(item => (
-            <div key={item.industry} style={{ fontFamily: 'var(--font-mono)', fontSize: 10, display: 'flex', justifyContent: 'space-between' }}>
+            <div key={item.industry} style={{ fontFamily: 'var(--font-mono)', fontSize: 12, display: 'flex', justifyContent: 'space-between' }}>
               <span style={{ color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '72%' }}>
                 {item.industry}
               </span>
@@ -213,7 +213,7 @@ export default function AmbientGauges() {
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           {rotationData?.leading.map(item => (
-            <div key={item.industry} style={{ fontFamily: 'var(--font-mono)', fontSize: 10, display: 'flex', justifyContent: 'space-between' }}>
+            <div key={item.industry} style={{ fontFamily: 'var(--font-mono)', fontSize: 12, display: 'flex', justifyContent: 'space-between' }}>
               <span style={{ color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '72%' }}>
                 {item.industry}
               </span>

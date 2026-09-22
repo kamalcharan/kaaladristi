@@ -155,7 +155,7 @@ export default function IndexCatalog({ onBack }: { onBack: () => void }) {
         <div className="text-center py-16">
           <p className="text-sm text-risk-red mb-1">Failed to load index catalog</p>
           <p className="text-xs text-muted">{error instanceof Error ? error.message : 'Unknown error'}</p>
-          <p className="text-[10px] text-muted mt-3 mono">Run km_migration_011_index_is_active.sql first</p>
+          <p className="text-[12px] text-muted mt-3 mono">Run km_migration_011_index_is_active.sql first</p>
         </div>
       ) : (
         <>
@@ -186,30 +186,30 @@ export default function IndexCatalog({ onBack }: { onBack: () => void }) {
                 </span>
 
                 {item.category && (
-                  <span className="text-[10px] px-1.5 py-px rounded bg-kd-elevated border border-kd-border text-[var(--text-secondary)] font-medium shrink-0 hidden sm:inline">
+                  <span className="text-[12px] px-1.5 py-px rounded bg-kd-elevated border border-kd-border text-[var(--text-secondary)] font-medium shrink-0 hidden sm:inline">
                     {item.category}
                   </span>
                 )}
 
                 {item.is_tri && (
-                  <span className="text-[9px] px-1.5 py-px rounded bg-accent-indigo/10 border border-accent-indigo/20 text-accent-indigo font-semibold shrink-0">
+                  <span className="text-[11px] px-1.5 py-px rounded bg-accent-indigo/10 border border-accent-indigo/20 text-accent-indigo font-semibold shrink-0">
                     TRI
                   </span>
                 )}
 
-                <span className="text-[10px] text-muted mono shrink-0 w-8">{item.exchange}</span>
+                <span className="text-[12px] text-muted mono shrink-0 w-8">{item.exchange}</span>
 
-                <span className="text-[10px] text-muted mono shrink-0 hidden md:inline w-[200px]">
+                <span className="text-[12px] text-muted mono shrink-0 hidden md:inline w-[200px]">
                   {item.data_from && item.data_to
                     ? `${fmtDate(item.data_from)} → ${fmtDate(item.data_to)}`
                     : '—'}
                 </span>
 
-                <span className="text-[10px] text-[var(--text-secondary)] mono font-medium shrink-0 w-14 text-right hidden sm:inline">
+                <span className="text-[12px] text-[var(--text-secondary)] mono font-medium shrink-0 w-14 text-right hidden sm:inline">
                   {item.record_count > 0 ? item.record_count.toLocaleString('en-IN') : '—'}
                 </span>
 
-                <span className="text-[11px] text-[var(--text-secondary)] mono font-medium shrink-0 w-20 text-right">
+                <span className="text-[12px] text-[var(--text-secondary)] mono font-medium shrink-0 w-20 text-right">
                   {item.last_close
                     ? item.last_close.toLocaleString('en-IN', { minimumFractionDigits: 2 })
                     : '—'}
@@ -266,7 +266,7 @@ export default function IndexCatalog({ onBack }: { onBack: () => void }) {
             </div>
           )}
 
-          <p className="text-[10px] text-muted mt-3 text-right mono">
+          <p className="text-[12px] text-muted mt-3 text-right mono">
             {activeCount} active &middot; {catalog.length} total
           </p>
         </>

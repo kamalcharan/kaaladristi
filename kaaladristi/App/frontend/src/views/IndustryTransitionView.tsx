@@ -52,7 +52,7 @@ function IndustryTag({ stock }: { stock: IndustryEnrichedStock }) {
     : 'text-muted border-kd-border bg-kd-elevated/30';
 
   return (
-    <span className={cn('text-[9px] font-bold px-1.5 py-0.5 rounded border inline-flex items-center gap-1', catColor)}>
+    <span className={cn('text-[11px] font-bold px-1.5 py-0.5 rounded border inline-flex items-center gap-1', catColor)}>
       {stock.industry}
       <span className="font-mono">{stock.industryPercentile}%ile</span>
       {stock.industryPercentileChange > 0 && <TrendingUp className="w-2.5 h-2.5" />}
@@ -79,9 +79,9 @@ function IndustryReturnPills({
     v == null ? 'text-muted' : v > 0 ? 'text-risk-green' : v < 0 ? 'text-risk-red' : 'text-muted';
   return (
     <span className="inline-flex items-center gap-1 pl-1 ml-0.5 border-l border-current/20 font-mono">
-      <span className={cn('text-[9px]', cls(r5))}  title="Industry avg return, 5D">5D {fmt(r5)}</span>
-      <span className={cn('text-[9px]', cls(r22))} title="Industry avg return, 22D">22D {fmt(r22)}</span>
-      <span className={cn('text-[9px]', cls(r66))} title="Industry avg return, 66D">66D {fmt(r66)}</span>
+      <span className={cn('text-[11px]', cls(r5))}  title="Industry avg return, 5D">5D {fmt(r5)}</span>
+      <span className={cn('text-[11px]', cls(r22))} title="Industry avg return, 22D">22D {fmt(r22)}</span>
+      <span className={cn('text-[11px]', cls(r66))} title="Industry avg return, 66D">66D {fmt(r66)}</span>
     </span>
   );
 }
@@ -116,11 +116,11 @@ function EnrichedStockCard({ stock }: { stock: IndustryEnrichedStock }) {
             <ExchangeBadge exchange={stock.exchange} />
           </div>
           <div className="flex items-center gap-1.5 flex-wrap">
-            {subName && <span className="text-[10px] text-muted truncate">{subName}</span>}
-            {subName && <span className="text-[10px] text-muted">·</span>}
+            {subName && <span className="text-[12px] text-muted truncate">{subName}</span>}
+            {subName && <span className="text-[12px] text-muted">·</span>}
             <IndustryTag stock={stock} />
             {flowConfig && (
-              <span className={cn('text-[9px] font-bold px-1.5 py-0.5 rounded', flowConfig.color, 'bg-kd-elevated/50')}>
+              <span className={cn('text-[11px] font-bold px-1.5 py-0.5 rounded', flowConfig.color, 'bg-kd-elevated/50')}>
                 {flowConfig.label}
               </span>
             )}
@@ -132,7 +132,7 @@ function EnrichedStockCard({ stock }: { stock: IndustryEnrichedStock }) {
               {stock.close != null ? stock.close.toFixed(2) : '—'}
             </p>
             <p className={cn(
-              'text-[11px] font-bold font-mono',
+              'text-[12px] font-bold font-mono',
               (stock.pct_chng ?? 0) >= 0 ? 'text-risk-green' : 'text-risk-red',
             )}>
               {(stock.pct_chng ?? 0) >= 0 ? '+' : ''}{(stock.pct_chng ?? 0).toFixed(2)}%
@@ -248,18 +248,18 @@ export default function IndustryTransitionView() {
                 before it's meaningful; the pill signals scope so users don't
                 read absent BSE-only industries as "no data". */}
             <span
-              className="text-[10px] font-mono text-accent-indigo bg-accent-indigo/10 border border-accent-indigo/30 px-2 py-1 rounded"
+              className="text-[12px] font-mono text-accent-indigo bg-accent-indigo/10 border border-accent-indigo/30 px-2 py-1 rounded"
               title="NSE-only universe for now. BSE industry tagging is being backfilled — full-market coverage lands in a follow-up."
             >
               NSE only · BSE coming soon
             </span>
             {data?.nseAsOfDate && (
-              <span className="text-[10px] font-mono text-risk-green bg-risk-green/10 border border-risk-green/30 px-2 py-1 rounded">
+              <span className="text-[12px] font-mono text-risk-green bg-risk-green/10 border border-risk-green/30 px-2 py-1 rounded">
                 NSE {data.nseAsOfDate}
               </span>
             )}
             {data && (
-              <span className="text-[10px] text-muted font-mono">
+              <span className="text-[12px] text-muted font-mono">
                 Stocks from {data.totalIndustries} qualifying industries · 5-day window
               </span>
             )}
@@ -283,7 +283,7 @@ export default function IndustryTransitionView() {
           >
             {tab.label}
             {data && (
-              <span className="ml-1.5 text-[10px] opacity-70">
+              <span className="ml-1.5 text-[12px] opacity-70">
                 {data.industryCounts[tab.id === 'all' ? 'all' : tab.id]}
               </span>
             )}
@@ -293,44 +293,44 @@ export default function IndustryTransitionView() {
 
       {/* Metric filters + Sort */}
       <Card rounded="xxl" className="px-4 py-3 mb-3 flex items-center gap-4 flex-wrap">
-        <span className="text-[10px] text-muted uppercase tracking-wider shrink-0">Filters</span>
+        <span className="text-[12px] text-muted uppercase tracking-wider shrink-0">Filters</span>
 
         {/* Percentile */}
         <div className="flex items-center gap-2 bg-kd-bg/40 border border-kd-border rounded-lg px-3 py-1.5">
-          <span className="text-[10px] text-muted uppercase tracking-wider">%ile &gt;</span>
+          <span className="text-[12px] text-muted uppercase tracking-wider">%ile &gt;</span>
           <input type="range" min={0} max={90} step={10} value={minPercentile}
             onChange={(e) => setMinPercentile(Number(e.target.value))}
             className="w-14 accent-risk-amber" />
-          <span className="text-[10px] font-mono text-[var(--text-primary)] w-6 text-right">
+          <span className="text-[12px] font-mono text-[var(--text-primary)] w-6 text-right">
             {minPercentile || 'off'}
           </span>
         </div>
 
         {/* RSI */}
         <div className="flex items-center gap-2 bg-kd-bg/40 border border-kd-border rounded-lg px-3 py-1.5">
-          <span className="text-[10px] text-muted uppercase tracking-wider">RSI &gt;</span>
+          <span className="text-[12px] text-muted uppercase tracking-wider">RSI &gt;</span>
           <input type="range" min={0} max={80} step={10} value={minRsi}
             onChange={(e) => setMinRsi(Number(e.target.value))}
             className="w-14 accent-risk-amber" />
-          <span className="text-[10px] font-mono text-[var(--text-primary)] w-6 text-right">
+          <span className="text-[12px] font-mono text-[var(--text-primary)] w-6 text-right">
             {minRsi || 'off'}
           </span>
         </div>
 
         {/* RSS */}
         <div className="flex items-center gap-2 bg-kd-bg/40 border border-kd-border rounded-lg px-3 py-1.5">
-          <span className="text-[10px] text-muted uppercase tracking-wider">RSS &gt;</span>
+          <span className="text-[12px] text-muted uppercase tracking-wider">RSS &gt;</span>
           <input type="range" min={0} max={80} step={10} value={minRss}
             onChange={(e) => setMinRss(Number(e.target.value))}
             className="w-14 accent-risk-amber" />
-          <span className="text-[10px] font-mono text-[var(--text-primary)] w-6 text-right">
+          <span className="text-[12px] font-mono text-[var(--text-primary)] w-6 text-right">
             {minRss || 'off'}
           </span>
         </div>
 
         {/* Sort */}
         <div className="flex items-center gap-1 ml-auto overflow-x-auto no-scrollbar">
-          <span className="text-[10px] text-muted uppercase tracking-wider shrink-0 mr-1">Sort</span>
+          <span className="text-[12px] text-muted uppercase tracking-wider shrink-0 mr-1">Sort</span>
           {SORT_OPTIONS.map((opt) => {
             const active = sortKey === opt.key;
             return (
@@ -338,7 +338,7 @@ export default function IndustryTransitionView() {
                 key={opt.key}
                 onClick={() => toggleSort(opt.key)}
                 className={cn(
-                  'inline-flex items-center gap-0.5 px-2 py-1 rounded-lg text-[10px] font-bold transition-all border whitespace-nowrap',
+                  'inline-flex items-center gap-0.5 px-2 py-1 rounded-lg text-[12px] font-bold transition-all border whitespace-nowrap',
                   active
                     ? 'bg-accent-indigo/15 text-accent-indigo border-accent-indigo/30'
                     : 'text-muted border-transparent hover:text-[var(--text-secondary)]',
@@ -377,7 +377,7 @@ export default function IndustryTransitionView() {
             ))}
           </div>
           <div className="mt-3 text-center">
-            <span className="text-[10px] text-muted font-mono">
+            <span className="text-[12px] text-muted font-mono">
               {filtered.length} stock{filtered.length !== 1 ? 's' : ''}
               {filtered.length === 100 ? ' (showing top 100)' : ''}
             </span>

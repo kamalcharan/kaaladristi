@@ -912,7 +912,7 @@ function FpbMetricLine({ stock }: { stock: ScanStock }) {
   }
   if (parts.length === 0) return null;
   return (
-    <div style={{ fontSize: 11, color: 'var(--text-faint)', margin: '-4px 4px 8px', letterSpacing: '0.01em' }}>
+    <div style={{ fontSize: 12, color: 'var(--text-faint)', margin: '-4px 4px 8px', letterSpacing: '0.01em' }}>
       {parts.join(' · ')}
     </div>
   );
@@ -1002,12 +1002,12 @@ function FpbActiveSection() {
                 {r.symbol}
               </span>
               <span style={{
-                fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 999,
+                fontSize: 12, fontWeight: 600, padding: '2px 8px', borderRadius: 999,
                 color: st.color, border: `1px solid ${st.color}`, whiteSpace: 'nowrap',
               }}>
                 {st.label}
               </span>
-              <span style={{ fontSize: 11.5, color: 'var(--text-muted)', marginLeft: 'auto', display: 'flex', gap: 14, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+              <span style={{ fontSize: 12, color: 'var(--text-muted)', marginLeft: 'auto', display: 'flex', gap: 14, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                 <span>{up ? 'Burst' : 'Shatter'} {r.release_date?.slice(5)}</span>
                 <span>entry {fmt(r.release_close)}</span>
                 <span>SL {fmt(r.sl_level)}</span>
@@ -1035,7 +1035,7 @@ function FpbActiveSection() {
                     display: 'inline-flex', alignItems: 'center', gap: 8, cursor: 'pointer',
                     padding: '5px 10px', borderRadius: 999,
                     background: 'var(--card)', border: `1px solid ${st.color}`,
-                    fontFamily: 'var(--font-mono)', fontSize: 11.5, color: 'var(--text-primary)',
+                    fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-primary)',
                   }}
                 >
                   <span style={{ color: up ? 'var(--bull)' : 'var(--bear)' }}>{up ? '↑' : '↓'}</span>
@@ -1397,7 +1397,7 @@ function ScannerResults({ presetId }: { presetId: string }) {
             }}
           >
             {p.name}
-            {researchProfile.recommended.includes(p.id)&&<span className="text-[10px]" title={`Recommended for ${researchProfile.label}`}>★ Recommended</span>}
+            {researchProfile.recommended.includes(p.id)&&<span className="text-[12px]" title={`Recommended for ${researchProfile.label}`}>★ Recommended</span>}
             {count != null && (
               <span style={{
                 fontFamily: 'var(--font-mono)', fontSize: '10px',

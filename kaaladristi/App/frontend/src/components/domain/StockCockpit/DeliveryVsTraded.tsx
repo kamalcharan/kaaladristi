@@ -47,18 +47,18 @@ export default function DeliveryVsTraded({ rows }: { rows: DayRow[] }) {
     <div className="rounded-lg bg-kd-card border border-kd-border p-3">
       <div className="flex items-center gap-2 mb-2.5">
         <BarChart3 className="w-3.5 h-3.5 text-accent-indigo" />
-        <span className="text-[11px] font-serif font-semibold text-primary tracking-wide">
+        <span className="text-[12px] font-serif font-semibold text-primary tracking-wide">
           Delivery vs Traded (10D)
         </span>
       </div>
 
       {/* Legend */}
       <div className="flex items-center gap-3 mb-2">
-        <span className="flex items-center gap-1.5 text-[9px] text-muted">
+        <span className="flex items-center gap-1.5 text-[11px] text-muted">
           <span className="inline-block w-2.5 h-2 rounded-sm" style={{ background: 'var(--accent-indigo, #6366f1)' }} />
           Delivered
         </span>
-        <span className="flex items-center gap-1.5 text-[9px] text-muted">
+        <span className="flex items-center gap-1.5 text-[11px] text-muted">
           <span className="inline-block w-2.5 h-2 rounded-sm" style={{ background: 'rgba(148,163,184,0.45)' }} />
           Traded
         </span>
@@ -70,7 +70,7 @@ export default function DeliveryVsTraded({ rows }: { rows: DayRow[] }) {
           const delivW = d.delivered != null ? Math.max(1, (d.delivered / maxTraded) * 100) : 0;
           return (
             <div key={d.date} className="flex items-center gap-2">
-              <span className="text-[9.5px] font-mono text-muted w-11 shrink-0">{fmtDay(d.date)}</span>
+              <span className="text-[11px] font-mono text-muted w-11 shrink-0">{fmtDay(d.date)}</span>
               <div className="flex-1 relative h-3.5 min-w-0">
                 {/* traded (background bar) */}
                 <div
@@ -83,10 +83,10 @@ export default function DeliveryVsTraded({ rows }: { rows: DayRow[] }) {
                   style={{ width: `${delivW}%`, background: 'var(--accent-indigo, #6366f1)' }}
                 />
               </div>
-              <span className="text-[9.5px] font-mono text-[var(--text-secondary)] w-8 text-right shrink-0">
+              <span className="text-[11px] font-mono text-[var(--text-secondary)] w-8 text-right shrink-0">
                 {d.pct != null ? `${Math.round(d.pct)}%` : '—'}
               </span>
-              <span className="text-[9.5px] font-mono text-muted w-14 text-right shrink-0">
+              <span className="text-[11px] font-mono text-muted w-14 text-right shrink-0">
                 {d.traded != null ? `${d.traded.toFixed(1)} Cr` : '—'}
               </span>
             </div>

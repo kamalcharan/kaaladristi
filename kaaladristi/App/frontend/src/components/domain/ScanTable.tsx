@@ -246,7 +246,7 @@ export default function ScanTable({ stocks, presetId, onRowClick }: ScanTablePro
               border: '1px solid var(--border)',
               background: gearOpen ? 'var(--accent-glow)' : 'transparent',
               color: gearOpen ? 'var(--accent)' : 'var(--text-muted)',
-              fontSize: 11, cursor: 'pointer',
+              fontSize: 12, cursor: 'pointer',
               fontFamily: 'var(--font-body)', transition: 'all 0.15s',
             }}
           >
@@ -261,7 +261,7 @@ export default function ScanTable({ stocks, presetId, onRowClick }: ScanTablePro
               minWidth: 180, boxShadow: '0 8px 24px rgba(0,0,0,0.3)',
             }}>
               <div style={{
-                padding: '4px 12px 6px', fontSize: 9, color: 'var(--text-faint)',
+                padding: '4px 12px 6px', fontSize: 11, color: 'var(--text-faint)',
                 letterSpacing: '.08em', textTransform: 'uppercase',
                 fontFamily: 'var(--font-mono)',
               }}>
@@ -290,7 +290,7 @@ export default function ScanTable({ stocks, presetId, onRowClick }: ScanTablePro
                       border: `1px solid ${enabled ? 'var(--accent)' : 'var(--border)'}`,
                       background: enabled ? 'var(--accent)' : 'transparent',
                       display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                      fontSize: 9, color: 'white', lineHeight: 1,
+                      fontSize: 11, color: 'white', lineHeight: 1,
                     }}>
                       {enabled ? '✓' : ''}
                     </span>
@@ -344,7 +344,7 @@ export default function ScanTable({ stocks, presetId, onRowClick }: ScanTablePro
                       width: cfg.width, minWidth: cfg.width,
                       padding: '0 10px',
                       textAlign: colKey === 'symbol' ? 'left' : 'right',
-                      fontSize: 11, letterSpacing: '0.06em', textTransform: 'uppercase',
+                      fontSize: 12, letterSpacing: '0.06em', textTransform: 'uppercase',
                       fontWeight: 600, fontFamily: 'var(--font-body)',
                       color: isActive ? 'var(--accent)' : 'var(--text-secondary)',
                       cursor: 'pointer', whiteSpace: 'nowrap',
@@ -438,7 +438,7 @@ export default function ScanTable({ stocks, presetId, onRowClick }: ScanTablePro
                               </span>
                               {stock.exchange && (
                                 <span style={{
-                                  fontSize: 8, padding: '1px 3px', borderRadius: 3,
+                                  fontSize: 10, padding: '1px 3px', borderRadius: 3,
                                   background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)',
                                   color: 'var(--text-faint)',
                                   fontFamily: 'var(--font-mono)',
@@ -449,7 +449,7 @@ export default function ScanTable({ stocks, presetId, onRowClick }: ScanTablePro
                             </div>
                             {company && (
                               <div style={{
-                                fontSize: 11, color: 'var(--text-muted)',
+                                fontSize: 12, color: 'var(--text-muted)',
                                 fontFamily: 'var(--font-body)',
                                 overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                                 maxWidth: 110,
@@ -576,7 +576,7 @@ export default function ScanTable({ stocks, presetId, onRowClick }: ScanTablePro
       <FloatingHScrollbar targetRef={scrollBoxRef} />
 
       <div style={{
-        marginTop: 6, fontSize: 10, color: 'var(--text-faint)',
+        marginTop: 6, fontSize: 12, color: 'var(--text-faint)',
         fontFamily: 'var(--font-mono)', textAlign: 'right',
       }}>
         {stocks.length} stocks

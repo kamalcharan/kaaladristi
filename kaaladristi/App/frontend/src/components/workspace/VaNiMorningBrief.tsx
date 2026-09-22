@@ -173,7 +173,7 @@ export default function VaNiMorningBrief({ modalOpen, onModalOpen, onModalClose,
       width: 22, height: 22, borderRadius: 6, flexShrink: 0,
       background: 'linear-gradient(135deg,var(--vani),#5b4fd4)',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
-      fontSize: 9, fontWeight: 700, color: '#fff',
+      fontSize: 11, fontWeight: 700, color: '#fff',
       fontFamily: 'var(--font-mono, monospace)',
     }
     if (items.length === 0) {
@@ -222,7 +222,7 @@ export default function VaNiMorningBrief({ modalOpen, onModalOpen, onModalClose,
                   position: 'absolute', top: 0, right: 0,
                   display: 'flex', alignItems: 'center', gap: 3,
                   background: 'none', border: 'none', cursor: 'pointer',
-                  fontSize: 8, fontFamily: 'var(--font-mono,monospace)',
+                  fontSize: 10, fontFamily: 'var(--font-mono,monospace)',
                   color: 'color-mix(in srgb, var(--bear) 35%, transparent)', padding: 0,
                 }}
                 onMouseEnter={e => (e.currentTarget.style.color = 'color-mix(in srgb, var(--bear) 80%, transparent)')}
@@ -234,11 +234,11 @@ export default function VaNiMorningBrief({ modalOpen, onModalOpen, onModalClose,
             )}
             <div style={{ width: 6, height: 6, borderRadius: '50%', marginTop: 5, flexShrink: 0, background: item.dot }} />
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 11, fontWeight: 500, color: 'var(--text-primary)', marginBottom: 1 }}>{item.title}</div>
-              <div style={{ fontSize: 10, color: 'var(--text-muted)', lineHeight: 1.4 }}>{item.description}</div>
+              <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-primary)', marginBottom: 1 }}>{item.title}</div>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.4 }}>{item.description}</div>
             </div>
             <span style={{
-              fontSize: 9, fontFamily: 'var(--font-mono, monospace)',
+              fontSize: 11, fontFamily: 'var(--font-mono, monospace)',
               color: item.dot, background: `color-mix(in srgb, ${item.dot} 9%, transparent)`,
               border: `1px solid color-mix(in srgb, ${item.dot} 19%, transparent)`,
               padding: '1px 5px', borderRadius: 3, flexShrink: 0,
@@ -284,7 +284,7 @@ export default function VaNiMorningBrief({ modalOpen, onModalOpen, onModalClose,
             width: 22, height: 22, borderRadius: 6, flexShrink: 0,
             background: 'linear-gradient(135deg,var(--vani),#5b4fd4)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 9, fontWeight: 700, color: '#fff',
+            fontSize: 11, fontWeight: 700, color: '#fff',
             fontFamily: 'var(--font-mono, monospace)',
           }}>
             Vᴺ
@@ -297,7 +297,7 @@ export default function VaNiMorningBrief({ modalOpen, onModalOpen, onModalClose,
             VaNi
           </span>
           <span style={{
-            marginLeft: 'auto', fontSize: 10,
+            marginLeft: 'auto', fontSize: 12,
             color: 'var(--text-faint)', fontFamily: 'var(--font-mono, monospace)',
           }}>
             Full context →
@@ -326,7 +326,7 @@ export default function VaNiMorningBrief({ modalOpen, onModalOpen, onModalClose,
                   position: 'absolute', top: 0, right: 0,
                   display: 'flex', alignItems: 'center', gap: 3,
                   background: 'none', border: 'none', cursor: 'pointer',
-                  fontSize: 8, fontFamily: 'var(--font-mono,monospace)',
+                  fontSize: 10, fontFamily: 'var(--font-mono,monospace)',
                   color: 'color-mix(in srgb, var(--bear) 35%, transparent)',
                   padding: 0,
                 }}
@@ -343,13 +343,13 @@ export default function VaNiMorningBrief({ modalOpen, onModalOpen, onModalClose,
             }} />
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{
-                fontSize: 11, fontWeight: 500, color: 'var(--text-primary)',
+                fontSize: 12, fontWeight: 500, color: 'var(--text-primary)',
                 marginBottom: 1,
               }}>
                 {item.title}
               </div>
               <div style={{
-                fontSize: 10, color: 'var(--text-muted)', lineHeight: 1.4,
+                fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.4,
                 display: '-webkit-box',
                 WebkitLineClamp: 1,
                 WebkitBoxOrient: 'vertical',
@@ -359,7 +359,7 @@ export default function VaNiMorningBrief({ modalOpen, onModalOpen, onModalClose,
               </div>
             </div>
             <span style={{
-              fontSize: 9, fontFamily: 'var(--font-mono, monospace)',
+              fontSize: 11, fontFamily: 'var(--font-mono, monospace)',
               color: item.dot, background: `color-mix(in srgb, ${item.dot} 9%, transparent)`,
               border: `1px solid color-mix(in srgb, ${item.dot} 19%, transparent)`,
               padding: '1px 5px', borderRadius: 3, flexShrink: 0,
@@ -543,7 +543,7 @@ function MorningModal({ items, profile, onClose }: {
               width: 28, height: 28, borderRadius: 8,
               background: 'linear-gradient(135deg,var(--vani),#5b4fd4)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 11, fontWeight: 700, color: '#fff',
+              fontSize: 12, fontWeight: 700, color: '#fff',
               fontFamily: 'var(--font-mono, monospace)',
             }}>
               Vᴺ
@@ -561,7 +561,7 @@ function MorningModal({ items, profile, onClose }: {
           </p>
           <ContinuityLine />
           <div style={{
-            marginTop: 5, fontSize: 10, fontFamily: 'var(--font-mono, monospace)',
+            marginTop: 5, fontSize: 12, fontFamily: 'var(--font-mono, monospace)',
             color: 'var(--text-faint)',
           }}>
             {dateStr} · {timeStr}
@@ -592,7 +592,7 @@ function MorningModal({ items, profile, onClose }: {
                       {obs.title}
                     </div>
                     <span style={{
-                      fontSize: 9, fontFamily: 'var(--font-mono,monospace)',
+                      fontSize: 11, fontFamily: 'var(--font-mono,monospace)',
                       color: dotColor, background: `${dotColor}18`,
                       border: `1px solid ${dotColor}30`,
                       padding: '2px 6px', borderRadius: 3, flexShrink: 0, whiteSpace: 'nowrap',
@@ -600,14 +600,14 @@ function MorningModal({ items, profile, onClose }: {
                       {obs.badge}
                     </span>
                   </div>
-                  <div style={{ fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.55, marginBottom: 8 }}>
+                  <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.55, marginBottom: 8 }}>
                     {obs.description}
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                     <span
                       onClick={() => handleAction(obs)}
                       style={{
-                        fontSize: 11,
+                        fontSize: 12,
                         fontFamily: 'var(--font-mono, monospace)',
                         color: 'var(--accent, var(--vani))',
                         cursor: obs.action_target ? 'pointer' : 'default',
@@ -633,7 +633,7 @@ function MorningModal({ items, profile, onClose }: {
                           style={{
                             display: 'flex', alignItems: 'center', gap: 3,
                             background: 'none', border: 'none', cursor: 'pointer',
-                            fontSize: 9, fontFamily: 'var(--font-mono,monospace)',
+                            fontSize: 11, fontFamily: 'var(--font-mono,monospace)',
                             color: 'color-mix(in srgb, var(--bear) 60%, transparent)',
                             padding: 0,
                           }}
@@ -676,7 +676,7 @@ function MorningModal({ items, profile, onClose }: {
               Dismiss
             </button>
             {!showLoader && liveObs.length > 0 && (
-              <span style={{ fontSize: 9, fontFamily: 'var(--font-mono,monospace)', color: 'var(--text-faint)' }}>
+              <span style={{ fontSize: 11, fontFamily: 'var(--font-mono,monospace)', color: 'var(--text-faint)' }}>
                 {allCached ? '⚡ cached · instant' : '✦ generated · fresh'}
               </span>
             )}

@@ -215,7 +215,7 @@ function createChartOptions(container: HTMLElement, height: number, colors: Retu
     layout: {
       background: { type: ColorType.Solid as const, color: colors.bg },
       textColor: colors.text,
-      fontSize: 11,
+      fontSize: 12,
       attributionLogo: false,
     },
     grid: {
@@ -1209,7 +1209,7 @@ export default function TradingChart({ data, height = 900, compact = false, work
     <div className="space-y-0.5">
       {/* Legend — legacy mode only */}
       {!workspaceMode && (
-        <div className="flex items-center gap-4 mb-2 text-[10px] text-muted">
+        <div className="flex items-center gap-4 mb-2 text-[12px] text-muted">
           {SMA_LINES.map((s) => (
             <span key={s.key} className="flex items-center gap-1">
               <span className="inline-block w-3 h-0.5 rounded" style={{ backgroundColor: s.color }} />
@@ -1220,7 +1220,7 @@ export default function TradingChart({ data, height = 900, compact = false, work
             <span className="inline-block w-3 h-0.5 rounded bg-risk-green" />
             SuperTrend
           </span>
-          <span className="ml-auto text-[9px] text-muted">volume shade = delivery %</span>
+          <span className="ml-auto text-[11px] text-muted">volume shade = delivery %</span>
         </div>
       )}
 
@@ -1320,12 +1320,12 @@ export default function TradingChart({ data, height = 900, compact = false, work
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700 }}>
                   <span style={{ width: 7, height: 7, borderRadius: '50%', background: c, flexShrink: 0 }} />
-                  <span style={{ color: dir.col, fontSize: 11 }}>{dir.g}</span>
+                  <span style={{ color: dir.col, fontSize: 12 }}>{dir.g}</span>
                   <span style={{ color: c }}>{storyBubble.title}</span>
                 </div>
-                <div style={{ fontSize: 11, color: 'var(--verdict-hero-muted)', marginTop: 3, lineHeight: 1.4 }}>{storyBubble.detail}</div>
+                <div style={{ fontSize: 12, color: 'var(--verdict-hero-muted)', marginTop: 3, lineHeight: 1.4 }}>{storyBubble.detail}</div>
                 {storyBubble.reactionPct != null && (
-                  <div style={{ fontSize: 11, marginTop: 4, fontFamily: 'var(--font-mono, monospace)' }}>
+                  <div style={{ fontSize: 12, marginTop: 4, fontFamily: 'var(--font-mono, monospace)' }}>
                     <span style={{ color: 'var(--verdict-hero-muted)' }}>→ price </span>
                     <span style={{ color: storyBubble.reactionPct >= 0 ? 'var(--risk-green)' : 'var(--risk-red)', fontWeight: 700 }}>
                       {storyBubble.reactionPct >= 0 ? '+' : ''}{storyBubble.reactionPct.toFixed(1)}%
@@ -1381,7 +1381,7 @@ export default function TradingChart({ data, height = 900, compact = false, work
               boxShadow: '0 1px 6px color-mix(in srgb, black 14%, transparent)',
               backdropFilter: 'blur(3px)',
               borderRadius: 6, padding: '4px 10px',
-              fontFamily: 'var(--font-mono, monospace)', fontSize: 10,
+              fontFamily: 'var(--font-mono, monospace)', fontSize: 12,
               display: 'flex', gap: 10, alignItems: 'baseline', flexWrap: 'wrap',
               color: 'var(--text-secondary, #cbd5e1)', maxWidth: '85%',
             }}>
@@ -1440,13 +1440,13 @@ export default function TradingChart({ data, height = 900, compact = false, work
                   <div key={`${b.ruleCode}-${b.from}-${i}`} style={i > 0 ? {
                     marginTop: 7, paddingTop: 7, borderTop: '1px solid color-mix(in srgb, var(--text-primary) 8%, transparent)',
                   } : undefined}>
-                    <div style={{ fontSize: 11, fontWeight: 600, color: c, marginBottom: 3, lineHeight: 1.3 }}>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: c, marginBottom: 3, lineHeight: 1.3 }}>
                       {b.displayName}
                     </div>
-                    <div style={{ fontSize: 10, fontFamily: 'var(--font-mono, monospace)', color: 'color-mix(in srgb, var(--text-primary) 45%, transparent)', marginBottom: 4 }}>
+                    <div style={{ fontSize: 12, fontFamily: 'var(--font-mono, monospace)', color: 'color-mix(in srgb, var(--text-primary) 45%, transparent)', marginBottom: 4 }}>
                       {b.ruleCode}
                     </div>
-                    <div style={{ fontSize: 10, color: 'color-mix(in srgb, var(--text-primary) 60%, transparent)', display: 'flex', gap: 4, alignItems: 'center' }}>
+                    <div style={{ fontSize: 12, color: 'color-mix(in srgb, var(--text-primary) 60%, transparent)', display: 'flex', gap: 4, alignItems: 'center' }}>
                       {b.isPoint ? (
                         <span>{fmtDate(b.from)}</span>
                       ) : (
@@ -1463,8 +1463,8 @@ export default function TradingChart({ data, height = 900, compact = false, work
                         replaced by THE PATTERN below. Upcoming windows still
                         get their opening date. */}
                     {b.from > today && (
-                      <div style={{ marginTop: 5, fontSize: 10, display: 'flex', gap: 5, alignItems: 'baseline' }}>
-                        <span style={{ fontSize: 8, letterSpacing: '0.1em', color: 'color-mix(in srgb, var(--text-primary) 35%, transparent)', fontFamily: 'var(--font-mono, monospace)' }}>
+                      <div style={{ marginTop: 5, fontSize: 12, display: 'flex', gap: 5, alignItems: 'baseline' }}>
+                        <span style={{ fontSize: 10, letterSpacing: '0.1em', color: 'color-mix(in srgb, var(--text-primary) 35%, transparent)', fontFamily: 'var(--font-mono, monospace)' }}>
                           THIS WINDOW
                         </span>
                         <span style={{ color: 'color-mix(in srgb, var(--text-primary) 40%, transparent)' }}>
@@ -1478,8 +1478,8 @@ export default function TradingChart({ data, height = 900, compact = false, work
                       const r = chartWindowReturn(b.from, b.to);
                       if (r == null) return null;
                       return (
-                        <div style={{ marginTop: 3, fontSize: 10, display: 'flex', gap: 5, alignItems: 'baseline' }}>
-                          <span style={{ fontSize: 8, letterSpacing: '0.1em', color: 'color-mix(in srgb, var(--text-primary) 35%, transparent)', fontFamily: 'var(--font-mono, monospace)' }}>
+                        <div style={{ marginTop: 3, fontSize: 12, display: 'flex', gap: 5, alignItems: 'baseline' }}>
+                          <span style={{ fontSize: 10, letterSpacing: '0.1em', color: 'color-mix(in srgb, var(--text-primary) 35%, transparent)', fontFamily: 'var(--font-mono, monospace)' }}>
                             THIS CHART
                           </span>
                           <span style={{ fontFamily: 'var(--font-mono, monospace)', color: r.pct >= 0 ? 'var(--bull)' : 'var(--bear)' }}>
@@ -1496,7 +1496,7 @@ export default function TradingChart({ data, height = 900, compact = false, work
                       if (!ev) return null;
                       const read = buildRuleRead(ev);
                       return (
-                        <div style={{ marginTop: 4, fontSize: 10, display: 'flex', gap: 5, alignItems: 'baseline' }}>
+                        <div style={{ marginTop: 4, fontSize: 12, display: 'flex', gap: 5, alignItems: 'baseline' }}>
                           <span style={{ flexShrink: 0, color: read.role === 'watch' ? 'var(--accent)' : 'color-mix(in srgb, var(--text-primary) 40%, transparent)' }}>
                             {read.role === 'watch' ? '\u25c8' : '\u25cb'}
                           </span>
@@ -1510,11 +1510,11 @@ export default function TradingChart({ data, height = 900, compact = false, work
                 );
               })}
               {extra > 0 && (
-                <div style={{ marginTop: 6, fontSize: 9, fontFamily: 'var(--font-mono, monospace)', color: 'color-mix(in srgb, var(--text-primary) 35%, transparent)' }}>
+                <div style={{ marginTop: 6, fontSize: 11, fontFamily: 'var(--font-mono, monospace)', color: 'color-mix(in srgb, var(--text-primary) 35%, transparent)' }}>
                   +{extra} more event{extra > 1 ? 's' : ''} here
                 </div>
               )}
-              <div style={{ marginTop: 6, fontSize: 9, fontFamily: 'var(--font-mono, monospace)', color: 'color-mix(in srgb, var(--text-primary) 35%, transparent)' }}>
+              <div style={{ marginTop: 6, fontSize: 11, fontFamily: 'var(--font-mono, monospace)', color: 'color-mix(in srgb, var(--text-primary) 35%, transparent)' }}>
                 right-click for the full read
               </div>
             </div>
@@ -1524,7 +1524,7 @@ export default function TradingChart({ data, height = 900, compact = false, work
 
       {!workspaceMode && !compact && (
         <div className="relative">
-          <span className="absolute top-1 left-2 text-[10px] text-muted z-10 pointer-events-none">
+          <span className="absolute top-1 left-2 text-[12px] text-muted z-10 pointer-events-none">
             RSI(14) <span style={{ color: 'var(--accent-violet)' }}>━</span> &nbsp; MFI(14) <span style={{ color: 'var(--accent-cyan)' }}>━</span>
           </span>
           <div ref={rsiRef} className="rounded-xl overflow-hidden" />
@@ -1533,7 +1533,7 @@ export default function TradingChart({ data, height = 900, compact = false, work
 
       {!workspaceMode && !compact && (
         <div className="relative">
-          <span className="absolute top-1 left-2 text-[10px] text-muted z-10 pointer-events-none">
+          <span className="absolute top-1 left-2 text-[12px] text-muted z-10 pointer-events-none">
             Sniper Dragon — <span style={{ color: 'var(--risk-red)' }}>Inst</span> / <span style={{ color: 'var(--risk-amber)' }}>Hot$</span> / <span style={{ color: 'var(--risk-green)' }}>Retail</span>
           </span>
           <div ref={sniperRef} className="rounded-xl overflow-hidden" />
@@ -1542,7 +1542,7 @@ export default function TradingChart({ data, height = 900, compact = false, work
 
       {!workspaceMode && (
         <div className="relative">
-          <span className="absolute top-1 left-2 text-[10px] text-muted z-10 pointer-events-none">
+          <span className="absolute top-1 left-2 text-[12px] text-muted z-10 pointer-events-none">
             MagicRS <span style={{ color: 'var(--risk-green)' }}>━</span> &nbsp; MagicMA <span style={{ color: 'var(--accent-indigo)' }}>━</span>
           </span>
           <div ref={magicRef} className="rounded-xl overflow-hidden" />

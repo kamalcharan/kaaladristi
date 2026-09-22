@@ -87,7 +87,7 @@ export default function SettingsView() {
               <h3 className="text-sm font-semibold mb-1 text-[var(--text-primary)]">{card.title}</h3>
               <p className="text-xs text-muted leading-relaxed">{card.description}</p>
               {!card.ready && (
-                <span className="inline-block mt-3 text-[10px] uppercase tracking-wider text-muted">Coming soon</span>
+                <span className="inline-block mt-3 text-[12px] uppercase tracking-wider text-muted">Coming soon</span>
               )}
             </button>
           ))}

@@ -98,7 +98,7 @@ export default function IndexPriceChart({
             key={r}
             onClick={() => onRangeChange(r)}
             className={cn(
-              'px-4 py-1.5 rounded-lg text-[11px] font-bold uppercase tracking-wider transition-all duration-200',
+              'px-4 py-1.5 rounded-lg text-[12px] font-bold uppercase tracking-wider transition-all duration-200',
               range === r
                 ? 'bg-accent-indigo/20 text-accent-indigo border border-accent-indigo/30'
                 : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)] hover:bg-kd-elevated'
@@ -130,7 +130,7 @@ export default function IndexPriceChart({
                 try { return format(parseISO(d), xTickFormat); }
                 catch { return d; }
               }}
-              tick={{ fontSize: 10, fill: 'var(--text-muted)' }}
+              tick={{ fontSize: 12, fill: 'var(--text-muted)' }}
               axisLine={{ stroke: 'var(--kd-border)' }}
               tickLine={false}
               minTickGap={40}
@@ -138,7 +138,7 @@ export default function IndexPriceChart({
             <YAxis
               domain={[yMin, yMax]}
               tickFormatter={formatYAxis}
-              tick={{ fontSize: 10, fill: 'var(--text-muted)' }}
+              tick={{ fontSize: 12, fill: 'var(--text-muted)' }}
               axisLine={false}
               tickLine={false}
               width={60}

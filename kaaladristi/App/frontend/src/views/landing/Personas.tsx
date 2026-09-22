@@ -35,13 +35,13 @@ export function Personas() {
           {PERSONAS.map((p, i) => (
             <FadeUp key={p.n} delay={i * 80}>
               <div className="dq-glass" style={{ padding:'36px 32px', height:'100%' }}>
-                <div style={{ fontFamily:MONO, fontSize:11, letterSpacing:'.22em', color:C.g2, marginBottom:28 }}>{p.n}</div>
+                <div style={{ fontFamily:MONO, fontSize:12, letterSpacing:'.22em', color:C.g2, marginBottom:28 }}>{p.n}</div>
                 <h3 style={{ fontFamily:SERIF, fontSize:26, color:C.ink1, margin:'0 0 20px', lineHeight:1.15, letterSpacing:'-0.01em' }}>{p.title}</h3>
                 <p style={{ fontFamily:SANS, margin:'0 0 28px', color:C.ink2, fontSize:14.5, lineHeight:1.6 }}>{p.body}</p>
                 <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
                   {p.tags.map(t => (
                     <span key={t} style={{
-                      fontFamily:MONO, fontSize:10, letterSpacing:'.14em',
+                      fontFamily:MONO, fontSize:12, letterSpacing:'.14em',
                       padding:'5px 10px', border:`1px solid ${C.rule}`,
                       color: t.startsWith('+') ? C.g1 : C.ink3,
                     }}>{t}</span>

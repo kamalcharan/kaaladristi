@@ -84,7 +84,7 @@ function ScanChips({ scans }: { scans: string[] }) {
         <span
           key={s}
           style={{
-            ...MONO, fontSize: 8.5, letterSpacing: '.04em',
+            ...MONO, fontSize: 10, letterSpacing: '.04em',
             padding: '1px 5px', borderRadius: 3,
             background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)', color: 'var(--text-muted)',
             whiteSpace: 'nowrap',
@@ -94,7 +94,7 @@ function ScanChips({ scans }: { scans: string[] }) {
         </span>
       ))}
       {extra > 0 && (
-        <span style={{ ...MONO, fontSize: 8.5, color: 'var(--text-faint)' }}>+{extra}</span>
+        <span style={{ ...MONO, fontSize: 10, color: 'var(--text-faint)' }}>+{extra}</span>
       )}
     </span>
   );
@@ -118,11 +118,11 @@ function HighlightRow({
       onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = 'color-mix(in srgb, var(--text-primary) 4%, transparent)'; }}
       onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
     >
-      <span style={{ fontSize: 10, color: 'var(--gold)', flexShrink: 0 }}>✦</span>
+      <span style={{ fontSize: 12, color: 'var(--gold)', flexShrink: 0 }}>✦</span>
       <span
         title={row.company_name ?? row.symbol}
         style={{
-          ...MONO, fontSize: 11, fontWeight: 600, color: 'var(--text-primary)',
+          ...MONO, fontSize: 12, fontWeight: 600, color: 'var(--text-primary)',
           flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
         }}
       >
@@ -132,7 +132,7 @@ function HighlightRow({
         <span
           title="Entered the highlights since the previous trading day"
           style={{
-            ...MONO, fontSize: 8, fontWeight: 700, letterSpacing: '.06em',
+            ...MONO, fontSize: 10, fontWeight: 700, letterSpacing: '.06em',
             padding: '1px 4px', borderRadius: 3, flexShrink: 0,
             color: 'var(--accent-indigo)', border: '1px solid var(--accent-indigo)',
             background: 'rgba(99,102,241,0.10)', textTransform: 'uppercase',
@@ -141,7 +141,7 @@ function HighlightRow({
           new
         </span>
       )}
-      <span style={{ ...MONO, fontSize: 10, color: 'var(--text-secondary)', flexShrink: 0, width: 34, textAlign: 'right' }}>
+      <span style={{ ...MONO, fontSize: 12, color: 'var(--text-secondary)', flexShrink: 0, width: 34, textAlign: 'right' }}>
         {metric}
       </span>
       <ScanChips scans={row.scans} />
@@ -176,14 +176,14 @@ function HighlightCard({
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-        <span style={{ ...MONO, fontSize: 10, fontWeight: 700, letterSpacing: '.07em', textTransform: 'uppercase', color }}>
+        <span style={{ ...MONO, fontSize: 12, fontWeight: 700, letterSpacing: '.07em', textTransform: 'uppercase', color }}>
           {title}
         </span>
-        <span style={{ ...MONO, fontSize: 10, color: 'var(--text-faint)' }}>· {total}</span>
+        <span style={{ ...MONO, fontSize: 12, color: 'var(--text-faint)' }}>· {total}</span>
         <button
           onClick={() => navigate(`/scanner/${viewAllPreset}`)}
           style={{
-            ...MONO, marginLeft: 'auto', fontSize: 10, color: 'var(--text-muted)',
+            ...MONO, marginLeft: 'auto', fontSize: 12, color: 'var(--text-muted)',
             background: 'none', border: 'none', cursor: 'pointer', padding: 0,
           }}
         >
@@ -192,12 +192,12 @@ function HighlightCard({
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0 6px 4px', borderBottom: '1px solid var(--border)', marginBottom: 2 }}>
         <span style={{ width: 10, flexShrink: 0 }} />
-        <span style={{ ...MONO, fontSize: 9, letterSpacing: '.07em', textTransform: 'uppercase', color: 'var(--text-faint)', flex: 1 }}>Stock</span>
-        <span style={{ ...MONO, fontSize: 9, letterSpacing: '.07em', textTransform: 'uppercase', color: 'var(--text-faint)', width: 34, textAlign: 'right', flexShrink: 0 }}>{metricLabel}</span>
-        <span style={{ ...MONO, fontSize: 9, letterSpacing: '.07em', textTransform: 'uppercase', color: 'var(--text-faint)', flexShrink: 0 }}>Flagged By</span>
+        <span style={{ ...MONO, fontSize: 11, letterSpacing: '.07em', textTransform: 'uppercase', color: 'var(--text-faint)', flex: 1 }}>Stock</span>
+        <span style={{ ...MONO, fontSize: 11, letterSpacing: '.07em', textTransform: 'uppercase', color: 'var(--text-faint)', width: 34, textAlign: 'right', flexShrink: 0 }}>{metricLabel}</span>
+        <span style={{ ...MONO, fontSize: 11, letterSpacing: '.07em', textTransform: 'uppercase', color: 'var(--text-faint)', flexShrink: 0 }}>Flagged By</span>
       </div>
       {rows.length === 0 ? (
-        <div style={{ ...MONO, fontSize: 10, color: 'var(--text-faint)', padding: '6px 6px 8px' }}>
+        <div style={{ ...MONO, fontSize: 12, color: 'var(--text-faint)', padding: '6px 6px 8px' }}>
           {emptyText}
         </div>
       ) : (
@@ -226,22 +226,22 @@ export default function VaNiHighlightsBoard() {
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
-        <span style={{ ...MONO, fontSize: 11, color: 'var(--text-faint)', letterSpacing: '.06em', textTransform: 'uppercase' }}>
+        <span style={{ ...MONO, fontSize: 12, color: 'var(--text-faint)', letterSpacing: '.06em', textTransform: 'uppercase' }}>
           ✦ VaNi Highlights
         </span>
         {data?.asOf && (
-          <span style={{ ...MONO, fontSize: 10, color: 'var(--text-muted)', letterSpacing: '.04em' }}>
+          <span style={{ ...MONO, fontSize: 12, color: 'var(--text-muted)', letterSpacing: '.04em' }}>
             as of {fmtAsOf(data.asOf)} close
           </span>
         )}
-        <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>
+        <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
           Names where the most scan conditions align — persistent names are the point (multi-scan
           agreement builds over days) · chips = which scans flagged it · observations, not recommendations
         </span>
       </div>
 
       {isLoading ? (
-        <div style={{ ...MONO, fontSize: 11, color: 'var(--text-faint)', padding: '12px 0' }}>
+        <div style={{ ...MONO, fontSize: 12, color: 'var(--text-faint)', padding: '12px 0' }}>
           Running scanners…
         </div>
       ) : (

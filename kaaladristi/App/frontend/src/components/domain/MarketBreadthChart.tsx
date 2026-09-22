@@ -125,7 +125,7 @@ function EmaStat({ label, value, prev }: { label: string; value: number | null; 
   const down = value != null && prev != null && value < prev;
   return (
     <div className="text-center">
-      <div className="text-[9px] text-muted font-bold uppercase tracking-wider mb-0.5">{label}</div>
+      <div className="text-[11px] text-muted font-bold uppercase tracking-wider mb-0.5">{label}</div>
       <div className={cn('text-[12px] font-bold mono flex items-center gap-0.5',
         up ? 'text-risk-green' : down ? 'text-risk-red' : 'text-[var(--text-primary)]'
       )}>
@@ -146,7 +146,7 @@ function BreadthTooltip({ active, payload, ma, researchMode, relative, niftyByDa
   if (!d) return null;
   const r = regimeAbsolute(d.breadth_score ?? 0);
   return (
-    <div className="glass-card rounded-xl p-3 text-[11px] border border-kd-border min-w-[160px]">
+    <div className="glass-card rounded-xl p-3 text-[12px] border border-kd-border min-w-[160px]">
       <div className="font-bold text-[var(--text-primary)] mb-2">{fmtDate(d.trade_date)}</div>
       <div className="flex justify-between gap-4 mb-1">
         <span className="text-muted">Score</span>
@@ -255,7 +255,7 @@ export default function MarketBreadthChart({
           <h3 className="text-[13px] font-bold text-[var(--text-primary)]">{title}</h3>
           {indexName && <p className="text-xs text-muted mt-1">{indexName}</p>}
           {displayStockCount != null && (
-            <p className="text-[10px] text-muted mt-0.5">
+            <p className="text-[12px] text-muted mt-0.5">
               {displayStockCount.toLocaleString()}{indexName ? ' constituents analysed' : '+ stocks analyzed'}
             </p>
           )}
@@ -269,7 +269,7 @@ export default function MarketBreadthChart({
                 key={p.label}
                 onClick={() => onPeriodChange ? onPeriodChange(p.days) : setPeriod(p.label)}
                 className={cn(
-                  'px-2.5 py-1 rounded-md text-[10px] font-bold transition-all',
+                  'px-2.5 py-1 rounded-md text-[12px] font-bold transition-all',
                   period === p.label
                     ? 'bg-accent-indigo text-white'
                     : 'text-muted hover:text-[var(--text-secondary)]',
@@ -291,7 +291,7 @@ export default function MarketBreadthChart({
 
           {/* Regime badge */}
           {r && !tooSmall && (
-            <span className={cn('px-2.5 py-1 rounded-lg text-[10px] font-bold border uppercase tracking-wider', researchMode ? 'text-muted border-kd-border' : [r.bg, r.color, r.border])}>
+            <span className={cn('px-2.5 py-1 rounded-lg text-[12px] font-bold border uppercase tracking-wider', researchMode ? 'text-muted border-kd-border' : [r.bg, r.color, r.border])}>
               {r.label}
             </span>
           )}
@@ -301,10 +301,10 @@ export default function MarketBreadthChart({
       {/* ── Chart title + current score ── */}
       <div className="flex items-start justify-between mb-2">
         <div>
-          <div className="text-[11px] font-bold text-[var(--text-secondary)]">Breadth Score Trend</div>
-          <div className="text-[9px] text-muted">50% Above {ma.m20} · 30% Above {ma.m50} · 20% Above {ma.m150}</div>
+          <div className="text-[12px] font-bold text-[var(--text-secondary)]">Breadth Score Trend</div>
+          <div className="text-[11px] text-muted">50% Above {ma.m20} · 30% Above {ma.m50} · 20% Above {ma.m150}</div>
           {zoneMode === 'provisional' && (
-            <div className="text-[9px] text-risk-amber mt-0.5">* Provisional — short index history</div>
+            <div className="text-[11px] text-risk-amber mt-0.5">* Provisional — short index history</div>
           )}
         </div>
         {latest?.breadth_score != null && !tooSmall && (
@@ -312,7 +312,7 @@ export default function MarketBreadthChart({
             <div className={cn('text-[22px] font-bold mono leading-none', researchMode ? 'text-[var(--text-primary)]' : r?.color)}>
               {latest.breadth_score.toFixed(1)}
             </div>
-            <div className="text-[9px] text-muted">{researchMode ? `Session score · ${fmtDate(latest.trade_date)}` : 'Current Score'}</div>
+            <div className="text-[11px] text-muted">{researchMode ? `Session score · ${fmtDate(latest.trade_date)}` : 'Current Score'}</div>
           </div>
         )}
       </div>
@@ -364,14 +364,14 @@ export default function MarketBreadthChart({
             <XAxis
               dataKey="trade_date"
               tickFormatter={fmtDate}
-              tick={{ fontSize: 9, fill: 'var(--text-muted)' }}
+              tick={{ fontSize: 11, fill: 'var(--text-muted)' }}
               tickLine={false}
               axisLine={false}
               interval="preserveStartEnd"
             />
             <YAxis
               domain={[0, 100]}
-              tick={{ fontSize: 9, fill: 'var(--text-muted)' }}
+              tick={{ fontSize: 11, fill: 'var(--text-muted)' }}
               tickLine={false}
               axisLine={false}
             />
@@ -383,21 +383,21 @@ export default function MarketBreadthChart({
               stroke={researchMode ? 'var(--text-muted)' : 'var(--bear)'}
               strokeDasharray="4 2"
               strokeOpacity={0.6}
-              label={{ value: `Greed ${GREED_THRESHOLD}`, position: 'right', fontSize: 9, fill: researchMode ? 'var(--text-muted)' : 'var(--bear)' }}
+              label={{ value: `Greed ${GREED_THRESHOLD}`, position: 'right', fontSize: 11, fill: researchMode ? 'var(--text-muted)' : 'var(--bear)' }}
             />
             <ReferenceLine
               y={FEAR_THRESHOLD}
               stroke={researchMode ? 'var(--text-muted)' : 'var(--bull)'}
               strokeDasharray="4 2"
               strokeOpacity={0.6}
-              label={{ value: `Fear ${FEAR_THRESHOLD}`, position: 'right', fontSize: 9, fill: researchMode ? 'var(--text-muted)' : 'var(--bull)' }}
+              label={{ value: `Fear ${FEAR_THRESHOLD}`, position: 'right', fontSize: 11, fill: researchMode ? 'var(--text-muted)' : 'var(--bull)' }}
             />
 
             </>}
             <Tooltip content={<BreadthTooltip ma={ma} researchMode={researchMode} relative={relative} niftyByDate={niftyByDate} />} />
             {focusedDate && data.some(row => row.trade_date === focusedDate) && <ReferenceLine
               x={focusedDate} stroke="var(--text-primary)" strokeWidth={2} strokeDasharray="3 3"
-              label={{ value: fmtDate(focusedDate), position: 'insideTopRight', fill: 'var(--text-primary)', fontSize: 10 }} />}
+              label={{ value: fmtDate(focusedDate), position: 'insideTopRight', fill: 'var(--text-primary)', fontSize: 12 }} />}
 
             <Area
               dataKey="breadth_score"
@@ -412,7 +412,7 @@ export default function MarketBreadthChart({
       )}
 
       {/* ── Legend ── */}
-      {onDateFocus && <p className="text-[11px] text-muted mt-2">Oldest → latest on the right · Hover or tap to link the date with the heatmaps.</p>}
+      {onDateFocus && <p className="text-[12px] text-muted mt-2">Oldest → latest on the right · Hover or tap to link the date with the heatmaps.</p>}
       {!tooSmall && <p className="text-xs text-muted mt-3">{relative ? `Zone uses this index’s own history: ${(percentileRank! * 100).toFixed(0)}% of recorded scores were lower. Greed ≥70%; Fear ≤30%.${zoneMode==='provisional'?' Provisional: fewer than 252 readings.':''}` : 'Zone uses fixed breadth-score thresholds: Greed >55; Fear <35.'}</p>}
       {!tooSmall && r?.label.startsWith('Greed') && <p className="vani-evidence-caution text-xs mt-2">Greed is a caution context alongside flow strength, not a reversal signal.</p>}
       {!tooSmall && !relative && (
@@ -424,7 +424,7 @@ export default function MarketBreadthChart({
           ].map(({ color, label }) => (
             <div key={label} className="flex items-center gap-1.5">
               <span className={cn('w-2 h-2 rounded-full', researchMode ? 'bg-[var(--text-muted)]' : color)} />
-              <span className="text-[9px] text-muted">{label}</span>
+              <span className="text-[11px] text-muted">{label}</span>
             </div>
           ))}
         </div>

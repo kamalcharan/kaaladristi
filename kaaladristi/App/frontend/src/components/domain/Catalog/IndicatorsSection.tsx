@@ -36,7 +36,7 @@ function IndicatorPreview({ id, color }: { id: string; color: string }) {
         {/* SuperTrend — bull phase then bear flip */}
         <path d="M6,26 L70,18" stroke="#2dd4bf" strokeWidth={1.5} fill="none" strokeDasharray="none" />
         <path d="M70,18 L154,10" stroke="#f43f5e" strokeWidth={1.5} fill="none" />
-        <text x={70} y={8} fill="color-mix(in srgb, var(--text-primary) 25%, transparent)" fontSize={7} textAnchor="middle"
+        <text x={70} y={8} fill="color-mix(in srgb, var(--text-primary) 25%, transparent)" fontSize={10} textAnchor="middle"
           fontFamily="monospace">flip</text>
       </svg>
     )
@@ -56,7 +56,7 @@ function IndicatorPreview({ id, color }: { id: string; color: string }) {
         {/* S2 */}
         <line x1={0} y1={32} x2={160} y2={32} stroke={color} strokeWidth={0.5} strokeDasharray="4 4" opacity={0.4} />
         {/* PP label */}
-        <text x={4} y={16} fill={color} fontSize={6} fontFamily="monospace" opacity={0.7}>PP</text>
+        <text x={4} y={16} fill={color} fontSize={10} fontFamily="monospace" opacity={0.7}>PP</text>
         {/* Price candle */}
         <path d="M100,8 L140,28" stroke="color-mix(in srgb, var(--text-primary) 10%, transparent)" strokeWidth={6} strokeLinecap="round" />
       </svg>
@@ -84,7 +84,7 @@ function IndicatorPreview({ id, color }: { id: string; color: string }) {
         <path d={paths[id]} stroke={color} strokeWidth={1.5} fill="none" />
       )}
       {/* Chart label */}
-      <text x={4} y={34} fill="color-mix(in srgb, var(--text-primary) 18%, transparent)" fontSize={6} fontFamily="monospace">
+      <text x={4} y={34} fill="color-mix(in srgb, var(--text-primary) 18%, transparent)" fontSize={10} fontFamily="monospace">
         NIFTY 50 · 1Y
       </text>
     </svg>
@@ -218,7 +218,7 @@ export default function IndicatorsSection({ onSelect, compact }: IndicatorsSecti
           Pick a color before adding — you can change it anytime from the overlay strip.
         </p>
         <span style={{
-          fontSize: 11, fontFamily: 'var(--font-mono, monospace)',
+          fontSize: 12, fontFamily: 'var(--font-mono, monospace)',
           color: 'var(--bull)', display: 'inline-flex', alignItems: 'center', gap: 5,
         }}>
           <span style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--bull)', display: 'inline-block' }} />
@@ -282,7 +282,7 @@ export default function IndicatorsSection({ onSelect, compact }: IndicatorsSecti
                 <div style={{ display: 'flex', gap: 5, marginBottom: 8, flexWrap: 'wrap' }}>
                   {isChart && (
                     <span style={{
-                      fontSize: 9, fontFamily: 'var(--font-mono, monospace)',
+                      fontSize: 11, fontFamily: 'var(--font-mono, monospace)',
                       color: 'var(--text-muted)', letterSpacing: '0.08em',
                       textTransform: 'uppercase', background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)',
                       border: '1px solid var(--border)', padding: '1px 5px', borderRadius: 3,
@@ -291,7 +291,7 @@ export default function IndicatorsSection({ onSelect, compact }: IndicatorsSecti
                     </span>
                   )}
                   <span style={{
-                    fontSize: 9, fontFamily: 'var(--font-mono, monospace)',
+                    fontSize: 11, fontFamily: 'var(--font-mono, monospace)',
                     color: 'var(--text-muted)', letterSpacing: '0.08em',
                     textTransform: 'uppercase', background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)',
                     border: '1px solid var(--border)', padding: '1px 5px', borderRadius: 3,
@@ -303,7 +303,7 @@ export default function IndicatorsSection({ onSelect, compact }: IndicatorsSecti
                   <span
                     title="Applies to Study charts (the chart pages and your My Space chart). Pulse views are curated and not configurable."
                     style={{
-                      fontSize: 8.5, fontFamily: 'var(--font-mono, monospace)', fontWeight: 700,
+                      fontSize: 10, fontFamily: 'var(--font-mono, monospace)', fontWeight: 700,
                       color: 'var(--gold)', letterSpacing: '0.08em',
                       textTransform: 'uppercase', background: 'rgba(240,165,0,0.08)',
                       border: '1px solid rgba(240,165,0,0.25)', padding: '1px 5px', borderRadius: 3,
@@ -328,7 +328,7 @@ export default function IndicatorsSection({ onSelect, compact }: IndicatorsSecti
                 {/* VaNi one-liner */}
                 {item.vani_explanation && (
                   <p style={{
-                    fontSize: 11,
+                    fontSize: 12,
                     color: 'var(--text-secondary)',
                     lineHeight: 1.5,
                     marginBottom: 10,
@@ -361,7 +361,7 @@ export default function IndicatorsSection({ onSelect, compact }: IndicatorsSecti
                   {/* DB column badge */}
                   {item.db_column && (
                     <span style={{
-                      fontSize: 9, fontFamily: 'var(--font-mono, monospace)',
+                      fontSize: 11, fontFamily: 'var(--font-mono, monospace)',
                       color: 'var(--text-faint)', background: 'color-mix(in srgb, var(--text-primary) 3%, transparent)',
                       border: '1px solid var(--border)', padding: '1px 5px', borderRadius: 3,
                       flexShrink: 0,
@@ -382,7 +382,7 @@ export default function IndicatorsSection({ onSelect, compact }: IndicatorsSecti
                   {/* Add / Added */}
                   {active ? (
                     <span style={{
-                      fontSize: 11, fontFamily: 'var(--font-mono, monospace)',
+                      fontSize: 12, fontFamily: 'var(--font-mono, monospace)',
                       color: 'var(--bull)', marginLeft: 'auto',
                     }}>
                       ✓ added
@@ -392,7 +392,7 @@ export default function IndicatorsSection({ onSelect, compact }: IndicatorsSecti
                       onClick={e => handleAdd(item, e)}
                       style={{
                         marginLeft: 'auto',
-                        padding: '4px 12px', borderRadius: 5, fontSize: 11,
+                        padding: '4px 12px', borderRadius: 5, fontSize: 12,
                         cursor: 'pointer',
                         border: '1px solid color-mix(in srgb, var(--accent) 35%, transparent)',
                         background: 'color-mix(in srgb, var(--accent) 8%, transparent)',

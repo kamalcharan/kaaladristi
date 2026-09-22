@@ -30,12 +30,12 @@ export default function FactorCard({
           <Icon className="w-5 h-5 text-[var(--text-secondary)] group-hover:text-accent-indigo" />
         </div>
         <span className="font-mono text-xl font-bold text-[var(--text-primary)]">
-          {value}<span className="text-[10px] text-muted font-normal ml-1">/{max}</span>
+          {value}<span className="text-[12px] text-muted font-normal ml-1">/{max}</span>
         </span>
       </div>
 
       {/* Label */}
-      <p className="text-[11px] font-bold text-muted uppercase tracking-widest mb-3">
+      <p className="text-[12px] font-bold text-muted uppercase tracking-widest mb-3">
         {label} Weight
       </p>
 
@@ -46,7 +46,7 @@ export default function FactorCard({
       {details && details.length > 0 && (
         <div className="mt-4 flex flex-wrap gap-1.5">
           {details.map((d) => (
-            <span key={d} className="text-[9px] px-2 py-0.5 rounded bg-kd-elevated text-secondary border border-kd-border">
+            <span key={d} className="text-[11px] px-2 py-0.5 rounded bg-kd-elevated text-secondary border border-kd-border">
               {d}
             </span>
           ))}

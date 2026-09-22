@@ -177,7 +177,7 @@ function OHLCRow({ r }: { r: InferenceEvalRow }) {
   const close = r.final_return_pct  != null ? prev * (1 + n(r.final_return_pct)!  / 100) : null;
 
   return (
-    <div className="flex items-center gap-3 text-[10px] mono pt-1.5 mt-1.5 border-t border-kd-border">
+    <div className="flex items-center gap-3 text-[12px] mono pt-1.5 mt-1.5 border-t border-kd-border">
       <span className="text-[var(--text-muted)] uppercase tracking-wider font-bold">OHLC</span>
       <span className="text-[var(--text-secondary)]">
         O <span className="text-[var(--text-primary)]">{fmtPrice(prev, prev)}</span>
@@ -215,7 +215,7 @@ function OutcomeBadge({ result }: { result: InferenceEvalRow }) {
 
   return (
     <span className={cn(
-      'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[11px] font-semibold shrink-0',
+      'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[12px] font-semibold shrink-0',
       s.bg, s.text, s.border,
     )}>
       {s.label}
@@ -239,12 +239,12 @@ function OutcomeBadge({ result }: { result: InferenceEvalRow }) {
 // ── Impact Badge ──────────────────────────────────────────────────────────────
 
 function ImpactBadge({ impact }: { impact: string | null }) {
-  if (!impact) return <span className="text-[10px] text-[var(--text-muted)] italic">turning date</span>;
+  if (!impact) return <span className="text-[12px] text-[var(--text-muted)] italic">turning date</span>;
   const s = MARKET_STATUS_MAP.get(impact);
   const c = STATUS_COLOR_CLASSES[s?.color ?? 'slate'];
   return (
     <span className={cn(
-      'inline-flex items-center px-2 py-px rounded text-[9px] font-bold border uppercase tracking-wider',
+      'inline-flex items-center px-2 py-px rounded text-[11px] font-bold border uppercase tracking-wider',
       c.bg, c.text, c.border,
     )}>
       {s?.label ?? impact}
@@ -268,7 +268,7 @@ function EvalRow({ r, minor, major }: { r: InferenceEvalRow; minor: number; majo
           <p className="text-[13px] font-semibold text-[var(--text-primary)] truncate leading-tight">
             {r.astro_event}
           </p>
-          <p className="text-[10px] text-[var(--text-muted)] mono mt-0.5">
+          <p className="text-[12px] text-[var(--text-muted)] mono mt-0.5">
             {formatDateRange(r.start_date, r.end_date)}
           </p>
         </div>
@@ -276,17 +276,17 @@ function EvalRow({ r, minor, major }: { r: InferenceEvalRow; minor: number; majo
 
       {/* Row 2 — expected → achieved */}
       <div className="flex flex-wrap items-center gap-2 mt-2">
-        <span className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider font-bold">Expected</span>
+        <span className="text-[12px] text-[var(--text-muted)] uppercase tracking-wider font-bold">Expected</span>
         <ImpactBadge impact={r.market_impact} />
         <span className="text-[var(--text-muted)]">→</span>
-        <span className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider font-bold">Achieved</span>
+        <span className="text-[12px] text-[var(--text-muted)] uppercase tracking-wider font-bold">Achieved</span>
 
         {r.eval_status === 'pending' ? (
-          <span className="text-[10px] text-[var(--text-muted)] italic">starts {fmtDate(r.start_date)}</span>
+          <span className="text-[12px] text-[var(--text-muted)] italic">starts {fmtDate(r.start_date)}</span>
         ) : !hasPrice ? (
-          <span className="text-[10px] text-[var(--text-muted)] italic">no price data</span>
+          <span className="text-[12px] text-[var(--text-muted)] italic">no price data</span>
         ) : (
-          <div className="flex items-center gap-2 text-[10px] mono text-[var(--text-secondary)]">
+          <div className="flex items-center gap-2 text-[12px] mono text-[var(--text-secondary)]">
             <span>
               Close <span className={cn(
                 'font-semibold',
@@ -421,7 +421,7 @@ export default function RuleEvalView() {
 
   const selectCls = 'px-3 py-2 bg-kd-elevated border border-kd-border rounded-xl text-xs text-[var(--text-secondary)] focus:outline-none focus:border-accent-indigo/60 transition-colors';
   const inputCls  = 'w-20 px-3 py-2 bg-kd-elevated border border-kd-border rounded-xl text-xs text-[var(--text-primary)] text-center mono focus:outline-none focus:border-accent-indigo/60 transition-colors';
-  const labelCls  = 'block text-[10px] uppercase tracking-widest font-bold text-muted mb-1.5';
+  const labelCls  = 'block text-[12px] uppercase tracking-widest font-bold text-muted mb-1.5';
 
   const PERIOD_PILLS: [PeriodFilter, string][] = [
     ['all',   'All Time'],
@@ -496,7 +496,7 @@ export default function RuleEvalView() {
                       key={key}
                       onClick={() => { setPeriod(key); resetPage(); }}
                       className={cn(
-                        'px-3 py-1.5 rounded-lg border text-[11px] font-semibold transition-all',
+                        'px-3 py-1.5 rounded-lg border text-[12px] font-semibold transition-all',
                         period === key
                           ? 'bg-accent-indigo/20 text-accent-indigo border-accent-indigo/40'
                           : 'bg-kd-elevated text-[var(--text-secondary)] border-kd-border hover:border-kd-border-active hover:text-[var(--text-primary)]',
@@ -558,7 +558,7 @@ export default function RuleEvalView() {
               <button
                 onClick={() => { setFilterOutcome(''); resetPage(); }}
                 className={cn(
-                  'px-2.5 py-1 rounded-lg border text-[11px] font-semibold transition-all',
+                  'px-2.5 py-1 rounded-lg border text-[12px] font-semibold transition-all',
                   !filterOutcome
                     ? 'bg-accent-indigo/20 text-accent-indigo border-accent-indigo/40'
                     : 'bg-kd-elevated text-[var(--text-secondary)] border-kd-border hover:border-kd-border-active',
@@ -574,7 +574,7 @@ export default function RuleEvalView() {
                     key={key}
                     onClick={() => { setFilterOutcome(f => f === key ? '' : key); resetPage(); }}
                     className={cn(
-                      'px-2.5 py-1 rounded-lg border text-[11px] font-semibold transition-all',
+                      'px-2.5 py-1 rounded-lg border text-[12px] font-semibold transition-all',
                       filterOutcome === key ? cls : 'bg-kd-elevated text-[var(--text-muted)] border-kd-border hover:border-kd-border-active',
                     )}
                   >
@@ -601,7 +601,7 @@ export default function RuleEvalView() {
             <p className="text-sm text-muted max-w-sm">
               {error instanceof Error ? error.message : 'Unknown error'}
             </p>
-            <p className="text-[11px] text-muted mono">
+            <p className="text-[12px] text-muted mono">
               Run: <span className="text-[var(--text-secondary)]">python3 backend/apply_migration_017.py</span>
             </p>
           </div>
@@ -625,14 +625,14 @@ export default function RuleEvalView() {
             {/* Pagination */}
             {totalPages > 1 && (
               <div className="flex items-center justify-between mt-4">
-                <span className="text-[11px] text-[var(--text-muted)] mono">
+                <span className="text-[12px] text-[var(--text-muted)] mono">
                   {(safePage - 1) * PAGE_SIZE + 1}–{Math.min(safePage * PAGE_SIZE, sorted.length)} of {sorted.length}
                 </span>
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => setPage(1)}
                     disabled={safePage <= 1}
-                    className="px-2.5 py-1.5 text-[11px] border border-kd-border rounded-lg text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-kd-border-active disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                    className="px-2.5 py-1.5 text-[12px] border border-kd-border rounded-lg text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-kd-border-active disabled:opacity-30 disabled:cursor-not-allowed transition-all"
                   >
                     First
                   </button>
@@ -656,7 +656,7 @@ export default function RuleEvalView() {
                   <button
                     onClick={() => setPage(totalPages)}
                     disabled={safePage >= totalPages}
-                    className="px-2.5 py-1.5 text-[11px] border border-kd-border rounded-lg text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-kd-border-active disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                    className="px-2.5 py-1.5 text-[12px] border border-kd-border rounded-lg text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-kd-border-active disabled:opacity-30 disabled:cursor-not-allowed transition-all"
                   >
                     Last
                   </button>
@@ -667,7 +667,7 @@ export default function RuleEvalView() {
         )}
 
         {allRows.length > 0 && !isLoading && (
-          <p className="text-[10px] text-muted mt-3 text-right mono">
+          <p className="text-[12px] text-muted mt-3 text-right mono">
             {allRows.length} total · {index} · minor {minor}% · major {major}%
           </p>
         )}

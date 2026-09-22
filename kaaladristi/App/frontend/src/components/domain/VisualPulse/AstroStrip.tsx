@@ -135,7 +135,7 @@ export default function AstroStrip({ dcInferences, activeDate }: AstroStripProps
         marginBottom: 6,
       }}>
         <span style={{
-          fontSize: 8, fontFamily: 'var(--font-mono, monospace)',
+          fontSize: 10, fontFamily: 'var(--font-mono, monospace)',
           textTransform: 'uppercase', letterSpacing: 2, color: 'var(--text-muted)',
         }}>
           Astro Energy &middot; 7-Day Window
@@ -149,7 +149,7 @@ export default function AstroStrip({ dcInferences, activeDate }: AstroStripProps
           ].map((item) => (
             <span key={item.label} style={{
               display: 'flex', alignItems: 'center', gap: 3,
-              fontSize: 7, fontFamily: 'var(--font-mono, monospace)', color: 'var(--text-muted)',
+              fontSize: 10, fontFamily: 'var(--font-mono, monospace)', color: 'var(--text-muted)',
             }}>
               <span style={{
                 width: 6, height: 6, borderRadius: '50%', background: item.color,
@@ -191,7 +191,7 @@ export default function AstroStrip({ dcInferences, activeDate }: AstroStripProps
             >
               {/* Day number */}
               <span style={{
-                fontSize: 10, fontFamily: 'var(--font-mono, monospace)',
+                fontSize: 12, fontFamily: 'var(--font-mono, monospace)',
                 fontWeight: isActive ? 700 : 400,
                 color: isActive ? 'var(--accent-gold)' : 'var(--text-primary)',
               }}>
@@ -214,7 +214,7 @@ export default function AstroStrip({ dcInferences, activeDate }: AstroStripProps
               {isToday && (
                 <span style={{
                   position: 'absolute', top: -10,
-                  fontSize: 6, fontFamily: 'var(--font-mono, monospace)',
+                  fontSize: 10, fontFamily: 'var(--font-mono, monospace)',
                   color: 'var(--accent-gold)', letterSpacing: 1,
                   textTransform: 'uppercase',
                 }}>TODAY</span>
@@ -224,7 +224,7 @@ export default function AstroStrip({ dcInferences, activeDate }: AstroStripProps
               {day.score !== 0 && (
                 <span style={{
                   position: 'absolute', bottom: -10,
-                  fontSize: 7, fontFamily: 'var(--font-mono, monospace)',
+                  fontSize: 10, fontFamily: 'var(--font-mono, monospace)',
                   color: day.score > 0 ? 'var(--bull)' : 'var(--bear)',
                 }}>
                   {day.score > 0 ? '+' : ''}{day.score}
@@ -243,7 +243,7 @@ export default function AstroStrip({ dcInferences, activeDate }: AstroStripProps
         {days.map((day) => (
           <span key={day.dateStr} style={{
             textAlign: 'center',
-            fontSize: 7, fontFamily: 'var(--font-mono, monospace)', color: 'var(--text-muted)',
+            fontSize: 10, fontFamily: 'var(--font-mono, monospace)', color: 'var(--text-muted)',
           }}>
             {formatDayLabel(day.dateStr)}
           </span>
@@ -262,7 +262,7 @@ export default function AstroStrip({ dcInferences, activeDate }: AstroStripProps
           background: 'var(--kd-surface)',
           border: '1px solid var(--kd-border)',
           boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
-          fontSize: 9,
+          fontSize: 11,
           color: 'var(--text-secondary)',
           lineHeight: 1.6,
           maxWidth: 260,
@@ -278,7 +278,7 @@ export default function AstroStrip({ dcInferences, activeDate }: AstroStripProps
             }}>{tooltip.dateStr}</span>
             <span style={{
               fontFamily: 'var(--font-mono, monospace)', fontWeight: 600,
-              fontSize: 10,
+              fontSize: 12,
               color: tooltip.score > 0 ? 'var(--bull)' : tooltip.score < 0 ? 'var(--bear)' : 'var(--text-muted)',
             }}>
               Score: {tooltip.score > 0 ? '+' : ''}{tooltip.score}
@@ -299,7 +299,7 @@ export default function AstroStrip({ dcInferences, activeDate }: AstroStripProps
                   color: IMPACT_COLORS[ev.market_impact ?? 'neutral'],
                   fontWeight: 600,
                 }}>{ev.astro_event}</div>
-                <div style={{ color: 'var(--text-muted)', fontSize: 8 }}>
+                <div style={{ color: 'var(--text-muted)', fontSize: 10 }}>
                   {ev.start_date}{ev.end_date && ev.end_date !== ev.start_date ? ` → ${ev.end_date}` : ''}
                   {' · '}
                   <span style={{
@@ -310,7 +310,7 @@ export default function AstroStrip({ dcInferences, activeDate }: AstroStripProps
                 {ev.inference && (
                   <div style={{
                     color: 'var(--accent-gold)', fontStyle: 'italic', marginTop: 2,
-                    fontSize: 9,
+                    fontSize: 11,
                   }}>"{ev.inference}"</div>
                 )}
               </div>

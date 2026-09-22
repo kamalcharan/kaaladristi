@@ -126,7 +126,7 @@ function CurrentSectorCompanion() {
     {!listingFollowup && !loading && !issue && reading.data?.log_id && <VaNiFeedback analyticsContext={analyticsContext} key={reading.data.log_id} logId={reading.data.log_id} />}
     {!!indexId && evidence.data && <details data-vani-detail="evidence"><summary className="cursor-pointer text-sm">Inspect the evidence</summary>
       {indexId && <div className="h-44 mt-3" role="img" aria-label="Selected index Flow 5D and Flow 22D history"><ResponsiveContainer width="100%" height="100%"><LineChart data={evidence.data.history}>
-        <XAxis dataKey="trade_date" tickFormatter={sectorSessionDate} tick={{ fontSize: 9 }} minTickGap={40} /><YAxis width={35} tick={{fontSize:9}} />
+        <XAxis dataKey="trade_date" tickFormatter={sectorSessionDate} tick={{ fontSize: 11 }} minTickGap={40} /><YAxis width={35} tick={{fontSize:11}} />
         <Tooltip labelFormatter={v => sectorSessionDate(String(v))} contentStyle={{ background:'var(--card)',borderColor:'var(--border)' }} />
         <Line dataKey="score_5d" name="Flow 5D" stroke="var(--accent)" dot={false}/><Line dataKey="score_22d" name="Flow 22D" stroke="var(--text-primary)" strokeDasharray="4 3" dot={false}/>
       </LineChart></ResponsiveContainer></div>}

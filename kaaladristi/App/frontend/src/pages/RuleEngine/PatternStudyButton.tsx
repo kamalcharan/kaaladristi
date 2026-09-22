@@ -84,15 +84,15 @@ export default function PatternStudyButton() {
           : 'Run Pattern Study'}
       </button>
       {running && status?.current_bench && (
-        <span className="text-[10px] font-mono text-muted">{status.current_bench}</span>
+        <span className="text-[12px] font-mono text-muted">{status.current_bench}</span>
       )}
       {!running && (startError ?? status?.error) && (
-        <span className="text-[10px] font-mono text-risk-red/80">
+        <span className="text-[12px] font-mono text-risk-red/80">
           {startError ?? status?.error}
         </span>
       )}
       {!running && !startError && !status?.error && status?.table?.last_computed_at && (
-        <span className="text-[10px] font-mono text-muted">
+        <span className="text-[12px] font-mono text-muted">
           {status.table.rows.toLocaleString()} rows · last {status.table.last_computed_at.slice(0, 10)}
         </span>
       )}

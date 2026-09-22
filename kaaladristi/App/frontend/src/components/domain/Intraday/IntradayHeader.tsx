@@ -36,7 +36,7 @@ interface PillProps { label: string; active: boolean; activeColor: string; }
 function Pill({ label, active, activeColor }: PillProps) {
   return (
     <span style={{
-      fontFamily: 'var(--font-mono, monospace)', fontSize: 9,
+      fontFamily: 'var(--font-mono, monospace)', fontSize: 11,
       padding: '2px 7px', borderRadius: 3,
       letterSpacing: '0.08em', fontWeight: 700,
       background: active ? `color-mix(in srgb, ${activeColor} 13%, transparent)` : 'transparent',
@@ -81,7 +81,7 @@ export default function IntradayHeader({
         }}>
           {lastClose.toLocaleString('en-IN')}
           {pctChng !== null && (
-            <span style={{ marginLeft: 6, fontSize: 11 }}>
+            <span style={{ marginLeft: 6, fontSize: 12 }}>
               {pctChng >= 0 ? '+' : ''}{pctChng.toFixed(2)}%
             </span>
           )}
@@ -90,13 +90,13 @@ export default function IntradayHeader({
 
       {/* Trade date */}
       <span style={{
-        fontFamily: 'var(--font-mono, monospace)', fontSize: 11,
+        fontFamily: 'var(--font-mono, monospace)', fontSize: 12,
         color: 'var(--text-muted)',
       }}>{formatDateLabel(tradeDate)}</span>
 
       {/* EOD badge */}
       <span style={{
-        fontFamily: 'var(--font-mono, monospace)', fontSize: 9,
+        fontFamily: 'var(--font-mono, monospace)', fontSize: 11,
         padding: '2px 6px', borderRadius: 3,
         border: '1px solid var(--kd-border)', color: 'var(--text-faint)',
         letterSpacing: '0.08em',
@@ -115,7 +115,7 @@ export default function IntradayHeader({
       {/* Holiday badge */}
       {isHoliday && (
         <span style={{
-          fontFamily: 'var(--font-mono, monospace)', fontSize: 10,
+          fontFamily: 'var(--font-mono, monospace)', fontSize: 12,
           padding: '2px 8px', borderRadius: 3,
           background: 'var(--caution-bg)',
           color: 'var(--risk-amber)',

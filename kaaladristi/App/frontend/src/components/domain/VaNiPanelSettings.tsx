@@ -35,7 +35,7 @@ export default function VaNiPanelSettings() {
               style={{
                 flex: 1, padding: '7px 0', borderRadius: 8,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 11, fontFamily: 'inherit', cursor: 'pointer',
+                fontSize: 12, fontFamily: 'inherit', cursor: 'pointer',
                 background: isActive ? 'color-mix(in srgb, var(--accent) 8%, transparent)' : 'transparent',
                 border: `1px solid ${isActive ? 'color-mix(in srgb, var(--accent) 25%, transparent)' : 'var(--border)'}`,
                 color: isActive ? 'var(--text-primary)' : 'var(--text-muted)',
@@ -48,7 +48,7 @@ export default function VaNiPanelSettings() {
         })}
       </div>
 
-      <p style={{ fontSize: 10, color: 'var(--text-faint)', margin: '2px 0 0', lineHeight: 1.5 }}>
+      <p style={{ fontSize: 12, color: 'var(--text-faint)', margin: '2px 0 0', lineHeight: 1.5 }}>
         {VANI_PANEL_MODES.find(option => option.id === mode)?.hint}
       </p>
     </div>

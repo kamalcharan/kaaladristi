@@ -39,7 +39,7 @@ export default function ActsOnPicker({ data, value, onPick }: {
             <div>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                 <span style={{ fontSize: 14, fontWeight: 600, color: active ? 'var(--accent)' : 'var(--text-primary)' }}>{opt.label}</span>
-                <span style={{ fontFamily: MONO, fontSize: 10, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{presetName}</span>
+                <span style={{ fontFamily: MONO, fontSize: 12, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{presetName}</span>
               </div>
               <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 3, lineHeight: 1.45 }}>{opt.hint}</div>
             </div>
@@ -48,7 +48,7 @@ export default function ActsOnPicker({ data, value, onPick }: {
                 <StudioCard stacked stock={stock} descriptor={descriptor} onClick={() => onPick(k, stock)} />
               </div>
             ) : (
-              <div style={{ fontFamily: MONO, fontSize: 11, color: 'var(--text-muted)', padding: '10px 0' }}>
+              <div style={{ fontFamily: MONO, fontSize: 12, color: 'var(--text-muted)', padding: '10px 0' }}>
                 {data.loading && !data.failed[k] ? 'Reading today\'s market…' : 'No live setup today — pick by description.'}
               </div>
             )}

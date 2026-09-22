@@ -33,7 +33,7 @@ export default function MiniBarChart({
               title={`${val}`}
             />
             {labels && labels[i] && (
-              <span className="text-[7px] text-muted font-mono uppercase">{labels[i]}</span>
+              <span className="text-[10px] text-muted font-mono uppercase">{labels[i]}</span>
             )}
           </div>
         );

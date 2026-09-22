@@ -36,7 +36,7 @@ interface LatestRow {
 function CardShell({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="glass-card rounded-xl px-4 py-3 min-w-0">
-      <div className="text-[9px] font-mono font-bold uppercase tracking-widest text-muted mb-2">
+      <div className="text-[11px] font-mono font-bold uppercase tracking-widest text-muted mb-2">
         {title}
       </div>
       {children}
@@ -46,7 +46,7 @@ function CardShell({ title, children }: { title: string; children: React.ReactNo
 
 function Row({ label, value, valueClass }: { label: string; value: string; valueClass?: string }) {
   return (
-    <div className="flex items-baseline justify-between gap-3 text-[11px] leading-relaxed">
+    <div className="flex items-baseline justify-between gap-3 text-[12px] leading-relaxed">
       <span className="text-muted">{label}</span>
       <span className={cn('font-mono font-semibold', valueClass ?? 'text-[var(--text-secondary)]')}>{value}</span>
     </div>
@@ -91,9 +91,9 @@ export default function StatStrip({
           <span className={cn('text-lg font-mono font-bold', scoreTone(s5))}>
             {s5 != null ? Math.round(s5) : '—'}
           </span>
-          <span className="text-[10px] text-muted">Flow 5D</span>
+          <span className="text-[12px] text-muted">Flow 5D</span>
           {s5 != null && s22 != null && (
-            <span className={cn('ml-auto text-[9px] font-mono font-bold px-1.5 py-0.5 rounded',
+            <span className={cn('ml-auto text-[11px] font-mono font-bold px-1.5 py-0.5 rounded',
               s5 >= s22 ? 'text-risk-green bg-risk-green/10' : 'text-risk-amber bg-risk-amber/10')}>
               {s5 >= s22 ? 'Accelerating' : 'Fading'}
             </span>
@@ -115,9 +115,9 @@ export default function StatStrip({
           <span className="text-lg font-mono font-bold text-[var(--text-primary)]">
             {rsi != null ? rsi.toFixed(0) : '—'}
           </span>
-          <span className="text-[10px] text-muted">RSI (14)</span>
+          <span className="text-[12px] text-muted">RSI (14)</span>
           {rsiTone && (
-            <span className={cn('ml-auto text-[9px] font-mono font-bold px-1.5 py-0.5 rounded', rsiToneClass)}>
+            <span className={cn('ml-auto text-[11px] font-mono font-bold px-1.5 py-0.5 rounded', rsiToneClass)}>
               {rsiTone}
             </span>
           )}

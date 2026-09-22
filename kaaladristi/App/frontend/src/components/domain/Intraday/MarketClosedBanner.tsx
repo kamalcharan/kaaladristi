@@ -24,7 +24,7 @@ export default function MarketClosedBanner({ fallbackDate }: MarketClosedBannerP
       padding: '6px 16px',
       background: 'var(--caution-bg)',
       borderBottom: '1px solid var(--risk-amber, rgba(245,158,11,0.40))',
-      fontFamily: 'var(--font-mono, monospace)', fontSize: 11,
+      fontFamily: 'var(--font-mono, monospace)', fontSize: 12,
       color: 'var(--risk-amber)', letterSpacing: '0.04em',
     }}>
       ⊘ Market non-working — showing data for {formatLong(fallbackDate)}

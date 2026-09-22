@@ -69,14 +69,14 @@ export default function CockpitOverlayStrip({ onAdd }: { onAdd: () => void }) {
               className="w-2.5 h-2.5 rounded-full shrink-0 cursor-pointer border-0 p-0"
               style={{ background: color }}
             />
-            <span style={{ ...MONO }} className="text-[10px] font-semibold text-[var(--text-secondary)] whitespace-nowrap">
+            <span style={{ ...MONO }} className="text-[12px] font-semibold text-[var(--text-secondary)] whitespace-nowrap">
               {labelOf(first)}
               {isGroup && <span className="text-muted"> · {members.length}</span>}
             </span>
             <button
               title={isGroup ? 'Remove all rules in this group' : 'Remove overlay'}
               onClick={() => members.forEach((o) => removeOverlay(o.catalog_item_id))}
-              className="text-[10px] text-muted hover:text-[var(--text-primary)] px-1 cursor-pointer bg-transparent border-0"
+              className="text-[12px] text-muted hover:text-[var(--text-primary)] px-1 cursor-pointer bg-transparent border-0"
             >
               ×
             </button>
@@ -86,7 +86,7 @@ export default function CockpitOverlayStrip({ onAdd }: { onAdd: () => void }) {
 
       <button
         onClick={onAdd}
-        className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold text-accent-indigo bg-accent-indigo/10 border border-accent-indigo/30 hover:bg-accent-indigo/20 transition-all"
+        className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[12px] font-bold text-accent-indigo bg-accent-indigo/10 border border-accent-indigo/30 hover:bg-accent-indigo/20 transition-all"
         style={MONO}
       >
         + Overlay

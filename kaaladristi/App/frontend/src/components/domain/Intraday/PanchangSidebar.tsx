@@ -68,7 +68,7 @@ export default function PanchangSidebar({ panchang }: Props) {
       <div style={{
         border: '1px dashed var(--kd-border)', borderRadius: 4,
         padding: '10px 12px',
-        fontFamily: 'var(--font-mono, monospace)', fontSize: 10,
+        fontFamily: 'var(--font-mono, monospace)', fontSize: 12,
         color: 'var(--text-faint)',
       }}>Panchang loading…</div>
     );
@@ -88,7 +88,7 @@ export default function PanchangSidebar({ panchang }: Props) {
       background: 'var(--panel-recess)',
     }}>
       <div style={{
-        fontFamily: 'var(--font-mono, monospace)', fontSize: 9,
+        fontFamily: 'var(--font-mono, monospace)', fontSize: 11,
         color: 'var(--text-faint)', letterSpacing: '0.12em',
         textTransform: 'uppercase', marginBottom: 6,
       }}>Panchang</div>
@@ -98,7 +98,7 @@ export default function PanchangSidebar({ panchang }: Props) {
           display: 'flex', justifyContent: 'space-between',
           padding: '3px 0',
           borderBottom: i < rows.length - 1 ? '1px solid color-mix(in srgb, var(--text-primary) 4%, transparent)' : 'none',
-          fontFamily: 'var(--font-mono, monospace)', fontSize: 10,
+          fontFamily: 'var(--font-mono, monospace)', fontSize: 12,
         }}>
           <span style={{ color: 'var(--text-faint)' }}>{r.label}</span>
           <span style={{
@@ -116,7 +116,7 @@ export default function PanchangSidebar({ panchang }: Props) {
         }}>
           {specials.map(s => (
             <span key={s} style={{
-              fontSize: 9, padding: '1px 6px', borderRadius: 2,
+              fontSize: 11, padding: '1px 6px', borderRadius: 2,
               fontFamily: 'var(--font-mono, monospace)', fontWeight: 700,
               background: 'var(--gold-bg)',
               color: 'var(--gold)',

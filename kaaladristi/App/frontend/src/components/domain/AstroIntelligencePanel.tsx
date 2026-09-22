@@ -12,7 +12,7 @@ export default function AstroIntelligencePanel({ date }: AstroIntelligencePanelP
       {/* Header */}
       <div className="flex items-center justify-between">
         <h3 className="text-[13px] font-bold text-[var(--text-primary)]">Astro Intelligence</h3>
-        <span className="text-[10px] text-muted">Planetary · Transits · Outlook</span>
+        <span className="text-[12px] text-muted">Planetary · Transits · Outlook</span>
       </div>
 
       {/* Layer 1 — Major transits (> 30 days): full progress banner */}

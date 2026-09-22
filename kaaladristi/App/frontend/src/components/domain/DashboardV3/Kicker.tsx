@@ -30,7 +30,7 @@ export default function Kicker({ label, tag, tier = 'info', className = '' }: Ki
       className={`flex items-center gap-2 ${className}`}
       style={{
         fontFamily: 'var(--font-mono)',
-        fontSize: 10,
+        fontSize: 12,
         color,
         letterSpacing: '0.14em',
         textTransform: 'uppercase',

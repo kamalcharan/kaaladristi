@@ -21,6 +21,15 @@
 //   4. LITERAL-COUNT RATCHET — the repo-wide hex/rgba literal count may only
 //      go DOWN. Baseline lives in scripts/theme-baseline.json; when you
 //      remove literals, re-run with --update-baseline to lower the floor.
+//   5. TYPE-SIZE FLOOR — no `text-[Npx]` AND no numeric `fontSize` below
+//      10px anywhere in src/.
+//      On 2026-09-22 the owner reported text was hard to read; raising the
+//      contrast tokens helped ("better but not sufficient") and the remaining
+//      cause was raw size: 535 usages sat at 7-10px, 351 of them at 10px.
+//      The scale was bumped (7/8/8.5 -> 10, 9/9.5 -> 11, 10/11 -> 12) and this
+//      gate keeps the floor. 10px survives only for uppercase micro-badges,
+//      which carry tracking and weight; anything smaller is unreadable at
+//      arm's length regardless of how much contrast it has.
 //
 // MONITORING (reported, not gated): calc(100vh usages — the existing hits are
 // legitimate scroll-bound max-heights, not the §5.3 .page anti-pattern.
@@ -196,7 +205,34 @@ if (!existsSync(BASELINE_PATH) || UPDATE_BASELINE) {
   }
 }
 
-// ── 5. Monitoring: calc(100vh ──
+// ── 5. Type-size floor ──
+// Arbitrary Tailwind sizes only; named utilities (text-xs = 12px) are already
+// above the floor. Sub-pixel values like text-[9.5px] are caught too.
+// BOTH FORMS, or the gate guards half the surface. The 2026-09-22 pass found
+// 719 sub-floor Tailwind classes AND 708 sub-floor numeric `fontSize` props —
+// the inline ones were the larger half and included the chart reference labels
+// the owner actually circled. A class-only check would have passed the day the
+// complaint was filed.
+const TYPE_FLOOR_PX = 10;
+const tooSmall = (v) => Number(v) < TYPE_FLOOR_PX;
+const sizeHits = [
+  ...grep('text-\\[[0-9.]+px\\]', 'src')
+    .map(line => { const m = line.match(/text-\[([0-9.]+)px\]/); return m && tooSmall(m[1]) ? line : null; }),
+  ...grep('fontSize:\\s*[0-9]', 'src')
+    .map(line => { const m = line.match(/fontSize:\s*([0-9]+(?:\.[0-9]+)?)(?![\d.])/); return m && tooSmall(m[1]) ? line : null; }),
+  ...grep('fontSize=\\{[0-9]', 'src')
+    .map(line => { const m = line.match(/fontSize=\{([0-9]+(?:\.[0-9]+)?)(?![\d.])/); return m && tooSmall(m[1]) ? line : null; }),
+].filter(Boolean);
+if (sizeHits.length > 0) {
+  failed = true;
+  console.error(`\n✗ Type-size floor: ${sizeHits.length} usage(s) below ${TYPE_FLOOR_PX}px (class or fontSize prop).`);
+  console.error('  Raising contrast cannot rescue text this small — use 10px (uppercase badges) or 11px+.');
+  sizeHits.slice(0, 15).forEach(line => console.error(`  ${line}`));
+} else {
+  console.log(`✓ Type-size floor: no text-[Npx] or fontSize below ${TYPE_FLOOR_PX}px in src/.`);
+}
+
+// ── 6. Monitoring: calc(100vh ──
 const vhHits = grep('calc\\(100vh', 'src');
 if (vhHits.length > 0) {
   console.log(`\nℹ ${vhHits.length} calc(100vh usage(s) — verify each is a scroll-bound max-height, not a .page min-height (§5.3):`);

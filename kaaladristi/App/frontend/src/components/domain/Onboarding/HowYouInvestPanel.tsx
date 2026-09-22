@@ -72,7 +72,7 @@ export default function HowYouInvestPanel({ rerun = false }: { rerun?: boolean }
           {CONCEDE_LEVEL_IDS.map(k => (
             <Chip key={k} active={answers.concede_level === k} onClick={() => patch({ concede_level: k })}>
               {CONCEDE_LEVEL_OPTIONS[k].label}
-              <span style={{ fontFamily: MONO, fontSize: 11, marginLeft: 8, opacity: .8 }}>{CONCEDE_LEVEL_OPTIONS[k].line}</span>
+              <span style={{ fontFamily: MONO, fontSize: 12, marginLeft: 8, opacity: .8 }}>{CONCEDE_LEVEL_OPTIONS[k].line}</span>
             </Chip>
           ))}
         </div>
@@ -88,7 +88,7 @@ export default function HowYouInvestPanel({ rerun = false }: { rerun?: boolean }
 
       <div style={{ padding: '12px 14px', borderRadius: 12, background: 'var(--card)', border: '1px solid var(--border)',
         display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-        <span style={{ fontFamily: MONO, fontSize: 11, color: 'var(--text-muted)' }}>How to use DristiQ · {walked} of {total} walks done</span>
+        <span style={{ fontFamily: MONO, fontSize: 12, color: 'var(--text-muted)' }}>How to use DristiQ · {walked} of {total} walks done</span>
         <button type="button" disabled={dirty || saving} onClick={() => navigate('/guide')}
           style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 12, color: 'var(--accent)', fontFamily: 'inherit' }}>
           {dirty ? 'Save preferences to open your updated guide' : 'Open the guide →'}

@@ -183,12 +183,12 @@ export default function PlanetRegimeStrip() {
           paddingRight: 10, borderRight: '1px solid var(--border)', flexShrink: 0,
         }}>
           <span style={{
-            fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.18em',
+            fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.18em',
             textTransform: 'uppercase', color: 'var(--gold)',
           }}>
             Sky Regime
           </span>
-          <span style={{ fontSize: 9, color: 'var(--text-faint)', marginTop: 2 }}>
+          <span style={{ fontSize: 11, color: 'var(--text-faint)', marginTop: 2 }}>
             structure · trend · momentum · signal
           </span>
         </div>
@@ -212,35 +212,35 @@ export default function PlanetRegimeStrip() {
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
                 <span style={{ fontSize: 13, color: 'var(--gold)' }}>{GLYPHS[c.planet]}</span>
                 <span style={{
-                  fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 700,
+                  fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 700,
                   color: 'var(--text-primary)',
                 }}>
                   {c.planet}
                 </span>
                 <span style={{
-                  fontFamily: 'var(--font-mono)', fontSize: 8, letterSpacing: '0.1em',
+                  fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.1em',
                   textTransform: 'uppercase', color: 'var(--text-faint)', marginLeft: 'auto',
                 }}>
                   {ROLES[c.planet]}
                 </span>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 3, flexWrap: 'wrap' }}>
-                <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
+                <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
                   {c.sign ?? '—'}
                 </span>
                 {dig && (
-                  <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: dig.color }}>
+                  <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: dig.color }}>
                     {dig.label}
                   </span>
                 )}
                 {c.retro ? (
                   <span style={{
-                    fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--risk-amber)',
+                    fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--risk-amber)',
                   }}>
                     ◉ retro{c.motionDaysLeft != null ? ` · ${c.motionDaysLeft}d left` : ''}
                   </span>
                 ) : (
-                  <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-faint)' }}>
+                  <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-faint)' }}>
                     direct
                   </span>
                 )}
@@ -257,7 +257,7 @@ export default function PlanetRegimeStrip() {
           marginTop: 8, paddingTop: 8, borderTop: '1px solid var(--border)',
         }}>
           <span style={{
-            fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.14em',
+            fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.14em',
             textTransform: 'uppercase', color: 'var(--text-faint)', flexShrink: 0,
           }}>
             Coming up
@@ -275,7 +275,7 @@ export default function PlanetRegimeStrip() {
               style={{
                 background: 'transparent', border: '1px solid var(--border)',
                 borderRadius: 100, padding: '2px 9px', cursor: 'pointer',
-                fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-secondary)',
+                fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-secondary)',
               }}
             >
               <span style={{ color: 'var(--gold)' }}>in {u.days}d</span> · {u.label}

@@ -54,7 +54,7 @@ function SummaryCards({ status }: { status: DiscoveryStatus | undefined }) {
           <span className={cn('text-2xl font-semibold tabular-nums', color)}>
             {value == null ? '—' : (fmt ? fmt(value) : value)}
           </span>
-          <span className="text-[11px] text-muted font-mono">{label}</span>
+          <span className="text-[12px] text-muted font-mono">{label}</span>
         </div>
       ))}
     </div>
@@ -174,7 +174,7 @@ function LastRunSummary({ status }: { status: DiscoveryStatus }) {
         ].map(({ label, value, red }) => (
           <div key={label}>
             <p className={cn('text-sm font-semibold tabular-nums', red ? 'text-risk-red/80' : 'text-secondary')}>{value}</p>
-            <p className="text-[10px] text-muted font-mono">{label}</p>
+            <p className="text-[12px] text-muted font-mono">{label}</p>
           </div>
         ))}
       </div>
@@ -196,10 +196,10 @@ function ErrorList({ errors }: { errors: DiscoveryStatus['errors'] }) {
       <div className="max-h-48 overflow-y-auto rounded-xl border border-risk-red/20 bg-risk-red/5 divide-y divide-risk-red/10">
         {errors.map((e, i) => (
           <div key={i} className="px-3 py-2 flex items-start gap-2">
-            <span className="font-mono text-[11px] text-risk-red/80 shrink-0 mt-0.5">
+            <span className="font-mono text-[12px] text-risk-red/80 shrink-0 mt-0.5">
               {e.rule_code}
             </span>
-            <span className="text-[11px] text-muted leading-snug">{e.error}</span>
+            <span className="text-[12px] text-muted leading-snug">{e.error}</span>
           </div>
         ))}
       </div>
@@ -228,7 +228,7 @@ function DiagnosticResult({ data }: { data: Record<string, unknown> }) {
         Diagnosis: {verdict.replace(/_/g, ' ')}
       </p>
       {rows.map(r => (
-        <div key={r.label} className="flex gap-3 text-[11px] font-mono">
+        <div key={r.label} className="flex gap-3 text-[12px] font-mono">
           <span className="w-24 text-muted shrink-0">{r.label}</span>
           <span className={r.bad ? 'text-risk-red/80' : 'text-secondary'}>{r.value}</span>
         </div>

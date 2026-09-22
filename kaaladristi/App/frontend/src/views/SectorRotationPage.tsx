@@ -42,7 +42,7 @@ function pctColor(v: number | null | undefined): string {
 function DayToggle({ days, onChange }: { days: 5 | 22 | 66; onChange: (d: 5 | 22 | 66) => void }) {
   const btnStyle = (active: boolean): React.CSSProperties => ({
     ...MONO,
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: active ? 600 : 400,
     color: active ? 'var(--text-primary)' : 'var(--text-muted)',
     background: active ? 'color-mix(in srgb, var(--text-primary) 8%, transparent)' : 'transparent',
@@ -64,7 +64,7 @@ function DayToggle({ days, onChange }: { days: 5 | 22 | 66; onChange: (d: 5 | 22
           {d}
         </button>
       ))}
-      <span style={{ ...MONO, fontSize: 9, color: 'var(--text-faint)', letterSpacing: '0.05em', textTransform: 'uppercase', marginLeft: 4 }}>
+      <span style={{ ...MONO, fontSize: 11, color: 'var(--text-faint)', letterSpacing: '0.05em', textTransform: 'uppercase', marginLeft: 4 }}>
         sessions
       </span>
     </div>
@@ -201,7 +201,7 @@ function TabContent({ tab, view, forDate, heatDays }: {
           ] as const).map(({ color, label, desc }) => (
             <span key={label} style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
               <span style={{ width: 10, height: 10, borderRadius: 2, background: color, flexShrink: 0 }} />
-              <span style={{ ...MONO, fontSize: 10, color: 'var(--text-muted)' }}>
+              <span style={{ ...MONO, fontSize: 12, color: 'var(--text-muted)' }}>
                 <strong style={{ color: 'var(--text-secondary)', fontWeight: 500 }}>{label}</strong>
                 {' '}— {desc}
               </span>
@@ -263,7 +263,7 @@ function DatePicker({
       onChange={(e) => onChange(e.target.value)}
       style={{
         ...MONO,
-        fontSize: 11,
+        fontSize: 12,
         color: 'var(--text-secondary)',
         background: 'var(--card)',
         border: '1px solid var(--border)',
@@ -286,7 +286,7 @@ function ViewToggle({ view, onChange }: { view: ViewMode; onChange: (v: ViewMode
     alignItems: 'center',
     gap: 5,
     ...MONO,
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: active ? 600 : 400,
     color: active ? 'var(--text-primary)' : 'var(--text-muted)',
     background: active ? 'color-mix(in srgb, var(--text-primary) 8%, transparent)' : 'transparent',

@@ -124,7 +124,7 @@ export default function PanchangBand({ panchang, nowMin, sq }: PanchangBandProps
             />
             <text
               x={tx(t.min)} y={VB_H - 3}
-              fontSize={6} fill="var(--text-faint)"
+              fontSize={10} fill="var(--text-faint)"
               textAnchor="middle"
               fontFamily="var(--font-mono, monospace)"
             >{t.label}</text>
@@ -147,7 +147,7 @@ export default function PanchangBand({ panchang, nowMin, sq }: PanchangBandProps
           <text
             x={(tx(rahuS!) + tx(rahuE!)) / 2}
             y={VB_H / 2 + 2}
-            fontSize={6}
+            fontSize={10}
             fill="var(--risk-red)"
             opacity={0.85}
             textAnchor="middle"
@@ -158,7 +158,7 @@ export default function PanchangBand({ panchang, nowMin, sq }: PanchangBandProps
           <text
             x={(tx(abhS!) + tx(abhE!)) / 2}
             y={VB_H / 2 + 2}
-            fontSize={6}
+            fontSize={10}
             fill="var(--risk-green)"
             opacity={0.85}
             textAnchor="middle"

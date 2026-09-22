@@ -130,7 +130,7 @@ export default function MagicRsWidget({ symbolId }: Props) {
           color, lineHeight: 1 }}>
           {currentRs != null ? currentRs.toFixed(2) : '—'}
         </span>
-        <span style={{ fontSize: 10, fontFamily: 'var(--font-mono, monospace)',
+        <span style={{ fontSize: 12, fontFamily: 'var(--font-mono, monospace)',
           color, opacity: 0.7, letterSpacing: '0.05em' }}>
           {currentZone ?? 'Neutral'}
         </span>

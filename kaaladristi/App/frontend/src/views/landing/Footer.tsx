@@ -22,7 +22,7 @@ export function Footer() {
                 <div style={{ fontFamily:SERIF, fontSize:24, color:C.ink1, letterSpacing:'-0.01em' }}>
                   Dristi<span style={{ color:C.g1 }}>Q</span>
                 </div>
-                <div style={{ fontFamily:MONO, fontSize:9, letterSpacing:'.22em', color:C.ink3, textTransform:'uppercase' }}>
+                <div style={{ fontFamily:MONO, fontSize:11, letterSpacing:'.22em', color:C.ink3, textTransform:'uppercase' }}>
                   By Vikuna Technologies, Hyderabad
                 </div>
               </div>
@@ -35,7 +35,7 @@ export function Footer() {
           {/* Link columns */}
           {COLS.map(col => (
             <div key={col.h}>
-              <div style={{ fontFamily:MONO, fontSize:10, letterSpacing:'.22em', color:C.g2, textTransform:'uppercase', marginBottom:18 }}>{col.h}</div>
+              <div style={{ fontFamily:MONO, fontSize:12, letterSpacing:'.22em', color:C.g2, textTransform:'uppercase', marginBottom:18 }}>{col.h}</div>
               <ul style={{ listStyle:'none', padding:0, margin:0 }}>
                 {col.links.map(l => (
                   <li key={l} style={{ marginBottom:10 }}>
@@ -51,7 +51,7 @@ export function Footer() {
 
         {/* Bottom row */}
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginTop:32, gap:32, flexWrap:'wrap' }}>
-          <p style={{ fontFamily:SANS, margin:0, fontSize:11, color:C.ink4, lineHeight:1.7, maxWidth:'76ch' }}>
+          <p style={{ fontFamily:SANS, margin:0, fontSize:12, color:C.ink4, lineHeight:1.7, maxWidth:'76ch' }}>
             <strong style={{ color:C.ink3, fontWeight:500 }}>Important disclosure:</strong> DristiQ is operated
             by Vikuna Technologies and is a data research and educational platform. It is{' '}
             <strong style={{ color:C.ink3, fontWeight:500 }}>not registered with the Securities and Exchange
@@ -63,7 +63,7 @@ export function Footer() {
             for their investment decisions; please consult a SEBI-registered investment adviser before
             making financial decisions.
           </p>
-          <div style={{ fontFamily:MONO, fontSize:10, letterSpacing:'.22em', color:C.ink4, textTransform:'uppercase', textAlign:'right' }}>
+          <div style={{ fontFamily:MONO, fontSize:12, letterSpacing:'.22em', color:C.ink4, textTransform:'uppercase', textAlign:'right' }}>
             © 2026 Vikuna Technologies<br/>
             <span style={{ color:C.g3 }}>Made in Bhārat</span>
           </div>

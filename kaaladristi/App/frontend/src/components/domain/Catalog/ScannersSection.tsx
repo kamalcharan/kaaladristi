@@ -189,7 +189,7 @@ export default function ScannersSection() {
                   {preset.name}
                 </div>
                 <div style={{
-                  fontSize: 11,
+                  fontSize: 12,
                   color: 'var(--text-secondary)',
                   lineHeight: 1.45,
                   marginBottom: 8,
@@ -205,7 +205,7 @@ export default function ScannersSection() {
                       <span
                         key={tag}
                         style={{
-                          fontSize: 9,
+                          fontSize: 11,
                           fontFamily: 'var(--font-mono, monospace)',
                           padding: '2px 7px',
                           borderRadius: 3,
@@ -218,7 +218,7 @@ export default function ScannersSection() {
                     )
                   })}
                   <span style={{
-                    fontSize: 9,
+                    fontSize: 11,
                     fontFamily: 'var(--font-mono, monospace)',
                     padding: '2px 7px',
                     borderRadius: 3,
@@ -240,7 +240,7 @@ export default function ScannersSection() {
                   top {preset.limit}
                 </div>
                 <div style={{
-                  fontSize: 9,
+                  fontSize: 11,
                   color: 'var(--text-muted)',
                   fontFamily: 'var(--font-mono, monospace)',
                   marginTop: 2,
@@ -249,7 +249,7 @@ export default function ScannersSection() {
                   results
                 </div>
                 <div style={{
-                  fontSize: 11,
+                  fontSize: 12,
                   color: 'var(--text-muted)',
                   fontFamily: 'var(--font-mono, monospace)',
                 }}>
@@ -272,11 +272,11 @@ export default function ScannersSection() {
         lineHeight: 1.6,
       }}>
         Scanner results update on each run — data is fetched live from{' '}
-        <span style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: 11 }}>km_equity_eod</span>{' '}
+        <span style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: 12 }}>km_equity_eod</span>{' '}
         and{' '}
-        <span style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: 11 }}>km_industry_eod</span>.
+        <span style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: 12 }}>km_industry_eod</span>.
         All logic runs in the browser via{' '}
-        <span style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: 11 }}>scanEngine.ts</span>.
+        <span style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: 12 }}>scanEngine.ts</span>.
       </div>
     </div>
   )

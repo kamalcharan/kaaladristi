@@ -38,7 +38,7 @@ function vaniOneLiner(corr: VaNiCorrelation): string {
 function StatBox({ label, value, color }: { label: string; value: string; color?: string }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-      <span style={{ fontSize: 9, color: 'color-mix(in srgb, var(--text-primary) 30%, transparent)', fontFamily: 'var(--font-mono,monospace)',
+      <span style={{ fontSize: 11, color: 'color-mix(in srgb, var(--text-primary) 30%, transparent)', fontFamily: 'var(--font-mono,monospace)',
         letterSpacing: '.05em', textTransform: 'uppercase' }}>
         {label}
       </span>
@@ -55,7 +55,7 @@ function OutcomeBar({ bullish, bearish }: { bullish: number; bearish: number }) 
   const bullPct = total > 0 ? (bullish / total) * 100 : 50
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5, fontSize: 10,
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5, fontSize: 12,
         color: 'color-mix(in srgb, var(--text-primary) 40%, transparent)', fontFamily: 'var(--font-mono,monospace)' }}>
         <span style={{ color: 'var(--bull)' }}>▲ {bullish} higher</span>
         <span style={{ color: 'var(--bear)' }}>{bearish} lower ▼</span>
@@ -92,16 +92,16 @@ function PairDetail({ corr, onDismiss, onOpenFull }: {
               <span style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--bull)',
                 boxShadow: '0 0 6px var(--bull)', display: 'inline-block',
                 animation: 'pulse 2s infinite', flexShrink: 0 }} />
-              <span style={{ fontSize: 11, color: 'var(--bull)', fontWeight: 600 }}>Active Now</span>
+              <span style={{ fontSize: 12, color: 'var(--bull)', fontWeight: 600 }}>Active Now</span>
             </>
           ) : (
             <>
               <span style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--caution)',
                 display: 'inline-block', flexShrink: 0 }} />
-              <span style={{ fontSize: 11, color: 'var(--caution)' }}>Approaching</span>
+              <span style={{ fontSize: 12, color: 'var(--caution)' }}>Approaching</span>
             </>
           )}
-          <span style={{ fontSize: 9, color: 'color-mix(in srgb, var(--text-primary) 20%, transparent)',
+          <span style={{ fontSize: 11, color: 'color-mix(in srgb, var(--text-primary) 20%, transparent)',
             fontFamily: 'var(--font-mono,monospace)', marginLeft: 2 }}>
             {corr.shape}
           </span>
@@ -134,7 +134,7 @@ function PairDetail({ corr, onDismiss, onOpenFull }: {
         background: 'var(--accent-glow)',
         borderTop: '1px solid var(--border)',
         borderBottom: '1px solid var(--border)' }}>
-        <span style={{ color: 'var(--accent)', fontSize: 10,
+        <span style={{ color: 'var(--accent)', fontSize: 12,
           fontFamily: 'var(--font-mono,monospace)' }}>✦ VaNi · </span>
         <span style={{ fontSize: 12, fontStyle: 'italic',
           fontFamily: 'var(--font-display, serif)',
@@ -267,7 +267,7 @@ export default function CorrelationDrawer({ isOpen, activePairKey, onClose, onSe
                   key={key}
                   onClick={() => onSelectPair(key)}
                   style={{
-                    padding: '6px 8px', fontSize: 10, whiteSpace: 'nowrap', cursor: 'pointer',
+                    padding: '6px 8px', fontSize: 12, whiteSpace: 'nowrap', cursor: 'pointer',
                     background: 'none', border: 'none',
                     borderBottom: isActive ? '2px solid #a78bfa' : '2px solid transparent',
                     color: isActive ? '#c4b5fd' : 'color-mix(in srgb, var(--text-primary) 30%, transparent)',

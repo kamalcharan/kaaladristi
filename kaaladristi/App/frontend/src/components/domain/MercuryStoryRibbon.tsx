@@ -58,7 +58,7 @@ export default function MercuryStoryRibbon({ overlay = false }: { overlay?: bool
       background: overlay
         ? 'color-mix(in srgb, var(--card) 88%, transparent)'
         : `color-mix(in srgb, ${MERCURY_COLOR} 5%, transparent)`,
-      fontSize: 11, fontFamily: 'var(--font-mono, monospace)',
+      fontSize: 12, fontFamily: 'var(--font-mono, monospace)',
       color: 'var(--text-secondary)',
       ...(overlay
         ? {
@@ -96,14 +96,14 @@ export default function MercuryStoryRibbon({ overlay = false }: { overlay?: bool
         onClick={e => { e.stopPropagation(); navigate('/almanac') }}
         title="See the full Mercury calendar"
         style={{
-          marginLeft: 'auto', fontSize: 10, whiteSpace: 'nowrap',
+          marginLeft: 'auto', fontSize: 12, whiteSpace: 'nowrap',
           color: MERCURY_COLOR,
         }}
       >
         ◈ full calendar →
       </span>
       {/* Visible affordance — no hidden gesture required */}
-      <span style={{ fontSize: 9, color: 'color-mix(in srgb, var(--text-primary) 32%, transparent)', whiteSpace: 'nowrap' }}>
+      <span style={{ fontSize: 11, color: 'color-mix(in srgb, var(--text-primary) 32%, transparent)', whiteSpace: 'nowrap' }}>
         ✦ ask VaNi ▸
       </span>
     </div>

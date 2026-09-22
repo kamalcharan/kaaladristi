@@ -53,11 +53,11 @@ export default function SectorMembershipCard(
       <div className="rounded-lg bg-kd-card border border-kd-border p-3">
         <div className="flex items-center gap-2 mb-1.5">
           <Layers className="w-3.5 h-3.5 text-[var(--text-faint)]" />
-          <span className="text-[11px] font-serif font-semibold text-primary tracking-wide">
+          <span className="text-[12px] font-serif font-semibold text-primary tracking-wide">
             Member Of
           </span>
         </div>
-        <p className="text-[10px] font-mono text-muted leading-relaxed">
+        <p className="text-[12px] font-mono text-muted leading-relaxed">
           {exchange === 'BSE'
             ? 'Not in any tracked index. NSE indices cover NSE listings — check this company\u2019s NSE line, or add it to a curated index.'
             : 'Not in any tracked index.'}
@@ -70,10 +70,10 @@ export default function SectorMembershipCard(
     <div className="rounded-lg bg-kd-card border border-kd-border p-3">
       <div className="flex items-center gap-2 mb-2">
         <Layers className="w-3.5 h-3.5 text-accent-indigo" />
-        <span className="text-[11px] font-serif font-semibold text-primary tracking-wide">
+        <span className="text-[12px] font-serif font-semibold text-primary tracking-wide">
           Member Of
         </span>
-        <span className="ml-auto text-[9px] font-mono text-muted">{memberships.length}</span>
+        <span className="ml-auto text-[11px] font-mono text-muted">{memberships.length}</span>
       </div>
 
       <div className="flex flex-wrap gap-1.5">
@@ -93,19 +93,19 @@ export default function SectorMembershipCard(
                   style={{ background: dot.color }}
                 />
               )}
-              <span className="text-[10px] font-mono text-[var(--text-secondary)]">
+              <span className="text-[12px] font-mono text-[var(--text-secondary)]">
                 {m.name.replace(/^NIFTY /, '')}
               </span>
               {dot && (
                 <span
-                  className="text-[8px] font-mono font-bold uppercase tracking-wider"
+                  className="text-[10px] font-mono font-bold uppercase tracking-wider"
                   style={{ color: dot.color }}
                 >
                   {dot.short}
                 </span>
               )}
               {m.isCurated && (
-                <span className="text-[8px] font-mono font-bold uppercase tracking-wider text-[var(--gold,#d4a84b)]">
+                <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-[var(--gold,#d4a84b)]">
                   Curated
                 </span>
               )}

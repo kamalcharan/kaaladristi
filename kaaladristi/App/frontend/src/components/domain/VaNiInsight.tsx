@@ -115,13 +115,13 @@ export default function VaNiInsight({
       {/* Masthead */}
       <div className="flex items-center gap-1.5 px-3 py-1.5 bg-accent-indigo/[0.13] border-b border-accent-indigo/25">
         <span className="w-[15px] h-[15px] rounded-[4px] bg-accent-indigo flex items-center justify-center shrink-0">
-          <span className="text-white text-[8px] leading-none select-none">✦</span>
+          <span className="text-white text-[10px] leading-none select-none">✦</span>
         </span>
-        <span className="text-[9px] font-black uppercase tracking-[0.16em] text-accent-indigo">
+        <span className="text-[11px] font-black uppercase tracking-[0.16em] text-accent-indigo">
           VaNi
         </span>
-        <span className="text-[8px] text-accent-indigo/60 tracking-wide">वाणी</span>
-        {cached && <span className="ml-auto text-[9.5px] text-accent-indigo/70">⚡ cached</span>}
+        <span className="text-[10px] text-accent-indigo/60 tracking-wide">वाणी</span>
+        {cached && <span className="ml-auto text-[11px] text-accent-indigo/70">⚡ cached</span>}
       </div>
 
       {/* Body */}
@@ -129,7 +129,7 @@ export default function VaNiInsight({
         {isLoading && !insight ? (
           <div className="flex items-center gap-1.5 text-muted">
             <Loader2 className="w-3 h-3 animate-spin" />
-            <span className="text-[10px]">Consulting VaNi…</span>
+            <span className="text-[12px]">Consulting VaNi…</span>
           </div>
         ) : (
           <>
@@ -141,7 +141,7 @@ export default function VaNiInsight({
                   (\n\n-separated) but plain HTML collapses that into one
                   unbroken block — the paragraph structure was always being
                   generated, just never rendered. */}
-              <p className="text-[11px] text-[var(--text-secondary)] leading-relaxed whitespace-pre-line">
+              <p className="text-[12px] text-[var(--text-secondary)] leading-relaxed whitespace-pre-line">
                 {highlightChips && insight ? renderWithChips(insight) : insight}
               </p>
               {collapsed && (
@@ -154,7 +154,7 @@ export default function VaNiInsight({
             {showToggle && (
               <button
                 onClick={() => setExpanded((e) => !e)}
-                className="mt-1 text-[10px] font-mono text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
+                className="mt-1 text-[12px] font-mono text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
               >
                 {expanded ? '▴ Collapse' : '▾ Read full VaNi analysis'}
               </button>

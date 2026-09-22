@@ -87,7 +87,7 @@ export default function MajorTransitBanner() {
                 {event.display_name}
               </p>
               <span className={cn(
-                'shrink-0 text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full border',
+                'shrink-0 text-[12px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full border',
                 c.bg, c.text, c.border,
               )}>
                 {label}
@@ -95,7 +95,7 @@ export default function MajorTransitBanner() {
             </div>
 
             {/* Date range */}
-            <p className="text-[11px] text-muted font-mono">
+            <p className="text-[12px] text-muted font-mono">
               {fmtShort(event.start_date)} → {fmtShort(event.end_date)}
             </p>
 
@@ -109,10 +109,10 @@ export default function MajorTransitBanner() {
             {/* Progress bar */}
             <div className="space-y-1">
               <div className="flex items-center justify-between">
-                <span className="text-[10px] text-muted">
+                <span className="text-[12px] text-muted">
                   Day {elapsed} of {total}
                 </span>
-                <span className={cn('text-[10px] font-bold', c.text)}>{pct}%</span>
+                <span className={cn('text-[12px] font-bold', c.text)}>{pct}%</span>
               </div>
               <div className="h-1 rounded-full bg-white/5 overflow-hidden">
                 <div

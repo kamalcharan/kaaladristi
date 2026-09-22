@@ -65,7 +65,7 @@ function StockRow({ stock, onClick, variant = 'default' }: {
         padding: '4px 0',
         borderBottom: '1px solid var(--border)',
         fontFamily: 'var(--font-mono, monospace)',
-        fontSize: 11,
+        fontSize: 12,
         cursor: 'pointer',
       }}
       onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'var(--accent-glow)' }}
@@ -95,7 +95,7 @@ function StockRow({ stock, onClick, variant = 'default' }: {
           <span style={{ color: 'var(--text-muted)', textAlign: 'right' }}>
             {stock.magic_rs != null ? stock.magic_rs.toFixed(1) : '—'}
           </span>
-          <span style={{ color: 'var(--text-faint)', textAlign: 'right', fontSize: 9, letterSpacing: '.02em' }}>
+          <span style={{ color: 'var(--text-faint)', textAlign: 'right', fontSize: 11, letterSpacing: '.02em' }}>
             {formatStage(stock.stage)}
           </span>
           <span style={{ color: chgColor, textAlign: 'right' }}>
@@ -116,7 +116,7 @@ function ColumnHeaders({ variant = 'default' }: { variant?: ColumnVariant }) {
       gridTemplateColumns: GRID_COLS[variant],
       gap: 6,
       fontFamily: 'var(--font-mono, monospace)',
-      fontSize: 9,
+      fontSize: 11,
       color: 'var(--text-faint)',
       letterSpacing: '.08em',
       textTransform: 'uppercase',
@@ -156,11 +156,11 @@ export default function ScannerWidget({ presetId, title, maxRows = 4, variant = 
     }}>
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--text-secondary)', letterSpacing: '.04em' }}>
+        <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-secondary)', letterSpacing: '.04em' }}>
           {title}
         </span>
         {!isLoading && !isError && data && (
-          <span style={{ fontSize: 10, fontFamily: 'var(--font-mono, monospace)', color: 'var(--text-faint)' }}>
+          <span style={{ fontSize: 12, fontFamily: 'var(--font-mono, monospace)', color: 'var(--text-faint)' }}>
             {data.length}
           </span>
         )}
@@ -174,16 +174,16 @@ export default function ScannerWidget({ presetId, title, maxRows = 4, variant = 
       {/* Body */}
       {isLoading ? (
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 0',
-          color: 'var(--text-faint)', fontSize: 11 }}>
+          color: 'var(--text-faint)', fontSize: 12 }}>
           <Loader2 size={12} className="animate-spin" />
           <span>Loading…</span>
         </div>
       ) : isError ? (
-        <div style={{ fontSize: 11, color: 'var(--text-faint)', padding: '8px 0' }}>
+        <div style={{ fontSize: 12, color: 'var(--text-faint)', padding: '8px 0' }}>
           Failed to load
         </div>
       ) : !data || data.length === 0 ? (
-        <div style={{ fontSize: 11, color: 'var(--text-faint)', padding: '8px 0' }}>
+        <div style={{ fontSize: 12, color: 'var(--text-faint)', padding: '8px 0' }}>
           No results
         </div>
       ) : (
@@ -203,7 +203,7 @@ export default function ScannerWidget({ presetId, title, maxRows = 4, variant = 
           onClick={() => navigate(`/scanner/${presetId}`)}
           style={{
             background: 'none', border: 'none', cursor: 'pointer',
-            fontSize: 10, fontFamily: 'var(--font-mono, monospace)',
+            fontSize: 12, fontFamily: 'var(--font-mono, monospace)',
             color: 'var(--accent)', textAlign: 'right',
             padding: '4px 0 0', letterSpacing: '.04em',
           }}

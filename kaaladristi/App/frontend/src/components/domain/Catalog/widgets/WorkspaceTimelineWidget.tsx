@@ -25,7 +25,7 @@ const BTN: React.CSSProperties = {
   width: 26, height: 26, borderRadius: 5,
   border: '1px solid color-mix(in srgb, var(--text-primary) 10%, transparent)',
   background: 'transparent', color: 'color-mix(in srgb, var(--text-primary) 50%, transparent)',
-  cursor: 'pointer', fontSize: 11, display: 'flex',
+  cursor: 'pointer', fontSize: 12, display: 'flex',
   alignItems: 'center', justifyContent: 'center',
   transition: 'all 0.15s', flexShrink: 0,
 }
@@ -92,7 +92,7 @@ export default function WorkspaceTimelineWidget() {
 
   if (isLoading || total === 0) {
     return <div style={{ height: 58, display: 'flex', alignItems: 'center',
-      padding: '0 16px', opacity: 0.3, fontSize: 11,
+      padding: '0 16px', opacity: 0.3, fontSize: 12,
       color: 'color-mix(in srgb, var(--text-primary) 30%, transparent)', fontFamily: 'var(--font-mono, monospace)' }}>
       loading timeline…
     </div>
@@ -142,7 +142,7 @@ export default function WorkspaceTimelineWidget() {
               <div key={idx} onClick={() => seek(idx)}
                 style={{ position: 'absolute', left, transform: 'translateX(-50%)',
                   cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                <span style={{ fontSize: 7, fontFamily: 'var(--font-mono, monospace)',
+                <span style={{ fontSize: 10, fontFamily: 'var(--font-mono, monospace)',
                   color: 'color-mix(in srgb, var(--text-primary) 25%, transparent)', whiteSpace: 'nowrap',
                   userSelect: 'none' }}>
                   {label}
@@ -153,7 +153,7 @@ export default function WorkspaceTimelineWidget() {
           })}
           {/* Now mark */}
           <div style={{ position: 'absolute', right: 0, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-            <span style={{ fontSize: 7, fontFamily: 'var(--font-mono, monospace)',
+            <span style={{ fontSize: 10, fontFamily: 'var(--font-mono, monospace)',
               color: '#c9a84c', whiteSpace: 'nowrap', userSelect: 'none' }}>
               Now
             </span>
@@ -176,12 +176,12 @@ export default function WorkspaceTimelineWidget() {
 
       {/* Current date + range meta */}
       <div style={{ width: 100, textAlign: 'right', flexShrink: 0 }}>
-        <div style={{ fontSize: 10, fontWeight: 500,
+        <div style={{ fontSize: 12, fontWeight: 500,
           fontFamily: 'var(--font-mono, monospace)',
           color: isNow ? '#c9a84c' : 'var(--text-primary)' }}>
           {isNow ? 'NOW' : activeDate}
         </div>
-        <div style={{ fontSize: 8, fontFamily: 'var(--font-mono, monospace)',
+        <div style={{ fontSize: 10, fontFamily: 'var(--font-mono, monospace)',
           color: 'color-mix(in srgb, var(--text-primary) 20%, transparent)', marginTop: 1 }}>
           {total} days · {firstDate.slice(0, 7)} → {lastDate.slice(0, 7)}
         </div>

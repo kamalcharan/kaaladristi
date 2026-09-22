@@ -41,7 +41,7 @@ export default function VaNiSentence({ narrative, corrState, date, isFading, onS
         marginTop: 8,
       }}>
         <span style={{
-          fontSize: 8, fontFamily: 'var(--font-mono, monospace)',
+          fontSize: 10, fontFamily: 'var(--font-mono, monospace)',
           color: 'var(--text-muted)', letterSpacing: 1,
         }}>{date}</span>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
@@ -49,7 +49,7 @@ export default function VaNiSentence({ narrative, corrState, date, isFading, onS
             <button
               onClick={onStudyClick}
               style={{
-                fontSize: 9, fontFamily: 'var(--font-mono, monospace)', fontWeight: 600,
+                fontSize: 11, fontFamily: 'var(--font-mono, monospace)', fontWeight: 600,
                 letterSpacing: '0.06em', color: 'var(--gold)',
                 background: 'none', border: 'none', cursor: 'pointer', padding: 0,
               }}
@@ -59,7 +59,7 @@ export default function VaNiSentence({ narrative, corrState, date, isFading, onS
           )}
           <span style={{
             padding: '2px 8px', borderRadius: 8,
-            fontSize: 8, fontFamily: 'var(--font-mono, monospace)', fontWeight: 700,
+            fontSize: 10, fontFamily: 'var(--font-mono, monospace)', fontWeight: 700,
             textTransform: 'uppercase', letterSpacing: 1,
             background: `color-mix(in srgb, ${corrState.color} 15%, transparent)`,
             border: `1px solid color-mix(in srgb, ${corrState.color} 40%, transparent)`,

@@ -39,7 +39,7 @@ export default function SectorThermometer({
         padding: '14px 8px',
       }}
     >
-      <div className="text-[9px] font-mono uppercase tracking-[0.14em] text-muted">{label}</div>
+      <div className="text-[11px] font-mono uppercase tracking-[0.14em] text-muted">{label}</div>
 
       <div
         className="relative"
@@ -79,7 +79,7 @@ export default function SectorThermometer({
 
       {leading ? (
         <div
-          className="text-[8px] font-mono uppercase tracking-wide px-1.5 py-0.5 rounded-full"
+          className="text-[10px] font-mono uppercase tracking-wide px-1.5 py-0.5 rounded-full"
           style={{
             color: 'var(--risk-green)',
             background: 'color-mix(in srgb, var(--risk-green) 12%, transparent)',
@@ -89,7 +89,7 @@ export default function SectorThermometer({
           ★ {leadingLabel}
         </div>
       ) : (
-        <div className="text-[8px] font-mono uppercase tracking-wide text-muted">percentile</div>
+        <div className="text-[10px] font-mono uppercase tracking-wide text-muted">percentile</div>
       )}
     </div>
   )

@@ -34,14 +34,14 @@ export default function SignalLineChart({
         <YAxis
           domain={domain}
           width={30}
-          tick={{ fontSize: 9, fill: 'var(--text-faint)' }}
+          tick={{ fontSize: 11, fill: 'var(--text-faint)' }}
           axisLine={false}
           tickLine={false}
         />
         <Tooltip
           contentStyle={{
             background: 'var(--card)', border: '1px solid var(--border)',
-            borderRadius: 4, fontFamily: 'var(--font-mono)', fontSize: 10,
+            borderRadius: 4, fontFamily: 'var(--font-mono)', fontSize: 12,
           }}
           labelFormatter={(l: unknown, payload: unknown) => {
             const p = payload as Array<{ payload?: { trade_date?: string } }>;

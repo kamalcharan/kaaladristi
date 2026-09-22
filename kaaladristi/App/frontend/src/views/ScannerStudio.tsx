@@ -401,7 +401,7 @@ export default function ScannerStudio({ presetId }: { presetId: string }) {
 
             {viewMode === 'cards' && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-faint)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-faint)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
                   Sort
                 </span>
                 {sortOptions.map((opt) => {
@@ -421,7 +421,7 @@ export default function ScannerStudio({ presetId }: { presetId: string }) {
               </div>
             )}
 
-            <span style={{ marginLeft: 'auto', fontFamily: 'var(--font-mono)', fontSize: 11.5, color: 'var(--text-faint)' }}>
+            <span style={{ marginLeft: 'auto', fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-faint)' }}>
               {filtered.length} shown
             </span>
             <div style={{ display: 'flex', gap: 4 }}>
@@ -430,7 +430,7 @@ export default function ScannerStudio({ presetId }: { presetId: string }) {
                   padding: '5px 12px', borderRadius: 7, border: '1px solid var(--border)',
                   background: viewMode === m ? 'var(--accent-glow)' : 'transparent',
                   color: viewMode === m ? 'var(--accent)' : 'var(--text-muted)',
-                  fontSize: 11.5, fontFamily: 'var(--font-mono)', cursor: 'pointer', textTransform: 'capitalize',
+                  fontSize: 12, fontFamily: 'var(--font-mono)', cursor: 'pointer', textTransform: 'capitalize',
                 }}>{m}</button>
               ))}
             </div>
@@ -704,7 +704,7 @@ export function ScannerVaNiCard({
           showLoading ? (branded ? <VaNiConsulting/> :
             <div className="flex items-center gap-1.5 text-muted">
               <Loader2 className="w-3 h-3 animate-spin" />
-              <span className="text-[10px]">Consulting VaNi…</span>
+              <span className="text-[12px]">Consulting VaNi…</span>
             </div>
           ) : active?.error || active?.data?.error ? <div role="alert"><p>{active?.data?.error || "VaNi could not prepare this explanation."}</p><button className="sector-question" onClick={()=>askIntent(scanIntent,depth,false,true)}>Try again</button></div> : (
             <>

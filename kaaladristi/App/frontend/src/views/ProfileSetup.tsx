@@ -211,7 +211,7 @@ function Screen1({ displayName, setDisplayName, phone, setPhone, onBegin }: S1Pr
         <div style={{ display:'inline-flex', alignItems:'center', gap:7,
           padding:'5px 14px', borderRadius:100,
           background:'var(--accent-glow)', border:'1px solid var(--accent-dim)',
-          fontSize:10, fontWeight:600, letterSpacing:'1px', textTransform:'uppercase',
+          fontSize:12, fontWeight:600, letterSpacing:'1px', textTransform:'uppercase',
           color:'var(--accent)', fontFamily:'var(--font-mono, monospace)', marginBottom:28,
           animation:'text-in .6s ease .8s both' }}>
           <span style={{ width:6, height:6, borderRadius:'50%', background:'var(--accent)',
@@ -252,7 +252,7 @@ function Screen1({ displayName, setDisplayName, phone, setPhone, onBegin }: S1Pr
               borderRadius:10, fontSize:13, color:'var(--text-primary)',
               outline:'none', fontFamily:'inherit' }} />
           {showPhoneError && (
-            <div style={{ fontSize:11, color:'var(--bear)', textAlign:'left', marginTop:6 }}>
+            <div style={{ fontSize:12, color:'var(--bear)', textAlign:'left', marginTop:6 }}>
               Enter a valid 10-digit Indian mobile number.
             </div>
           )}
@@ -338,9 +338,9 @@ function Screen3({ template, persona, isFree: _isFree, onAccept, onBrowse, onKee
         <div style={{ width:22, height:22, borderRadius:6, flexShrink:0,
           background:'linear-gradient(135deg, #9d8ff9, #5b4fd4)',
           boxShadow:`0 3px 10px ${V}.4)` }} />
-        <span style={{ fontFamily:'var(--font-mono, monospace)', fontSize:10,
+        <span style={{ fontFamily:'var(--font-mono, monospace)', fontSize:12,
           color:'var(--accent)', letterSpacing:'.1em', textTransform:'uppercase' }}>VaNi</span>
-        <span style={{ marginLeft:'auto', fontSize:10, fontFamily:'var(--font-mono, monospace)',
+        <span style={{ marginLeft:'auto', fontSize:12, fontFamily:'var(--font-mono, monospace)',
           color:'var(--text-muted)' }}>
           {done ? 'ready ✓' : `${visibleCount} / ${total}`}
         </span>
@@ -353,7 +353,7 @@ function Screen3({ template, persona, isFree: _isFree, onAccept, onBrowse, onKee
         <div style={{ borderRight: phone ? 'none' : '1px solid color-mix(in srgb, var(--text-primary) 7%, transparent)',
           display:'flex', flexDirection:'column', padding: phone ? 16 : 24, gap:12, minWidth:0,
           overflowY: phone ? 'visible' : 'auto' }}>
-          <span style={{ fontFamily:'var(--font-mono, monospace)', fontSize:10,
+          <span style={{ fontFamily:'var(--font-mono, monospace)', fontSize:12,
             letterSpacing:'.1em', textTransform:'uppercase', color:'color-mix(in srgb, var(--text-primary) 15%, transparent)' }}>
             Your Workspace
           </span>
@@ -374,7 +374,7 @@ function Screen3({ template, persona, isFree: _isFree, onAccept, onBrowse, onKee
                 <div style={{ display:'flex', alignItems:'center', gap:10 }}>
                   <span style={{ fontSize:18, flexShrink:0 }}>{block.icon}</span>
                   <div style={{ flex:1 }}>
-                    <div style={{ fontFamily:'var(--font-mono, monospace)', fontSize:9,
+                    <div style={{ fontFamily:'var(--font-mono, monospace)', fontSize:11,
                       color:'color-mix(in srgb, var(--text-primary) 20%, transparent)', letterSpacing:'.1em',
                       textTransform:'uppercase', marginBottom:3 }}>{block.type_label}</div>
                     <div style={{ fontSize:13, fontWeight:500, color:'var(--text-primary)' }}>
@@ -382,7 +382,7 @@ function Screen3({ template, persona, isFree: _isFree, onAccept, onBrowse, onKee
                     </div>
                   </div>
                 </div>
-                <span style={{ display:'inline-block', marginTop:8, fontSize:9,
+                <span style={{ display:'inline-block', marginTop:8, fontSize:11,
                   fontFamily:'var(--font-mono, monospace)', padding:'2px 7px',
                   borderRadius:3, background:bc.bg, color:bc.color }}>
                   {block.badge}
@@ -393,7 +393,7 @@ function Screen3({ template, persona, isFree: _isFree, onAccept, onBrowse, onKee
 
           {/* The persona's four scanners — the workbench's output panels. They
               light after the blocks so the sequence reads blocks → scanners. */}
-          <span style={{ fontFamily:'var(--font-mono, monospace)', fontSize:10, marginTop:8,
+          <span style={{ fontFamily:'var(--font-mono, monospace)', fontSize:12, marginTop:8,
             letterSpacing:'.1em', textTransform:'uppercase', color:'color-mix(in srgb, var(--text-primary) 15%, transparent)' }}>
             Your scanners
           </span>
@@ -404,7 +404,7 @@ function Screen3({ template, persona, isFree: _isFree, onAccept, onBrowse, onKee
                 <div key={m.id} style={{ border:`1px solid ${lit ? 'var(--accent-dim)' : 'var(--border)'}`,
                   borderRadius:10, background:'var(--card)', padding:'10px 12px',
                   opacity: lit ? 1 : .35, transition:`all .5s ease ${i * 120}ms` }}>
-                  <div style={{ fontFamily:'var(--font-mono, monospace)', fontSize:9, letterSpacing:'.1em',
+                  <div style={{ fontFamily:'var(--font-mono, monospace)', fontSize:11, letterSpacing:'.1em',
                     textTransform:'uppercase', color:'var(--accent)', marginBottom:3 }}>Scanner 0{i + 1}</div>
                   <div style={{ fontSize:13, fontWeight:500, color:'var(--text-primary)' }}>{m.name}</div>
                 </div>
@@ -486,7 +486,7 @@ function Screen3({ template, persona, isFree: _isFree, onAccept, onBrowse, onKee
               <div style={{ width:24, height:24, borderRadius:7, flexShrink:0,
                 background:'linear-gradient(135deg, #9d8ff9, #5b4fd4)',
                 display:'flex', alignItems:'center', justifyContent:'center',
-                fontSize:10, fontWeight:700, color:'#fff',
+                fontSize:12, fontWeight:700, color:'#fff',
                 fontFamily:'var(--font-mono, monospace)', marginTop:1 }}>V</div>
               <div style={{ background:'var(--card)',
                 border:'1px solid color-mix(in srgb, var(--text-primary) 7%, transparent)',
@@ -507,7 +507,7 @@ function Screen3({ template, persona, isFree: _isFree, onAccept, onBrowse, onKee
               <div style={{ width:24, height:24, borderRadius:7, flexShrink:0,
                 background:'linear-gradient(135deg, #9d8ff9, #5b4fd4)',
                 display:'flex', alignItems:'center', justifyContent:'center',
-                fontSize:10, fontWeight:700, color:'#fff', fontFamily:'var(--font-mono, monospace)', marginTop:1 }}>V</div>
+                fontSize:12, fontWeight:700, color:'#fff', fontFamily:'var(--font-mono, monospace)', marginTop:1 }}>V</div>
               <div style={{ background:'var(--card)', border:'1px solid var(--accent-glow)',
                 borderRadius:'3px 10px 10px 10px', padding:'10px 14px',
                 fontSize:12, color:'var(--text-muted)', lineHeight:1.6, flex:1 }}>
@@ -850,7 +850,7 @@ export default function ProfileSetup() {
               <div style={{ display: 'inline-flex', alignItems: 'center', gap: 7,
                 padding: '5px 14px', borderRadius: 100,
                 background: 'var(--accent-glow)', border: '1px solid var(--accent-dim)',
-                fontSize: 10, fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase',
+                fontSize: 12, fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase',
                 color: 'var(--accent)', fontFamily: 'var(--font-mono, monospace)', marginBottom: 20 }}>
                 Almost there
               </div>
@@ -879,7 +879,7 @@ export default function ProfileSetup() {
               <div style={{ display: 'inline-flex', alignItems: 'center', gap: 7,
                 padding: '5px 14px', borderRadius: 100,
                 background: 'var(--accent-glow)', border: '1px solid var(--accent-dim)',
-                fontSize: 10, fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase',
+                fontSize: 12, fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase',
                 color: 'var(--accent)', fontFamily: 'var(--font-mono, monospace)', marginBottom: 20 }}>
                 One last step
               </div>

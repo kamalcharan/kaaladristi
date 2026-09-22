@@ -80,7 +80,7 @@ function TagColorControl({
             width: 150,
           }}
         >
-          <div style={{ fontSize: 9, color: 'color-mix(in srgb, var(--text-primary) 40%, transparent)', marginBottom: 6,
+          <div style={{ fontSize: 11, color: 'color-mix(in srgb, var(--text-primary) 40%, transparent)', marginBottom: 6,
             fontFamily: 'var(--font-mono, monospace)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
             {tag} color
           </div>
@@ -102,9 +102,9 @@ function TagColorControl({
           {/* Opacity slider */}
           <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
-              <span style={{ fontSize: 9, color: 'color-mix(in srgb, var(--text-primary) 40%, transparent)',
+              <span style={{ fontSize: 11, color: 'color-mix(in srgb, var(--text-primary) 40%, transparent)',
                 fontFamily: 'var(--font-mono, monospace)' }}>opacity</span>
-              <span style={{ fontSize: 9, color: 'color-mix(in srgb, var(--text-primary) 60%, transparent)',
+              <span style={{ fontSize: 11, color: 'color-mix(in srgb, var(--text-primary) 60%, transparent)',
                 fontFamily: 'var(--font-mono, monospace)' }}>{Math.round(opacity * 100)}%</span>
             </div>
             <input
@@ -428,7 +428,7 @@ export default function CatalogAstroSection({ onSelect, compact = false }: Catal
         </h2>
         <p style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
           Live from{' '}
-          <span style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: 11 }}>km_astro_rule_master</span>.{' '}
+          <span style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: 12 }}>km_astro_rule_master</span>.{' '}
           Range rules (Transit, State, Conjunct) add as chart overlays. Point rules add as panel blocks.
         </p>
       </div>
@@ -473,7 +473,7 @@ export default function CatalogAstroSection({ onSelect, compact = false }: Catal
             border: '1px solid var(--border)',
             borderRadius: 8,
             padding: '7px 11px',
-            fontSize: 11,
+            fontSize: 12,
             color: 'var(--text-secondary)',
             fontFamily: 'var(--font-mono, monospace)',
             outline: 'none',
@@ -486,7 +486,7 @@ export default function CatalogAstroSection({ onSelect, compact = false }: Catal
           ))}
         </select>
         <span style={{
-          fontSize: 11,
+          fontSize: 12,
           fontFamily: 'var(--font-mono, monospace)',
           color: 'var(--text-muted)',
           whiteSpace: 'nowrap',
@@ -498,7 +498,7 @@ export default function CatalogAstroSection({ onSelect, compact = false }: Catal
       {/* Group Overlays — one pill adds an entire tag's range rules as a single overlay layer */}
       <div style={{ marginBottom: 16 }}>
         <p style={{
-          fontSize: 9, color: 'var(--text-muted)', marginBottom: 8,
+          fontSize: 11, color: 'var(--text-muted)', marginBottom: 8,
           fontFamily: 'var(--font-mono, monospace)', textTransform: 'uppercase',
           letterSpacing: '0.1em',
         }}>
@@ -541,7 +541,7 @@ export default function CatalogAstroSection({ onSelect, compact = false }: Catal
                   }}
                 >
                   {group.display_name}
-                  <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>
+                  <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>
                     {added ? '✓' : '+'}
                   </span>
                 </button>
@@ -555,7 +555,7 @@ export default function CatalogAstroSection({ onSelect, compact = false }: Catal
       {allTags.length > 0 && (
         <div style={{ marginBottom: 14 }}>
           <p style={{
-            fontSize: 9, color: 'var(--text-muted)', marginBottom: 8,
+            fontSize: 11, color: 'var(--text-muted)', marginBottom: 8,
             fontFamily: 'var(--font-mono, monospace)', textTransform: 'uppercase',
             letterSpacing: '0.1em',
           }}>
@@ -567,7 +567,7 @@ export default function CatalogAstroSection({ onSelect, compact = false }: Catal
             style={{
               padding: '3px 10px',
               borderRadius: 20,
-              fontSize: 11,
+              fontSize: 12,
               cursor: 'pointer',
               border: `1px solid ${activeTags.length === 0 ? 'color-mix(in srgb, var(--accent) 50%, transparent)' : 'var(--border)'}`,
               background: activeTags.length === 0 ? 'color-mix(in srgb, var(--accent) 15%, transparent)' : 'color-mix(in srgb, var(--text-primary) 3%, transparent)',
@@ -586,7 +586,7 @@ export default function CatalogAstroSection({ onSelect, compact = false }: Catal
               <button
                 key={tag}
                 onClick={() => toggleTag(tag)}
-                className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] border transition-all cursor-pointer"
+                className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[12px] border transition-all cursor-pointer"
                 style={{
                   fontFamily: 'inherit',
                   background: active
@@ -607,7 +607,7 @@ export default function CatalogAstroSection({ onSelect, compact = false }: Catal
                 />
                 {tag}
                 <span style={{
-                  fontSize: 10, lineHeight: 1, padding: '2px 5px', borderRadius: 999,
+                  fontSize: 12, lineHeight: 1, padding: '2px 5px', borderRadius: 999,
                   background: active
                     ? `color-mix(in srgb, ${hue} 22%, transparent)`
                     : 'color-mix(in srgb, var(--text-primary) 8%, transparent)',
@@ -657,7 +657,7 @@ export default function CatalogAstroSection({ onSelect, compact = false }: Catal
                     style={{
                       padding: '9px 13px',
                       textAlign: col === '' ? 'right' : 'left',
-                      fontSize: 9,
+                      fontSize: 11,
                       fontFamily: 'var(--font-mono, monospace)',
                       letterSpacing: '0.1em',
                       textTransform: 'uppercase',
@@ -715,7 +715,7 @@ export default function CatalogAstroSection({ onSelect, compact = false }: Catal
                       <td style={{ padding: '10px 13px', verticalAlign: 'middle', whiteSpace: 'nowrap' }}>
                         <span style={{
                           fontFamily: 'var(--font-mono, monospace)',
-                          fontSize: 11,
+                          fontSize: 12,
                           color: 'var(--accent)',
                           background: 'color-mix(in srgb, var(--accent) 10%, transparent)',
                           border: '1px solid color-mix(in srgb, var(--accent) 20%, transparent)',
@@ -736,7 +736,7 @@ export default function CatalogAstroSection({ onSelect, compact = false }: Catal
                         {compact && (
                           <span style={{
                             fontFamily: 'var(--font-mono, monospace)',
-                            fontSize: 10,
+                            fontSize: 12,
                             color: 'color-mix(in srgb, var(--accent) 60%, transparent)',
                           }}>
                             {rule.rule_code}
@@ -778,7 +778,7 @@ export default function CatalogAstroSection({ onSelect, compact = false }: Catal
                     {/* Last transit — full catalog only */}
                     {!compact && (
                       <td style={{ padding: '10px 13px', verticalAlign: 'middle', whiteSpace: 'nowrap' }}>
-                        <span style={{ fontSize: 11, fontFamily: 'var(--font-mono, monospace)', color: 'var(--text-muted)' }}>
+                        <span style={{ fontSize: 12, fontFamily: 'var(--font-mono, monospace)', color: 'var(--text-muted)' }}>
                           {fmtTransitDate(transitMap.get(rule.id)?.last_end)}
                         </span>
                       </td>
@@ -794,13 +794,13 @@ export default function CatalogAstroSection({ onSelect, compact = false }: Catal
                       return (
                         <td style={{ padding: '10px 13px', verticalAlign: 'middle', whiteSpace: 'nowrap' }}>
                           <span style={{
-                            fontSize: 11,
+                            fontSize: 12,
                             fontFamily: 'var(--font-mono, monospace)',
                             color: urgent ? 'var(--risk-amber, var(--caution))' : next ? 'var(--text-secondary)' : 'var(--text-muted)',
                           }}>
                             {fmtTransitDate(next)}
                             {urgent && daysAway !== null && (
-                              <span style={{ marginLeft: 4, fontSize: 10, opacity: 0.7 }}>({daysAway}d)</span>
+                              <span style={{ marginLeft: 4, fontSize: 12, opacity: 0.7 }}>({daysAway}d)</span>
                             )}
                           </span>
                         </td>
@@ -815,7 +815,7 @@ export default function CatalogAstroSection({ onSelect, compact = false }: Catal
                             <TagChip key={tag} tag={tag} />
                           ))}
                           {rule.tags.length > 3 && (
-                            <span style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono, monospace)' }}>
+                            <span style={{ fontSize: 12, color: 'var(--text-muted)', fontFamily: 'var(--font-mono, monospace)' }}>
                               +{rule.tags.length - 3}
                             </span>
                           )}
@@ -837,7 +837,7 @@ export default function CatalogAstroSection({ onSelect, compact = false }: Catal
                       )}
                       {active ? (
                         <span style={{
-                          fontSize: 11,
+                          fontSize: 12,
                           fontFamily: 'var(--font-mono, monospace)',
                           color: 'var(--bull)',
                           whiteSpace: 'nowrap',
@@ -850,7 +850,7 @@ export default function CatalogAstroSection({ onSelect, compact = false }: Catal
                           style={{
                             padding: '4px 12px',
                             borderRadius: 5,
-                            fontSize: 11,
+                            fontSize: 12,
                             cursor: 'pointer',
                             border: '1px solid color-mix(in srgb, var(--accent) 35%, transparent)',
                             background: 'color-mix(in srgb, var(--accent) 8%, transparent)',
@@ -878,7 +878,7 @@ export default function CatalogAstroSection({ onSelect, compact = false }: Catal
                         !BASE_RULE_CODES.includes(rule.rule_code) &&
                         BASE_RULE_MAP[rule.rule_code.split('-')[0]] && (
                         <p style={{
-                          fontSize: 10, color: 'color-mix(in srgb, var(--accent) 50%, transparent)',
+                          fontSize: 12, color: 'color-mix(in srgb, var(--accent) 50%, transparent)',
                           margin: '2px 0 0', textAlign: 'center',
                           fontFamily: 'var(--font-mono, monospace)',
                         }}>

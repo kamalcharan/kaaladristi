@@ -24,7 +24,7 @@ export default function ScanPresenceCard({ stock, matchedScans }: ScanPresenceCa
     <div className="rounded-lg bg-kd-card border border-kd-border p-3">
       <div className="flex items-center gap-2 mb-2">
         <ScanSearch className="w-3.5 h-3.5 text-accent-indigo" />
-        <span className="text-[11px] font-serif font-semibold text-primary tracking-wide">
+        <span className="text-[12px] font-serif font-semibold text-primary tracking-wide">
           Currently in Scans
         </span>
       </div>
@@ -38,26 +38,26 @@ export default function ScanPresenceCard({ stock, matchedScans }: ScanPresenceCa
               className="flex items-center gap-2 group"
             >
               <span className="w-1.5 h-1.5 rounded-full bg-accent-indigo shrink-0" />
-              <span className="text-[11px] font-mono text-secondary group-hover:text-accent-indigo transition-colors">
+              <span className="text-[12px] font-mono text-secondary group-hover:text-accent-indigo transition-colors">
                 {scan.name}
               </span>
               {scan.vani && (
                 <span
                   title="✦ VaNi Highlight within this scan — independent confirmation from another dimension"
-                  className="text-[10px] shrink-0"
+                  className="text-[12px] shrink-0"
                   style={{ color: 'var(--gold, #d4a84b)' }}
                 >
                   ✦
                 </span>
               )}
-              <span className="ml-auto text-[10px] text-muted group-hover:text-accent-indigo transition-colors">
+              <span className="ml-auto text-[12px] text-muted group-hover:text-accent-indigo transition-colors">
                 &rarr;
               </span>
             </Link>
           ))}
         </div>
       ) : (
-        <p className="text-[11px] text-muted italic">
+        <p className="text-[12px] text-muted italic">
           Not surfacing in any scans today.
         </p>
       )}

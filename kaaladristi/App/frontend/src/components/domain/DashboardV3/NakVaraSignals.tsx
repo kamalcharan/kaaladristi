@@ -120,7 +120,7 @@ function SignalRow({ sig }: { sig: RuleSignal }) {
       <div style={{ minWidth: 0 }}>
         <div style={{
           fontFamily: 'var(--font-body)',
-          fontSize: 11,
+          fontSize: 12,
           color: 'var(--text-primary)',
           overflow: 'hidden',
           textOverflow: 'ellipsis',
@@ -130,7 +130,7 @@ function SignalRow({ sig }: { sig: RuleSignal }) {
         </div>
         <div style={{
           fontFamily: 'var(--font-mono)',
-          fontSize: 9,
+          fontSize: 11,
           color: 'var(--text-faint)',
           letterSpacing: '0.08em',
           marginTop: 1,
@@ -143,7 +143,7 @@ function SignalRow({ sig }: { sig: RuleSignal }) {
       {/* Outcome badge */}
       <span style={{
         fontFamily: 'var(--font-mono)',
-        fontSize: 9,
+        fontSize: 11,
         letterSpacing: '0.08em',
         textTransform: 'uppercase',
         color,
@@ -161,14 +161,14 @@ function SignalRow({ sig }: { sig: RuleSignal }) {
         {confPct != null ? (
           <span style={{
             fontFamily: 'var(--font-mono)',
-            fontSize: 10,
+            fontSize: 12,
             fontWeight: 600,
             color: confPct >= 60 ? 'var(--bull)' : confPct >= 40 ? 'var(--caution)' : 'var(--text-muted)',
           }}>
             {confPct}%
           </span>
         ) : (
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-faint)' }}>—</span>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-faint)' }}>—</span>
         )}
       </div>
 
@@ -194,7 +194,7 @@ function SectionDivider({ label }: { label: string }) {
     <div style={{
       padding: '5px 16px 3px',
       fontFamily: 'var(--font-mono)',
-      fontSize: 8,
+      fontSize: 10,
       letterSpacing: '0.16em',
       textTransform: 'uppercase',
       color: 'var(--gold)',
@@ -248,7 +248,7 @@ export default function NakVaraSignals({ date }: { date: string }) {
         <div>
           <span style={{
             fontFamily: 'var(--font-mono)',
-            fontSize: 9,
+            fontSize: 11,
             letterSpacing: '0.16em',
             textTransform: 'uppercase',
             color: 'var(--text-faint)',
@@ -258,7 +258,7 @@ export default function NakVaraSignals({ date }: { date: string }) {
           {data && (
             <span style={{
               fontFamily: 'var(--font-body)',
-              fontSize: 11,
+              fontSize: 12,
               color: 'var(--text-secondary)',
               marginLeft: 8,
             }}>
@@ -270,22 +270,22 @@ export default function NakVaraSignals({ date }: { date: string }) {
         {summary && (
           <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
             {summary.bullish > 0 && (
-              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--bull)' }}>
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--bull)' }}>
                 {summary.bullish}▲
               </span>
             )}
             {summary.bearish > 0 && (
-              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--bear)' }}>
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--bear)' }}>
                 {summary.bearish}▼
               </span>
             )}
             {summary.turning > 0 && (
-              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--caution)' }}>
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--caution)' }}>
                 {summary.turning}◈
               </span>
             )}
             {summary.avg_confidence != null && (
-              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-faint)' }}>
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-faint)' }}>
                 avg {summary.avg_confidence}%
               </span>
             )}
@@ -296,7 +296,7 @@ export default function NakVaraSignals({ date }: { date: string }) {
       {/* Body */}
       {isLoading && (
         <div style={{ padding: '20px 16px', textAlign: 'center' }}>
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-faint)', letterSpacing: '0.1em' }}>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-faint)', letterSpacing: '0.1em' }}>
             LOADING…
           </span>
         </div>
@@ -304,7 +304,7 @@ export default function NakVaraSignals({ date }: { date: string }) {
 
       {isError && (
         <div style={{ padding: '20px 16px', textAlign: 'center' }}>
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--bear)', letterSpacing: '0.1em' }}>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--bear)', letterSpacing: '0.1em' }}>
             SIGNAL DATA UNAVAILABLE
           </span>
         </div>
@@ -312,7 +312,7 @@ export default function NakVaraSignals({ date }: { date: string }) {
 
       {!isLoading && !isError && signals.length === 0 && (
         <div style={{ padding: '20px 16px', textAlign: 'center' }}>
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-faint)', letterSpacing: '0.1em' }}>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-faint)', letterSpacing: '0.1em' }}>
             NO SIGNALS FOR THIS DATE
           </span>
         </div>

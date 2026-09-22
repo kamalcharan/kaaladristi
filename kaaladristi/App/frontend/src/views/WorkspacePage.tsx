@@ -136,7 +136,7 @@ export default function WorkspacePage() {
               color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>
               {framework!.name}
             </h1>
-            <span style={{ fontSize: 10, fontFamily: 'var(--font-mono, monospace)',
+            <span style={{ fontSize: 12, fontFamily: 'var(--font-mono, monospace)',
               color: 'var(--text-faint)', letterSpacing: '.05em' }}>
               v{framework!.version}
             </span>
@@ -148,7 +148,7 @@ export default function WorkspacePage() {
               title="You're a founding member. Full access free until public launch."
               style={{
                 display: 'inline-flex', alignItems: 'center', gap: 5,
-                padding: '3px 10px', borderRadius: 20, fontSize: 11,
+                padding: '3px 10px', borderRadius: 20, fontSize: 12,
                 background: 'var(--caution-bg)',
                 border: '1px solid var(--caution-dim)',
                 color: 'var(--caution)',
@@ -206,7 +206,7 @@ export default function WorkspacePage() {
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10 }}>
           <TourLauncher onClick={() => void startTour()} />
           <AtmosphericBadge />
-          <span style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+          <span style={{ fontSize: 12, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
             {todayDisplay}
           </span>
         </div>

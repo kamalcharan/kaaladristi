@@ -432,20 +432,20 @@ function MagicRsStats({ data, activeIndex, benchmarkLabel, variant = 'long',
         </span>
         {grade && (
           <span
-            className="text-[9px] font-mono uppercase tracking-wider px-1.5 py-0.5 rounded"
+            className="text-[11px] font-mono uppercase tracking-wider px-1.5 py-0.5 rounded"
             style={{ color: vColor, border: `1px solid ${vColor}`, opacity: 0.85 }}
           >
             {grade}
           </span>
         )}
-        <span className="text-[11px] font-mono" style={{ color: 'var(--text-faint)' }}>
+        <span className="text-[12px] font-mono" style={{ color: 'var(--text-faint)' }}>
           {diff != null && `strength ${Math.abs(diff).toFixed(1)} pts ${above ? 'above' : 'below'} its ${variant === 'short' ? '10' : '60'}-bar trend`}
           {held > 0 && ` · ${held} bar${held === 1 ? '' : 's'}`}
         </span>
         <span className="ml-auto inline-flex items-center gap-2">
           {frames.map((f) => (
             <span key={f.label} className="inline-flex items-center gap-1">
-              <span className="text-[10px] font-mono text-[var(--text-faint)]">{f.label}</span>
+              <span className="text-[12px] font-mono text-[var(--text-faint)]">{f.label}</span>
               <span
                 style={{
                   width: 7, height: 7, borderRadius: 99, display: 'inline-block',
@@ -466,13 +466,13 @@ function MagicRsStats({ data, activeIndex, benchmarkLabel, variant = 'long',
           { k: 'Held', v: held > 0 ? `${held} bars` : '—', c: 'var(--text-secondary)' },
         ].map((x) => (
           <div key={x.k}>
-            <div className="text-[9px] font-mono uppercase tracking-wider text-[var(--text-faint)]">{x.k}</div>
+            <div className="text-[11px] font-mono uppercase tracking-wider text-[var(--text-faint)]">{x.k}</div>
             <div className="text-[13px] font-mono tabular-nums" style={{ color: x.c }}>{x.v}</div>
           </div>
         ))}
       </div>
 
-      <div className="px-3 pb-2 text-[9px] font-mono text-[var(--text-faint)] leading-relaxed">
+      <div className="px-3 pb-2 text-[11px] font-mono text-[var(--text-faint)] leading-relaxed">
         {variant === 'short' ? 'SHORT 21-bar RS, 10-bar average — the only series weekly/monthly carry' : '144-bar RS, 60-bar average'} · 5/22/66-bar changes, computed by the pipeline
         {short && ` · series starts ${withRs[0].trade_date} (${withRs.length} of ${data.length} bars)`}
       </div>

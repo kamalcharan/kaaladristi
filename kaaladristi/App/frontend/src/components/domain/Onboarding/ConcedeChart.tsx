@@ -60,11 +60,11 @@ export default function ConcedeChart({ stock, value, onChange }: {
         <div style={{ borderRadius: 14, border: '1px solid var(--border)', background: 'var(--card)', overflow: 'hidden' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px 0' }}>
             <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{displaySymbol(stock)}</span>
-            <span style={{ fontFamily: MONO, fontSize: 10, color: 'var(--text-muted)' }}>last 6 months · tap a line below</span>
+            <span style={{ fontFamily: MONO, fontSize: 12, color: 'var(--text-muted)' }}>last 6 months · tap a line below</span>
           </div>
           {isLoading || bars.length === 0 ? (
             <div style={{ height: 240, display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontFamily: MONO, fontSize: 11, color: 'var(--text-muted)' }}>
+              fontFamily: MONO, fontSize: 12, color: 'var(--text-muted)' }}>
               {isLoading ? 'Loading chart…' : 'No bars for this symbol.'}
             </div>
           ) : (
@@ -80,7 +80,7 @@ export default function ConcedeChart({ stock, value, onChange }: {
           return (
             <Chip key={k} active={value === k} onClick={() => onChange(k)} title={opt.line}>
               <span>{opt.label}</span>
-              <span style={{ fontFamily: MONO, fontSize: 11, marginLeft: 8, opacity: .8 }}>
+              <span style={{ fontFamily: MONO, fontSize: 12, marginLeft: 8, opacity: .8 }}>
                 {opt.line}{stock && price != null ? ` · ${fmtInr(price)}` : ''}
               </span>
             </Chip>

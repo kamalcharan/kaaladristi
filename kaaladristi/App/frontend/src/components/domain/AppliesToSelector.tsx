@@ -221,7 +221,7 @@ export function AppliesTo({
                   active ? 'bg-accent-indigo' : 'bg-[var(--text-muted)]/40'
                 )} />
               </div>
-              <p className="text-[10px] text-muted mt-0.5">{card.sub}</p>
+              <p className="text-[12px] text-muted mt-0.5">{card.sub}</p>
             </button>
           );
         })}
@@ -231,11 +231,11 @@ export function AppliesTo({
       {activePanel && activePanel !== 'stockMarket' && panelSection && (
         <div className="flex-1 p-3 bg-kd-elevated/50 border border-kd-border rounded-xl">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-[11px] font-bold text-[var(--text-primary)]">{panelLabel}</span>
+            <span className="text-[12px] font-bold text-[var(--text-primary)]">{panelLabel}</span>
             <button
               type="button"
               onClick={() => handleDisable(activePanel)}
-              className="text-[10px] text-risk-red hover:text-risk-red/80 transition-colors"
+              className="text-[12px] text-risk-red hover:text-risk-red/80 transition-colors"
             >
               Remove
             </button>
@@ -250,7 +250,7 @@ export function AppliesTo({
                 onChange={e => toggleAll(e.target.checked)}
                 className="accent-accent-indigo w-3 h-3"
               />
-              <span className="text-[11px] text-[var(--text-secondary)]">All {panelLabel}</span>
+              <span className="text-[12px] text-[var(--text-secondary)]">All {panelLabel}</span>
             </label>
           )}
 
@@ -264,7 +264,7 @@ export function AppliesTo({
                   value={search}
                   onChange={e => setSearch(e.target.value)}
                   placeholder={`Search ${panelLabel.toLowerCase()}...`}
-                  className="w-full pl-7 pr-3 py-1.5 bg-kd-elevated border border-kd-border rounded-lg text-[11px] text-[var(--text-primary)] placeholder:text-muted focus:outline-none focus:border-accent-indigo/60"
+                  className="w-full pl-7 pr-3 py-1.5 bg-kd-elevated border border-kd-border rounded-lg text-[12px] text-[var(--text-primary)] placeholder:text-muted focus:outline-none focus:border-accent-indigo/60"
                 />
               </div>
               <div className="max-h-40 overflow-y-auto space-y-0.5 pr-1">
@@ -276,15 +276,15 @@ export function AppliesTo({
                       onChange={e => updateCodes(it.code, e.target.checked)}
                       className="accent-accent-indigo w-3 h-3"
                     />
-                    <span className="text-[11px] text-[var(--text-secondary)]">{it.label}</span>
+                    <span className="text-[12px] text-[var(--text-secondary)]">{it.label}</span>
                   </label>
                 ))}
                 {filteredItems.length === 0 && (
-                  <p className="text-[10px] text-muted py-2 text-center">No matches</p>
+                  <p className="text-[12px] text-muted py-2 text-center">No matches</p>
                 )}
               </div>
               {selectedCodes.length > 0 && (
-                <p className="text-[10px] text-accent-indigo mt-2">{selectedCodes.length} selected</p>
+                <p className="text-[12px] text-accent-indigo mt-2">{selectedCodes.length} selected</p>
               )}
             </>
           )}
@@ -294,7 +294,7 @@ export function AppliesTo({
       {/* Stock Market selected — no children, just confirmation */}
       {activePanel === 'stockMarket' && (
         <div className="flex-1 flex items-center justify-center p-3 bg-kd-elevated/50 border border-kd-border rounded-xl">
-          <p className="text-[11px] text-muted text-center">Applies broadly to the entire stock market</p>
+          <p className="text-[12px] text-muted text-center">Applies broadly to the entire stock market</p>
         </div>
       )}
     </div>
