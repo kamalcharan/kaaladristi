@@ -34,6 +34,10 @@ export interface EquityMeta {
   isin: string | null;
   is_active: boolean;
   mcap_cr?: number | null;
+  /** Listed share count — lets a bulk deal be stated as a % of equity, the
+   *  unit its disclosure threshold is actually defined in. Nullable: when it
+   *  is absent the percentage is omitted rather than guessed. */
+  shares_outstanding?: number | null;
 }
 
 // ── Columns fetched from km_equity_eod ─────────────────────────
@@ -55,7 +59,7 @@ const EQUITY_PULSE_COLS = [
 
 async function fetchEquityMeta(equityId: number): Promise<EquityMeta | null> {
   const { data, error } = await from('km_equity_symbols')
-    .select('id,symbol,company_name,industry,exchange,isin,is_active,mcap_cr')
+    .select('id,symbol,company_name,industry,exchange,isin,is_active,mcap_cr,shares_outstanding')
     .eq('id', equityId)
     .limit(1)
     .single()

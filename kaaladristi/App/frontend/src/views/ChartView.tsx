@@ -21,6 +21,8 @@ import DeliveryVsTraded from '@/components/domain/StockCockpit/DeliveryVsTraded'
 import SectorMembershipCard from '@/components/domain/StockCockpit/SectorMembershipCard';
 import CockpitIndicatorPanels from '@/components/domain/StockCockpit/CockpitIndicatorPanels';
 import BigMoneyCard from '@/components/domain/StockCockpit/BigMoneyCard';
+import BulkDealsCard from '@/components/domain/StockCockpit/BulkDealsCard';
+import { useBulkDeals } from '@/hooks/useBulkDeals';
 import CockpitOverlayStrip from '@/components/domain/StockCockpit/CockpitOverlayStrip';
 import { readBigMoneyDays } from '@/services/bigMoney';
 import { useFrameworkStore } from '@/stores/frameworkStore';
@@ -610,6 +612,17 @@ export default function ChartView({ storyPreview = false }: { storyPreview?: boo
   // ── Story mode (Chart & Replay) — timed price-vs-signal events ──
   const [storyOpen, setStoryOpen] = useState(false);
   const bigMoneyDates = useMemo(() => new Set(bigMoneyEvents.map((e) => e.trade_date)), [bigMoneyEvents]);
+
+  // Disclosed bulk/block deals over the SAME window the chart is showing, so
+  // the card's coverage sentence describes the sessions actually on screen.
+  // Named counterparties are the complement to Big Money's anonymous
+  // delivery footprint — see services/bulkDeals.ts for why both exist.
+  const bulkDeals = useBulkDeals(
+    isEquity && tf === 'daily' ? numId : null,
+    rows[0]?.trade_date,
+    rows[rows.length - 1]?.trade_date,
+    equityPulse.meta?.shares_outstanding ?? null,
+  );
   const { data: sectorByDate } = useQuery({
     queryKey: ['sector-series', equityPulse.meta?.industry],
     queryFn: () => fetchSectorSeries(equityPulse.meta?.industry ?? null),
@@ -1148,8 +1161,9 @@ export default function ChartView({ storyPreview = false }: { storyPreview?: boo
                 />
               }
             />
-            <div className="lg:row-span-2">
+            <div className="lg:row-span-2 flex flex-col gap-3">
               <BigMoneyCard events={bigMoneyEvents} />
+              <BulkDealsCard result={bulkDeals.data} />
             </div>
             <div className="lg:col-span-2">
               <DeliveryVsTraded rows={rows} />
