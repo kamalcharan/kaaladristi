@@ -76,7 +76,14 @@ export const KaalaDrishtiTheme: ThemeConfig = {
       },
       utility: {
         primaryText:         '#E8E6E0',  // --text: cream white
-        secondaryText:       '#7A8099',  // --muted: muted slate blue
+        // Lifted from #7A8099 on 2026-09-22 (owner-approved). The original
+        // measured 4.63:1 worst-case, which was AA for itself but left NO
+        // ROOM BELOW IT: --text-muted derives from this value and must stay
+        // dimmer, so muted topped out at 3.70 — legible, but short of the
+        // 4.5:1 AA that 9-10px body text needs. Same slate, 25% lighter:
+        // secondary 6.95, muted 5.35, so every text tier except decorative
+        // --text-faint now clears AA with real separation between rungs.
+        secondaryText:       '#9ba0b2',  // --muted: muted slate blue
         primaryBackground:   '#0D0F14',  // --bg: deep dark background
         secondaryBackground: '#13161D',  // --surface: card/panel background
       },

@@ -61,11 +61,15 @@ function mixHex(base: string, tint: string, pct: number): string {
  * Vikuna Black rather than drifting cream.
  *
  * - rgba(…, a)  → reduce alpha by 0.10 (was 0.25) → Jade Thorn 5.30:1
- * - hex          → rgba at 0.85 opacity (was 0.60) → Vikuna Black 3.70:1
+ * - hex          → rgba at 0.85 opacity (was 0.60) → Vikuna Black 5.35:1
  *
- * Both stay BELOW --text-secondary (4.63 / 6.74 worst-case) so the ramp keeps
- * its order. See the ceiling note on --text-faint for why Vikuna cannot reach
- * a full 4.5:1 here without the owner lifting secondaryText itself.
+ * Both stay BELOW --text-secondary (6.95 / 6.74 worst-case) so the ramp keeps
+ * its order. Vikuna reached 4.5:1 only after the owner approved lifting that
+ * theme's dark secondaryText on 2026-09-22 (#7A8099 → #9ba0b2); at the old
+ * value this same 0.85 alpha capped out at 3.70, because muted must stay
+ * dimmer than a secondary that was itself only 4.63. In LIGHT mode muted is
+ * still 3.48 / 3.77 — a recorded gap, see the FLOORS block in
+ * scripts/check-text-contrast.mjs.
  */
 function deriveTextMuted(secondaryText: string): string {
   const rgbaRe = /rgba\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*([\d.]+)\s*\)/;

@@ -34,13 +34,14 @@
  * matters as much as the floors: raising a tier past the one above it destroys
  * the hierarchy just as surely as leaving it invisible.
  *
- * FLOORS. muted and faint are de-emphasis tiers, so they are held to WCAG's
- * 3:1 (large text / UI boundaries) rather than 4.5:1. That is a deliberate,
- * documented compromise, NOT the ideal: much of this UI renders these tokens
- * at 8.5–10px, which WCAG treats as normal text needing 4.5:1. Vikuna Black
- * dark cannot reach 4.5 on muted, because its own secondaryText tops out at
- * 4.63 and muted must stay below it — closing that gap requires lifting
- * secondaryText in the palette, which is an owner design decision.
+ * FLOORS are per mode and the difference is deliberate — see the FLOORS block.
+ * In DARK, every tier but decorative --text-faint must hold 4.5:1. That became
+ * reachable on 2026-09-22 when the owner approved lifting Vikuna Black's
+ * secondaryText (#7A8099 -> #9ba0b2): the old value was AA for itself at 4.63
+ * but left no room beneath it, capping muted at 3.70. Note that raising TYPE
+ * SIZE would not have helped — WCAG's 3:1 "large text" tier starts at 24px
+ * (18.7px bold), so 9px -> 11px stays normal text at 4.5:1. Only the palette
+ * moves the ratio; type size buys legibility, which is a separate pass.
  */
 
 import fs from 'node:fs';
@@ -103,11 +104,23 @@ const themeMod = load('src/config/theme/index.ts', {
 });
 
 // ── the contract ────────────────────────────────────────────────────────
+// Floors are PER MODE, because the two modes are in different states.
+//
+// DARK is the shipping surface (the app is dark-locked for launch) and, since
+// secondaryText was lifted on 2026-09-22, every tier but decorative --text-faint
+// holds 4.5:1. That is locked in here so it cannot quietly slip back.
+//
+// LIGHT is held at 3.0 on muted, and that is a RECORDED GAP, not an opinion
+// that 3.0 is enough. Vikuna light muted is 3.48 and Jade light 3.77; both can
+// reach AA, but only by materially darkening secondaryText (#6f6354 -> ~#534a3f
+// and #5e5c5a -> ~#4b4a48), and those light palettes were owner-calibrated over
+// five sessions with A/B/C picks (see docs/claude/theme-session-2026-07-12.md).
+// Overriding that unilaterally would trade one owner decision for a compliance
+// number, on a mode that does not currently ship. Raise these to 4.5 when light
+// mode is re-calibrated for release — the numbers above are the targets.
 const FLOORS = {
-  '--text-primary': 4.5,
-  '--text-secondary': 4.5,
-  '--text-muted': 3.0,
-  '--text-faint': 3.0,
+  dark:  { '--text-primary': 4.5, '--text-secondary': 4.5, '--text-muted': 4.5, '--text-faint': 3.0 },
+  light: { '--text-primary': 4.5, '--text-secondary': 4.5, '--text-muted': 3.0, '--text-faint': 3.0 },
 };
 const RAMP = ['--text-primary', '--text-secondary', '--text-muted', '--text-faint'];
 const SURFACES = ['--bg', '--card'];
@@ -127,6 +140,7 @@ for (const theme of list) {
   for (const prefersDark of [true, false]) {
     const vars = tokensFor(theme, prefersDark);
     const modeName = prefersDark ? 'dark' : 'light';
+    const floors = FLOORS[modeName];
     const label = `${theme.name ?? theme.id ?? 'theme'} ${modeName}`;
 
     // A dark-only theme has no meaningful light pass.
@@ -148,8 +162,8 @@ for (const theme of list) {
         if (!surf[s]) continue;
         const r = ratio(over(p.rgb, p.a, surf[s]), surf[s]);
         if (r < w) w = r;
-        if (r < FLOORS[tok]) {
-          console.error(`✗ ${label}: ${tok} on ${s} = ${r.toFixed(2)}:1 (floor ${FLOORS[tok]}:1)`);
+        if (r < floors[tok]) {
+          console.error(`✗ ${label}: ${tok} on ${s} = ${r.toFixed(2)}:1 (floor ${floors[tok]}:1)`);
           failed++;
         }
       }
