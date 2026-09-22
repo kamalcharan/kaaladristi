@@ -17,7 +17,13 @@ export const JadeThornTheme: ThemeConfig = {
     },
     utility: {
       primaryText:         '#1a1a1a',
-      secondaryText:       '#8a8884',
+      // Darkened from #8a8884 on 2026-09-22. The original measured 2.94:1 on
+      // --bg and 3.54:1 on --card — below AA for body text — and dragged
+      // --text-muted (derived at 82%) down to 2.34:1, which INVERTED the ramp
+      // against --text-faint at 3.19:1. CLAUDE.md had already recorded the
+      // 2.34 figure; nothing enforced it until check-text-contrast.mjs.
+      // Same warm gray, 68% of each channel: sec 5.53, muted 3.77, faint 3.19.
+      secondaryText:       '#5e5c5a',
       // Deeper parchment canvas so the white cards clearly separate (matches
       // the "white depth" tuned into Vikuna Black light); stays warm parchment,
       // not greige — keeps Jade Thorn's identity.

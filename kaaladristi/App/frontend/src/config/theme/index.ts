@@ -45,18 +45,37 @@ function mixHex(base: string, tint: string, pct: number): string {
 
 /**
  * Derive --text-muted from secondaryText when no explicit placeholder is given.
- * - rgba(…, a)  → reduce alpha by ~40 %
- * - hex          → convert to rgba at 0.60 opacity
+ *
+ * ⚠ RECALIBRATED 2026-09-22 — the previous values were never measured in DARK
+ * mode, only in light. Measured on the launch theme (Vikuna Black dark), the
+ * old derive produced **2.51:1 on --bg and 2.48:1 on --card** — below WCAG's
+ * 3:1 floor for even large/decorative text, while carrying real sentences at
+ * 9–10px (the breadth chart's "50% Above 20 EMA · …" subtitle, the Greed/Fear
+ * axis labels, "N constituents analysed"). Same failure shape as the
+ * scrollbar thumb: dark "looked dim but present", so nobody put a number on
+ * it for months. The comments below light-mode values carried measurements;
+ * the dark branch carried an assumption.
+ *
+ * The alpha is raised but the HUE is kept — muted still composites the
+ * theme's own secondaryText, not primaryText, so it stays slate-blue on
+ * Vikuna Black rather than drifting cream.
+ *
+ * - rgba(…, a)  → reduce alpha by 0.10 (was 0.25) → Jade Thorn 5.30:1
+ * - hex          → rgba at 0.85 opacity (was 0.60) → Vikuna Black 3.70:1
+ *
+ * Both stay BELOW --text-secondary (4.63 / 6.74 worst-case) so the ramp keeps
+ * its order. See the ceiling note on --text-faint for why Vikuna cannot reach
+ * a full 4.5:1 here without the owner lifting secondaryText itself.
  */
 function deriveTextMuted(secondaryText: string): string {
   const rgbaRe = /rgba\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*([\d.]+)\s*\)/;
   const m = secondaryText.match(rgbaRe);
   if (m) {
-    const a = Math.max(0, parseFloat(m[4]) - 0.25).toFixed(2);
+    const a = Math.max(0, parseFloat(m[4]) - 0.10).toFixed(2);
     return `rgba(${m[1]}, ${m[2]}, ${m[3]}, ${a})`;
   }
   if (secondaryText.startsWith('#')) {
-    return hexToRgba(secondaryText, 0.60);
+    return hexToRgba(secondaryText, 0.85);
   }
   return secondaryText;
 }
@@ -161,15 +180,19 @@ export function applyTheme(config: ThemeConfig, prefersDark: boolean): void {
   set('--panel-recess', prefersDark ? 'rgba(0,0,0,0.15)' : 'rgba(0,0,0,0.04)');
 
   // ── Text faint ──
-  // A flat 25% of primaryText reads fine in dark mode (light text dimmed
-  // over a near-black page still has presence) but is nearly invisible in
+  // A flat 25% of primaryText was ASSUMED to read fine in dark mode (light
+  // text dimmed over a near-black page "still has presence") — measured
+  // 2026-09-22 it is 2.00:1, so it was never fine. It is also invisible in
   // light mode: 25% of a near-black hex over a white/near-white background
   // blends to ~1.8:1 contrast, well under WCAG's 3:1 floor for any text —
   // this is the systemic "washed out" complaint across the ~64 components
   // that use --text-faint (sidebar footer, PageHeader meta lines, table
   // captions, etc.), not a per-page bug. Light mode uses a much higher
   // alpha (~3:1 for small decorative text) to actually be legible.
-  set('--text-faint', hexToRgba(c.utility.primaryText, prefersDark ? 0.25 : 0.50));
+  // Dark was 0.25 and measured 2.00:1 on --bg / 2.04:1 on --card — less than
+  // half the AA requirement, and the comment above asserted it "reads fine".
+  // 0.40 measures 3.29 / 3.31, clearing the 3:1 floor this tier is for.
+  set('--text-faint', hexToRgba(c.utility.primaryText, prefersDark ? 0.40 : 0.50));
 }
 
 /**

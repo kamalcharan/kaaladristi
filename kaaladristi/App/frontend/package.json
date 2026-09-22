@@ -1,16 +1,17 @@
 {
-  "name": "kāla-drishti",
+  "name": "k\u0101la-drishti",
   "private": true,
   "version": "0.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0 --port 5173",
-    "build": "node scripts/check-theme-standard.mjs && node scripts/qa/check-persona.mjs && vite build --mode production && node scripts/write-version.mjs",
+    "build": "node scripts/check-theme-standard.mjs && node scripts/qa/check-persona.mjs && node scripts/check-text-contrast.mjs && vite build --mode production && node scripts/write-version.mjs",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "check:theme": "node scripts/check-theme-standard.mjs",
-    "check:persona": "node scripts/qa/check-persona.mjs"
+    "check:persona": "node scripts/qa/check-persona.mjs",
+    "check:contrast": "node scripts/check-text-contrast.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
