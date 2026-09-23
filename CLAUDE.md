@@ -22,7 +22,19 @@ members, not a curated liquid subset. Any gap between that and what's in
 This has been restated by the owner many times and keeps resurfacing because
 nothing recorded it. It is recorded here now.
 
-**Current state (audited 2026-08-03) — the intent is NOT met:**
+**✅ LARGELY MET as of 2026-09-23 — the block below is the 2026-08-03 audit and
+its numbers are STALE. Re-measured on the 2026-09-22 bar: `km_equity_symbols`
+holds **3,839 NSE** rows (all active) and **3,392 get bars on the day**, against
+the 1,445 / 1,334 recorded below. The NSE side of this decision has been
+delivered — the ~2,100 figure it calls the real universe has been passed.**
+**Do not spend a session "fixing" the root cause described below without
+re-measuring first.** The DECISION is unchanged and still not open for
+discussion; what changed is that the gap it describes is largely closed. Still
+worth confirming separately: BSE coverage, and whether the newly-admitted
+symbols got their history backfilled and breadth rebuilt (the two things this
+decision says it implies).
+
+**Prior state (audited 2026-08-03) — superseded, kept for the root-cause trail:**
 
 - `km_equity_symbols` holds **1,445 NSE** rows; only **1,334** get bars on a
   given day. The real NSE listed universe is ~2,100+.
@@ -1975,9 +1987,26 @@ owner raised together (2026-09-22/23): a five-layer trading frame mapped onto
 the ICP, a four-filter swing watchlist, and an eight-step High-Probability
 Pullback Checklist. **No migration, no column, no scanner exists for any of
 it.** Every ✅/❌ was checked against the repo; every row count is marked
-⏳ UNMEASURED because the read-only `kaala-postgres` MCP was wedged all session
-(even `SELECT 1` timed out at 60s) — and the counts matter most, since two of
-the three proposals exist to make a list *smaller*.
+**MEASURED 2026-09-23** (the MCP recovered after a container restart) and the
+numbers settle the central design question — §0 of the doc.
+
+**On the 2026-09-22 bar, NSE active non-ETF, universe 3,044:** within 10% of the
+52-week high 547 · +30% in 3 months 365 · **both 218** · + Stage 2 **161** ·
++ above `ema_20` **159**. ⚠ Stage 2 is stored as **`S2_CANDIDATE`** — there is no
+plain `'S2'`, so a filter written against `'S2'`/`'STAGE_2'` returns zero and
+reads as "nothing qualifies" rather than as a typo.
+
+⚠ **All four swing filters AND-ed return ZERO.** Computed directly from raw bars
+for those 159 names (not via Flower Pot membership, which would be circular —
+that arm holds 33 rows today): **1** is ATR-compressed, 28 are volume-dead,
+**0** are both, and the best ATR ratio in the whole watchlist is 0.80, exactly
+at the gate. A stock that has run +30% into its 52-week high is essentially
+never in Flower-Pot-grade compression on the same bar. So filter 4 ("tight range
+candles") **cannot be a watchlist filter** — as an `AND` it empties the list on
+an ordinary session, which reads as a broken screen. It is the TRIGGER, exactly
+as the owner's own spec said ("entry still comes from a tight trigger bar").
+159 is also too many for a checklist to be the entry point: steps 1–3 want to be
+a scanner, and the 8-step checklist is a PANEL opened on one candidate from it.
 
 Four findings worth carrying even if none of it is built:
 
