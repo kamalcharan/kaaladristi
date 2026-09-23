@@ -145,15 +145,28 @@ DIMENSION_DEPENDENTS: dict[str, list[str]] = {
     # before, and the Stage 2 Leaders scanner (`.eq('stage','S2')`) served an
     # empty list.
     #
-    # The outage persisted because of THIS line, not because of the NULLs. The
-    # gap sweep repaired rolling_metrics on 09-16 — w52_high is fully populated
-    # on that bar today — but with no edge here the cascade recomputed
-    # big_money and vani_flags and never re-derived stage, and the classifier's
-    # default mode only reprocesses rows where `stage IS NULL`. So a repaired
-    # input left a permanently wrong derived value: every column populated,
-    # fill rate healthy, answer wrong. Exactly the class migration 210's
-    # check_derivation_staleness exists to catch, on an edge it could not see
-    # because the edge was not declared.
+    # ⚠ THE EDGE IS CORRECT BUT IT IS NOT THE ROOT CAUSE. Declaring it stops a
+    # repaired rolling_metrics from leaving stage stale, which is real. What
+    # actually produced both outages is in worker._cascade_dependents: the whole
+    # closure is enqueued in ONE pass as sibling jobs, all force=True, all with
+    # the same created_at, with no execution ordering between them and NO
+    # "parent failed -> skip dependents" rule. km_jobs shows the consequence on
+    # 2026-09-16 AND 2026-09-22: rolling_metrics and stage_classification run
+    # concurrently, both UPDATE km_equity_eod, and DEADLOCK. rolling_metrics
+    # loses, but its forced nullify has already COMMITTED (separately from the
+    # recompute, or a rollback would have restored the old values), so
+    # w52_high / w52_low / lifetime_high are left NULL — and
+    # stage_classification then completes successfully against those NULLs and
+    # demotes every S2 to S2_CANDIDATE.
+    #
+    # So adding this edge does not fix the outage and, on its own, adds one
+    # more forced sibling to the same batch. Three things are still open:
+    #   1. a dependent must NOT run when its parent's fix failed;
+    #   2. siblings that write the same table must be serialised, or the
+    #      handler must retry on deadlock (40P01);
+    #   3. gap_sweep re-fires an nse_equity_indicators fix that repairs 0 rows
+    #      every ~2h, and each one cascades a destructive forced nullify of
+    #      rolling_metrics. That is what sets the frequency.
     'rolling_metrics':        ['big_money', 'vani_flags', 'stage_classification'],
 
     # The Flower Pot arm gates on stage; the journey walk excludes S3/S4.
