@@ -5,6 +5,17 @@
  * NULLs), never from our `family` column — see constants/filingCategories.ts
  * for why that distinction is load-bearing.
  *
+ * ⚠ A row EXPANDS; it does not navigate. This is a filings browser, so the
+ * primary act on a row is reading the filing — the chart is a secondary link
+ * inside the panel. Navigating away on click made the filing's own content
+ * unreachable from the one page built to show it.
+ *
+ * ⚠ The panel never claims to hold the document. `km_filings_raw.raw_text` is
+ * NULL on all 31,803 rows (`extract_status = 'pending'` — Sprint 3 has never
+ * run), so what it shows is the exchange's own prose (`summary_text`, present
+ * on every row) plus a link OUT to the PDF. When that prose adds nothing over
+ * the subject line the panel says so rather than rendering an empty box.
+ *
  * ⚠ The "High Priority" tab is MEASURED, not asserted. It carries results and
  * the three legal/distress classes that showed real forward drift, and
  * deliberately omits "Orders Won" — which pops +2.07% on Day 0 and gives back
@@ -13,7 +24,10 @@
 
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, ArrowUpDown, AlertTriangle, FileText, ChevronLeft, ChevronRight } from 'lucide-react';
+import {
+  Search, ArrowUpDown, AlertTriangle, FileText, ChevronLeft, ChevronRight,
+  ChevronDown, ExternalLink, LineChart,
+} from 'lucide-react';
 import { Card, PageHeader, Tabs, EmptyState } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import { useFilings } from '@/hooks/useFilings';
@@ -48,6 +62,20 @@ function fmtTime(ts: string | null): string {
   });
 }
 
+/** Full dissemination stamp for the detail panel, explicitly labelled IST. */
+function fmtStamp(ts: string | null): string {
+  if (!ts) return '—';
+  const dt = new Date(ts);
+  if (Number.isNaN(dt.getTime())) return '—';
+  const d = dt.toLocaleDateString('en-IN', {
+    day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata',
+  });
+  const t = dt.toLocaleTimeString('en-IN', {
+    hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Kolkata',
+  });
+  return `${d}, ${t} IST`;
+}
+
 function isoDaysAgo(n: number): string {
   const d = new Date();
   d.setDate(d.getDate() - n);
@@ -79,43 +107,140 @@ function SortHeader({
   );
 }
 
+/** One grid template, shared by the header and every row, so they stay aligned. */
+const GRID =
+  'grid grid-cols-[92px_minmax(0,1fr)_16px] ' +
+  'sm:grid-cols-[104px_minmax(0,1.3fr)_minmax(0,1fr)_16px] gap-x-3';
+
 function FilingRowItem({ row }: { row: FilingRow }) {
-  const navigate = useNavigate();
+  const [open, setOpen] = useState(false);
   const gid = groupForDesc(row.descRaw);
   const time = fmtTime(row.disseminatedAt);
-  const clickable = row.equityId != null;
 
   return (
-    <div
-      className={cn(
-        'grid grid-cols-[92px_minmax(0,1fr)] sm:grid-cols-[104px_minmax(0,1.3fr)_minmax(0,1fr)]',
-        'gap-x-3 gap-y-1 px-3 py-2.5 border-b border-kd-border last:border-b-0',
-        clickable && 'cursor-pointer hover:bg-kd-elevated transition-colors',
-      )}
-      onClick={clickable
-        ? () => navigate(`/chart/equity/${row.equityId}?name=${encodeURIComponent(row.companyName)}`)
-        : undefined}
-    >
-      {/* Day 0 + dissemination time */}
-      <div className="min-w-0">
-        <div className="text-[12px] font-mono text-[var(--text-secondary)]">{fmtDay(row.day0)}</div>
-        {time && <div className="text-[11px] font-mono text-muted">{time}</div>}
-      </div>
-
-      {/* Company */}
-      <div className="min-w-0">
-        <div className="text-[13px] text-primary font-medium leading-snug break-words">
-          {row.companyName}
+    <div className="border-b border-kd-border last:border-b-0">
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+        className={cn(
+          GRID,
+          'w-full text-left gap-y-1 px-3 py-2.5 items-start',
+          'cursor-pointer hover:bg-kd-elevated transition-colors',
+        )}
+      >
+        {/* Day 0 + dissemination time */}
+        <div className="min-w-0">
+          <div className="text-[12px] font-mono text-[var(--text-secondary)]">{fmtDay(row.day0)}</div>
+          {time && <div className="text-[11px] font-mono text-muted">{time}</div>}
         </div>
-        {/* Category shows here on phones, where the third column is gone */}
-        <div className="sm:hidden mt-0.5">
+
+        {/* Company */}
+        <div className="min-w-0">
+          <div className="text-[13px] text-primary font-medium leading-snug break-words">
+            {row.companyName}
+          </div>
+          {/* Category shows here on phones, where the third column is gone */}
+          <div className="sm:hidden mt-0.5">
+            <CategoryChip gid={gid} desc={row.descRaw} />
+          </div>
+        </div>
+
+        {/* Category + subject */}
+        <div className="hidden sm:block min-w-0">
           <CategoryChip gid={gid} desc={row.descRaw} />
         </div>
+
+        <ChevronDown
+          className={cn(
+            'w-4 h-4 mt-0.5 shrink-0 text-muted transition-transform',
+            open && 'rotate-180',
+          )}
+        />
+      </button>
+
+      {open && <FilingDetail row={row} />}
+    </div>
+  );
+}
+
+/**
+ * What the exchange actually filed. Three facts and two exits — deliberately
+ * not a summary of the document, which we do not have.
+ */
+function FilingDetail({ row }: { row: FilingRow }) {
+  const navigate = useNavigate();
+
+  return (
+    <div className="px-3 pb-3 pt-1 sm:pl-[116px] space-y-2.5 bg-kd-elevated/40">
+      {/* The exchange's own subject line, in full and unabbreviated */}
+      <div>
+        <div className="text-[10px] font-semibold uppercase tracking-wider text-muted mb-0.5">
+          Subject
+        </div>
+        <div className="text-[12px] text-primary leading-snug break-words">{row.descRaw || '—'}</div>
       </div>
 
-      {/* Category + subject */}
-      <div className="hidden sm:block min-w-0">
-        <CategoryChip gid={gid} desc={row.descRaw} />
+      {/* The prose, when it carries more than the subject line already did */}
+      {row.summary ? (
+        <div>
+          <div className="text-[10px] font-semibold uppercase tracking-wider text-muted mb-0.5">
+            What was filed
+          </div>
+          <p className="text-[12px] text-[var(--text-secondary)] leading-relaxed break-words whitespace-pre-line">
+            {row.summary}
+          </p>
+        </div>
+      ) : (
+        // Not an error and not an empty box: the feed genuinely repeats the
+        // subject line for this filing. Say which of the two it is.
+        <p className="text-[11px] text-muted italic leading-relaxed">
+          The exchange feed carries no wording beyond the subject line for this
+          filing. The document itself has not been read — open it to see more.
+        </p>
+      )}
+
+      <div className="text-[11px] text-muted font-mono">
+        Disseminated {fmtStamp(row.disseminatedAt)}
+        {row.day0 && <> · actionable {fmtDay(row.day0)}</>}
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2 pt-0.5">
+        {row.docUrl ? (
+          <a
+            href={row.docUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={cn(
+              'inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[12px] font-medium',
+              'bg-[var(--accent)]/15 border border-[var(--accent)]/40 text-[var(--accent)]',
+              'hover:bg-[var(--accent)]/25 transition-colors',
+            )}
+          >
+            <ExternalLink className="w-3.5 h-3.5" />
+            Open filing
+            {row.docSize && <span className="text-[11px] opacity-70">· {row.docSize}</span>}
+          </a>
+        ) : (
+          <span className="text-[11px] text-muted italic">No document link in the feed.</span>
+        )}
+
+        {row.equityId != null && (
+          <button
+            type="button"
+            onClick={() => navigate(
+              `/chart/equity/${row.equityId}?name=${encodeURIComponent(row.companyName)}`,
+            )}
+            className={cn(
+              'inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[12px] font-medium',
+              'bg-kd-elevated border border-kd-border text-primary',
+              'hover:border-[var(--accent)]/40 transition-colors',
+            )}
+          >
+            <LineChart className="w-3.5 h-3.5" />
+            View chart
+          </button>
+        )}
       </div>
     </div>
   );
@@ -247,14 +372,12 @@ export default function FilingsView() {
 
       <Card rounded="xxl" className="overflow-hidden">
         {/* Column headers double as the sort control */}
-        <div className={cn(
-          'grid grid-cols-[92px_minmax(0,1fr)] sm:grid-cols-[104px_minmax(0,1.3fr)_minmax(0,1fr)]',
-          'gap-x-3 px-3 py-2 border-b border-kd-border bg-kd-elevated',
-        )}>
+        <div className={cn(GRID, 'px-3 py-2 border-b border-kd-border bg-kd-elevated')}>
           <SortHeader label="Day 0" col="date" sort={sort} ascending={ascending} onSort={onSort} />
           <SortHeader label="Company" col="company" sort={sort} ascending={ascending} onSort={onSort} />
           <SortHeader label="Category" col="category" sort={sort} ascending={ascending} onSort={onSort}
             className="hidden sm:flex" />
+          <span aria-hidden="true" />
         </div>
 
         {isLoading && !data ? (

@@ -5,6 +5,18 @@
  * a day, so this is a paged PostgREST read with a total count; it is never a
  * fetch-the-table-and-filter-in-the-browser page.
  *
+ * ⚠ The row DETAIL (subject prose + the PDF link) lives on `km_filings_raw`,
+ * not here — `km_corporate_events` is the normalised event, the raw row is the
+ * filing. They are joined by `primary_raw_id` (a real FK, so PostgREST embeds
+ * it) and it is populated on 31,294 of 31,294 rows. `summary_text` and
+ * `doc_url` are likewise non-NULL on all 31,803 raw rows, measured 2026-09-23,
+ * which is why the detail is embedded in the LIST query rather than fetched
+ * per-row on expand: it is ~135 chars a row and always there.
+ *
+ * ⚠ `raw_text` is NULL on every row and `extract_status` is `'pending'` on all
+ * 31,803 — document extraction is Sprint 3 and has never run. Nothing may
+ * offer "the document text"; the honest affordance is a link to the PDF.
+ *
  * ⚠ `day_0_trade_date` is the session the market could ACT on the filing, and
  * it is what the page sorts and filters by. `disseminated_at` is the exchange
  * timestamp and is shown as the TIME on the row — the two are different facts
@@ -30,6 +42,12 @@ export interface FilingRow {
   disseminatedAt: string | null;
   day0: string | null;
   isResult: boolean;
+  /** Exchange prose for this filing. Non-blank on every row measured. */
+  summary: string | null;
+  /** The filing PDF on the exchange. Opened in a new tab, never proxied. */
+  docUrl: string | null;
+  /** e.g. "1.57 MB" — shown on the link so a 12 MB PDF is not a surprise. */
+  docSize: string | null;
 }
 
 export interface FilingsQuery {
@@ -54,7 +72,33 @@ export interface FilingsResult {
   failed: boolean;
 }
 
-const COLS = 'id,equity_id,isin,company_name,desc_raw,disseminated_at,day_0_trade_date,is_result_announcement';
+// The embed is the to-one FK `primary_raw_id` → `km_filings_raw`. There is
+// exactly one FK between these two tables, so the bare table name resolves.
+const COLS =
+  'id,equity_id,isin,company_name,desc_raw,disseminated_at,day_0_trade_date,is_result_announcement,' +
+  'km_filings_raw(summary_text,doc_url,doc_size_label)';
+
+/**
+ * PostgREST returns a to-one embed as an object, but returns an ARRAY when it
+ * cannot prove the relationship is to-one (and older versions did so always).
+ * Both shapes are handled — a detail panel that silently renders nothing
+ * because the embed arrived wrapped is exactly the failure this page exists to
+ * avoid.
+ */
+function embedded(v: unknown): Record<string, unknown> | null {
+  if (Array.isArray(v)) return (v[0] as Record<string, unknown>) ?? null;
+  if (v && typeof v === 'object') return v as Record<string, unknown>;
+  return null;
+}
+
+/** Blank, whitespace, or a verbatim echo of the subject line carries nothing. */
+function usefulSummary(text: unknown, descRaw: string): string | null {
+  if (typeof text !== 'string') return null;
+  const t = text.trim();
+  if (!t) return null;
+  if (t.toLowerCase() === descRaw.trim().toLowerCase()) return null;
+  return t;
+}
 
 const SORT_COLUMN: Record<FilingSortKey, string> = {
   date: 'day_0_trade_date',
@@ -122,16 +166,23 @@ export async function fetchFilings(q: FilingsQuery = {}): Promise<FilingsResult>
     return { rows: [], total: 0, page, pageSize, failed: true };
   }
 
-  const rows: FilingRow[] = (res.data as Record<string, unknown>[]).map((r) => ({
-    id: Number(r.id),
-    equityId: r.equity_id == null ? null : Number(r.equity_id),
-    isin: (r.isin as string) ?? null,
-    companyName: (r.company_name as string) ?? '—',
-    descRaw: (r.desc_raw as string) ?? '',
-    disseminatedAt: (r.disseminated_at as string) ?? null,
-    day0: (r.day_0_trade_date as string) ?? null,
-    isResult: r.is_result_announcement === true,
-  }));
+  const rows: FilingRow[] = (res.data as Record<string, unknown>[]).map((r) => {
+    const descRaw = (r.desc_raw as string) ?? '';
+    const raw = embedded(r.km_filings_raw);
+    return {
+      id: Number(r.id),
+      equityId: r.equity_id == null ? null : Number(r.equity_id),
+      isin: (r.isin as string) ?? null,
+      companyName: (r.company_name as string) ?? '—',
+      descRaw,
+      disseminatedAt: (r.disseminated_at as string) ?? null,
+      day0: (r.day_0_trade_date as string) ?? null,
+      isResult: r.is_result_announcement === true,
+      summary: usefulSummary(raw?.summary_text, descRaw),
+      docUrl: (raw?.doc_url as string) || null,
+      docSize: (raw?.doc_size_label as string) || null,
+    };
+  });
 
   return { rows, total: res.count ?? rows.length, page, pageSize, failed: false };
 }

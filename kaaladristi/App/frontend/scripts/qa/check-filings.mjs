@@ -20,9 +20,26 @@
  *    against nginx's 8KB header limit, and the DEFAULT view needs 104 of them.
  *    The query must invert to the 13-value complement instead.
  *
+ * 4. THE ROW EXPANDS, IT DOES NOT NAVIGATE. The first version of this page
+ *    routed a row click to /chart/equity/:id, which made the filing's own
+ *    content unreachable from the one page built to show it. The row's click
+ *    handler must toggle; the chart must be a named secondary control.
+ *
+ * 5. THE DETAIL IS ACTUALLY JOINED, AND ITS EMBED SHAPE IS TOLERANT.
+ *    `summary_text`/`doc_url` live on `km_filings_raw`, one FK hop away.
+ *    PostgREST returns a to-one embed as an object OR an array depending on
+ *    version and detection; only one of those shapes rendering means the panel
+ *    is silently empty for everyone on the other.
+ *
+ * 6. NOTHING PROMISES THE DOCUMENT TEXT. `raw_text` is NULL on all 31,803 raw
+ *    rows and `extract_status` is 'pending' on every one of them — Sprint 3
+ *    has never run. A missing summary must say which of "no wording filed" and
+ *    "not read yet" it is, never render an empty box.
+ *
  * Verified to FAIL against: a typo'd desc string, orders/auditor added to high
- * priority, admin included in the defaults, a desc listed in two groups, and
- * the shorter-side inversion removed.
+ * priority, admin included in the defaults, a desc listed in two groups, the
+ * shorter-side inversion removed, a row click that navigates, an embed read
+ * that assumes one shape, a dropped join, and a blank missing-summary branch.
  */
 
 import assert from 'node:assert/strict';
@@ -139,6 +156,68 @@ const ok = (n) => { pass++; console.log(`  ✓ ${n}`); };
   const encoded = excluded.reduce((a, d) => a + encodeURIComponent(d).length + 3, 0);
   assert.ok(encoded < 4000, `default exclusion must stay well under the header limit, got ${encoded}`);
   ok(`default view excludes ${excluded.length} subjects (~${encoded} URL chars), not ${included.length}`);
+}
+
+// ── 6. The row expands; only the panel navigates ─────────────────────────
+{
+  const view = fs.readFileSync(new URL('../../src/views/FilingsView.tsx', import.meta.url), 'utf8');
+
+  // The row component's own body, up to the next top-level function.
+  const start = view.indexOf('function FilingRowItem(');
+  assert.ok(start > 0, 'FilingRowItem must exist');
+  const rest = view.slice(start + 1);
+  const end = start + 1 + rest.indexOf('\nfunction ');
+  const rowBody = view.slice(start, end);
+
+  assert.ok(!/navigate\s*\(/.test(rowBody),
+    'a filings row must NOT navigate on click — it expands. The chart belongs '
+    + 'in the detail panel as a named control, or the filing is unreadable on '
+    + 'the page built to show it.');
+  assert.ok(/aria-expanded/.test(rowBody),
+    'the row toggle must expose aria-expanded');
+  assert.ok(/FilingDetail/.test(rowBody),
+    'the row must render the detail panel when open');
+
+  const detail = view.slice(view.indexOf('function FilingDetail('));
+  assert.ok(/View chart/.test(detail) && /navigate\s*\(/.test(detail),
+    'the chart must still be reachable — as an explicit control in the panel');
+  assert.ok(/row\.docUrl/.test(detail) && /target="_blank"/.test(detail),
+    'the panel must link out to the filing document');
+  ok('row expands; chart and PDF are named controls in the panel');
+}
+
+// ── 7. The detail is joined, and both embed shapes are handled ───────────
+{
+  const src = fs.readFileSync(new URL('../../src/services/filings.ts', import.meta.url), 'utf8');
+  assert.ok(/km_filings_raw\(summary_text,doc_url,doc_size_label\)/.test(src),
+    'the list query must embed km_filings_raw — the detail lives there, not on '
+    + 'km_corporate_events');
+  assert.ok(/Array\.isArray\(/.test(src),
+    'PostgREST may return the to-one embed as an array; assuming one shape '
+    + 'leaves the panel silently empty on the other');
+  ok('detail is embedded in the list query, both embed shapes handled');
+}
+
+// ── 8. Nothing claims to hold the document text ──────────────────────────
+{
+  const view = fs.readFileSync(new URL('../../src/views/FilingsView.tsx', import.meta.url), 'utf8');
+  const src = fs.readFileSync(new URL('../../src/services/filings.ts', import.meta.url), 'utf8');
+
+  // raw_text is NULL on 31,803 of 31,803 rows; extract_status is 'pending' on
+  // all of them. Reading it would render an empty section on every filing.
+  for (const [name, text] of [['FilingsView', view], ['filings service', src]]) {
+    const body = text.split('*/').slice(1).join('*/');  // skip the doc comments
+    assert.ok(!/raw_text/.test(body),
+      `${name} must not read raw_text — document extraction has never run`);
+  }
+
+  // An absent summary is a stated fact, not a blank.
+  const detail = view.slice(view.indexOf('function FilingDetail('));
+  assert.ok(/row\.summary\s*\?/.test(detail),
+    'the panel must branch on whether the summary carries anything');
+  assert.ok(/no wording beyond the subject line/.test(detail),
+    'a missing summary must SAY so — an empty box reads as a broken panel');
+  ok('missing summary is stated, document text is never promised');
 }
 
 console.log(`\n✓ filings: ${pass} checks passed`);
