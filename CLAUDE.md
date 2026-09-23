@@ -624,7 +624,8 @@ Three properties that are load-bearing — do not "simplify" them away:
    per-dimension derivative.
 
 Knobs (env): `PIPELINE2_CASCADE` (`on`), `PIPELINE2_CASCADE_MAX` (`25`; the
-longest real chain, from `nse_eod_download`, is 21), `PIPELINE2_CASCADE_DEBOUNCE_MIN`
+longest real chain, from `nse_eod_download`, is 22 — 21 before the
+`rolling_metrics` → `stage_classification` edge was added 2026-09-23), `PIPELINE2_CASCADE_DEBOUNCE_MIN`
 (`30`). Guarded by `test_pipeline_cascade.py`, verified to fail against both an
 unforced enqueue and a re-expanding cascade. Plan + rollout watch:
 `docs/claude/thesis-events-poa.md`.

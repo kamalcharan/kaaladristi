@@ -133,7 +133,28 @@ DIMENSION_DEPENDENTS: dict[str, list[str]] = {
 
     # is_vani_52wh / is_vani_ath read w52_high / lifetime_high; big_money
     # measures against the avg_amt_66d baseline rolling_metrics writes.
-    'rolling_metrics':        ['big_money', 'vani_flags'],
+    #
+    # stage_classification added 2026-09-23 — THIS EDGE WAS MISSING and it cost
+    # a production outage. The Weinstein S2 gate requires
+    # `w52l IS NOT NULL AND w52h IS NOT NULL AND close >= w52l*1.25
+    #  AND close >= w52h*0.75` (scripts/backfill_stage_classification.py), all
+    # of which rolling_metrics writes. On 2026-09-16 and 2026-09-22 the rolling
+    # RANGE group (w52_high / w52_low / lifetime_high) came out NULL for the
+    # whole bar while every other rolling column populated normally, so every
+    # would-be S2 fell through to S2_CANDIDATE: 0 S2 against ~1,030 the day
+    # before, and the Stage 2 Leaders scanner (`.eq('stage','S2')`) served an
+    # empty list.
+    #
+    # The outage persisted because of THIS line, not because of the NULLs. The
+    # gap sweep repaired rolling_metrics on 09-16 — w52_high is fully populated
+    # on that bar today — but with no edge here the cascade recomputed
+    # big_money and vani_flags and never re-derived stage, and the classifier's
+    # default mode only reprocesses rows where `stage IS NULL`. So a repaired
+    # input left a permanently wrong derived value: every column populated,
+    # fill rate healthy, answer wrong. Exactly the class migration 210's
+    # check_derivation_staleness exists to catch, on an edge it could not see
+    # because the edge was not declared.
+    'rolling_metrics':        ['big_money', 'vani_flags', 'stage_classification'],
 
     # The Flower Pot arm gates on stage; the journey walk excludes S3/S4.
     'stage_classification':   ['vani_flags', 'scan_refresh', 'wg_journeys'],
