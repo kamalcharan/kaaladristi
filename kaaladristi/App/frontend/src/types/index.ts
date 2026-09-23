@@ -613,6 +613,22 @@ export interface ScanStock {
   is_vani_surge?: boolean | null;
   is_vani_breakout?: boolean | null;
   // Flower Pot Burst fields (null for all other scans)
+  // ── Post-Result Drift (PEAD) — populated ONLY by the pead_drift preset ──
+  // Derived on read from kd_result_returns (migration 215/216). Never stored
+  // on km_equity_eod: a third copy of a derivable number is how two readings
+  // of one rule start to disagree.
+  /** The session the market could first act on the result. */
+  result_day_0?: string | null;
+  /** Day -1 -> Day 0. The announcement reaction. NEVER merged with drift. */
+  result_reaction_pct?: number | null;
+  /** Day 0 -> latest bar. Measuring this from Day -1 would fold the
+   *  announcement jump into the drift — how a PEAD study reports an effect it
+   *  never measured. */
+  result_drift_pct?: number | null;
+  /** Sessions since Day 0. The 20-session window is how much is left to run. */
+  result_sessions_elapsed?: number | null;
+  /** How many outcomes that one board meeting produced (migration 216). */
+  result_siblings?: number | null;
   fpb_phase?: 'BURST' | 'SETUP' | 'SHATTER' | null;
   fpb_quality?: number | null;              // burst quality score (BURST rows)
   fpb_compression_score?: number | null;    // compression tightness (higher = tighter)

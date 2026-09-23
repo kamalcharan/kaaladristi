@@ -21,6 +21,19 @@ import { getStudioDescriptor } from '@/config/scannerStudio'
 // (`tableColumns`, config/scannerStudio.ts) and are read first below, so a
 // Studio cannot be missing its column set (gap audit §7).
 const PRESET_COL_OVERRIDES: Partial<Record<string, string[]>> = {
+  // Post-Result Drift selects on the RESULT, so the result columns lead —
+  // without them the grid gives no clue why a row is present. Reaction is the
+  // membership criterion, Drift is what has happened since, and Sessions says
+  // how much of the 20-session window is left. Reaction and Drift are never
+  // merged into one number: measuring drift from Day -1 would fold the
+  // announcement jump into it, which is how a PEAD study reports an effect it
+  // never measured.
+  pead_drift: [
+    'symbol', 'close', 'result_reaction_pct', 'result_drift_pct',
+    'result_day_0', 'result_sessions_elapsed',
+    'pct_chng', 'magic_rs', 'rvol', 'delivery_pct', 'stage',
+  ],
+
   // Flower Pot Burst has its own metric surface — the price_action group's
   // breakout/score columns are all null here. Lead with the always-populated
   // compression fields; burst-only metrics (Vol Burst / Range Exp / Close Str /

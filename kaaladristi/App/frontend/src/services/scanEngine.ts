@@ -16,7 +16,12 @@ import {trackEvent} from '@/lib/analytics';
  */
 
 import { ACTIVE_UNIVERSE_CAP } from './equityUniverse';
-import { from } from './postgrest';
+
+/** Post-Result Drift entry gate. Measured, not chosen: the drift is negative
+ *  across every reaction band below +2% and only clears the market above +5%.
+ *  See fetchPeadDrift for the table. */
+const PEAD_MIN_REACTION_PCT = 5;
+import { from, rpc } from './postgrest';
 import { studioPresetsBySource } from '@/config/scannerStudio';
 import type {
   ScanStock,
@@ -76,6 +81,12 @@ export const SCAN_PRESETS: ScanDefinition[] = [
   { id: 'waking_giants',        name: 'Waking Giants',         description: 'Stocks breaking out of a multi-year hibernation at the Golden Line — the first sessions of a structural transition', limit: 60, universe: 'NSE_ONLY', category: 'discovery', category_label: 'Discovery', category_color: '', category_sort: 5, is_default_tab: false, timeframe: 'daily', vani_rule: null },
   { id: 'wg_ascent',            name: 'Ascent',                description: 'Confirmed multi-year journeys in progress — aligned across the daily, weekly and monthly clocks',                     limit: 60, universe: 'NSE_ONLY', category: 'discovery', category_label: 'Discovery', category_color: '', category_sort: 5, is_default_tab: false, timeframe: 'daily', vani_rule: null },
   { id: 'wg_stirring',          name: 'Stirring',              description: 'Quiet delivery-backed building inside a multi-year hibernation — no breakout yet',                                    limit: 40, universe: 'NSE_ONLY', category: 'discovery', category_label: 'Discovery', category_color: '', category_sort: 5, is_default_tab: false, timeframe: 'daily', vani_rule: null },
+  // Post-Result Drift. Its own 'events' category because it is SEASONAL —
+  // 104 qualifying names in the week of 2026-08-10 and ONE on 2026-09-23 —
+  // and an empty list sitting inside Price Action or Discovery would read as
+  // those families being broken. Metadata (incl. category color) comes from
+  // kd_scan_presets; empty color keeps the literal ratchet flat.
+  { id: 'pead_drift',           name: 'Post-Result Drift',     description: 'Stocks that jumped more than 5% on their results day, still inside the 20-session window that move was measured over', limit: 200, universe: 'NSE_ONLY', category: 'events', category_label: 'Events', category_color: '', category_sort: 6, is_default_tab: true, timeframe: 'daily', vani_rule: null },
 ];
 
 // ── Preset metadata — DB is the source of truth ────────────────
@@ -707,6 +718,189 @@ async function fetchStage2Leaders(exchangeFilter: ExchangeFilter): Promise<ScanS
       is_vani_s2:           row.is_vani_s2 ?? null,
     };
   });
+}
+
+/**
+ * Scan: Post-Result Drift (PEAD).
+ *
+ * Membership: a results announcement whose Day 0 close was more than 5% above
+ * the session before it, with Day 0 inside the last 20 sessions — i.e. still
+ * inside the window the drift was measured over.
+ *
+ * WHY +5% AND NOT +2%. Measured over 2,245 results (Jul-Aug 2026), median
+ * 20-session drift from Day 0 against a universe median of -0.59%:
+ *
+ *     reaction > +5%     n=278   +0.95%   (+1.54 pts excess)
+ *     reaction +2..+5%   n=288   +0.16%   (+0.75)
+ *     reaction -2..+2%   n=833   -1.61%   (-1.02)
+ *     reaction < -2%     n=846   -1.5 to -1.9%
+ *
+ * The threshold is sharp at +5%: below it the drift is negative across three
+ * consecutive bands.
+ *
+ * ⚠ NO MagicRS GATE. react>=5% with RS rising measured +0.80%, with RS falling
+ * +0.59% (n=42) — within noise. Adding it would halve the list for no measured
+ * gain and imply a confluence that was tested and is not there.
+ *
+ * ⚠ DERIVED ON READ. kd_result_returns (migration 215) computes reaction and
+ * drift; migration 216 de-duplicates to one row per board meeting, because one
+ * meeting files results AND a dividend AND an auditor change separately —
+ * 427 of 2,733 rows were a second Day 0 for a result already counted.
+ * Nothing is stored on km_equity_eod.
+ *
+ * ⚠ suspect_corporate_action IS FILTERED, not optional. km_corporate_actions
+ * is still EMPTY, so a bonus inside the span would read as a genuine -50%
+ * drift — and results season is exactly when boards declare them.
+ */
+async function fetchPeadDrift(exchangeFilter: ExchangeFilter): Promise<ScanStock[]> {
+  // 21 dates: [0] is the latest completed bar, [20] is 20 sessions back — the
+  // start of the window. Calendar-derived, never date arithmetic: a holiday
+  // would silently widen or narrow the window.
+  const dates = await fetchRecentDates(21);
+  const latestDate = dates[0] ?? null;
+  if (!latestDate) return [];
+  const windowStart = dates[Math.min(20, dates.length - 1)] ?? latestDate;
+
+  const { data: rpcRows, error: rpcErr } = await rpc('kd_result_returns', {
+    p_from: windowStart,
+    p_to: latestDate,
+    p_horizon_sessions: 20,
+  });
+
+  // The database is authoritative: a failed read FAILS, it does not render as
+  // an empty scanner. An empty list is a measurement; an error is not.
+  if (rpcErr) throw new Error(`Post-Result Drift: ${rpcErr.message}`);
+
+  const qualifying = ((rpcRows ?? []) as any[]).filter((r) =>
+    r.equity_id != null &&
+    r.suspect_corporate_action !== true &&
+    r.reaction_pct != null && Number(r.reaction_pct) >= PEAD_MIN_REACTION_PCT,
+  );
+  if (!qualifying.length) return [];
+
+  // One row per stock — the FRESHEST result wins. Two results inside twenty
+  // sessions is rare but real (two quarters filed close together), and the
+  // older one's window is nearly spent.
+  const byEquity = new Map<number, any>();
+  for (const r of qualifying) {
+    const id = Number(r.equity_id);
+    const prev = byEquity.get(id);
+    if (!prev || String(r.day_0_trade_date) > String(prev.day_0_trade_date)) byEquity.set(id, r);
+  }
+
+  // The RPC's own `symbol` is NULL on some rows (measured: equity_id 39532),
+  // so the display name comes from the km_equity_symbols embed like every
+  // other scanner, never from the function's output.
+  const ids = Array.from(byEquity.keys());
+  const { data: rows } = await from('km_equity_eod')
+    .select([
+      'equity_id', 'trade_date', 'close', 'open', 'high', 'low',
+      'pct_chng', 'magic_rs', 'magic_rs_zone', 'magic_rs_chg_5d', 'magic_rs_chg_22d',
+      'magic_rs_chg_66d', 'magic_rs_align', 'rss_value', 'rss_spread',
+      'rsi_14', 'rvol', 'flow_type', 'supertrend_dir',
+      'sma_50', 'sma_200', 'sma_150', 'ema_20', 'atr_14',
+      'w52_high', 'w52_low', 'lifetime_high',
+      'avg_amt_5d', 'avg_amt_22d', 'delivery_surge_x',
+      'sniper_inst', 'sniper_hot', 'accum_distrib',
+      'volume_divergence_flag', 'delivery_pct',
+      'dot_svd', 'dot_sbd', 'dot_syd',
+      'stage', 'is_vani_s2', 'rs_percentile', 'score_5d', 'score_22d',
+      'km_equity_symbols(id,symbol,company_name,exchange,industry,mcap_cr,isin)',
+    ].join(','))
+    .eq('trade_date', latestDate)
+    .in('equity_id', ids)
+    .limit(ids.length)
+    .execute();
+
+  const out: ScanStock[] = [];
+  for (const row of (rows ?? []) as any[]) {
+    const sym = row.km_equity_symbols;
+    if (!sym) continue;
+    if (exchangeFilter === 'NSE' && sym.exchange !== 'NSE') continue;
+    if (exchangeFilter === 'BSE' && sym.exchange !== 'BSE') continue;
+
+    const ev = byEquity.get(Number(row.equity_id));
+    if (!ev) continue;
+
+    const ema20 = row.ema_20 ?? null;
+    const atr14 = row.atr_14 ?? null;
+
+    out.push({
+      equity_id:            row.equity_id,
+      symbol:               sym?.symbol ?? String(row.equity_id),
+      company_name:         sym?.company_name ?? null,
+      industry:             sym?.industry ?? null,
+      exchange:             sym?.exchange ?? null,
+      mcap_cr:              sym?.mcap_cr ?? null,
+      trade_date:           row.trade_date,
+      close:                row.close,
+      open:                 row.open ?? null,
+      high:                 row.high ?? null,
+      low:                  row.low ?? null,
+      pct_chng:             toNum(row.pct_chng),
+      magic_rs:             toNum(row.magic_rs),
+      magic_rs_chg_5d:      toNum(row.magic_rs_chg_5d),
+      magic_rs_chg_22d:     toNum(row.magic_rs_chg_22d),
+      magic_rs_chg_66d:     toNum(row.magic_rs_chg_66d),
+      magic_rs_align:       toNum(row.magic_rs_align),
+      magic_rs_zone:        row.magic_rs_zone ?? null,
+      rss_value:            toNum(row.rss_value),
+      rss_spread:           toNum(row.rss_spread),
+      rsi_14:               toNum(row.rsi_14),
+      rvol:                 toNum(row.rvol),
+      flow_type:            row.flow_type ?? null,
+      supertrend_dir:       row.supertrend_dir ?? null,
+      sma_50:               toNum(row.sma_50),
+      sma_200:              toNum(row.sma_200),
+      sma_150:              toNum(row.sma_150),
+      ema_20:               ema20,
+      atr_14:               atr14,
+      w52_high:             toNum(row.w52_high),
+      w52_low:              toNum(row.w52_low),
+      lifetime_high:        toNum(row.lifetime_high),
+      avg_amt_5d:           toNum(row.avg_amt_5d),
+      avg_amt_22d:          toNum(row.avg_amt_22d),
+      delivery_surge_x:     toNum(row.delivery_surge_x),
+      sniper_inst:          toNum(row.sniper_inst),
+      sniper_hot:           toNum(row.sniper_hot),
+      accum_distrib:        row.accum_distrib ?? null,
+      volume_divergence_flag: row.volume_divergence_flag ?? null,
+      delivery_pct:         toNum(row.delivery_pct),
+      has_recent_svd:       !!row.dot_svd,
+      has_recent_sbd:       !!row.dot_sbd,
+      has_recent_syd:       !!row.dot_syd,
+      pctBelow52wHigh:      row.w52_high && row.w52_high > 0
+                              ? ((row.w52_high - row.close) / row.w52_high) * 100 : null,
+      reward:               ema20 && atr14 ? (ema20 + atr14) - row.close : null,
+      rewardPct:            ema20 && atr14 && atr14 > 0
+                              ? ((ema20 + atr14) - row.close) / atr14 : null,
+      magicRsTrend:         [],
+      score_5d:             row.score_5d  != null ? Number(row.score_5d)  : null,
+      score_22d:            row.score_22d != null ? Number(row.score_22d) : null,
+      avg_amt_66d:          null,
+      xAmt:                 null,
+      rel_5d_n50:           null, rel_22d_n50:  null, rel_66d_n50:  null,
+      rel_5d_n500:          null, rel_22d_n500: null, rel_66d_n500: null,
+      vaniOpportunity:      false,
+      rs_percentile:        toNum(row.rs_percentile),
+      stage:                row.stage ?? null,
+      is_vani_s2:           row.is_vani_s2 ?? null,
+      result_day_0:             ev.day_0_trade_date ?? null,
+      result_reaction_pct:      toNum(ev.reaction_pct),
+      result_drift_pct:         toNum(ev.drift_pct),
+      result_sessions_elapsed:  ev.sessions_elapsed != null ? Number(ev.sessions_elapsed) : null,
+      result_siblings:          ev.sibling_announcements != null ? Number(ev.sibling_announcements) : null,
+    });
+  }
+
+  // Freshest first: a result two sessions old has eighteen of its twenty-
+  // session window left, which is the part that has yet to be earned.
+  out.sort((a, b) => {
+    const d = String(b.result_day_0 ?? '').localeCompare(String(a.result_day_0 ?? ''));
+    if (d !== 0) return d;
+    return (b.result_reaction_pct ?? 0) - (a.result_reaction_pct ?? 0);
+  });
+  return out;
 }
 
 /** Scan: Stage 2 Watch — S2_CANDIDATE stocks with MA stacking, not yet extended. */
@@ -1887,6 +2081,7 @@ export async function executeScan(
   if (scanId === 'stage_4_leaders')      return fetchStage4Leaders(exchangeFilter);
   if (scanId === 'stage_3_watch')        return fetchStage3Watch(exchangeFilter);
   if (scanId === 'vani_exit_watch')      return fetchVaNiExitWatch(exchangeFilter);
+  if (scanId === 'pead_drift')           return fetchPeadDrift(exchangeFilter);
   // The database is authoritative. Empty results are valid; failed reads fail.
   if (scanId === 'breakout_surge_daily') scanId = 'breakout_surge';
   const strictPriceAction = ['breakout_surge','breakdown_watch','weekly_movers','monthly_movers','weekly_decliners','monthly_decliners'].includes(scanId);

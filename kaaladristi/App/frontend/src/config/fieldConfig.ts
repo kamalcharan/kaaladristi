@@ -483,6 +483,45 @@ export const ALL_FIELDS: Record<string, FieldConfig> = {
     colorFn: () => 'var(--text-secondary)',
   },
 
+  // ── Post-Result Drift (PEAD) fields ──
+  result_reaction_pct: {
+    key: 'result_reaction_pct',
+    label: 'Reaction',
+    tooltip: 'How the stock closed on Day 0 versus the session before the result (Day -1 -> Day 0). This is the announcement reaction, NOT the drift. Measured across 2,245 results: a reaction above +5% was followed by +1.54 points of excess return over the next 20 sessions; every band below +2% underperformed.',
+    type: 'pct',
+    width: 84,
+    colorFn: (val: any) => (Number(val) >= 5 ? 'var(--bull)' : 'var(--text-secondary)'),
+  },
+  result_drift_pct: {
+    key: 'result_drift_pct',
+    label: 'Drift',
+    tooltip: 'Move since the Day 0 close — the post-result drift itself, measured from Day 0 so the announcement jump is excluded. Positive means the stock has continued in the direction it reacted.',
+    type: 'pct',
+    width: 78,
+    colorFn: (val: any) => {
+      const n = Number(val);
+      if (!Number.isFinite(n)) return 'var(--text-secondary)';
+      return n > 0 ? 'var(--bull)' : n < 0 ? 'var(--bear)' : 'var(--text-secondary)';
+    },
+  },
+  result_day_0: {
+    key: 'result_day_0',
+    label: 'Result Day',
+    tooltip: 'Day 0 — the session the market could first act on the result, derived from the exchange dissemination time, never the company filing time.',
+    type: 'date',
+    width: 96,
+    colorFn: () => 'var(--text-secondary)',
+  },
+  result_sessions_elapsed: {
+    key: 'result_sessions_elapsed',
+    label: 'Sessions',
+    tooltip: 'Sessions since Day 0, out of the 20-session window the drift was measured over. A low number means most of the window is still ahead.',
+    type: 'number',
+    width: 76,
+    formatFn: (val: any) => (val == null ? '—' : `${val} / 20`),
+    colorFn: () => 'var(--text-secondary)',
+  },
+
   // ── Flower Pot Burst fields ──
   fpb_phase: {
     key: 'fpb_phase',
