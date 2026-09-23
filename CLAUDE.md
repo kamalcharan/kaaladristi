@@ -623,7 +623,31 @@ Three properties that are load-bearing — do not "simplify" them away:
 3. **`integrity_checks` is not a dependent** — a nightly whole-day sweep, not a
    per-dimension derivative.
 
-Knobs (env): `PIPELINE2_CASCADE` (`on`), `PIPELINE2_CASCADE_MAX` (`25`; the
+⚠ **Two cascade defects caused the 2026-09-22 Stage 2 Leaders outage; both
+fixed 2026-09-23.** The closure is enqueued in ONE pass as SIBLING jobs, all
+`force=True`, sharing a `created_at`, with no ordering between them. On
+2026-09-16 AND 09-22 `rolling_metrics` and `stage_classification` ran
+concurrently, both `UPDATE km_equity_eod`, and **deadlocked**.
+`rolling_metrics` lost — but its forced nullify had already COMMITTED, so
+`w52_high`/`w52_low`/`lifetime_high` were NULL for the whole bar;
+`stage_classification` then COMPLETED against those NULLs and, because the S2
+gate needs both non-NULL, demoted all 7,520 rows to `S2_CANDIDATE` (0 S2 vs
+~1,030 the day before). Now: **a dependent whose parent's fix failed for that
+date within `PIPELINE2_PARENT_FAIL_WINDOW_MIN` (120) does not run** — it ends
+as `status='deferred'`, **terminal on purpose**: `_claim_job` orders by
+`created_at`, which a deferral does not change, so re-queueing hands the same
+job back on the next poll and starves everything behind it (the loop only
+sleeps when nothing was processed). The parent's own repair re-cascades it.
+And **a failed fix writes its own CRITICAL `km_integrity_findings` row
+immediately** (`_record_failure_finding`, same `check_key` the sweep uses).
+That closes a ~23-hour blind spot: `integrity_checks` is the LAST daily step
+(~19:07) while the gap sweep fires 19:30 and its cascade 19:31+, so every
+cascade failure was created after that day's sweep finished — 09-16's outage
+was correctly reported, on 09-17. ⚠ `lib/alerting.py` still no-ops unless
+`ALERT_WEBHOOK_URL` or `ALERT_EMAIL_TO`+`SMTP_*` are set, so a critical finding
+is still PULL-only until that is configured.
+
+Knobs (env): `PIPELINE2_CASCADE` (`on`), `PIPELINE2_PARENT_FAIL_WINDOW_MIN` (`120`), `PIPELINE2_CASCADE_MAX` (`25`; the
 longest real chain, from `nse_eod_download`, is 22 — 21 before the
 `rolling_metrics` → `stage_classification` edge was added 2026-09-23), `PIPELINE2_CASCADE_DEBOUNCE_MIN`
 (`30`). Guarded by `test_pipeline_cascade.py`, verified to fail against both an

@@ -158,6 +158,100 @@ CASCADE_MAX = int(os.getenv('PIPELINE2_CASCADE_MAX', '25'))
 CASCADE_DEBOUNCE_MIN = int(os.getenv('PIPELINE2_CASCADE_DEBOUNCE_MIN', '30'))
 
 
+# How far back a parent's failure still blocks its dependents. A cascade batch
+# is enqueued in one pass and drains within minutes; two hours covers a slow
+# drain plus the 19:30 and 21:30 gap sweeps without blocking tomorrow's run.
+PARENT_FAILURE_WINDOW_MIN = int(os.getenv('PIPELINE2_PARENT_FAIL_WINDOW_MIN', '120'))
+
+
+def _record_failure_finding(conn, dim: str, trade_date_obj: date,
+                            error: str, job_id: int) -> None:
+    """Write a CRITICAL finding the moment a fix job fails.
+
+    WHY THIS EXISTS. `check_step_failures` already detects this class correctly
+    — on 2026-09-17 it produced exactly the right row for the 09-16 outage:
+    "Pipeline step rolling_metrics on 2026-09-16: failed — deadlock detected".
+    The problem is WHEN. `integrity_checks` is the LAST step of the daily run
+    (~19:07), the gap sweep fires at 19:30 and its cascade at 19:31+, so every
+    failure the cascade produces is created AFTER that day's sweep has already
+    finished. It is invisible until the NEXT day's run — a ~23-hour blind spot
+    on exactly the failure mode the cascade generates, which is the window the
+    owner spent looking at an empty Stage 2 Leaders and a green dashboard.
+
+    Rescheduling the sweep only moves the blind spot. The worker already knows
+    the dimension, the date and the error at the instant it fails, so it does
+    not need a sweep to rediscover them hours later. The nightly sweep stays as
+    the backstop for everything else, and writes the same `check_key`, so the
+    two agree rather than duplicating under different names.
+
+    Never raises: a reporting failure must not turn into a second job failure.
+    """
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO km_integrity_findings "
+                "  (run_date, check_key, check_class, severity, subject, summary, detail) "
+                "VALUES (%s, %s, 'step_failure', 'critical', %s, %s, %s)",
+                [
+                    str(trade_date_obj),
+                    f'step_{dim}_{trade_date_obj}',
+                    dim,
+                    f'Pipeline step {dim} on {trade_date_obj}: failed — {error[:200]}',
+                    json.dumps({'job_id': job_id, 'reported_by': 'worker',
+                                'error': error[:500]}),
+                ],
+            )
+        conn.commit()
+    except Exception as e:                      # pragma: no cover - reporting must never cascade
+        log.warning(f'could not record failure finding for {dim} {trade_date_obj}: {e}')
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+
+
+def _parent_failed_recently(conn, dim: str, trade_date_obj: date) -> str | None:
+    """Name a PARENT of `dim` whose fix failed for this date, or None.
+
+    WHY THIS EXISTS. worker._cascade_dependents enqueues the whole closure in
+    ONE pass as SIBLING jobs — all force=True, all sharing a created_at — with
+    no ordering between them. On 2026-09-16 AND 2026-09-22 rolling_metrics and
+    stage_classification ran concurrently, both UPDATE km_equity_eod, and
+    DEADLOCKED. rolling_metrics lost; its forced nullify had already COMMITTED
+    (separately from the recompute, or the rollback would have restored the old
+    values), leaving w52_high / w52_low / lifetime_high NULL for the whole bar.
+    stage_classification then COMPLETED against those NULLs, and because the
+    Weinstein S2 gate requires `w52l IS NOT NULL AND w52h IS NOT NULL`, all
+    7,520 rows fell through to S2_CANDIDATE — 0 S2 against ~1,030 the day
+    before, and Stage 2 Leaders (`.eq('stage','S2')`) served an empty list.
+
+    A dependent computed from a parent that just failed is not merely stale, it
+    is computed from a column the failure DELETED. So it must not run at all:
+    NULL that the gap sweep retries is recoverable, a confidently wrong value is
+    not. Deferring re-queues rather than fails — the parent's failure is the
+    finding, and a second one for the dependent would be noise pointing at the
+    wrong dimension.
+    """
+    try:
+        parents = watermarks.parents_of().get(dim, [])
+    except Exception as e:                      # pragma: no cover - graph validated at import
+        log.warning(f'parent guard: could not resolve parents of {dim}: {e}')
+        return None
+    if not parents:
+        return None
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT dimension FROM km_jobs "
+            "WHERE job_type = 'fix' AND status = 'failed' "
+            "  AND trade_date = %s AND dimension = ANY(%s) "
+            "  AND completed_at > now() - (%s || ' minutes')::interval "
+            "ORDER BY completed_at DESC LIMIT 1",
+            [str(trade_date_obj), list(parents), str(PARENT_FAILURE_WINDOW_MIN)],
+        )
+        row = cur.fetchone()
+    return row[0] if row else None
+
+
 def _cascade_dependents(conn, dim: str, trade_date_obj: date, parent_job: dict) -> None:
     """Enqueue a forced fix for every dimension derived from `dim`.
 
@@ -277,6 +371,37 @@ def _run_fix(conn, job: dict) -> None:
         _update_job(conn, job_id, progress_text=text[:500], progress_pct=min(max(pct, 0), 99))
 
     try:
+        # A parent that just FAILED did not merely leave a stale column — a
+        # forced fix nullifies before it recomputes, so a failed parent leaves
+        # the column NULL. Computing from that produces a confidently wrong
+        # value (the 2026-09-22 Stage 2 outage). Not running is recoverable —
+        # the parent's own repair re-cascades this dimension; a wrong derived
+        # value is not, because nothing downstream can tell it apart.
+        blocked_by = _parent_failed_recently(conn, dim, trade_date_obj)
+        if blocked_by:
+            # TERMINAL, not re-queued. `_claim_job` orders by created_at and a
+            # deferral does not change it, so status='queued' would hand the
+            # SAME job straight back on the next poll — a hot loop for the whole
+            # window, and one that starves every younger job behind it, because
+            # the main loop only sleeps when nothing was processed.
+            #
+            # Ending the job is also the more honest semantics: the re-run is
+            # already owned by the parent. When rolling_metrics is eventually
+            # repaired its own cascade re-enqueues this dimension, which is the
+            # mechanism that exists. If the parent is never repaired, the
+            # CRITICAL finding from _record_failure_finding is the thing that
+            # should be acted on — not a dependent quietly recomputing from a
+            # column the failure emptied.
+            _update_job(conn, job_id, status='deferred',
+                        progress_text=f'deferred: parent {blocked_by} failed for this date',
+                        progress_pct=100,
+                        completed_at=datetime.utcnow())
+            log.warning(
+                f'Job #{job_id} ({dim} {trade_date_obj}): deferred — parent '
+                f'{blocked_by} failed for this date within '
+                f'{PARENT_FAILURE_WINDOW_MIN}m')
+            return
+
         result = handlers.handle(dim, conn, trade_date_obj, force, exchange, _progress)
     except RuntimeError as e:
         if str(e) == 'cancelled':
@@ -287,6 +412,7 @@ def _run_fix(conn, job: dict) -> None:
                     error_msg=str(e)[:500],
                     completed_at=datetime.utcnow(),
                     progress_pct=100)
+        _record_failure_finding(conn, dim, trade_date_obj, str(e), job_id)
         return
     except Exception as e:
         conn.rollback()
@@ -294,6 +420,7 @@ def _run_fix(conn, job: dict) -> None:
                     error_msg=str(e)[:500],
                     completed_at=datetime.utcnow(),
                     progress_pct=100)
+        _record_failure_finding(conn, dim, trade_date_obj, str(e), job_id)
         return
 
     _update_job(
@@ -312,6 +439,13 @@ def _run_fix(conn, job: dict) -> None:
         f'{result.fill_rate_before:.1f}% -> {result.fill_rate_after:.1f}% '
         f'[{result.status}]'
     )
+
+    # A handler can report failure by RETURN as well as by raising — that path
+    # sets no watermark and enqueues no cascade, and until now it also told
+    # nobody.
+    if result.status == 'failed':
+        _record_failure_finding(
+            conn, dim, trade_date_obj, result.error_msg or 'handler reported failed', job_id)
 
     # Watermark (migration 210), BEFORE the cascade enqueues anything. This is
     # the fix path's whole point: a fix rewrites a column, so every dimension

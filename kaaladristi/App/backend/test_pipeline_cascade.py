@@ -199,3 +199,117 @@ class EnqueueBehaviour(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)
+
+
+# ── The 2026-09-22 Stage 2 Leaders outage ────────────────────────────────────
+#
+# Both defects below produced ONE user-visible symptom: Stage 2 Leaders served
+# an empty list while the admin dashboard stayed green.
+#
+#   rolling_metrics and stage_classification were enqueued as SIBLINGS in one
+#   cascade batch, ran concurrently, both UPDATE km_equity_eod, and DEADLOCKED.
+#   rolling_metrics lost — but its forced nullify had already COMMITTED, so
+#   w52_high / w52_low / lifetime_high were NULL for the whole bar.
+#   stage_classification then COMPLETED against those NULLs, and the Weinstein
+#   S2 gate requires both to be non-NULL, so all 7,520 rows fell through to
+#   S2_CANDIDATE: 0 S2 against ~1,030 the day before.
+#
+#   Nobody was told, because integrity_checks is the LAST step of the daily run
+#   (~19:07) while the gap sweep fires at 19:30 and its cascade at 19:31+ — so
+#   the failure is created after that day's sweep has finished and is invisible
+#   until the next day's. The same shape on 2026-09-16 was duly reported... on
+#   2026-09-17.
+
+class ParentFailureGuardTest(unittest.TestCase):
+    """A dependent must not run when its parent's fix just FAILED."""
+
+    def test_parent_failure_is_detected_and_named(self):
+        # The guard asks one question; the stub answers with the failed parent.
+        conn = FakeConn(select_results=[('rolling_metrics',)])
+        blocked = worker._parent_failed_recently(conn, 'stage_classification', '2026-09-22')
+        self.assertEqual(blocked, 'rolling_metrics')
+
+        sql, params = conn.cursor_obj.statements[-1]
+        self.assertIn("status = 'failed'", sql)
+        self.assertIn('km_jobs', sql)
+        # It must be scoped to the SAME BAR — a failure on another date says
+        # nothing about this one.
+        self.assertIn('2026-09-22', [str(p) for p in params])
+
+    def test_parents_are_read_from_the_declared_graph(self):
+        # rolling_metrics -> stage_classification is the edge the outage needed;
+        # if it is ever removed, this guard silently stops protecting stage.
+        from pipeline2 import watermarks
+        self.assertIn('rolling_metrics',
+                      watermarks.parents_of().get('stage_classification', []))
+
+    def test_no_parents_means_no_query_and_no_block(self):
+        # A root dimension must not be blocked by an empty ANY() match.
+        conn = FakeConn(select_results=[])
+        roots = [d for d, p in __import__('pipeline2.watermarks', fromlist=['x'])
+                 .parents_of().items() if not p]
+        if roots:
+            self.assertIsNone(worker._parent_failed_recently(conn, roots[0], '2026-09-22'))
+
+    def test_healthy_parent_does_not_block(self):
+        conn = FakeConn(select_results=[None])
+        self.assertIsNone(
+            worker._parent_failed_recently(conn, 'stage_classification', '2026-09-22'))
+
+
+class FailureIsReportedImmediatelyTest(unittest.TestCase):
+    """A failed fix writes its own CRITICAL finding — it does not wait a day."""
+
+    def test_finding_is_written_with_the_sweep_s_own_key(self):
+        conn = FakeConn()
+        worker._record_failure_finding(
+            conn, 'rolling_metrics', '2026-09-22', 'deadlock detected', 3842)
+
+        sql, params = conn.cursor_obj.statements[-1]
+        self.assertIn('km_integrity_findings', sql)
+        flat = ' '.join(str(p) for p in params)
+        # critical, or the dashboard stays green
+        self.assertIn('critical', sql + flat)
+        self.assertIn('step_failure', sql + flat)
+        # Same check_key the nightly sweep uses, so the two agree instead of
+        # filing the same outage under two different names.
+        self.assertIn('step_rolling_metrics_2026-09-22', flat)
+        self.assertIn('deadlock detected', flat)
+        self.assertEqual(conn.commits, 1, 'the finding must be committed, not left open')
+
+    def test_reporting_never_raises(self):
+        # A reporting failure must not become a second job failure.
+        class Exploding(FakeConn):
+            def cursor(self):
+                raise RuntimeError('findings table is gone')
+
+        worker._record_failure_finding(
+            Exploding(), 'rolling_metrics', '2026-09-22', 'boom', 1)
+
+
+class OutageWiringTest(unittest.TestCase):
+    """The helpers exist AND _run_fix actually calls them."""
+
+    def test_run_fix_guards_and_reports(self):
+        import inspect
+        src = inspect.getsource(worker._run_fix)
+        self.assertIn('_parent_failed_recently', src,
+                      'the parent guard is not wired into _run_fix')
+        self.assertIn('_record_failure_finding', src,
+                      'failures are not reported from _run_fix')
+        # The deferral must be TERMINAL. _claim_job orders by created_at, which
+        # a deferral does not change, so re-queueing hands the same job back on
+        # the next poll — a hot loop that also starves everything behind it.
+        # Assert on the CALL, not the prose — the comment above it explains
+        # why status='queued' is wrong and would otherwise trip this.
+        calls = [ln for ln in src.splitlines()
+                 if '_update_job(' in ln and 'status=' in ln]
+        self.assertTrue(any("status='deferred'" in ln for ln in calls),
+                        'the deferral does not end the job — that spins')
+        self.assertFalse(any("status='queued'" in ln for ln in calls),
+                         'a re-queued deferral is re-claimed immediately by _claim_job')
+        # Three failure paths: RuntimeError, generic Exception, and a handler
+        # that RETURNS status='failed' without raising.
+        self.assertGreaterEqual(
+            src.count('_record_failure_finding'), 3,
+            'a failure path still reports nothing')
