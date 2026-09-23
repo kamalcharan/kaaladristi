@@ -371,16 +371,25 @@ def main():
                              'already carry stage entry data)')
     parser.add_argument('--verify', action='store_true',
                         help='report what is stored; write nothing')
+    parser.add_argument('--from', dest='from_date', default='',
+                        help='REPLAY the nightly carry from this date forward '
+                             '(YYYY-MM-DD). Use after repairing `stage` on a '
+                             'past bar — see replay_range.')
+    parser.add_argument('--to', dest='to_date', default='',
+                        help='last date of the replay (default: the latest '
+                             'classified bar). Stopping short leaves every '
+                             'later bar carrying the old answer.')
     args = parser.parse_args()
 
     if args.verify:
         run_verify()
+    elif args.from_date:
+        replay_range(args.from_date, args.to_date or None)
     else:
+        if args.to_date:
+            parser.error('--to requires --from')
         run_backfill(args.batch_size, resume=not args.restart)
 
-
-if __name__ == '__main__':
-    main()
 
 
 # ── Nightly increment ─────────────────────────────────────────────────────
@@ -502,3 +511,94 @@ def compute_stage_entry_for_date(db_conn, trade_date, verbose: bool = False) -> 
         return n
     finally:
         conn.close()
+
+
+def replay_range(from_date: str, to_date: str | None = None) -> int:
+    """Re-run the nightly carry over every classified bar in [from, to].
+
+    WHY THIS EXISTS
+    ---------------
+    `stage_since` is a FORWARD CARRY: each bar reads the single prior
+    classified bar and either extends its run or opens a new one. So repairing
+    the `stage` LABEL on a past bar does not repair the entry trio -- not on
+    that bar, and not on any bar after it, because every later bar was
+    computed from the corrupted one and stored the result.
+
+    That is exactly what the 2026-09-16 / 09-22 cascade deadlock did. Stage was
+    repaired with `backfill_stage_classification.py --date ... --full`, which
+    writes `stage` and nothing else; the entry trio still held values derived
+    from the demoted label. Measured on the 09-22 bar afterwards: 983 rows read
+    `stage_since = 2026-09-22` with a stage IDENTICAL to 09-21's -- an entry on
+    a bar where nothing entered, with `stage_since_close` set to that day's
+    close and `pct_from_stage_entry` therefore 0.00 on every one of them.
+    Against a baseline of ~450 entries a day, 09-16 recorded 1,395, 09-17
+    recorded 1,245 (the ECHO -- the label flipped back, breaking the run a
+    SECOND time) and 09-22 recorded 1,379.
+
+    TWO PROPERTIES, BOTH LOAD-BEARING
+    ---------------------------------
+    1. ASCENDING, AND EVERY DATE. The carry is a chain. Replaying out of order,
+       or skipping a session inside the range, hands a bar a predecessor that
+       still holds the old answer -- and writes a wrong result with no error.
+       Dates come from the table itself, so a holiday or a half-day cannot be
+       guessed wrong.
+    2. IT MUST REACH THE LATEST BAR. Repairing date D alone leaves D+1..today
+       carrying what they derived from D. `--to` defaults to the newest
+       classified bar for that reason; passing an earlier one is almost always
+       a mistake and is reported as a warning, not silently accepted.
+
+    The batch rebuild (`--restart`) is the other way to heal this and needs no
+    ordering, because it derives everything from the raw `stage` history with
+    no carry at all. It is also the whole table. Prefer this when the damaged
+    window is known.
+    """
+    conn = get_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT max(trade_date) FROM km_equity_eod "
+                        "WHERE stage IS NOT NULL AND stage <> 'UNKNOWN'")
+            latest = cur.fetchone()[0]
+            if latest is None:
+                print('[stage-entry] no classified bars — nothing to replay.')
+                return 0
+
+            end = to_date or str(latest)
+            cur.execute("""
+                SELECT DISTINCT trade_date FROM km_equity_eod
+                WHERE trade_date >= %s AND trade_date <= %s
+                  AND stage IS NOT NULL AND stage <> 'UNKNOWN'
+                ORDER BY trade_date
+            """, (from_date, end))
+            dates = [r[0] for r in cur.fetchall()]
+        conn.commit()
+    finally:
+        conn.close()
+
+    if not dates:
+        print(f'[stage-entry] no classified bars between {from_date} and {end}.')
+        return 0
+
+    if str(dates[-1]) != str(latest):
+        print(f'  ⚠ replay stops at {dates[-1]}, but the latest classified bar '
+              f'is {latest}. Every bar after {dates[-1]} will keep the entry '
+              f'values it derived from the OLD data. Re-run without --to '
+              f'unless you mean this.')
+
+    print(f'\n[stage-entry] replaying the carry over {len(dates)} sessions, '
+          f'{dates[0]} → {dates[-1]}.')
+    print('  Ascending and contiguous — each bar reads the one before it.\n')
+
+    t0 = time.time()
+    total = 0
+    for i, d in enumerate(dates, 1):
+        n = compute_stage_entry_for_date(None, d)
+        total += n
+        print(f'  [{i:>3}/{len(dates)}] {d}  {n:>9,} rows   '
+              f'(running {total:>11,} · {time.time() - t0:.0f}s)', flush=True)
+
+    print(f'\n  Done in {time.time() - t0:.0f}s — {total:,} rows rewritten.')
+    return total
+
+
+if __name__ == '__main__':
+    main()

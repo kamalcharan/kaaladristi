@@ -647,6 +647,65 @@ was correctly reported, on 09-17. ⚠ `lib/alerting.py` still no-ops unless
 `ALERT_WEBHOOK_URL` or `ALERT_EMAIL_TO`+`SMTP_*` are set, so a critical finding
 is still PULL-only until that is configured.
 
+### ⚠ Repairing `stage` does NOT repair `stage_since` — the carry is a chain (2026-09-23)
+
+The sequel to the outage above, and a worse bug than it: Stage 2 came back and
+**every leader read "in stage since 22 Sept", entry price = that day's close,
+% since entry = 0.00** — a stock that entered Stage 2 in March presented as one
+that entered yesterday, which is the exact opposite of what the column is
+consulted for.
+
+`stage_since` / `stage_since_close` / `pct_from_stage_entry` / `stage_run_bars`
+are a **FORWARD CARRY**: each bar reads the single prior classified bar
+(`_SQL_INCREMENTAL` in `scripts/backfill_stage_entry.py`) and either extends its
+run or opens a new one. So three things follow, and all three bit at once:
+
+1. **Repairing the `stage` LABEL repairs nothing else.**
+   `backfill_stage_classification.py --date … --full` writes `stage`,
+   `sma200_rising`, `is_vani_s2` — and stops. pipeline2's
+   `handle_stage_classification` runs stage **and** the entry carry as ONE unit,
+   with a comment saying exactly why; **the standalone repair script was that
+   split**, so a hand-repaired bar kept an entry date derived from the value
+   that had just been replaced.
+2. **It does not repair any LATER bar**, because each already stored a value
+   carried from the corrupted predecessor. Fixing only the newest bar is the
+   obvious move and is **not enough** — proved on a throwaway cluster: it left
+   the entry date at the echo bar.
+3. **A label that flips BACK breaks the run a second time.** That echo is the
+   bar nobody repairs, because nothing was ever wrong with its own inputs.
+
+Measured on the live DB (baseline ~450 stage entries per session):
+**09-16 → 1,395** (deadlock) · **09-17 → 1,245** (the echo) · 09-18 455 ·
+09-21 406 · **09-22 → 1,379** (deadlock). On the 09-22 bar, **983 rows** carried
+`stage_since = 2026-09-22` with a stage **identical to 09-21's** — all S2, all
+`pct_from_stage_entry` 0.00.
+
+⚠ **No matview is involved.** The five Stage scanners read `km_equity_eod`
+directly (`km_scan_results` has 107 columns and not one named `*stage*`), so the
+data fix is visible immediately and **no `REFRESH` heals it**.
+
+**Fixed:** `backfill_stage_entry.py` gains `--from/--to` (`replay_range`), which
+replays the carry **ascending over every classified session in range, read from
+the table** — never a generated calendar, because a skipped holiday breaks the
+chain silently — and defaults `--to` to the latest bar, warning when it would
+stop short. `backfill_stage_classification.py --date` now runs the entry carry
+for that date (parity with the handler) and names the follow-up replay; `--full`
+points at `--restart`. Its `__main__` guard also moved to the bottom of the
+file: it had sat ABOVE `compute_stage_entry_for_date`, harmless until `main()`
+called it.
+
+**To repair a bar by hand, in this order:**
+```bash
+cd App/backend
+python scripts/backfill_rolling_metrics.py     --date <D>      # if w52_* are NULL
+python scripts/backfill_stage_classification.py --date <D> --full
+python scripts/backfill_stage_entry.py --from <D>              # through the latest bar
+```
+Guarded by `test_stage_entry_repair.py` (10 tests, no DB), verified to fail
+against five regressions, plus a throwaway-cluster fixture that reproduces the
+983-row shape and proves the replay restores the clean baseline and is
+idempotent.
+
 Knobs (env): `PIPELINE2_CASCADE` (`on`), `PIPELINE2_PARENT_FAIL_WINDOW_MIN` (`120`), `PIPELINE2_CASCADE_MAX` (`25`; the
 longest real chain, from `nse_eod_download`, is 22 — 21 before the
 `rolling_metrics` → `stage_classification` edge was added 2026-09-23), `PIPELINE2_CASCADE_DEBOUNCE_MIN`
@@ -2016,13 +2075,20 @@ it.** Every ✅/❌ was checked against the repo; every row count is marked
 numbers settle the central design question — §0 of the doc.
 
 **On the 2026-09-22 bar, NSE active non-ETF, universe 3,044:** within 10% of the
-52-week high 547 · +30% in 3 months 365 · **both 218** · + Stage 2 **161** ·
-+ above `ema_20` **159**. ⚠ Stage 2 is stored as **`S2_CANDIDATE`** — there is no
-plain `'S2'`, so a filter written against `'S2'`/`'STAGE_2'` returns zero and
-reads as "nothing qualifies" rather than as a typo.
+52-week high 547 · +30% in 3 months 365 · **both 218** · + Stage 2 (`stage='S2'`)
+**155** · + above `ema_20` **153**. ⚠ **CORRECTED 2026-09-23** — this line read
+161/159 and claimed *"Stage 2 is stored as `S2_CANDIDATE`, there is no plain
+`'S2'`"*. **Backwards.** Both exist: `S2` is the full Weinstein gate (MA stack +
+rising sma_200 + the 52-week gates), `S2_CANDIDATE` is the MA alignment
+**without** them — 155 vs 6 of the 218, so filtering on the candidate returns the
+weak tail, not the leaders. The original measurement was taken on the 09-22 bar
+*during the Stage 2 outage*, when every `S2` had been demoted, so `stage='S2'`
+returned zero. **A broken bar and a nonexistent enum look identical from one
+query** — check a value's population across several sessions before concluding it
+is never written.
 
 ⚠ **All four swing filters AND-ed return ZERO.** Computed directly from raw bars
-for those 159 names (not via Flower Pot membership, which would be circular —
+for those names (not via Flower Pot membership, which would be circular —
 that arm holds 33 rows today): **1** is ATR-compressed, 28 are volume-dead,
 **0** are both, and the best ATR ratio in the whole watchlist is 0.80, exactly
 at the gate. A stock that has run +30% into its 52-week high is essentially

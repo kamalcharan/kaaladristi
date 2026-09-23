@@ -23,23 +23,41 @@ NSE, active, ETFs excluded. **Universe 3,044.**
 | Within 10% of 52-week high (`pct_below_52w_high <= 10`) | 547 |
 | +30% in 3 months (`ret_66d >= 30`) | 365 |
 | **Both** | **218** |
-| + Stage 2 (`stage = 'S2_CANDIDATE'`) | **161** |
-| + above `ema_20` (trend proxy for the DEMA leg) | **159** |
+| + Stage 2 (`stage = 'S2'`) | **155** |
+| + above `ema_20` (trend proxy for the DEMA leg) | **153** |
 
-⚠ **Stage 2 is stored as `S2_CANDIDATE`.** There is no plain `'S2'` value —
-the column holds `S1` / `S2_CANDIDATE` / `S3` / `S4` / `UNKNOWN`. A filter
-written against `'STAGE_2'` or `'S2'` returns zero and looks like "no stock
-qualifies" rather than a typo. It cost a query here; it would cost a scanner
-silently.
+⚠ **CORRECTED 2026-09-23 (same day).** An earlier version of this table read
+161 / 159 and carried a warning that *"Stage 2 is stored as `S2_CANDIDATE`;
+there is no plain `'S2'`"*. **That was wrong, and backwards.** Both values
+exist and they are different states:
+
+- `S2` — the full Weinstein gate: `close > sma_50 > sma_200`, `sma_200` rising,
+  **and** the 52-week gates (`close >= w52_low*1.25`, `close >= w52_high*0.75`).
+- `S2_CANDIDATE` — the moving-average alignment **without** those gates.
+
+Of the 218, **155 are `S2` and only 6 are `S2_CANDIDATE`**. A filter written
+against `S2_CANDIDATE` therefore returns the weak tail, not the leaders —
+precisely inverted from what the old note advised.
+
+**How the wrong reading happened, because the mechanism matters more than the
+number.** The funnel was measured on the 2026-09-22 bar *during the Stage 2
+outage*: a cascade deadlock had left `w52_high`/`w52_low` NULL, the `S2` gate
+needs both non-NULL, so every `S2` row had been demoted to `S2_CANDIDATE`.
+Querying `stage='S2'` returned zero — which reads exactly like a value that
+does not exist. **A broken bar and a nonexistent enum are indistinguishable
+from a single query**, and the confident conclusion was the wrong one. Check a
+value's population across several sessions before concluding it is never
+written. The funnel's shape is unchanged (218 → ~155 → ~153) and every
+conclusion below still holds.
 
 ### 0.1 ⚠ All four filters AND-ed returns ZERO — measured, not predicted
 
 §2.2 argued filters 1–2 (movement) and filter 4 (stillness) are near-disjoint.
-Measured directly on the 159 watchlist names — computing `atr15/atr60` and
+Measured directly on the (then) 159 watchlist names — computing `atr15/atr60` and
 `vol5/vol22` from raw bars, NOT via Flower Pot membership (which would have been
 circular, since that arm holds only 33 rows today):
 
-| Of the 159 | Count |
+| Of those names | Count |
 |---|---|
 | ATR compressed (`atr15/atr60 < 0.8`) | **1** |
 | Volume dead (`vol5/vol22 < 0.6`) | 28 |
@@ -47,8 +65,8 @@ circular, since that arm holds only 33 rows today):
 | Best ATR ratio anywhere in the watchlist | 0.80 — exactly at the gate |
 
 A stock that has run +30% into its 52-week high is essentially never in
-Flower-Pot-grade compression on the same bar. **One name in 159 clears even the
-ATR leg alone.**
+Flower-Pot-grade compression on the same bar. **One name in the whole watchlist clears even
+the ATR leg alone.**
 
 **This settles the design.** Filter 4 cannot be a watchlist filter — as an
 `AND` it returns an empty list on a perfectly ordinary session, which would read
@@ -58,10 +76,10 @@ trigger bar"). The spec was right; the naive implementation of it is not.
 
 ### 0.2 What the count implies for the surface
 
-**159 is too many for a per-stock checklist to be the entry point.** So:
+**~155 is too many for a per-stock checklist to be the entry point.** So:
 
 - **Steps 1–3 become a scanner** (a preset, or a saved filter over existing
-  ones — still open, §5 Q7). 159 on this session; it will breathe with the
+  ones — still open, §5 Q7). ~155 on this session; it will breathe with the
   market.
 - **The 8-step checklist is a PANEL** you open on one candidate from that list,
   not a universe-wide ranked run. That answers §5 Q5 for the common case,
@@ -314,7 +332,7 @@ Same rule as the Flower Pot coverage line and the bulk-deal `windowUncovered`.
 
 ## 4. Suggested build order
 
-1. ~~Measure the funnel~~ **DONE 2026-09-23 — see §0.** 159 names clear steps
+1. ~~Measure the funnel~~ **DONE 2026-09-23 — see §0.** ~155 names clear steps
    1–3; all four AND-ed returns **0**. Step 1 becomes a scanner, the checklist
    becomes a per-stock panel, and filter 4 moves to the trigger.
 2. **Swing pivot detection**, confirmed/provisional flagged. Unblocks steps 2
