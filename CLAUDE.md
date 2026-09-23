@@ -1968,6 +1968,61 @@ per-year coverage tables in the audit doc.
 ### 📋 FOR REVIEW (owner) — Astro-Technical Alignment hidden on Market Structure
 The **Astro-Technical Alignment** card (`MarketWeatherCard`) was **hidden** from the Market Structure page's *Today's Structure* tab (`views/MarketStructureView.tsx` → `TodayStructureTab`) at the owner's request (2026-07-09), pending a rework of the astro × breadth "confluence" UX. The proposed astro-confluence layer (breadth regime × astro window → historical positive-day frequency, + a forward 6-day strip) is designed but **not built** — it lands as Layer 4 of the Market Breadth page (mock reviewed). The **Historical Confluence** tab is untouched and keeps the existing breadth × ROC × nak-vara content. The component still renders on `/dashboard`; only the Market Structure usage was removed. Re-enable by restoring `<MarketWeatherCard date={date} />` in `TodayStructureTab`.
 
+### 📋 FOR REVIEW (owner) — Trading-system layers, swing filter, pullback checklist (NOTHING BUILT)
+
+`docs/claude/pullback-system-poa.md` — capability audit for three things the
+owner raised together (2026-09-22/23): a five-layer trading frame mapped onto
+the ICP, a four-filter swing watchlist, and an eight-step High-Probability
+Pullback Checklist. **No migration, no column, no scanner exists for any of
+it.** Every ✅/❌ was checked against the repo; every row count is marked
+⏳ UNMEASURED because the read-only `kaala-postgres` MCP was wedged all session
+(even `SELECT 1` timed out at 60s) — and the counts matter most, since two of
+the three proposals exist to make a list *smaller*.
+
+Four findings worth carrying even if none of it is built:
+
+- **The missing primitive is SWING PIVOT DETECTION, not DEMA.** Checklist steps
+  2 and 3 ("prior advance of 30%+", "pullback is 30–40% of the prior advance")
+  both need swing highs/lows, and `ret_66d` is **not** a substitute — a stock
+  can be +30% over 66 days having advanced 80% and given back 28%. Those are
+  different numbers and the retracement needs the second. DEMA is three columns
+  of recursion; pivots are the actual project, and they carry a **repaint trap**
+  (a swing high is unconfirmed until N bars pass without exceeding it, so the
+  latest pivot is always provisional — the same prior-only discipline
+  `stage_since` and `backfill_big_money.py` already enforce).
+- **`concede_level` is a stop-loss question being spent on breadth.** "Where
+  would you concede you were wrong" (tight / swing_low / structure) IS the
+  Process layer's stop loss, asked in plain language — and its only job today is
+  picking the opening brief's breadth leg. The same answer could drive a
+  per-stock stop reference. Do not remove either job; one of them is simply
+  unused.
+- **Four of the five named setups already ship under other names**: VCP =
+  Flower Pot coil, Momentum Burst = breakout_surge/volume_drive, Pullback =
+  gl_retest, Episodic Pivot = the filing/PEAD layer (212–217), Flat Base =
+  Stage 1–2. A naming/IA problem, not a capability one — and the place to settle
+  the pending **Eagles / Spark** vocabulary, since this is the one users speak.
+- **Layer 3 (stop, size, risk) is the gap, and the compliance line is
+  arithmetic vs advice**: "you said you concede at the 22-day low; that is ₹412,
+  4.1% away, N shares at 1% risk" is maths on the user's own rule. A price
+  target is not. Position sizing also needs **account capital, which is stored
+  nowhere** — recommendation is browser-local only, never server-side, never in
+  a VaNi prompt or `km_vani_cache`.
+
+Steps 5–6 (Demand Tail / Inside Bar / NR4 / NR7 / "linear" bars) need **no
+storage** — pure OHLC, the `priceActionEvents.ts` derive-on-read pattern, but
+they must be given warm-up bars or they report "no trigger" on a window too
+short to have looked (the `fpbEvents` starvation lesson). The checklist also
+wants a surface the product does not have: eight rows for ONE stock, with
+**three** states — pass, fail, and *not measurable* — because a row that cannot
+be measured must say so rather than quietly pass or quietly fail.
+
+⚠ Applies to all of it: `km_corporate_actions` is still EMPTY (D44), so
+`ret_66d` and any swing pivot over unadjusted closes carry phantom moves on
+splits/bonuses. A nuisance for a live daily screen; **disqualifying for
+historical validation** until Sprint 3b. Open questions (entry-tactic
+definition, DEMA vs "trend rising", the pivot confirmation rule, capital
+storage, panel vs scanner) are listed in the doc.
+
 ### 📋 FOR REVIEW (owner) — Is an rs_percentile scanner worth building? (script written, NOT YET RUN)
 
 `scripts/backtest_rs_percentile.py` — read-only, writes nothing. Answers the
