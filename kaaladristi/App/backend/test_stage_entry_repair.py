@@ -64,33 +64,41 @@ def _calls(node):
     return out
 
 
-class RepairWritesTheWholeDimension(unittest.TestCase):
-    """pipeline2 runs stage + entry as ONE unit. The manual repair path must
-    too, or a hand-repaired bar keeps an entry date derived from the label
-    that was just replaced."""
+class TheNightlyPathPairsThem(unittest.TestCase):
+    """pipeline2 runs stage + entry as ONE unit, and that is where the pairing
+    belongs -- NOT inside backfill_stage_classification.run_date.
 
-    def test_run_date_runs_the_entry_carry(self):
-        calls = _calls(_func(_STAGE, 'run_date'))
-        self.assertIn('compute_stage_entry_for_date', calls,
-                      'run_date() repairs `stage` and must also recompute the '
-                      'entry trio -- exactly as handle_stage_classification does')
+    An earlier version of this file added the entry carry to run_date() so that
+    a hand repair would write its whole dimension. That was wrong, and reverted:
+    compute_stage_for_date -> run_date IS the nightly path, so the handler would
+    have run the carry twice, writing km_equity_eod an extra ~5,500 rows every
+    night -- in a pipeline whose 09-16/09-22 outage was caused by concurrent
+    UPDATEs to that exact table deadlocking.
 
-    def test_run_date_names_the_follow_up_for_later_bars(self):
-        calls = _calls(_func(_STAGE, 'run_date'))
-        self.assertIn('_warn_if_later_bars_exist', calls,
-                      'repairing a past bar leaves every LATER bar carrying the '
-                      'old answer; the script must say so')
+    The manual repair is therefore a SEQUENCE the operator runs, not a hidden
+    side effect of a script that the scheduler also calls."""
 
-    def test_the_handler_still_pairs_them(self):
-        """The precedent this mirrors. If pipeline2 ever stops pairing them,
-        these tests are guarding a rule the product no longer follows."""
-        h = _src(os.path.join(_HERE, 'pipeline2', 'handlers.py'))
-        fn = _func(os.path.join(_HERE, 'pipeline2', 'handlers.py'),
-                   'handle_stage_classification')
-        calls = _calls(fn)
+    def test_the_handler_pairs_stage_and_entry(self):
+        path = os.path.join(_HERE, 'pipeline2', 'handlers.py')
+        calls = _calls(_func(path, 'handle_stage_classification'))
         self.assertIn('compute_stage_for_date', calls)
         self.assertIn('compute_stage_entry_for_date', calls)
-        self.assertIn('backfill_stage_entry', h)
+
+    def test_run_date_does_NOT_run_the_carry(self):
+        """The revert, pinned. run_date is reached by the nightly handler via
+        compute_stage_for_date; a carry in here is a second write per night."""
+        calls = _calls(_func(_STAGE, 'run_date'))
+        self.assertNotIn('compute_stage_entry_for_date', calls,
+                         'run_date is on the NIGHTLY path (handler -> '
+                         'compute_stage_for_date -> run_date). The handler '
+                         'already calls the carry; adding it here writes '
+                         'km_equity_eod twice a night.')
+
+    def test_compute_stage_for_date_still_delegates_to_run_date(self):
+        """The reason the test above matters. If this ever stops being true,
+        re-read the revert before assuming run_date is a manual-only path."""
+        calls = _calls(_func(_STAGE, 'compute_stage_for_date'))
+        self.assertIn('run_date', calls)
 
 
 class ReplayIsAChain(unittest.TestCase):

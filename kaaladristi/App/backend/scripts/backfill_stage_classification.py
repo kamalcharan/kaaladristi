@@ -214,20 +214,9 @@ def run_missing(conn):
 
 
 def run_full(conn):
-    """Reprocess all rows.
-
-    Rewrites `stage` across all history, which invalidates the entry trio for
-    every symbol — stage_since and friends are derived from the label this
-    replaces. The single-date path repairs its own carry; a whole-history
-    rewrite is far past what a forward replay is for, so it points at the
-    batch rebuild instead.
-    """
+    """Reprocess all rows."""
     n = _run_sql(conn, "", "", "full", timeout_ms=1_800_000)
     _apply_unknown_stage(conn)
-    print("\n  ⚠ `stage` was rewritten across all history. stage_since / "
-          "stage_since_close / pct_from_stage_entry are derived from it and "
-          "are now stale everywhere. Rebuild them with:\n"
-          "      python scripts/backfill_stage_entry.py --restart\n")
     return n
 
 
@@ -263,50 +252,7 @@ def run_date(conn, target_date: str):
     elapsed = time.time() - t0
     print(f"  Done — {updated:,} rows updated in {elapsed:.0f}s")
     _apply_unknown_stage(conn, target_date)
-
-    # The entry carry belongs to this dimension, not to a separate step.
-    #
-    # pipeline2's handle_stage_classification runs compute_stage_for_date and
-    # compute_stage_entry_for_date as ONE unit, with a comment saying exactly
-    # why: the second reads `stage`, so splitting them lets stage_since fall a
-    # day behind `stage` with nothing failing. This script WAS that split —
-    # repairing a bar by hand wrote the label and left stage_since,
-    # stage_since_close and pct_from_stage_entry derived from the value that
-    # had just been replaced.
-    #
-    # That is how the 2026-09-16 / 09-22 cascade deadlock became a visible
-    # product bug. Stage came back; the Stage 2 Leaders table then showed 983
-    # stocks "in stage since 22 Sept" at an entry price equal to that day's
-    # close and 0.00% since entry — on rows whose stage had not changed since
-    # 09-21. A stock that entered Stage 2 in March read as one that entered
-    # yesterday, which is the opposite of what the column is consulted for.
-    from scripts.backfill_stage_entry import compute_stage_entry_for_date
-    compute_stage_entry_for_date(None, target_date, verbose=True)
-
-    # ...and repairing THIS bar is still not the whole repair. stage_since is a
-    # forward carry, so every later bar stored a value derived from the label
-    # that was just corrected. Nothing here can know whether the caller cares,
-    # so say it plainly rather than guessing.
-    _warn_if_later_bars_exist(conn, target_date)
     return updated
-
-
-def _warn_if_later_bars_exist(conn, target_date: str) -> None:
-    """Name the follow-up when repairing a bar that is not the latest one."""
-    with conn.cursor() as cur:
-        cur.execute("""
-            SELECT max(trade_date) FROM km_equity_eod
-            WHERE trade_date > %s AND stage IS NOT NULL AND stage <> 'UNKNOWN'
-        """, (target_date,))
-        latest = cur.fetchone()[0]
-    conn.commit()
-    if latest is None:
-        return
-    print(f"\n  ⚠ {target_date} is not the latest bar ({latest} is). stage_since "
-          f"is a forward carry, so every session after {target_date} still holds "
-          f"an entry date and entry price derived from the stage this run just "
-          f"replaced. Finish the repair with:\n"
-          f"      python scripts/backfill_stage_entry.py --from {target_date}\n")
 
 
 def verify(conn):
