@@ -39,6 +39,7 @@ const navSections: NavSection[] = [
       { to: '/scanner',        glyph: '⊙', label: 'Scanner' },
       { to: '/bookmarks',      glyph: '☆', label: 'My Bookmarks' },
       { to: '/market-structure', glyph: '⊞', label: 'Market Structure' },
+      { to: '/filings',         glyph: '▤', label: 'Filings' },
       { to: '/account',         glyph: '◯', label: 'Account' },
       // Settings is hidden from the nav (theme selection moved to Account →
       // Appearance). The /settings route still resolves by URL for the admin

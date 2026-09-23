@@ -32,6 +32,7 @@ import AdminPanchangView from '@/views/AdminPanchangView';
 import UsersView from '@/views/UsersView';
 import { RuleList, RuleDetail } from '@/pages/RuleEngine';
 import MarketStructureView from '@/views/MarketStructureView';
+import FilingsView from '@/views/FilingsView';
 import PlanetaryIntelView from '@/views/PlanetaryIntelView';
 import WorkspacePage from '@/views/WorkspacePage'
 import GuidePage from '@/views/GuidePage'
@@ -157,6 +158,7 @@ function AppRoutes() {
           <Route path="/admin/panchang" element={<AdminPanchangView />} />
           <Route path="/users" element={<UsersView />} />
           <Route path="/market-structure" element={<MarketStructureView />} />
+          <Route path="/filings" element={<FilingsView />} />
           <Route path="/planetary-intel" element={<PlanetaryIntelView />} />
           <Route path="/rules" element={<RuleList />} />
           <Route path="/rules/:id" element={<RuleDetail />} />

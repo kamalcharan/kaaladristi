@@ -152,6 +152,18 @@ class QueryBuilder {
     return this;
   }
 
+  /** NOT IN filter: column NOT IN (val1, val2, ...).
+   *  The mirror of in(). Added for the Filings page, where the DEFAULT view is
+   *  "every category except the administrative ones": listing the 104 wanted
+   *  values inline is ~7KB once URL-encoded, which sits on nginx's 8KB header
+   *  limit, while excluding the 13 unwanted ones is ~1KB. Always send the
+   *  SHORTER side. */
+  notIn(column: string, values: (string | number)[]): this {
+    const formatted = values.map(v => typeof v === 'string' ? `"${v}"` : v);
+    this.state.params.append(column, `not.in.(${formatted.join(',')})`);
+    return this;
+  }
+
   /** Array contains: column @> {val1, val2}. e.g. tags=cs.{Mercury} for a text[] column. */
   contains(column: string, values: (string | number)[]): this {
     const formatted = values.map(v => typeof v === 'string' ? `"${v}"` : v);
