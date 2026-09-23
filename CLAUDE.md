@@ -2143,6 +2143,79 @@ historical validation** until Sprint 3b. Open questions (entry-tactic
 definition, DEMA vs "trend rising", the pivot confirmation rule, capital
 storage, panel vs scanner) are listed in the doc.
 
+### 📋 FOR REVIEW (owner) — Signal discovery: PEAD measured, volume-spurt calibrated, volume_drive half broken (2026-09-23)
+
+**`docs/claude/signal-discovery-2026-09-23.md`** — four signals measured on the
+live DB in one session. Nothing built. Three are ready to build, one is
+explicitly refused.
+
+**PEAD IS REAL AND CHEAPER THAN THE POA ASSUMED.** 2,245 result announcements
+bucketed by Day 0 price reaction, median drift over the NEXT 20 sessions
+against a universe median of **−0.59%**: reaction **> +5% → +0.95% (+1.54 pts
+excess, n=278)**; every band below +2% → −1.5 to −1.9% (−0.9 to −1.3 pts). A
+**2.8-point spread**, threshold sharp at +5%. ⚠ **Sprint 3 (Qwen document
+extraction) is NOT a prerequisite** — the signal is the price REACTION, not the
+filing's content, and Day 0 + prices are already stored. ⚠ **MagicRS adds
+nothing** (+0.80 vs +0.59, n=42) — do not bolt it on. ⚠ **The scanner is
+SEASONAL**: 104 qualifying events in the week of 2026-08-10, **1 on
+2026-09-23**. An empty list must read "no results filed in the last 20
+sessions", never "no opportunities" (the fpbEvents starvation lesson). Only
+2.5 months of history exists (Day 0 spans 07-10 → 09-22), so this is ONE
+results season and could be a Q1-FY27 artifact.
+
+**⚠ `volume_drive` IS HALF BROKEN — fix before adding anything.** It is
+`dot_svd OR dot_sbd` on the latest bar, no lookback. The **SVD arm is a
+measurable FADE**: 89% of its names are already up ≥10% on the day they appear,
+median forward 5-day **−2.61% against a universe −0.81% (−1.80 pts)**, only 37%
+positive. Structural, not bad luck — SVD's definition REQUIRES `pct_chng > 9`,
+so it can only fire after the move. **This also makes "SVD during compression"
+impossible by construction**: if the owner's Pine SVD fires inside a box it is
+a DIFFERENT indicator needing its own definition. The SBD arm is marginal
+(+0.68 pts median). Minimum fix: split the preset so the scanner stops
+recommending its own worst cohort. Honest framing for SBD: **6.7× lift on a
+≥10% next-day move** (5.4% vs 0.8% base) with a MEDIAN outcome of ~zero — a
+lottery-ticket list, not a trend list.
+
+**VOLUME SPURT COUNT — calibrated on two independent dates.** How OFTEN beats
+how BIG: `5× on ≥1 day` scores **1.02 / 1.08 lift** (noise — and that is what
+volume_drive does today), while `2× on ≥6 days` scores 1.27. Window calibrated
+with one shared baseline: **22 days wins all four matched-size comparisons**;
+44 days is flat at every threshold (old spurts only dilute); 10 days is too
+short. **`≥8` beats `≥6` on stability** (1.32/1.32 vs 1.37/1.21). Direction is
+required — volume is blind, and 4+ spurts with RS rising beat RS falling on
+both dates (17.4 vs 14.6, 20.8 vs 16.1). Rule: **`vol_spurt_count_22d >= 8 AND
+magic_rs_chg_22d > 0`**, ONE new column. ⚠ The live `rvol` divides by a 50-bar
+mean that INCLUDES today — it read **19.2** on OPTIEMUS 09-22 when the true
+spurt vs prior-bar median was **~52×**. Use prior bars only, and median not
+mean (29× vs 52× on the same day).
+
+**`rs_percentile` — 20-year answer, and it is NOT a ranking.** 61
+non-overlapping 22-session windows, **153,556 stock-windows**, 2006→2026.
+Bucket median minus same-date universe median: <50 **−0.16**, 50–70 **+0.64**,
+70–80 +0.60, 80–90 +0.05, 90–95 +0.54, 95–100 **+0.36**. **Not monotone** —
+bucket 2 beats the top decile; top−bottom spread only +0.52 pts. **It is a
+negative FILTER (exclude <50), not a ranking — do not build a top-decile RS
+scanner.** Regime swing dwarfs the effect: top bucket +4.38 in 2023, −2.31 in
+2024-25. ⚠ `scripts/backtest_rs_percentile.py` still has NOT been run (port
+5432 unreachable from the cloud container); the methodology was reproduced in
+SQL via the read-only MCP, so Spearman rho and the phase-3 scanner-overlap test
+remain open.
+
+**Two population results that overturn the intuitive read**, both measured over
+366 big movers vs a 43,843-bar base: **`delivery_pct ≥ 50%` has 0.98× lift**
+(pure noise) and **`rvol < 0.9` has 0.58× lift** — big movers are preceded by
+ACTIVE days, not compressed ones. ⚠ **OPTIEMUS is a specimen, not a template**:
+on 09-21 it had none of the winning features (no dots, LOW_VOLUME, rvol 0.72),
+its last SBD was 19 sessions earlier, and what actually caught it was the
+15-minute MagicRS/SVD turn at **09:45** plus three filings at 12:26/12:38 —
+all of which the EOD layer sees 5.75 hours late. Do not calibrate a screen to
+it.
+
+**Data defects found in passing:** `2026-08-25` has **0 SBD / 0 SVD / 0 SYD
+across all 3,006 rows** (the `dots` dimension did not run, nothing reported
+it); `bm_ratio` is NULL before 2026-09-04 so Big Money cannot be backtested at
+all; `km_corporate_actions` still EMPTY.
+
 ### 📋 FOR REVIEW (owner) — Is an rs_percentile scanner worth building? (script written, NOT YET RUN)
 
 `scripts/backtest_rs_percentile.py` — read-only, writes nothing. Answers the
