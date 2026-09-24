@@ -1041,6 +1041,47 @@ from `base_close`, the calendar replaced by a constant, the zero-close guard
 weakened to `?? 1`, the empty copy going generic, one branch losing its body,
 and the category label drifting from migration 222.
 
+### ⚠ The +5% PEAD gate's excess is ONE WINDOW — split-sample FAILED (2026-09-24)
+
+`docs/claude/pead-filing-integration.md` §MEASURED. Run on the VPS via
+`App/backend/scripts/sql/pead_split_sample.sql` + `pead_split_q3_per_date.sql`
+(the MCP was wedged; `SELECT 1` timed out at 60s all session). The sanity header
+reproduced the published population EXACTLY — 2,245 events, 278 in the `>=+5%`
+band, universe ~2,800/date — so this is the data, not the query.
+
+Split at 2026-08-10: `>=+5%` **H1 +0.82 (n=187)** vs **H2 +5.95 (n=91)**, seven
+times apart, and `+2..+5%` and `<-5%` both FLIP SIGN across the halves. Only the
+two middle bands are stable.
+
+⚠ **H2 is ONE EPISODE.** Per-date top band: 08-11 (21) +6.65 · 08-12 (11)
++16.84 · 08-13 (24) +7.56 · 08-14 (17) +3.67 · 08-17 (17) +1.42 · 08-18 (1)
++7.17 — six dates, **four CONSECUTIVE sessions holding 73 of 91 events, all six
+positive**. Consecutive Day 0 dates share one 20-session forward window (all
+ending ~09-08/09-11), so +5.95 is one observation wearing n=91.
+
+⚠ **H1 is a coin flip**: 22 dates, **12 positive / 10 negative**, −7.18 to
++27.75, and its +0.82 is flattered by 07-21 (n=7, +11.33) and **07-24 (n=2,
++27.75)**. Strip those and H1 is ~zero.
+
+⚠ **~TWO independent periods exist**: six weeks of Day 0 against a 20-session
+horizon. `signal-research` warns below 8. **n=278 is 278 STOCKS, not 278
+observations** — treat every large n in this layer that way until the dates are
+counted.
+
+⚠ **Both EXTREME bands rose in H2 while the middle sat still** — the signature of
+volatile names outperforming in that window, which is not drift. Direction still
+adds (band5 beats band1 by 2.1 pts H1, 5.3 pts H2), so not purely beta.
+
+**The gate does NOT move** — `>=+5%` is the best band in both halves (+0.82 vs
+−0.17; +5.95 vs −0.45), the ranking survives, and re-fitting a threshold on this
+would be fitting a fortnight. **The shipped scanner is unaffected** (membership
+is a fact, not a forecast). **What IS superseded is the effect size**: migration
+221's header carries **+1.54 pts** as a point estimate; the honest figure is a
+range of roughly **0 to +6 pts depending on the window**. Never quote +1.54 as
+the expected edge — in a VaNi line, a tooltip, or a decision to extend this
+layer. Next real test: the **October season**, the first forward windows that do
+not overlap this sample.
+
 ### ⚠ A +5% day is a LOSING screen unless a result is under it (2026-09-24)
 
 The 20-session PEAD horizon was a data limit, not a choice, so the scanner

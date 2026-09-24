@@ -775,3 +775,65 @@ added nothing to the reaction (+0.80 vs +0.59, n=42), and the filing-cluster and
 **Unaffected by all of the above:** the shipped Post-Result Drift scanner is the
 price-reaction half, and that half measured well — results-day +5% **+1.72
 (n=277)** against any-reason +5% **−1.13 (n=691)**. Nothing here changes it.
+
+---
+
+## ⚠ MEASURED 2026-09-24 — the +5% gate's excess is ONE WINDOW, not a season
+
+Run on the VPS (`App/backend/scripts/sql/pead_split_sample.sql`, then
+`pead_split_q3_per_date.sql`). The MCP was wedged all session, so this was run
+directly against the DB.
+
+**The sanity header reproduced the published population exactly** — 2,245 events,
+278 in the `>= +5%` band, universe ~2,800 per date, Day 0 2026-07-10 → 08-21. So
+what follows is about the data, not the query.
+
+**Split-sample by event count (split at 2026-08-10):**
+
+| band | H1 median (n) | H2 median (n) | |
+|---|---|---|---|
+| **>= +5%** | **+0.82 (187)** | **+5.95 (91)** | 7x apart |
+| +2..+5% | −0.56 (182) | +2.40 (106) | sign flip |
+| −2..+2% | −0.17 (459) | −0.45 (374) | stable |
+| −5..−2% | −0.62 (279) | −0.72 (275) | stable |
+| < −5% | −1.30 (171) | +0.67 (121) | sign flip |
+
+⚠ **H2 IS ONE EPISODE.** Per-date, top band: 08-11 (n=21) +6.65 · 08-12 (11)
++16.84 · 08-13 (24) +7.56 · 08-14 (17) +3.67 · 08-17 (17) +1.42 · 08-18 (1)
++7.17. **Six dates, four of them CONSECUTIVE sessions holding 73 of the 91
+events, and all six positive.** Consecutive Day 0 dates share essentially one
+20-session forward window (all ending ~09-08 to 09-11), so the +5.95 is one
+observation wearing n=91 — not 91 of anything.
+
+⚠ **H1 is the honest reading and it is a coin flip**: 22 dates, **12 positive /
+10 negative**, medians from −7.18 to +27.75. Its +0.82 is flattered by two tiny
+dates — 07-21 (n=7, +11.33) and **07-24 (n=2, +27.75)**. Strip those and H1 sits
+around zero.
+
+⚠ **Roughly TWO independent periods exist in the whole sample.** Day 0 spans six
+weeks against a 20-session horizon; non-overlapping windows need Day 0 dates 20
+sessions apart. `signal-research` warns below 8. **n=278 is 278 stocks, not 278
+observations** — the single most misleading number in this file before now.
+
+⚠ **The extremes both rose in H2 while the middle sat still.** Bands 1 and 5 are
+the big-|reaction| bands; a symmetric lift in both is the signature of volatile
+names outperforming in that window, which is not drift. Direction still carries
+extra weight (band 5 beats band 1 by 2.1 pts in H1, 5.3 in H2), so it is not
+purely beta — but part of the headline plausibly is.
+
+**What this does and does not change.**
+
+* **The gate does NOT move.** `>= +5%` is still the best band in BOTH halves
+  (+0.82 vs −0.17 in H1; +5.95 vs −0.45 in H2). The RANKING survives; there is
+  no evidence for a different threshold, and changing one on this would be
+  fitting to a fortnight.
+* **The shipped scanner is unaffected.** Membership is "a result, inside 20
+  sessions, reaction >= +5%" — a fact about what happened, not a forecast.
+* **The recorded EFFECT SIZE is superseded.** Migration 221's header and the
+  earlier entries in this file carry **+1.54 pts** as a point estimate. The
+  honest statement is a range of roughly **0 to +6 pts depending on the window**,
+  on ~2 independent periods. Do not quote +1.54 as the expected edge, in a VaNi
+  line, a tooltip, or a decision to extend this layer.
+* **The next real test is the OCTOBER results season** — the first Day 0 dates
+  whose forward windows do not overlap this sample at all. Calendar-bound, not
+  blocked.
