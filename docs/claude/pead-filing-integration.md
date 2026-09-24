@@ -837,3 +837,40 @@ purely beta — but part of the headline plausibly is.
 * **The next real test is the OCTOBER results season** — the first Day 0 dates
   whose forward windows do not overlap this sample at all. Calendar-bound, not
   blocked.
+
+### The volatility read is confirmed, and the SHORT leg is refused
+
+Query 4 (`pead_split_q4_volatility.sql`), same sample, split at 2026-08-10.
+Buckets by the SIZE of the reaction ignoring sign, then by sign inside each:
+
+| size | direction | H1 median (n) | H2 median (n) | shift |
+|---|---|---|---|---|
+| big \|r\|>=5 | down | −1.55 (181) | **+0.57 (136)** | +2.1 |
+| big \|r\|>=5 | up | +0.82 (187) | **+5.95 (91)** | +5.1 |
+| small \|r\|<5 | down | −0.44 (521) | −0.46 (479) | **+0.0** |
+| small \|r\|<5 | up | −0.33 (389) | +0.15 (261) | +0.5 |
+
+⚠ **SMALL movers are IDENTICAL across the halves** (−0.44/−0.46, −0.33/+0.15), so
+the H2 window did not lift the market — the same-date universe median already
+removes that. It lifted **big movers specifically, in BOTH directions.** That is
+the volatility episode measured rather than suspected, and it is why the top
+band's absolute excess cannot be quoted.
+
+**What DOES survive the split: the up-vs-down spread among big reactions** —
+**+2.37 pts in H1** (+0.82 vs −1.55) and **+5.38 in H2** (+5.95 vs +0.57). Same
+sign, both clearly positive, magnitude 2x apart. Direction is real; its size is
+not. Note this is a RELATIVE statement: it says a big move up beat a big move
+down, not that either beat the market, and only the relative form is stable.
+
+⚠ **THE SHORT LEG IS REFUSED ON EVIDENCE.** It was on the pending list at
+−0.55/−0.59 pts from the whole-sample table. Split apart:
+
+* `< −5%` **FLIPS SIGN**: −1.30 (H1) → **+0.67 (H2)**. The band a short leg would
+  be built on is the *least* stable in the whole table.
+* `−5..−2%` is stable (−0.62 / −0.72) but worth only ~0.65 pts — below the
+  dispersion of everything around it, and a screen on it would spend a preset on
+  noise.
+
+So "the bands below +2% measure −0.55/−0.59, build the short leg" was reading a
+pooled average over two halves that disagree. Do not build it. If it is revisited
+after October, the test is the split, not the pooled number.

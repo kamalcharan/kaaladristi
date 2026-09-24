@@ -1072,6 +1072,19 @@ counted.
 volatile names outperforming in that window, which is not drift. Direction still
 adds (band5 beats band1 by 2.1 pts H1, 5.3 pts H2), so not purely beta.
 
+⚠ **Confirmed by a second query, and it refuses the short leg.** Bucketing by
+`abs(reaction)` then sign: **SMALL movers are IDENTICAL across halves** (down
+−0.44/−0.46, up −0.33/+0.15) while **BIG movers swing in BOTH directions**
+(down −1.55→+0.57, up +0.82→+5.95). So H2 lifted big movers specifically, not
+the market — the volatility episode, measured. **What survives is the up-vs-down
+spread among big reactions: +2.37 pts (H1), +5.38 (H2)** — same sign, 2x apart,
+and RELATIVE (a big move up beat a big move down; neither reliably beat the
+market). ⚠ **The SHORT leg is refused**: `<-5%` FLIPS SIGN (−1.30 → **+0.67**),
+the least stable band in the table, and `-5..-2%` is stable but worth only ~0.65
+pts. The pending "short leg measures −0.55/−0.59, build it" was a pooled average
+over two halves that disagree — **do not build it**; if revisited after October,
+the test is the split, not the pooled number.
+
 **The gate does NOT move** — `>=+5%` is the best band in both halves (+0.82 vs
 −0.17; +5.95 vs −0.45), the ranking survives, and re-fitting a threshold on this
 would be fitting a fortnight. **The shipped scanner is unaffected** (membership
