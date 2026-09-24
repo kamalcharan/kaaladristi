@@ -617,3 +617,75 @@ call dropped from `run()`, and a dating column added to the UPDATE.
 ⚠ **Nothing renders this.** No UI reads `family` or `event_type` yet — this is
 the data-ready layer the owner's steer asked for, and the Filings page already
 filtered these subjects through its own `capital` chip.
+
+---
+
+## MEASURED 2026-09-24 (3) — the 60-session question, answered by proxy
+
+The 20-session horizon was never chosen; it was all the filing history allowed
+(53 sessions exist, 0 result events carry 60). That left an open question the
+scanner could not answer about itself: **would a longer hold be better?**
+
+It is answerable **without filings** — by asking what a large single-day move
+does over time in this market generally. That needs only price bars, so it runs
+over years instead of one quarter.
+
+**Method.** 14 sample dates spaced 65 sessions apart (so the windows are
+independent), 2023-01-02 → 2026-06-09. Cohort: every NSE active non-ETF stock
+that moved **≥ +5% in a day** for any reason. Excess = the stock's forward
+return minus the **same-date universe median** of every stock in the same
+universe. Windows containing an implausible single-session move are excluded.
+
+| horizon | n | **median excess** | mean excess | % positive |
+|---|---|---|---|---|
+| 5 sessions | 692 | **−0.98** | +0.72 | 43.9 |
+| 20 sessions | 691 | **−1.13** | +1.17 | 45.2 |
+| 60 sessions | 683 | **−1.98** | +3.35 | 46.0 |
+
+### A generic +5% day is NEGATIVE at every horizon, and worsens with time
+
+So the answer to "should the hold be 60 sessions" is **no** — and the reason is
+not a data limit. Whatever carries a stock after a big day in this market, it
+decays into underperformance, and a longer hold buys more of that, not less.
+The literature's 60-day hold is a US large-cap finding; it does not transfer
+here on this evidence.
+
+### The more important result: the RESULT is the whole signal
+
+Put the two cohorts side by side at the same horizon:
+
+| cohort on Day 0 | n | median excess, 20 sessions |
+|---|---|---|
+| ≥ +5% day for **any** reason | 691 | **−1.13** |
+| ≥ +5% day **on a results day** | 277 | **+1.72** |
+
+**A 2.85-point separation.** The move is not the edge — the move is common and
+mean-reverting. What separates the two populations is that one of them had a
+results announcement underneath it.
+
+This is a far stronger validation of the scanner than the bucket table alone:
+the bucket table showed the gate ordering results *against each other*, and
+this shows the whole results cohort standing apart from the market's ordinary
+behaviour after an identical price move.
+
+⚠ It also sharpens what the scanner must never imply. **"Stock jumped 5%" is a
+losing screen** (−1.13). Only "jumped 5% *because results landed*" is not. Any
+copy, VaNi line or derivative screen that drops the results condition and keeps
+the move inherits −1.13.
+
+### Two properties of this run worth keeping
+
+- **Mean rises while median falls at every horizon** (+0.72 → +1.17 → +3.35
+  against −0.98 → −1.13 → −1.98). A handful of runaway names pull the mean up
+  while the typical stock in the cohort loses ground, and the gap *widens* with
+  the horizon. A mean-based version of this table concludes "hold longer, it
+  gets better" — the exact opposite of the truth.
+- **14 independent windows across three years**, so this is not one regime. The
+  PEAD result above it is still one season; this one is not.
+
+### What is still not measured
+
+The proxy answers *generic* big movers at 60 sessions. It does **not** prove
+results-day drift also turns negative by 60 — that needs a second and third
+results season, and the earliest honest answer is Q2 FY27 plus one more.
+Nothing in this table suggests extending the horizon, so **20 stands**.

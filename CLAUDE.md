@@ -1041,6 +1041,40 @@ from `base_close`, the calendar replaced by a constant, the zero-close guard
 weakened to `?? 1`, the empty copy going generic, one branch losing its body,
 and the category label drifting from migration 222.
 
+### ⚠ A +5% day is a LOSING screen unless a result is under it (2026-09-24)
+
+The 20-session PEAD horizon was a data limit, not a choice, so the scanner
+could not answer whether a longer hold is better. Answered **by proxy** — a
+generic large single-day move needs only price bars, so it measures over years
+instead of one quarter. 14 sample dates spaced 65 sessions apart (independent
+windows), 2023-01 → 2026-06, NSE active non-ETF, excess vs the same-date
+universe median:
+
+| horizon | n | median excess | mean | %pos |
+|---|---|---|---|---|
+| 5 | 692 | **−0.98** | +0.72 | 43.9 |
+| 20 | 691 | **−1.13** | +1.17 | 45.2 |
+| 60 | 683 | **−1.98** | +3.35 | 46.0 |
+
+**A generic +5% day is negative at EVERY horizon and worsens with time**, so
+**20 stands and 60 is refused on evidence**, not on the data limit. The US
+60-day hold does not transfer here.
+
+⚠ **The bigger result — the RESULT is the whole signal.** Same horizon, same
+universe, same +5% move: **any reason −1.13 (n=691)** vs **on a results day
++1.72 (n=277)**. A **2.85-point separation**. The move is common and
+mean-reverting; what separates the cohorts is the announcement underneath it.
+**Never let a screen, a VaNi line or a derivative keep the move and drop the
+results condition — it inherits −1.13.**
+
+⚠ Mean rises while median falls at every horizon, and the gap WIDENS with the
+window. A mean-based table concludes "hold longer, it gets better" — the exact
+opposite. This is the mean/median trap at its most expensive.
+
+⚠ Still unmeasured: whether RESULTS-day drift also turns negative by 60. That
+needs a second and third season. The proxy covers generic movers only — but
+nothing in it argues for extending.
+
 ### ⚠ The filing layer's one measured edge: big move × a filing, at +15% (2026-09-24)
 
 `docs/claude/pead-filing-integration.md` §MEASURED. A filing does not predict a
