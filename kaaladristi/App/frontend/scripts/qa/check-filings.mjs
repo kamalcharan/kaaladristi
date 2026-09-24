@@ -220,4 +220,26 @@ const ok = (n) => { pass++; console.log(`  ✓ ${n}`); };
   ok('missing summary is stated, document text is never promised');
 }
 
+// ── 9. A chip NARROWS; it does not start on and get switched off ────────
+{
+  const view = fs.readFileSync(new URL('../../src/views/FilingsView.tsx', import.meta.url), 'utf8');
+
+  assert.ok(/useState<string\[\]>\(\[\]\)/.test(view),
+    'the category selection must start EMPTY. Starting it as every non-muted '
+    + 'id makes every chip look ON and makes a click REMOVE a category — so '
+    + 'narrowing to Capital Raise meant clicking sixteen chips off, which reads '
+    + 'as a broken filter.');
+  assert.ok(/selected\.length \? selected : DEFAULT_GROUP_IDS/.test(view),
+    'empty selection must mean ALL categories (minus Administrative), never '
+    + 'an empty result');
+  assert.ok(/const on = selected\.includes\(g\.id\)/.test(view),
+    'a chip is lit by the SELECTION, not by the effective query — otherwise '
+    + 'all 18 light up on an unfiltered page');
+  assert.ok(/Showing all categories/.test(view),
+    'the empty state must say it is showing everything; an unlit chip row is '
+    + 'otherwise indistinguishable from a filter that returned nothing');
+  assert.ok(/Clear/.test(view), 'a narrowed row needs a way back');
+  ok('category chips narrow, and the unfiltered state says so');
+}
+
 console.log(`\n✓ filings: ${pass} checks passed`);

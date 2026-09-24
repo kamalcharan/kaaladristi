@@ -271,7 +271,12 @@ export default function FilingsView() {
   const [search, setSearch] = useState('');
   const [fromDate, setFromDate] = useState(isoDaysAgo(30));
   const [toDate, setToDate] = useState(() => new Date().toISOString().slice(0, 10));
-  const [groupIds, setGroupIds] = useState<string[]>(DEFAULT_GROUP_IDS);
+  // ⚠ EMPTY = "all categories" (minus Administrative), NOT "nothing".
+  // It used to start as all 17 non-muted ids, which made every chip look ON
+  // and made a click REMOVE a category — so narrowing to Capital Raise meant
+  // clicking sixteen chips off. A chip row is read as "pick one", always.
+  const [selected, setSelected] = useState<string[]>([]);
+  const groupIds = selected.length ? selected : DEFAULT_GROUP_IDS;
   const [sort, setSort] = useState<FilingSortKey>('date');
   const [ascending, setAscending] = useState(false);
   const [page, setPage] = useState(0);
@@ -290,7 +295,7 @@ export default function FilingsView() {
   };
 
   const toggleGroup = (id: string) => {
-    setGroupIds((cur) => cur.includes(id) ? cur.filter((g) => g !== id) : [...cur, id]);
+    setSelected((cur) => cur.includes(id) ? cur.filter((g) => g !== id) : [...cur, id]);
     setPage(0);
   };
 
@@ -345,16 +350,35 @@ export default function FilingsView() {
         {/* Category chips — All tab only. On a filtered tab they would
             silently intersect and show an empty page nobody can explain. */}
         {chipsActive && (
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-2 text-[11px]">
+              <span className="text-muted">
+                {selected.length
+                  ? `Showing ${selected.length} of ${FILING_GROUPS.length} categories`
+                  : 'Showing all categories — pick one to narrow'}
+              </span>
+              {selected.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => { setSelected([]); setPage(0); }}
+                  className="text-[var(--accent)] hover:underline"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
           <div className="flex flex-wrap gap-1.5">
             {FILING_GROUPS.map((g) => {
-              const on = groupIds.includes(g.id);
+              const on = selected.includes(g.id);
               const muted = MUTED_GROUP_IDS.has(g.id);
               return (
                 <button
                   key={g.id}
                   type="button"
                   onClick={() => toggleGroup(g.id)}
-                  title={muted ? 'Routine compliance filings — off by default' : undefined}
+                  title={muted
+                    ? 'Routine compliance filings — hidden unless you pick this'
+                    : undefined}
                   className={cn(
                     'px-2 py-1 rounded-md text-[11px] font-medium border transition-colors',
                     on
@@ -366,6 +390,7 @@ export default function FilingsView() {
                 </button>
               );
             })}
+          </div>
           </div>
         )}
       </Card>
