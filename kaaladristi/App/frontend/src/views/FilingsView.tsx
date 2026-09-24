@@ -238,7 +238,7 @@ function FilingDetail({ row }: { row: FilingRow }) {
             )}
           >
             <LineChart className="w-3.5 h-3.5" />
-            View chart
+            Chart study
           </button>
         )}
       </div>

@@ -179,7 +179,7 @@ const ok = (n) => { pass++; console.log(`  ✓ ${n}`); };
     'the row must render the detail panel when open');
 
   const detail = view.slice(view.indexOf('function FilingDetail('));
-  assert.ok(/View chart/.test(detail) && /navigate\s*\(/.test(detail),
+  assert.ok(/Chart study/.test(detail) && /navigate\s*\(/.test(detail),
     'the chart must still be reachable — as an explicit control in the panel');
   assert.ok(/row\.docUrl/.test(detail) && /target="_blank"/.test(detail),
     'the panel must link out to the filing document');

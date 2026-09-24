@@ -270,3 +270,116 @@ only measurement would have caught it.
 | 4 | Chart filing markers + per-stock Filings tab | none | context, not signal |
 | 5 | Re-measure after October results season | — | closes caveat 1 |
 | — | "Large order" / "Spark" scanner | — | **REFUSED — measured -2.61** |
+
+---
+
+## MEASURED 2026-09-24 — what the filing layer is actually worth
+
+Four questions, answered against the live DB. The headline is one measured
+discriminator and two refuted intuitions.
+
+### 1. The signal is `big Day 0 move` **×** `a filing on that day`
+
+The filing does not predict a move. What it does is tell a big move apart from
+a big move that reverts — and it only earns its keep at the extreme. Day 0 =
+the session the market could act; forward return = 5 sessions from Day 0's
+close, minus the **same-date universe median** so market direction cancels;
+NSE active non-ETF; Day 0 spans 2026-07-10 → 2026-09-23 (~52 sessions).
+
+| Day 0 move | no filing that day | a filing that day | difference |
+|---|---|---|---|
+| < +5% | 0.00 (n=116,869) | 0.00 (n=15,163) | 0 |
+| +5 … +10% | +0.08 (n=3,739) | **+0.54** (n=555) | +0.46 |
+| +10 … +15% | −1.04 (n=511) | −1.02 (n=115) | ~0 |
+| **≥ +15%** | **−0.69** (n=348) | **+2.59** (n=70) | **+3.28 pts** |
+
+Median excess return, percentage points, 5 sessions.
+
+A +15% day with nothing filed **mean-reverts**. A +15% day with a filing
+**continues**. 55.7% of the filed cases are positive against 46.8% unfiled.
+
+⚠ **Read the median, not the mean.** Unfiled ≥+15% has mean +3.29 against
+median −0.69 — a handful of runaway names carrying a population that typically
+gives back. Filed is mean +2.76 against median +2.59, i.e. a well-behaved
+distribution. A mean-based version of this table says the opposite thing.
+
+⚠ **Not monotone.** +10…15% is negative in BOTH columns. With n=115/511 over
+2.5 months that is as likely to be sample as structure, but it means this is a
+*threshold at +15%*, not a gradient — do not build a "the bigger the move the
+better" ranking on it.
+
+⚠ **Corporate actions are clean here, and that was checked, not assumed.**
+`km_corporate_actions` is still EMPTY (D44), so the 0.55×/1.80× single-session
+cliff gate was applied to every forward window: **0 of 418** ≥+15% events
+carried a cliff, so n is unchanged and the result is not a split artifact.
+
+⚠ 2.5 months, ~1.3 qualifying events a session. This is one market phase.
+
+### 2. REFUTED — a filing CLUSTER is not a signal
+
+OPTIEMUS filed **three** announcements inside twelve minutes on its +20% day,
+which makes "several filings in one session" look like the tell. It is not:
+
+| filings on Day 0 | n | median excess (5 sessions) |
+|---|---|---|
+| 1 | 10,050 | +0.03 |
+| 2 | 3,038 | +0.01 |
+| 3 or more | 2,815 | **−0.10** |
+
+Flat, and very slightly *worse* with more. 2,815 events filed 3+ in a session
+and carried no edge at all. **Count the price reaction, never the filings.**
+Same shape as the `rvol < 0.9` result: the visible feature of one specimen is
+not what separated it from the population.
+
+### 3. Ingest schedule, and the latency that follows from it
+
+Scheduled (`pipeline2/scheduler.py`, IST, every day — filings do not stop for
+weekends): **filings 06:10 / 09:10 / 12:10 / 20:10 / 23:10**, **board meetings
+07:40 / 21:40**, **bulk deals 08:20 / 22:20**. All deliberately outside
+12:30–19:30, where `daily_run` and both gap sweeps live, and staggered to
+:10/:40/:20 so three NSE fetchers never share a minute.
+
+Observed, 5 days to 2026-09-24 — the **20:10 slot is the whole day**: it lands
+434–641 rows and takes 50–110 minutes, so its rows carry `fetched_at` in the
+21:00 or 22:00 hour; the 23:10 slot spills past midnight. The other four slots
+land 1–66 rows each.
+
+**Latency on what matters — a filing disseminated during market hours**
+(09:15–15:30), live period since 2026-09-17, excluding the one-time 09-16
+backfill: **n=960, mean lag 342 minutes (5.7 hours), max 602**. Only **282 of
+960 (29.4%)** are in our database before that same session's close.
+
+So a mid-session filing is, more often than not, a *tomorrow* fact for us —
+which is consistent with the rule in §1 being a Day+1-onward rule, and is the
+reason it is stated that way. Closing the intraday gap needs a slot inside
+12:30–19:30, which is the window the scheduler avoids on purpose.
+
+### 4. OPTIEMUS INFRACOM — the filing→price link, established
+
+| when | what |
+|---|---|
+| 09-21 | close **590.75**. rvol 0.72, MagicRS 26.16 and *falling*, no dots, flow NULL. **No pre-signal whatsoever.** |
+| 09-22 12:26 | `General Updates` — binding term sheet with **Nothing Electronics** |
+| 09-22 12:32 | `Press Release` — *"CMF by Nothing and Optiemus Group Expand Partnership to Build India's First End-to-End R&D Smartphone Capability"* |
+| 09-22 12:38 | `Others` — the same term sheet again |
+| 09-22 close | **708.90, +20.00%** — close = high = upper circuit. Volume 8.05M vs a 189k norm, **rvol 19.24**. dot_sbd AND dot_svd. |
+| 09-22 **21:48** | ⚠ the three filings reach our DB — **9.2 hours after dissemination, 6.3 hours after the close**, and ~3.8 hours after that day's bhavcopy |
+| 09-23 | opens **800** (+12.9% gap), closes **828.35, +16.85%**, volume 10.6M |
+| 09-23 14:37 | corporate guarantee to IndusInd raised ₹50.07 Cr → ₹100 Cr — a *consequence*, not the driver |
+
+**+40.2% over two sessions from the 09-21 close**, and the entire first leg
+happened between 12:26 and the close of the day the news landed.
+
+Two honest readings of this specimen:
+
+- **The Day 0 leg was never catchable in an EOD product**, and no amount of
+  faster filing ingest changes that — the stock was locked at +20% within the
+  session. What §1 says is tradeable is the **Day+1 continuation**, which here
+  was +16.85%, and which the data says is only worth taking when a filing
+  exists. OPTIEMUS is a textbook instance of the filed ≥+15% bucket.
+- **There was a footprint four sessions earlier, and it was not a filing.**
+  09-16 gapped from 566.25 to open 600 (+6%) on rvol 1.52 with FRESH_LONGS and
+  a stage lift S3 → S2_CANDIDATE, and 09-17 added +2.89% the same way — with
+  **no announcement on file** to explain either. (OPTIEMUS also has no 09-15
+  bar although the market traded that session.) n=1; not a rule. But it is the
+  case for the `wg_journeys` / Big Money layer rather than the filing layer.

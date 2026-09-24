@@ -943,6 +943,55 @@ could ACT** (from `exchdisstime` via `kd_day_zero_trade_date`, never the filing
 time), and **`suspect_corporate_action` must be filtered on in any drift study**
 until `km_corporate_actions` is populated.
 
+### ⚠ The filing layer's one measured edge: big move × a filing, at +15% (2026-09-24)
+
+`docs/claude/pead-filing-integration.md` §MEASURED. A filing does not predict a
+move; it tells a big move apart from a big move that **reverts**. Median excess
+return over 5 sessions vs the same-date universe median, NSE active non-ETF,
+Day 0 2026-07-10 → 09-23:
+
+| Day 0 move | no filing | with a filing |
+|---|---|---|
+| < +5% | 0.00 (n=116,869) | 0.00 (n=15,163) |
+| +5…10% | +0.08 (n=3,739) | +0.54 (n=555) |
+| +10…15% | −1.04 (n=511) | −1.02 (n=115) |
+| **≥ +15%** | **−0.69 (n=348)** | **+2.59 (n=70)** |
+
+**+3.28 pts of separation, and only at the extreme.** 55.7% positive filed vs
+46.8% unfiled. ⚠ **Median, never mean** — unfiled ≥+15% has mean +3.29 against
+median −0.69 (a few runaways over a reverting population), while filed is
++2.76/+2.59; a mean-based table says the opposite thing. ⚠ **Not monotone** —
++10…15% is negative in both columns, so this is a THRESHOLD at +15%, not a
+gradient; do not rank by move size. ⚠ Cliffs were checked, not assumed: the
+0.55×/1.80× gate found **0 of 418** ≥+15% forward windows contaminated. ⚠ 2.5
+months, ~1.3 events a session — one market phase.
+
+⚠ **REFUTED — a filing CLUSTER is not a signal.** 1 / 2 / 3+ filings on Day 0
+score +0.03 / +0.01 / **−0.10** (n=10,050 / 3,038 / 2,815). OPTIEMUS filed three
+inside twelve minutes on its +20% day, which makes the cluster look like the
+tell; 2,815 events did the same with no edge. **Count the price reaction, never
+the filings** — same shape as the `rvol < 0.9` result.
+
+⚠ **A mid-session filing is a TOMORROW fact for us.** Scheduled slots are
+06:10/09:10/12:10/20:10/23:10 IST (board meetings 07:40/21:40, bulk deals
+08:20/22:20), all outside the 12:30–19:30 pipeline window on purpose. The
+**20:10 slot is the whole day** — 434–641 rows, 50–110 minutes, so its rows
+stamp `fetched_at` in the 21:00/22:00 hour and 23:10 spills past midnight. For
+filings disseminated 09:15–15:30 since 09-17: **n=960, mean lag 342 min (5.7 h),
+max 602**, and only **282 (29.4%)** are in the DB before that session's close.
+OPTIEMUS's three landed at 21:48 — 9.2 h after dissemination, 6.3 h after the
+close, ~3.8 h after that day's bhavcopy. This is WHY the rule above is stated as
+a Day+1-onward rule: OPTIEMUS was locked at +20% by 12:40 and no ingest speed
+recovers that leg. Closing the intraday gap means a slot inside the window the
+scheduler avoids.
+
+⚠ **OPTIEMUS had NO EOD pre-signal on 09-21** (rvol 0.72, MagicRS falling, no
+dots, flow NULL) and went +20.00% (upper circuit, rvol 19.24) then +16.85% —
+**+40.2% in two sessions**. Its only footprint was four sessions earlier and
+carried no filing at all: 09-16 gapped +6% into FRESH_LONGS with a S3 →
+S2_CANDIDATE lift, 09-17 added +2.89%. n=1, not a rule, and it is the Big Money
+/ journeys layer's case rather than the filing layer's.
+
 ---
 
 ### Thesis events — PARKED 2026-09-15, Phases 1–3 shipped
