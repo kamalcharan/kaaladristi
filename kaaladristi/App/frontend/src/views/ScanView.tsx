@@ -1600,12 +1600,15 @@ function ScannerResults({ presetId }: { presetId: string }) {
             background: 'var(--card)', border: '1px solid var(--border)', borderRadius: '16px',
           }}>
             <p style={{ fontSize: '14px', color: 'var(--text-muted)', marginBottom: 8 }}>
-              {oppFilter ? 'No VaNi Highlights in this scan today.' : 'No stocks match this scan criteria today.'}
+              {oppFilter
+                ? 'No VaNi Highlights in this scan today.'
+                : (EMPTY_COPY[presetId]?.head ?? 'No stocks match this scan criteria today.')}
             </p>
             <p style={{ fontSize: '12px', color: 'var(--text-faint)', lineHeight: 1.6 }}>
               {oppFilter
                 ? 'Try turning the VaNi filter off to see all matches.'
-                : 'That can be normal — some conditions only line up a few days a month. Try Strength Confluence for the broadest read, or check back after ~6:30 PM IST on trading days when fresh data lands.'}
+                : (EMPTY_COPY[presetId]?.body
+                   ?? 'That can be normal — some conditions only line up a few days a month. Try Strength Confluence for the broadest read, or check back after ~6:30 PM IST on trading days when fresh data lands.')}
             </p>
           </div>
         )
@@ -1653,12 +1656,13 @@ function ScannerResults({ presetId }: { presetId: string }) {
           <p style={{ fontSize: '14px', color: 'var(--text-muted)', marginBottom: 8 }}>
             {oppFilter
               ? 'No VaNi Highlights in this scan today.'
-              : 'No stocks match this scan criteria today.'}
+              : (EMPTY_COPY[presetId]?.head ?? 'No stocks match this scan criteria today.')}
           </p>
           <p style={{ fontSize: '12px', color: 'var(--text-faint)', lineHeight: 1.6 }}>
             {oppFilter
               ? 'Try turning the VaNi filter off to see all matches.'
-              : 'That can be normal — some conditions only line up a few days a month. Try Strength Confluence for the broadest read, or check back after ~6:30 PM IST on trading days when fresh data lands.'}
+              : (EMPTY_COPY[presetId]?.body
+                 ?? 'That can be normal — some conditions only line up a few days a month. Try Strength Confluence for the broadest read, or check back after ~6:30 PM IST on trading days when fresh data lands.')}
           </p>
         </div>
       )}
@@ -1705,6 +1709,24 @@ import React from 'react';
 const SCAN_DISCLAIMER =
   'Scans surface observations of market conditions from end-of-day data, for study and education. ' +
   'Nothing here is investment advice or a recommendation to buy or sell any security.';
+
+/**
+ * Empty-state copy, per preset.
+ *
+ * ⚠ A SEASONAL scanner must not say "no stocks match". Post-Result Drift held
+ * 104 names in the week of 2026-08-10 and ONE on 2026-09-23 — it is empty four
+ * weeks in five by design, and the generic line reads as a broken screen or,
+ * worse, as "no opportunities" when the truth is "nobody filed results". Same
+ * lesson as fpbEvents reporting an absence it never measured.
+ */
+const EMPTY_COPY: Record<string, { head: string; body: string }> = {
+  pead_drift: {
+    head: 'No results filed in the last 20 sessions.',
+    body: 'This list only fills during results season — a company has to '
+        + 'announce results AND jump more than 5% that day to appear. Between '
+        + 'quarters it is empty, which is the honest reading, not a fault.',
+  },
+};
 
 export default function ScanView() {
   const { presetId } = useParams<{ presetId?: string }>();

@@ -494,8 +494,8 @@ export const ALL_FIELDS: Record<string, FieldConfig> = {
   },
   result_drift_pct: {
     key: 'result_drift_pct',
-    label: 'Drift',
-    tooltip: 'Move since the Day 0 close — the post-result drift itself, measured from Day 0 so the announcement jump is excluded. Positive means the stock has continued in the direction it reacted.',
+    label: 'Drift so far',
+    tooltip: 'Move since the Day 0 close, up to the latest session — the post-result drift itself. SO FAR: every stock on this list is still inside its 20-session window, so this is a partial reading and the Sessions column says how partial. Measured from Day 0, never Day -1, so the announcement jump is excluded. Positive means the stock has continued in the direction it reacted.',
     type: 'pct',
     width: 78,
     colorFn: (val: any) => {

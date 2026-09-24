@@ -25,9 +25,17 @@
  *   into the drift, which is how a PEAD study reports an effect it never
  *   measured.
  *
+ *   DRIFT IS COMPUTED HERE, FROM day_0_close. `kd_result_returns` fills
+ *   drift_pct only once the FULL horizon has passed, while this scanner's
+ *   membership rule is "still inside the window" — so every row it can return
+ *   has a NULL drift_pct, and reading it shipped a column that was
+ *   structurally always "—".
+ *
  * Verified to FAIL against: the gate loosened to 2, an RS filter added, the
  * corporate-action filter dropped, the throw softened to `return []`, the
- * freshest-first ordering reversed, and the preset losing its own category.
+ * freshest-first ordering reversed, the preset losing its own category, drift
+ * read back from the RPC, drift measured from base_close, and the seasonal
+ * empty state falling back to the generic "no stocks match".
  */
 
 import assert from 'node:assert/strict';
@@ -37,8 +45,13 @@ const src = fs.readFileSync(new URL('../../src/services/scanEngine.ts', import.m
 const fn = (() => {
   const i = src.indexOf('async function fetchPeadDrift');
   assert.ok(i > 0, 'fetchPeadDrift not found in scanEngine.ts');
+  // Ends at the first top-level `}` on its own line. Asserted non-trivial so
+  // a refactor that moves the function cannot silently shrink every check
+  // below to a pass over an empty string.
   const j = src.indexOf('\n}\n', i);
-  return src.slice(i, j);
+  const body = src.slice(i, j);
+  assert.ok(body.length > 2000, 'fetchPeadDrift body looks truncated');
+  return body;
 })();
 
 let pass = 0;
@@ -126,6 +139,72 @@ const ok = (n) => { pass++; console.log(`  ✓ ${n}`); };
   assert.ok(/vani_rule:\s*null/.test(entry),
     'no vani_rule — a highlight here would just restate membership');
   ok('preset registered in its own seasonal category, NSE-only, no vani_rule');
+}
+
+// ── 8. Drift is computed here, and from the right anchor ────────────────
+{
+  assert.ok(/driftSoFar/.test(fn),
+    'drift must be computed in the scanner. kd_result_returns fills drift_pct '
+    + 'only after the FULL horizon, and every member of this list is still '
+    + 'inside its window — so reading the RPC gives a column that can never '
+    + 'populate');
+  assert.ok(!/toNum\(ev\.drift_pct\)/.test(fn),
+    'ev.drift_pct is NULL for every live row; it must not reach the column');
+  assert.ok(/ev\.day_0_close/.test(fn) && !/ev\.base_close/.test(fn),
+    'drift is measured from day_0_close. base_close is Day -1, and measuring '
+    + 'from there folds the announcement jump into the drift — the exact '
+    + 'error migration 215 exists to prevent');
+  assert.ok(/d0Close > 0/.test(fn),
+    'a zero or missing Day 0 close must yield null, never a division result');
+  // The divisor must be d0Close itself. `d0Close ?? 1` looks like a null guard
+  // and is not: it turns a missing Day 0 close into "drift = close - 100%",
+  // a confident number computed from nothing.
+  assert.ok(/\/ d0Close\)/.test(fn) && !/d0Close \?\?/.test(fn),
+    'divide by d0Close directly — a ?? fallback fabricates a drift from a '
+    + 'missing anchor instead of returning null');
+  assert.ok(/dates\.indexOf/.test(fn),
+    'sessions elapsed must come off the trading calendar, not date arithmetic '
+    + '— a holiday would silently mis-count the window');
+  ok('drift so far is computed from day_0_close, sessions off the calendar');
+}
+
+// ── 9. The seasonal empty state says what is actually empty ─────────────
+{
+  const view = fs.readFileSync(new URL('../../src/views/ScanView.tsx', import.meta.url), 'utf8');
+  assert.ok(/EMPTY_COPY/.test(view) && /pead_drift:/.test(view),
+    'a SEASONAL scanner needs its own empty copy');
+  assert.ok(/No results filed in the last 20 sessions/.test(view),
+    'the empty state must name what is missing — RESULTS, not opportunities. '
+    + '104 names in the week of 2026-08-10 and ONE on 2026-09-23: this list is '
+    + 'empty four weeks in five by design, and "no stocks match" reads as a '
+    + 'broken screen');
+  // Count the FALLBACKS, not the lookups: swapping `??` for `&&` keeps the
+  // lookup count identical and silently blanks the generic line.
+  const heads = view.match(/EMPTY_COPY\[presetId\]\?\.head\s*\?\?/g) ?? [];
+  const bodies = view.match(/EMPTY_COPY\[presetId\]\?\.body\s*\n?\s*\?\?/g) ?? [];
+  assert.equal(heads.length, 2,
+    `both empty states need a head with a ?? fallback; found ${heads.length}`);
+  assert.equal(bodies.length, 2,
+    `both empty states need a body with a ?? fallback; found ${bodies.length}`);
+  ok('seasonal empty state is wired into both branches, head and body');
+}
+
+// ── 10. The category label moves in the DB and the array together ───────
+{
+  const arr = fs.readFileSync(new URL('../../src/services/scanEngine.ts', import.meta.url), 'utf8');
+  const mig = fs.readFileSync(
+    new URL('../../../DBscripts/km_migration_222_events_category_rename.sql', import.meta.url), 'utf8');
+  const label = (arr.match(/category: 'events', category_label: '([^']+)'/) ?? [])[1];
+  assert.ok(label, 'the events preset must carry a category_label');
+  assert.ok(mig.includes(`category_label = '${label}'`),
+    `the array says "${label}" but migration 222 sets something else. `
+    + 'getPresetMeta() reads the DB row FIRST and only falls back to the '
+    + 'array, so the two must move together or the page renders whichever '
+    + 'copy happens to answer');
+  assert.ok(/category = 'events'/.test(mig) && !/SET category =/.test(mig),
+    "the category ID is an address (?setup= links, PRESET_COL_OVERRIDES) and "
+    + 'must not be renamed — only its label');
+  ok(`category label "${label}" is consistent across the array and migration 222`);
 }
 
 console.log(`\n✓ pead scanner: ${pass} checks passed`);

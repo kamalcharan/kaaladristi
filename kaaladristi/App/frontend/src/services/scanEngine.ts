@@ -86,7 +86,7 @@ export const SCAN_PRESETS: ScanDefinition[] = [
   // and an empty list sitting inside Price Action or Discovery would read as
   // those families being broken. Metadata (incl. category color) comes from
   // kd_scan_presets; empty color keeps the literal ratchet flat.
-  { id: 'pead_drift',           name: 'Post-Result Drift',     description: 'Stocks that jumped more than 5% on their results day, still inside the 20-session window that move was measured over', limit: 200, universe: 'NSE_ONLY', category: 'events', category_label: 'Events', category_color: '', category_sort: 6, is_default_tab: true, timeframe: 'daily', vani_rule: null },
+  { id: 'pead_drift',           name: 'Post-Result Drift',     description: 'Stocks that jumped more than 5% on their results day, still inside the 20-session window that move was measured over', limit: 200, universe: 'NSE_ONLY', category: 'events', category_label: 'Filing Intelligence', category_color: '', category_sort: 6, is_default_tab: true, timeframe: 'daily', vani_rule: null },
 ];
 
 // ── Preset metadata — DB is the source of truth ────────────────
@@ -822,6 +822,28 @@ async function fetchPeadDrift(exchangeFilter: ExchangeFilter): Promise<ScanStock
     const ev = byEquity.get(Number(row.equity_id));
     if (!ev) continue;
 
+    // ── Drift SO FAR, and it must be computed here ───────────────────────
+    // `kd_result_returns` only fills drift_pct once the FULL horizon has
+    // passed — but this scanner's membership rule is "still inside the
+    // 20-session window", so every row it can ever return is a row whose
+    // drift_pct is NULL. Reading the RPC's value shipped a Drift column that
+    // was structurally always "—".
+    //
+    // ⚠ Measured from `day_0_close`, NEVER `base_close`. base_close is Day -1,
+    // and measuring from there folds the announcement jump into the drift —
+    // which is how a PEAD study reports an effect it never measured (the rule
+    // migration 215's header states). Reaction and drift stay separate.
+    const d0Close = ev.day_0_close != null ? Number(ev.day_0_close) : null;
+    const driftSoFar = d0Close && d0Close > 0 && row.close != null
+      ? ((Number(row.close) / d0Close) - 1) * 100
+      : null;
+
+    // Sessions since Day 0, off the trading calendar rather than date
+    // arithmetic — `dates` is descending, so index 0 is the latest bar and a
+    // result filed on it has spent none of its window.
+    const d0Idx = dates.indexOf(String(ev.day_0_trade_date));
+    const sessionsElapsed = d0Idx >= 0 ? d0Idx : null;
+
     const ema20 = row.ema_20 ?? null;
     const atr14 = row.atr_14 ?? null;
 
@@ -887,8 +909,8 @@ async function fetchPeadDrift(exchangeFilter: ExchangeFilter): Promise<ScanStock
       is_vani_s2:           row.is_vani_s2 ?? null,
       result_day_0:             ev.day_0_trade_date ?? null,
       result_reaction_pct:      toNum(ev.reaction_pct),
-      result_drift_pct:         toNum(ev.drift_pct),
-      result_sessions_elapsed:  ev.sessions_elapsed != null ? Number(ev.sessions_elapsed) : null,
+      result_drift_pct:         driftSoFar,
+      result_sessions_elapsed:  sessionsElapsed,
       result_siblings:          ev.sibling_announcements != null ? Number(ev.sibling_announcements) : null,
     });
   }
