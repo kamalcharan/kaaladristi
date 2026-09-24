@@ -41,9 +41,11 @@ That is why archive depth is the question and a broker feed is not.
 from __future__ import annotations
 
 import argparse
+import datetime as dt
 import json
 import os
 import sys
+from urllib.parse import quote
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
 
@@ -128,13 +130,174 @@ def dump(sess, seq, sym: str) -> None:
                     print(f'      {k} = {rows[0].get(k)!r}')
 
 
+
+# ── Chain probe ────────────────────────────────────────────────────────────
+#
+# What the --dump run established, and why the earlier "no XBRL" verdict was
+# wrong about the cause:
+#
+#   * corporates-financial-results answered application/json with `[]`, NOT an
+#     HTML shell. The route works; `symbol=` is simply not how it is filtered.
+#   * corporates-financial-results-data answered, in plain text,
+#         "Required all params : params, seq_id, industry, ind, format"
+#     So the document endpoint EXISTS and published its own contract. Our
+#     announcement id is not its `params`, and `seq_id` has to come from the
+#     listing.
+#
+# The chain is therefore: LISTING -> a row carrying seq_id -> the data route
+# with format=xbrl. This probes that chain and nothing else. It still refuses
+# a PDF/LLM fallback — Sprint 3 owns extraction.
+
+LISTING = 'https://www.nseindia.com/api/corporates-financial-results'
+
+# Query shapes to try, most-likely first. NSE's own results page drives this
+# route by PERIOD plus a date window, not by symbol — which is exactly why the
+# symbol filter came back empty. Date format is unknown, so both orders are
+# tried rather than assumed.
+def listing_variants(d_from, d_to):
+    dmy_f, dmy_t = d_from.strftime('%d-%m-%Y'), d_to.strftime('%d-%m-%Y')
+    ymd_f, ymd_t = d_from.isoformat(), d_to.isoformat()
+    for period in ('Quarterly', 'Half-Yearly', 'Annual'):
+        yield f'{LISTING}?index=equities&period={period}&from_date={dmy_f}&to_date={dmy_t}'
+        yield f'{LISTING}?index=equities&period={period}&from_date={ymd_f}&to_date={ymd_t}'
+    yield f'{LISTING}?index=equities&period=Quarterly'
+    yield f'{LISTING}?index=equities'
+
+
+def rows_of(resp):
+    """Rows out of a listing response, or None when it is not a JSON listing."""
+    try:
+        data = json.loads(resp.text)
+    except Exception:                                    # noqa: BLE001
+        return None
+    if isinstance(data, list):
+        return data
+    if isinstance(data, dict):
+        for k in ('data', 'resultsData', 'rows'):
+            if isinstance(data.get(k), list):
+                return data[k]
+    return None
+
+
+def chain(sess, days: int) -> int:
+    """Listing -> seq_id -> the data route. Prints, never classifies."""
+    d_to = dt.date.today()
+    d_from = d_to - dt.timedelta(days=days)
+    print(f'LISTING window {d_from} .. {d_to}\n')
+
+    hit = None
+    for url in listing_variants(d_from, d_to):
+        try:
+            resp = sess.get(url, referer=RESULTS_REFERER)
+        except Exception as exc:                         # noqa: BLE001
+            print(f'  ERR  {type(exc).__name__:<16} {url[:110]}')
+            continue
+        rows = rows_of(resp)
+        n = 'not json' if rows is None else len(rows)
+        print(f'  {resp.status_code}  rows={str(n):<8} {url[:110]}')
+        if rows and hit is None:
+            hit = (url, rows)
+
+    if not hit:
+        print('\n  FINDING: no listing shape returned rows. The data route\n'
+              '  cannot be reached without a seq_id, so the surprise leg stops\n'
+              '  here. Report it — do not fall back to the PDF.')
+        return 2
+
+    url, rows = hit
+    row = rows[0]
+    print(f'\n  WORKING LISTING: {url}')
+    print(f'  {len(rows)} rows. keys = {sorted(row.keys())}')
+    print(f'  row[0] = {json.dumps(row)[:900]}')
+
+    # The data route named its five required params. Fill each from the row by
+    # exact key first, then a case-insensitive match — and print what could NOT
+    # be filled, because a missing one is the finding, not a detail.
+    need = ('params', 'seq_id', 'industry', 'ind', 'format')
+    low = {k.lower(): v for k, v in row.items()}
+    filled, missing = {}, []
+    for p in need:
+        if p == 'format':
+            filled[p] = 'xbrl'
+            continue
+        v = row.get(p, low.get(p.replace('_', '')))
+        if v in (None, ''):
+            missing.append(p)
+        else:
+            filled[p] = v
+    print(f'\n  data-route params filled from the row: {filled}')
+    if missing:
+        print(f'  ⚠ NOT in the listing row: {missing} — the row does not carry '
+              'everything the data route demands')
+
+    q = '&'.join(f'{k}={quote(str(v))}' for k, v in filled.items())
+    durl = f'{LISTING}-data?index=equities&{q}'
+    print(f'\n--- data route: {durl[:160]}')
+    try:
+        dresp = sess.get(durl, referer=RESULTS_REFERER)
+    except Exception as exc:                             # noqa: BLE001
+        print(f'    ERR {type(exc).__name__}: {exc}')
+        return 2
+    body = dresp.text or ''
+    tags = [w for w in WANTED if w in body]
+    print(f'    status {dresp.status_code}  {dresp.headers.get("content-type","?")}  '
+          f'{len(body)} bytes  XBRL tags {len(tags)}/{len(WANTED)}')
+    print('    ' + body[:900].replace('\n', ' ')[:900])
+    if tags:
+        print(f'\n  TAGS FOUND: {tags}\n'
+              '  The surprise leg is reachable. The remaining question is ARCHIVE\n'
+              '  DEPTH — a SUE needs ~8 quarters of the company OWN past EPS.\n'
+              '  Run --depth next.')
+        return 0
+    print('\n  No XBRL tags in the data response. Print-only by design: read the\n'
+          '  body above before deciding what the format param should be.')
+    return 2
+
+
+def depth(sess) -> int:
+    """How many quarters back the listing still answers. That count IS the gate."""
+    today = dt.date.today()
+    print('Archive depth — a SUE needs ~8 quarters of the company own past EPS.\n')
+    reachable = 0
+    for q in range(0, 13):
+        d_to = today - dt.timedelta(days=90 * q)
+        d_from = d_to - dt.timedelta(days=90)
+        url = (f'{LISTING}?index=equities&period=Quarterly'
+               f'&from_date={d_from.strftime("%d-%m-%Y")}&to_date={d_to.strftime("%d-%m-%Y")}')
+        try:
+            rows = rows_of(sess.get(url, referer=RESULTS_REFERER))
+        except Exception as exc:                         # noqa: BLE001
+            print(f'  Q-{q:<2} {d_from} .. {d_to}  ERR {type(exc).__name__}')
+            continue
+        n = 0 if not rows else len(rows)
+        if n:
+            reachable += 1
+        print(f'  Q-{q:<2} {d_from} .. {d_to}  rows={n}')
+    print(f'\n  quarters answering with rows: {reachable}/13')
+    print('  >= 8 -> a seasonal-random-walk SUE is buildable from NSE alone.\n'
+          '  <  8 -> it is not, and that is the finding.')
+    return 0 if reachable >= 8 else 2
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description='Probe NSE XBRL availability (read only)')
     ap.add_argument('--limit', type=int, default=20)
     ap.add_argument('--dump', action='store_true',
                     help='print the raw body of the two API routes for the newest '
                          'sample, with and without a referer, instead of scanning tags')
+    ap.add_argument('--chain', action='store_true',
+                    help='listing -> seq_id -> data route with format=xbrl')
+    ap.add_argument('--depth', action='store_true',
+                    help='how many quarters back the listing still answers')
+    ap.add_argument('--days', type=int, default=14,
+                    help='listing window for --chain (default 14)')
     args = ap.parse_args()
+
+    # --chain and --depth never touch the database: they probe NSE alone, so a
+    # DB outage must not block the one question that gates the surprise leg.
+    if args.chain or args.depth:
+        sess = NseSession()
+        return chain(sess, args.days) if args.chain else depth(sess)
 
     conn = psycopg2.connect(DATABASE_URL)
     conn.set_session(readonly=True, autocommit=True)
