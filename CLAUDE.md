@@ -1075,6 +1075,50 @@ opposite. This is the mean/median trap at its most expensive.
 needs a second and third season. The proxy covers generic movers only — but
 nothing in it argues for extending.
 
+### ⚠ The earnings-surprise leg: the XBRL archive and our reactions do not overlap (2026-09-24)
+
+`docs/claude/pead-filing-integration.md` §MEASURED. The blocker was recorded as
+"we hold ~1 quarter against the ~8 a SUE needs". Wrong blocker — measured
+against NSE with `scripts/probe_nse_xbrl.py` (read-only; **must run on the VPS**,
+the cloud container has no route to nseindia.com).
+
+**Reachable and parseable.** `api/corporates-financial-results?index=equities&period=Quarterly`
+returns JSON whose every row carries the finished document url in an `xbrl` key,
+so `corporates-financial-results-data` (which demands
+`params, seq_id, industry, ind, format`) is never needed. Documents parse with a
+regex on the local tag name — **no LLM, no PDF, no Sprint 3 dependency.**
+⚠ **EPS was absent from the sampled document**; it carried `ProfitLossForPeriod`
+and `RevenueFromOperations`. Profit is a usable level for a seasonal random walk
+and is NOT an EPS.
+
+⚠ **`from_date`/`to_date` filter the FILING date, not the reporting period** —
+proved from distributions: the Jan–Mar 2025 window's 3,865 rows broadcast
+Jan/Feb/Mar-2025 (1,212+2,547+106, summing exactly) while their reporting
+quarters spread back to 2022Q3. The bare listing is all reporting quarter 2024Q4.
+
+⚠ **The archive has a cliff: 7 DENSE quarters, ending 2025-03** (3,327–3,865
+documents each at ~100%), then 1–12 documents per quarter — **7 for all of
+Apr–Jun 2026**. The filter works, so that is the endpoint's content, not the
+query. **Our Day 0 records start 2026-07-10, so the two spans DO NOT OVERLAP**
+and no surprise can be joined to a reaction today. ⚠ An earlier run of the
+script reported "12/12 quarters, buildable" on a `>= 1 document` threshold;
+`DENSE_QUARTER_MIN = 500` now splits it 7 / 5.
+
+⚠ **Hypothesis, unchecked:** the cliff lands exactly at 2024Q4 = SEBI's
+Integrated Filing (Financials) regime. If so, current financials are on another
+route and the eras splice. Confirm before assuming.
+
+**Order of work, if resumed:** backfill Day 0 for 2023-07 → 2025-03 from the
+announcements archive FIRST — that answers *does a surprise add anything over
+the price reaction*, which decides whether finding the current-era route is
+worth anything. Measure before building: MagicRS added nothing to the reaction
+(+0.80 vs +0.59, n=42), and the filing-cluster and `rvol < 0.9` hypotheses both
+died on contact.
+
+⚠ **The shipped Post-Result Drift scanner is unaffected.** It is the
+price-reaction half and that half measured well (results-day +5% **+1.72**,
+n=277, vs any-reason +5% **−1.13**, n=691).
+
 ### ⚠ The filing layer's one measured edge: big move × a filing, at +15% (2026-09-24)
 
 `docs/claude/pead-filing-integration.md` §MEASURED. A filing does not predict a

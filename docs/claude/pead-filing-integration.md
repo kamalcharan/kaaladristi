@@ -689,3 +689,89 @@ The proxy answers *generic* big movers at 60 sessions. It does **not** prove
 results-day drift also turns negative by 60 — that needs a second and third
 results season, and the earliest honest answer is Q2 FY27 plus one more.
 Nothing in this table suggests extending the horizon, so **20 stands**.
+
+---
+
+## ⚠ MEASURED 2026-09-24 — the XBRL archive and our reactions DO NOT OVERLAP
+
+The surprise leg was previously recorded as blocked on "we hold ~1 quarter
+against the ~8 a SUE needs". That was the wrong blocker. Measured against NSE
+directly (`scripts/probe_nse_xbrl.py`, read-only, run on the VPS — the cloud
+container has no route to nseindia.com):
+
+**What works.** `api/corporates-financial-results?index=equities&period=Quarterly`
+returns JSON, and each row carries the finished document url itself:
+
+    "xbrl": "https://nsearchives.nseindia.com/corporate/xbrl/INDAS_..._.xml"
+
+So `corporates-financial-results-data` is NOT needed — it demands
+`params, seq_id, industry, ind, format` and answers nothing without them, but
+the listing has already handed over the file. Fetched documents parse with a
+plain regex on the local tag name: `RevenueFromOperations`,
+`ProfitLossForPeriod`, `DateOfStartOfReportingPeriod`,
+`DateOfEndOfReportingPeriod`. **No LLM, no PDF, no Sprint 3 dependency.**
+
+⚠ **EPS was NOT in the sampled document** — only revenue and profit. Profit is a
+usable level for a seasonal random walk (arguably better: no dilution noise) but
+it is not an EPS and must never be reported as one. The first probe run printed
+*"documents yielding an EPS-shaped figure: 1/1"* on exactly that document,
+because its counter incremented on any wanted tag. A check that cannot fail.
+
+**`from_date`/`to_date` filter the FILING date, not the reporting period.**
+Proved from the distributions rather than assumed: the Jan–Mar 2025 window
+returns 3,865 rows whose broadcast months are Jan-2025 (1,212), Feb-2025
+(2,547), Mar-2025 (106) — summing exactly — while their *reporting* quarters
+spread back to 2022Q3 (late filers). The bare listing's 3,816 rows are all
+reporting quarter **2024Q4**, broadcast from Jan-2025 to Jul-2026.
+
+**And the cliff, which is the finding.** Documents per aligned calendar quarter:
+
+| filing window | rows | with xbrl |
+|---|---|---|
+| Apr–Jun 2026 | 7 | 1 |
+| Jan–Mar 2026 | 15 | 4 |
+| Oct–Dec 2025 | 59 | 12 |
+| Jul–Sep 2025 | 8 | 3 |
+| Apr–Jun 2025 | 28 | 8 |
+| **Jan–Mar 2025** | **3,865** | **3,865 (100%)** |
+| Oct–Dec 2024 | 3,737 | 3,735 |
+| Jul–Sep 2024 | 3,650 | 3,648 |
+| Apr–Jun 2024 | 3,459 | 3,454 |
+| Jan–Mar 2024 | 3,482 | 3,482 |
+| Oct–Dec 2023 | 3,372 | 3,372 |
+| Jul–Sep 2023 | 3,327 | 3,327 |
+
+**7 dense quarters, ending March 2025.** The filter demonstrably works, so 7
+rows for a whole quarter is the endpoint's own content, not our query.
+
+⚠ **Our Day 0 reaction records start 2026-07-10.** The dense archive ends
+2025-03. **The two spans do not overlap at all**, so a surprise cannot be joined
+to a reaction in either direction today. Archive depth was never the blocker;
+the blocker is that the deep part is in a different era from our prices-plus-
+announcements records.
+
+⚠ **Do not read "12/12 quarters" from an earlier run of this script.** Its
+threshold was ">= 1 document", which a 7-row quarter satisfies.
+`DENSE_QUARTER_MIN = 500` now splits the sweep 7 dense / 5 sparse.
+
+**Hypothesis, NOT checked:** the cliff lands exactly at 2024Q4, which is when
+SEBI's Integrated Filing (Financials) regime replaced standalone results
+filings. If that is the cause, current-era financials are on another route and
+the two eras splice into one continuous series. Confirm before assuming.
+
+**Two paths, and they answer different questions.**
+
+* **Backfill Day 0 for 2023-07 → 2025-03** from the announcements archive. Gives
+  the dense XBRL span something to join, so it answers *does a surprise leg add
+  anything over the price reaction alone* — the question that decides whether
+  any of this is worth building. It does NOT produce a live scanner.
+* **Find the current-era financials route.** Required for a LIVE surprise, and
+  worth nothing if the first path says the leg does not earn its place.
+
+Measure first. The one thing already measured in this direction says MagicRS
+added nothing to the reaction (+0.80 vs +0.59, n=42), and the filing-cluster and
+`rvol < 0.9` hypotheses both died on contact.
+
+**Unaffected by all of the above:** the shipped Post-Result Drift scanner is the
+price-reaction half, and that half measured well — results-day +5% **+1.72
+(n=277)** against any-reason +5% **−1.13 (n=691)**. Nothing here changes it.
