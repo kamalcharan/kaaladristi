@@ -113,8 +113,12 @@ const GRID =
   'sm:grid-cols-[104px_minmax(0,1.3fr)_minmax(0,1fr)_16px] gap-x-3';
 
 function FilingRowItem({
-  row, onPickSubject,
-}: { row: FilingRow; onPickSubject: (desc: string) => void }) {
+  row, onPickSubject, activeSubject,
+}: {
+  row: FilingRow;
+  onPickSubject: (desc: string) => void;
+  activeSubject: string | null;
+}) {
   const [open, setOpen] = useState(false);
   const gid = groupForDesc(row.descRaw);
   const time = fmtTime(row.disseminatedAt);
@@ -152,13 +156,15 @@ function FilingRowItem({
           </div>
           {/* Category shows here on phones, where the third column is gone */}
           <div className="sm:hidden mt-0.5">
-            <CategoryChip gid={gid} desc={row.descRaw} onPickSubject={onPickSubject} />
+            <CategoryChip gid={gid} desc={row.descRaw} onPickSubject={onPickSubject}
+              active={activeSubject === row.descRaw} />
           </div>
         </div>
 
         {/* Category + subject */}
         <div className="hidden sm:block min-w-0">
-          <CategoryChip gid={gid} desc={row.descRaw} onPickSubject={onPickSubject} />
+          <CategoryChip gid={gid} desc={row.descRaw} onPickSubject={onPickSubject}
+              active={activeSubject === row.descRaw} />
         </div>
 
         <ChevronDown
@@ -264,8 +270,12 @@ function FilingDetail({ row }: { row: FilingRow }) {
  * unusable. Clicking it filters the page to that exact subject.
  */
 function CategoryChip({
-  gid, desc, onPickSubject,
-}: { gid: string; desc: string; onPickSubject?: (desc: string) => void }) {
+  gid, desc, onPickSubject, active,
+}: {
+  gid: string; desc: string;
+  onPickSubject?: (desc: string) => void;
+  active?: boolean;
+}) {
   const legal = gid === 'legal' || gid === 'auditor';
   return (
     <div className="flex flex-col gap-0.5 min-w-0 items-start">
@@ -288,8 +298,16 @@ function CategoryChip({
           onClick={(e) => { e.stopPropagation(); onPickSubject(desc); }}
           title={`Show only "${desc}"`}
           className={cn(
-            'text-left text-[11px] leading-snug break-words rounded px-1 -mx-1',
-            'text-muted hover:text-[var(--accent)] hover:underline transition-colors',
+            // A CHIP, not underlined text. Rendered as a caption it was
+            // indistinguishable from the badge's subtitle — present, clickable
+            // and invisible as a control, which is the whole reason the subject
+            // vocabulary went unused.
+            'inline-flex items-start text-left max-w-full px-1.5 py-0.5 rounded',
+            'border text-[11px] leading-snug break-words transition-colors',
+            active
+              ? 'bg-[var(--accent)]/20 border-[var(--accent)]/50 text-[var(--accent)]'
+              : 'bg-transparent border-kd-border text-muted '
+                + 'hover:border-[var(--accent)]/40 hover:text-[var(--accent)]',
           )}
         >
           {desc}
@@ -526,7 +544,8 @@ export default function FilingsView() {
           </div>
         ) : (
           data.rows.map((r) => (
-            <FilingRowItem key={r.id} row={r} onPickSubject={pickSubject} />
+            <FilingRowItem key={r.id} row={r} onPickSubject={pickSubject}
+              activeSubject={subject} />
           ))
         )}
       </Card>

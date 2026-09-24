@@ -64,6 +64,26 @@ function load(rel) {
  * why each is needed, so deleting the CODE left the check reading the prose.
  * A guard that reads a comment tests the comment.
  */
+/**
+ * A top-level function's own body, comments stripped.
+ *
+ * ⚠ Ends at `\nfunction ` OR `\nexport `. The first version looked for
+ * `\nfunction ` alone, so for the last helper before `export default function`
+ * the search returned -1 and the slice collapsed to nothing — every assertion
+ * over that body then failed against correct code, which reads as a real
+ * defect and is not one.
+ */
+function fnBody(src, name) {
+  const start = src.indexOf(`function ${name}(`);
+  assert.ok(start >= 0, `${name} must exist`);
+  const rest = src.slice(start + 1);
+  const ends = [rest.indexOf('\nfunction '), rest.indexOf('\nexport ')]
+    .filter((i) => i >= 0);
+  const end = ends.length ? start + 1 + Math.min(...ends) : src.length;
+  return src.slice(start, end)
+    .split('\n').filter((l) => !l.trim().startsWith('//')).join('\n');
+}
+
 function code(rel) {
   return fs.readFileSync(new URL(rel, import.meta.url), 'utf8')
     .replace(/\/\*[\s\S]*?\*\//g, '')
@@ -271,13 +291,7 @@ const ok = (n) => { pass++; console.log(`  ✓ ${n}`); };
   {
     // Scope to FilingRowItem's own body: the page has plenty of legitimate
     // <button>s elsewhere, and a whole-file regex reads them as this defect.
-    const start = view.indexOf('function FilingRowItem(');
-    // Comments stripped first: this body's own comment explains why it is not
-    // a <button>, and a regex that reads prose tests the comment, not the code.
-    // (Same trap as the reclassify docstring in test_filing_intelligence.py.)
-    const body = view
-      .slice(start, start + 1 + view.slice(start + 1).indexOf('\nfunction '))
-      .split('\n').filter((l) => !l.trim().startsWith('//')).join('\n');
+    const body = fnBody(view, 'FilingRowItem');
     assert.ok(/role="button"/.test(body) && /aria-expanded/.test(body),
       'the row wrapper must carry role=button + aria-expanded');
     assert.ok(!/<button/.test(body),
@@ -305,7 +319,20 @@ const ok = (n) => { pass++; console.log(`  ✓ ${n}`); };
     'the subject branch must come BEFORE the category branch — a subject '
     + 'clicked from a row must not come back empty because its group was '
     + 'deselected');
-  ok('sub-chips render, filter, and outrank the category');
+  // It must LOOK like a chip. Rendered as underlined caption text it was
+  // present, clickable and invisible as a control — which is exactly how the
+  // subject vocabulary went unused in the first place.
+  {
+    const body = fnBody(view, 'CategoryChip');
+    assert.ok(/rounded/.test(body) && /border/.test(body),
+      'the row sub-chip must be a bordered pill, not styled text');
+    assert.ok(!/hover:underline/.test(body),
+      'underlined text reads as a caption or a link, not a filter chip');
+    assert.ok(/active[\s\S]{0,200}--accent/.test(body),
+      'the row sub-chip must light up when it IS the active subject filter, '
+      + 'or the list gives no sign of what it is filtered to');
+  }
+  ok('sub-chips render as pills on every row, lit when active');
 }
 
 // ── 11. Search reaches the subject, including what ILIKE cannot ─────────
