@@ -82,9 +82,58 @@ def sample(conn, limit: int):
         return cur.fetchall()
 
 
+# The results page each API route backs. NSE's /api/ routes answer 200 with an
+# HTML shell when the referer does not match, which is indistinguishable from a
+# genuine "no data" answer unless the body is printed. The first run passed no
+# referer at all and reported 20/20 HTTP 200 carrying no XBRL tags — a result
+# that cannot tell those two cases apart.
+RESULTS_REFERER = 'https://www.nseindia.com/companies-listing/corporate-filings-financial-results'
+
+
+def dump(sess, seq, sym: str) -> None:
+    """Print what the two API routes ACTUALLY return, with and without a referer.
+
+    Answers one question the tag scan cannot: is the 200 a JSON listing (which
+    may carry the XBRL url the announcements payload lacks) or an HTML shell?
+    Prints the body rather than classifying it — a classifier here would be the
+    same mistake twice.
+    """
+    for tpl in CANDIDATES[:2]:
+        url = tpl.format(seq=seq, sym=sym or '', file='')
+        for label, ref in (('no referer', None), ('with referer', RESULTS_REFERER)):
+            print(f'\n--- {label}: {url}')
+            try:
+                resp = sess.get(url, referer=ref) if ref else sess.get(url)
+            except Exception as exc:                     # noqa: BLE001
+                print(f'    ERR {type(exc).__name__}: {exc}')
+                continue
+            ctype = resp.headers.get('content-type', '?')
+            body = resp.text or ''
+            print(f'    status {resp.status_code}  content-type {ctype}  {len(body)} bytes')
+            print('    ' + body[:700].replace('\n', ' ')[:700])
+            # Name every key that could plausibly hold a document link, so the
+            # next step is a fact rather than another guess.
+            try:
+                data = json.loads(body)
+            except Exception:                            # noqa: BLE001
+                continue
+            rows = data if isinstance(data, list) else (data.get('data') or [])
+            if rows and isinstance(rows[0], dict):
+                keys = sorted(rows[0].keys())
+                print(f'    JSON: {len(rows)} rows, keys = {keys}')
+                linky = [k for k in keys
+                         if any(t in k.lower() for t in ('xbrl', 'file', 'url', 'attach', 'link'))]
+                print(f'    link-shaped keys = {linky}')
+                for k in linky:
+                    print(f'      {k} = {rows[0].get(k)!r}')
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description='Probe NSE XBRL availability (read only)')
     ap.add_argument('--limit', type=int, default=20)
+    ap.add_argument('--dump', action='store_true',
+                    help='print the raw body of the two API routes for the newest '
+                         'sample, with and without a referer, instead of scanning tags')
     args = ap.parse_args()
 
     conn = psycopg2.connect(DATABASE_URL)
@@ -95,8 +144,14 @@ def main() -> int:
         print('No result announcements with has_xbrl found. Nothing to probe.')
         return 1
 
-    print(f'Probing {len(rows)} result announcements.\n')
     sess = NseSession()
+    if args.dump:
+        seq, sym, name, _diss, _doc, day0 = rows[0]
+        print(f'Dumping API responses for {sym} ({name}), Day 0 {day0}.')
+        dump(sess, seq, sym)
+        return 0
+
+    print(f'Probing {len(rows)} result announcements.\n')
     reachable = {c: 0 for c in CANDIDATES}
     depth_hits: list[str] = []
 
