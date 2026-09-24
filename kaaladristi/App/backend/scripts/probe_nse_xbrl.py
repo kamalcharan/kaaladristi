@@ -45,6 +45,7 @@ import datetime as dt
 import json
 import os
 import re
+from collections import Counter
 import sys
 from urllib.parse import quote
 
@@ -314,12 +315,17 @@ def depth(sess, n: int = 12) -> int:
         # A row with no xbrl url is not usable for a surprise, however many
         # rows the quarter reports. Count the url, not the row.
         with_x = sum(1 for r in rows if isinstance(r, dict) and (r.get('xbrl') or '').endswith('.xml'))
-        if with_x:
+        # A quarter with 1 document out of 7 rows is not a usable quarter. The
+        # first run reported 12/12 "buildable" on exactly that, because the
+        # threshold was >= 1. The dense quarters carry ~3,300-3,900 at 100%.
+        if with_x >= DENSE_QUARTER_MIN:
             usable += 1
         pct = f'{100 * with_x / len(rows):.0f}%' if rows else '-'
         print(f'  {start} .. {end}  rows={len(rows):<6} with xbrl={with_x:<6} ({pct})')
-    print(f'\n  quarters with at least one xbrl document: {usable}/{n}')
-    print('  >= 8 -> buildable from NSE alone, no broker consensus feed.')
+    print(f'\n  DENSE quarters (>= {DENSE_QUARTER_MIN} documents): {usable}/{n}')
+    print('  >= 8 dense quarters -> a surprise is computable for that span.\n'
+          '  ⚠ Computable for a span is not the same as usable: it must overlap\n'
+          '  the dates we hold Day 0 reactions for (ours start 2026-07-10).')
     return 0 if usable >= 8 else 2
 
 
@@ -333,7 +339,7 @@ def xbrl(sess, count: int) -> int:
         print('  FINDING: no xbrl urls in the newest complete quarter. Report it.')
         return 2
 
-    got = 0
+    eps = level = 0
     for r in rows[:count]:
         print(f"\n· {r.get('symbol'):<14} {str(r.get('companyName'))[:34]:<36} "
               f"{r.get('relatingTo')} {r.get('fromDate')}..{r.get('toDate')} "
@@ -349,27 +355,110 @@ def xbrl(sess, count: int) -> int:
             continue
         body = resp.text or ''
         print(f'    200  {len(body)} bytes')
-        found = {}
-        for tag in WANTED:
-            v = tag_values(body, tag)
-            if v:
-                found[tag] = v
+        found = {t: v for t in WANTED if (v := tag_values(body, t))}
         if not found:
             # Say so rather than guessing: an unparseable document is the
             # finding, and the head of the body is how the next person sees why.
             print(f'    NO WANTED TAGS. head: {body[:220]}')
             continue
-        got += 1
         for tag, v in found.items():
             print(f'    {tag:<32} {v}')
+        has_eps = any(t in found for t in EPS_TAGS)
+        has_level = any(t in found for t in LEVEL_TAGS)
+        if has_eps:
+            eps += 1
+        if has_level:
+            level += 1
+        # Name what is MISSING. A document with profit and no per-share figure
+        # is usable for a surprise and is NOT an EPS — the first run called it
+        # one, which is why this line exists.
+        print(f'    -> EPS {"yes" if has_eps else "NO"}, '
+              f'quarterly level {"yes" if has_level else "NO"}')
 
-    print(f'\n  documents yielding an EPS-shaped figure: {got}/{min(count, len(rows))}')
-    if got:
-        print('  The surprise leg is buildable: a per-quarter EPS, per company,\n'
-              '  parsed from XML with no LLM. Next is a plan, not another probe.')
-        return 0
-    print('  FINDING: urls resolve but carry none of the wanted tags. Report it.')
-    return 2
+    n = min(count, len(rows))
+    print(f'\n  documents carrying an EPS tag:        {eps}/{n}')
+    print(f'  documents carrying a quarterly level: {level}/{n}   (profit/revenue)')
+    if not level:
+        print('  FINDING: urls resolve but carry no repeatable quarterly level.')
+        return 2
+    print('  A seasonal-random-walk surprise needs a level that repeats every\n'
+          '  quarter, which profit satisfies; EPS is preferable but not required.\n'
+          '  ⚠ This says the DOCUMENT parses. It does NOT say the archive covers\n'
+          '  the dates we hold reactions for — run --audit for that.')
+    return 0
+
+
+
+# EPS specifically. ProfitLossForPeriod is NOT an EPS — the first --xbrl run
+# reported "1/1 yielding an EPS-shaped figure" on a document carrying revenue
+# and profit and NEITHER per-share tag, because the counter incremented on any
+# wanted tag. Same failure class as the NO TAGS label: a check that cannot fail.
+EPS_TAGS = ('BasicEarningsLossPerShare', 'DilutedEarningsLossPerShare')
+
+# A quarter is only usable if most of the market filed. The dense quarters carry
+# 3,300-3,900 documents; the sparse ones carry 1-12. Anything in between is a
+# transition to look at, not a quarter to rely on.
+DENSE_QUARTER_MIN = 500
+
+# A surprise needs a LEVEL that repeats every quarter. Profit qualifies; keep it
+# separate from EPS so the report never conflates the two.
+LEVEL_TAGS = ('ProfitLossForPeriod', 'RevenueFromOperations')
+
+
+def _quarter_of(s: str) -> str:
+    """'31-Dec-2024' or '2024-12-31' -> '2024Q4'. Unparseable -> the raw string."""
+    for fmt in ('%d-%b-%Y', '%Y-%m-%d', '%d-%m-%Y'):
+        try:
+            d = dt.datetime.strptime(s.strip()[:11], fmt).date()
+        except (ValueError, AttributeError):
+            continue
+        return f'{d.year}Q{(d.month - 1) // 3 + 1}'
+    return str(s)[:12]
+
+
+def _hist(rows, key, fn, top=10):
+    c = Counter(fn(str(r.get(key) or '')) for r in rows if isinstance(r, dict))
+    return sorted(c.items(), key=lambda kv: kv[0], reverse=True)[:top]
+
+
+def audit(sess) -> int:
+    """What does each listing shape actually contain, and what do the dates filter?
+
+    The depth sweep found a cliff — complete universe through Jan-Mar 2025,
+    almost nothing after — that neither "dates filter the reporting period" nor
+    "dates filter the filing date" explains. This prints the distributions
+    instead of theorising: for three listing shapes, how their rows spread over
+    reporting quarter (toDate) and over filing month (broadCastDate).
+    """
+    shapes = [
+        ('bare', f'{LISTING}?index=equities&period=Quarterly'),
+    ]
+    for start, end in [(dt.date(2026, 4, 1), dt.date(2026, 6, 30)),
+                       (dt.date(2025, 1, 1), dt.date(2025, 3, 31))]:
+        shapes.append((f'{start}..{end}',
+                       f'{LISTING}?index=equities&period=Quarterly'
+                       f'&from_date={start.strftime("%d-%m-%Y")}'
+                       f'&to_date={end.strftime("%d-%m-%Y")}'))
+
+    for label, url in shapes:
+        print(f'\n══ {label}')
+        print(f'   {url}')
+        try:
+            rows = rows_of(sess.get(url, referer=RESULTS_REFERER)) or []
+        except Exception as exc:                         # noqa: BLE001
+            print(f'   ERR {type(exc).__name__}: {exc}')
+            continue
+        print(f'   {len(rows)} rows')
+        if not rows:
+            continue
+        print('   reporting quarter (toDate):')
+        for k, v in _hist(rows, 'toDate', _quarter_of):
+            print(f'     {k:<10} {v}')
+        print('   filed (broadCastDate month):')
+        for k, v in _hist(rows, 'broadCastDate', lambda s: s[3:11] if len(s) > 10 else s):
+            print(f'     {k:<10} {v}')
+
+    return 0
 
 
 def main() -> int:
@@ -384,6 +473,8 @@ def main() -> int:
                     help='rows and xbrl coverage per aligned calendar quarter')
     ap.add_argument('--xbrl', type=int, metavar='N', default=0,
                     help='fetch N real XBRL documents and print the EPS figures')
+    ap.add_argument('--audit', action='store_true',
+                    help='what each listing shape contains and what the dates filter')
     ap.add_argument('--quarters', type=int, default=12,
                     help='how many complete quarters --depth walks back')
     ap.add_argument('--days', type=int, default=14,
@@ -392,8 +483,10 @@ def main() -> int:
 
     # --chain and --depth never touch the database: they probe NSE alone, so a
     # DB outage must not block the one question that gates the surprise leg.
-    if args.chain or args.depth or args.xbrl:
+    if args.chain or args.depth or args.xbrl or args.audit:
         sess = NseSession()
+        if args.audit:
+            return audit(sess)
         if args.chain:
             return chain(sess, args.days)
         if args.xbrl:
