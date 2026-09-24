@@ -943,6 +943,57 @@ could ACT** (from `exchdisstime` via `kd_day_zero_trade_date`, never the filing
 time), and **`suspect_corporate_action` must be filtered on in any drift study**
 until `km_corporate_actions` is populated.
 
+### Taxonomy v2 — fund raising is classified, and the map now self-heals (2026-09-24)
+
+`lib/filing_taxonomy.py` DESC_MAP 31 → 40, `TAXONOMY_VERSION = 'v2'`. QIP,
+preferential issue, rights issue, `Issue of Securities`, FCCBs and `Conversion`
+were `UNCLASSIFIED` with a NULL `event_type` — so the most consequential filing
+a smallcap makes could not be read by any scanner, VaNi fact or drift study.
+Now `OWNERSHIP` with their own event types. The proceeds trio (`Monitoring
+Agency Report` 350, Reg-32 deviations 182, `Utilisation of Funds` 9) → `GENERAL`
+/ `FUND_UTILISATION`: **541 rows leave the LLM queue for free.**
+
+⚠ **Polarity is NEUTRAL and that is MEASURED, not the house default.** Pooled
+over the six raise subjects, median 5-session excess vs the same-date universe
+median is **−0.85 pts (n=62)**, against `Allotment of Securities` **+0.48
+(n=169)** and the proceeds trio **−0.27 (n=441)**. "Capital in" has the sign
+backwards and 62 rows will not carry "dilution" either — the price reaction
+carries direction, the label says what was filed.
+
+⚠ **An OFS is NOT a fund raise** (an existing holder sells; the company receives
+nothing and is not diluted), so it gets `OFS`, never a raise type — sharing one
+makes every "capital raised" figure wrong. `Increase in Authorised Capital` is
+enabling headroom → `AUTHORISED_CAPITAL`. A proceeds report is a CONSEQUENCE of
+a raise, filed quarterly about one that already happened; counting it as a raise
+turns one event into many (the migration-216 shape).
+
+⚠ **Refused on purpose, and the refusal is tested:** `Giving guarantees/…
+surety for third party` (39 — OPTIEMUS filed one the day after its +20% bar) is
+a contingent LIABILITY with contested direction; `Redemption` (1) and
+`Forfeiture` (4) turn on the document. All three sit in the frontend's "Capital
+Raise" chip and stay `UNCLASSIFIED`.
+
+⚠ **EXTENDING DESC_MAP DOES NOT REPAIR STORED ROWS.** `derive_events` selects
+`WHERE e.id IS NULL`, so a new entry reaches only FUTURE filings — **14,522 of
+31,962 events were UNCLASSIFIED** when this landed, so a scanner on the new
+event types would have seen almost nothing while the change looked applied.
+Same shape as repairing `stage` without `stage_since`. `reclassify_events()`
+closes it and runs on EVERY ingest pass, so a future map addition needs no
+manual backfill. Four guards, each a removable-looking line in one UPDATE:
+only `classified_by='desc_map'` (an llm/human judgement is never stomped — all
+rows are `desc_map` today, which is when the guard is easiest to omit
+unnoticed); only rows still `UNCLASSIFIED` (it re-labels an ABSENCE, never
+revises an answer); only where the map now has an entry (a quiet run writes 0);
+and **the dating is never touched** (`day_0_trade_date`, `disseminated_at`,
+`is_result_announcement`, `board_meeting_id` — Day 0 has exactly one
+implementation and re-deriving it here would be a second). `derive_events` also
+stops hardcoding `'v1'`.
+
+Apply on the VPS with `python scripts/ingest_nse_filings.py --reclassify`, or do
+nothing and the 20:10 slot does it. Guarded by 15 new tests in
+`test_filing_intelligence.py` (60 → 75), verified to fail against nine
+sabotages. ⚠ **Nothing renders `family`/`event_type` yet** — data-ready only.
+
 ### ⚠ The filing layer's one measured edge: big move × a filing, at +15% (2026-09-24)
 
 `docs/claude/pead-filing-integration.md` §MEASURED. A filing does not predict a

@@ -518,3 +518,102 @@ merging: the drift horizons differ by 4×, one can be waited for and the other
 cannot, and merging them would put a 20-session drift and a 5-session
 continuation under one ordering. OPTIEMUS is the pure non-results case — a
 binding term sheet, no earnings anywhere near it.
+
+---
+
+## SHIPPED 2026-09-24 — taxonomy v2: the fund-raising cluster is classified
+
+The gap named above is closed. `lib/filing_taxonomy.py` grows from 31 to 40
+`DESC_MAP` entries and stamps `TAXONOMY_VERSION = 'v2'`.
+
+**Fund raising → `OWNERSHIP`, polarity `NEUTRAL`:** `Qualified Institutional
+Placement` → `QIP`, `Preferential issue` → `PREFERENTIAL_ISSUE`, `Rights Issue`
+→ `RIGHTS_ISSUE`, `Issue of Securities` → `ISSUE_OF_SECURITIES`, `FCCBs` →
+`FCCB`, `Conversion` → `CONVERSION`, plus two that are deliberately their own
+event types.
+
+**Proceeds reports → `GENERAL` / `FUND_UTILISATION`:** `Monitoring Agency
+Report` (350), `Statement of deviation(s) or variation(s) under Reg. 32` (182),
+`Utilisation of Funds` (9) — **541 rows leave the LLM queue for nothing.**
+
+### Polarity is NEUTRAL, and that is measured
+
+Pooled over the six raise subjects, median 5-session excess return against the
+same-date universe median: **−0.85 pts (n=62)**. Against `Allotment of
+Securities` at **+0.48 (n=169)** and the proceeds trio at **−0.27 (n=441)**.
+
+So "capital in" has the sign backwards, and 62 rows will not carry "dilution"
+either. The price reaction carries direction (the +15% rule above); the label
+states what was filed. Same reasoning the resignation entries already carry.
+
+### Three distinctions that look like inconsistencies and are not
+
+1. **An OFS is not a fund raise.** An existing holder sells: the shares change
+   hands, the company receives nothing, nobody is diluted. Sharing an
+   `event_type` with a QIP would make every "capital raised" figure wrong. Own
+   type, `OFS`. (n=2 live — far too few to measure.)
+2. **`Increase in Authorised Capital` is enabling headroom**, not money
+   received, so `AUTHORISED_CAPITAL` lets a consumer exclude it rather than
+   count a resolution as a raise.
+3. **A proceeds report is a CONSEQUENCE of a raise**, filed quarterly about one
+   that already happened. Counting it as a raise turns one event into many —
+   the migration-216 shape, where 427 of 2,733 result rows were a second Day 0
+   for one result.
+
+**Refused, and the refusal is tested:** `Giving guarantees/indemnity/ becoming a
+surety for third party` (39 — OPTIEMUS filed one the day after its +20% bar) is
+a contingent *liability*, not a raise, and its direction is genuinely contested;
+`Redemption` (1) and `Forfeiture` (4) turn on the document. All three sit in the
+frontend's "Capital Raise" chip and stay `UNCLASSIFIED`. Placing them to make
+the group look complete is the failure the test pins.
+
+### ⚠ Extending the map does NOT repair what is already stored
+
+`derive_events` selects `WHERE e.id IS NULL` — rows with no event yet — so a new
+entry reaches only **future** filings. Measured at the time of this change:
+**14,522 of 31,962 events were UNCLASSIFIED**, all `classified_by='desc_map'`.
+A scanner on the new event types would have seen almost nothing while the change
+looked applied. Identical shape to repairing `stage` without repairing
+`stage_since`.
+
+`reclassify_events(conn)` closes it, and **runs on every ingest pass**, which
+makes the map self-healing — a future `DESC_MAP` addition needs no manual
+backfill. Four load-bearing guards, each one a removable-looking line inside one
+`UPDATE`:
+
+1. **Only `classified_by='desc_map'`.** An `llm` or `human` label is a
+   judgement the deterministic lookup must never stomp. All 31,962 rows are
+   `desc_map` today, which is exactly when this guard is easy to omit and
+   impossible to notice missing.
+2. **Only rows still `UNCLASSIFIED`.** It re-labels an *absence*; revising an
+   answer the map already gave is a deliberate migration, not an ingest side
+   effect.
+3. **Only where the map now has an entry**, so a quiet run writes 0 rows.
+4. **The dating is never touched** — not `day_0_trade_date`, not
+   `disseminated_at`, not `is_result_announcement`, not `board_meeting_id`. Day
+   0 carries lookahead risk and has exactly one implementation
+   (`kd_day_zero_trade_date`); re-deriving it here would be a second.
+
+`derive_events` also stops hardcoding `'v1'`, so a new row and a re-labelled row
+are traceable to the same map.
+
+**To apply on the VPS** — or do nothing and the 20:10 slot does it:
+
+```bash
+cd App/backend
+python scripts/ingest_nse_filings.py --reclassify   # no NSE fetch, prints the count
+```
+
+Verified on a throwaway PostgreSQL 16 cluster with a fixture covering all four
+guards: 3 of 8 rows re-labelled, an `llm` row and a `human` row untouched, an
+already-classified row not revised, a still-unmappable row untouched, every
+dating column byte-identical, and a second run writing 0. 15 new tests in
+`test_filing_intelligence.py` (60 → 75), verified to fail against nine
+sabotages: QIP marked positive, OFS sharing the raise type, a proceeds report
+mapped as a raise, a contested subject placed, the version left at v1, the
+llm/human guard removed, the unclassified-only guard removed, the reclassify
+call dropped from `run()`, and a dating column added to the UPDATE.
+
+⚠ **Nothing renders this.** No UI reads `family` or `event_type` yet — this is
+the data-ready layer the owner's steer asked for, and the Filings page already
+filtered these subjects through its own `capital` chip.

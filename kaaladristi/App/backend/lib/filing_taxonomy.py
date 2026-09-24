@@ -36,6 +36,11 @@ NEGATIVE_SPARK, GENERAL, UNCLASSIFIED = 'NEGATIVE_SPARK', 'GENERAL', 'UNCLASSIFI
 
 POSITIVE, NEGATIVE, NEUTRAL = 'positive', 'negative', 'neutral'
 
+# Stamped on every event this pass writes, and bumped whenever DESC_MAP gains or
+# changes an entry — so a row's label can be traced to the map that produced it.
+# v2 (2026-09-24): the fund-raising cluster and the proceeds-report trio.
+TAXONOMY_VERSION = 'v2'
+
 # desc -> (family, event_type, polarity)
 DESC_MAP: dict[str, tuple[str, str, str]] = {
     # ── SPARK: changes the business trajectory ──────────────────────────────
@@ -54,6 +59,37 @@ DESC_MAP: dict[str, tuple[str, str, str]] = {
     'Allotment of Securities':               (OWNERSHIP, 'ALLOTMENT', NEUTRAL),       # 102
     'Disclosure under SEBI Takeover Regulations': (OWNERSHIP, 'SAST', NEUTRAL),       # 56
     'Options to purchase securities':        (OWNERSHIP, 'ESOP', NEUTRAL),            # 26
+
+    # ── FUND RAISING (2026-09-24) ───────────────────────────────────────────
+    # These were UNCLASSIFIED with a NULL event_type until now, which meant a
+    # QIP — among the most consequential things a smallcap files: who is
+    # buying, at what price, how much dilution — could not be read by any
+    # scanner, VaNi fact or drift study. They are exact NSE strings with
+    # unambiguous meanings, so this is a lookup, not a model's job.
+    #
+    # ⚠ POLARITY IS NEUTRAL, AND THAT IS MEASURED, not just the house default.
+    # Pooled over the six raise subjects, median 5-session excess return vs the
+    # same-date universe median is **-0.85 pts (n=62)** — the dilution side
+    # winning, mildly. Against 'Allotment of Securities' at +0.48 (n=169). So
+    # 'capital in' would be the wrong sign and 'dilution' overstates a 62-row
+    # sample: the price reaction carries direction (see the +15% rule in
+    # docs/claude/pead-filing-integration.md), the label does not. Same
+    # reasoning the resignation entries above already state.
+    'Qualified Institutional Placement':     (OWNERSHIP, 'QIP', NEUTRAL),                 # 13
+    'Preferential issue':                    (OWNERSHIP, 'PREFERENTIAL_ISSUE', NEUTRAL),  # 13
+    'Rights Issue':                          (OWNERSHIP, 'RIGHTS_ISSUE', NEUTRAL),        # 9
+    'Issue of Securities':                   (OWNERSHIP, 'ISSUE_OF_SECURITIES', NEUTRAL), # 53
+    'FCCBs':                                 (OWNERSHIP, 'FCCB', NEUTRAL),                # 1
+    'Conversion':                            (OWNERSHIP, 'CONVERSION', NEUTRAL),          # 4
+    # An ENABLING step, not a raise — the company is creating headroom it may
+    # never use. Distinct event_type so a consumer can exclude it rather than
+    # count a resolution as money received.
+    'Increase in Authorised Capital':        (OWNERSHIP, 'AUTHORISED_CAPITAL', NEUTRAL),  # 5
+    # ⚠ NOT A FUND RAISE. An OFS is an existing holder selling: the shares
+    # change hands, the company receives NOTHING and is not diluted. Filing it
+    # under the same event_type as a QIP would make every 'capital raised'
+    # figure wrong. n=2 live, far too few to measure.
+    'Offer for sale':                        (OWNERSHIP, 'OFS', NEUTRAL),                 # 3
 
     # ── SWITCH (management/strategy) — a SPARK family with neutral polarity,
     # because an appointment is not good or bad news on its own.
@@ -90,7 +126,32 @@ DESC_MAP: dict[str, tuple[str, str, str]] = {
     'Corrigendum':                           (GENERAL, 'CORRIGENDUM', NEUTRAL),     # 36
     'Amendment to AOA/MOA':                  (GENERAL, 'ARTICLES', NEUTRAL),        # 34
     'Committee Meeting Updates':             (GENERAL, 'COMMITTEE', NEUTRAL),       # 28
+
+    # ── PROCEEDS REPORTS (2026-09-24): routine, and a CONSEQUENCE of a raise ─
+    # SEBI requires periodic reporting on how issue proceeds were used. Three
+    # subjects, 541 rows, all previously UNCLASSIFIED and therefore queued for
+    # the LLM at no benefit. Measured median 5-session excess -0.27 pts (n=441).
+    #
+    # ⚠ They must NOT join the fund-raising event types. A monitoring report is
+    # filed quarterly ABOUT a raise that already happened, so counting it as a
+    # raise would over-weight one event into many -- the migration-216 lesson,
+    # where 427 of 2,733 result rows were a second Day 0 for one result.
+    'Monitoring Agency Report':              (GENERAL, 'FUND_UTILISATION', NEUTRAL),   # 350
+    'Statement of deviation(s) or variation(s) under Reg. 32':
+                                             (GENERAL, 'FUND_UTILISATION', NEUTRAL),   # 182
+    'Utilisation of Funds':                  (GENERAL, 'FUND_UTILISATION', NEUTRAL),   # 9
 }
+
+# ⚠ LEFT UNCLASSIFIED ON PURPOSE, although they sit in the frontend's
+# "Capital Raise" chip alongside the entries above:
+#   'Giving guarantees/indemnity/ becoming a surety for third party' (39) — a
+#     contingent LIABILITY, not a raise. OPTIEMUS filed one the day after its
+#     +20% bar. Its direction is genuinely contested and it belongs to no
+#     family here without a rule of its own.
+#   'Redemption' (1), 'Forfeiture' (4) — too few to place, and the meaning
+#     turns on the document rather than the subject line.
+# Naming them here so the next person can see they were considered and refused,
+# rather than assume an oversight.
 
 # Generic labels that carry no signal by themselves. Deliberately NOT in
 # DESC_MAP: each can be anything, so they go to the LLM with their summary_text.

@@ -22,7 +22,9 @@ import os
 import unittest
 from datetime import date
 
-from lib.filing_taxonomy import classify_board_meeting
+from lib.filing_taxonomy import (classify_board_meeting, classify_desc,
+                                 DESC_MAP, TAXONOMY_VERSION, UNCLASSIFIED,
+                                 AMBIGUOUS_DESCS)
 from scripts.ingest_nse_board_meetings import (
     MATCH_BACK_DAYS, MATCH_FWD_DAYS, link_result_announcements,
     relink_result_announcements, upsert_meetings, _material_diff)
@@ -1032,3 +1034,174 @@ class BulkDeals(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+class FundRaisingTaxonomy(unittest.TestCase):
+    """The fund-raising cluster (taxonomy v2, 2026-09-24).
+
+    Before this, a QIP / preferential issue / rights issue carried
+    family=UNCLASSIFIED and event_type=NULL, so nothing downstream could read
+    the most consequential filing a smallcap makes. These tests pin the three
+    decisions that are judgement rather than lookup — each of which reads like
+    an inconsistency to anyone tidying the map later.
+    """
+
+    RAISES = ('Qualified Institutional Placement', 'Preferential issue',
+              'Rights Issue', 'Issue of Securities', 'FCCBs', 'Conversion')
+
+    def test_every_raise_subject_is_placed(self):
+        for d in self.RAISES:
+            fam, et, pol, conf = classify_desc(d)
+            self.assertNotEqual(fam, UNCLASSIFIED, f'{d} must be classified')
+            self.assertIsNotNone(et, f'{d} must carry an event_type')
+            self.assertEqual(conf, 1.0, 'an exact-string lookup is confidence 1.0')
+
+    def test_polarity_is_neutral_not_positive(self):
+        """MEASURED, not a default. Pooled over these six subjects the median
+        5-session excess return vs the same-date universe median is -0.85 pts
+        (n=62) — so 'capital in' has the sign backwards; and 62 rows will not
+        carry 'dilution' either. The price reaction carries direction, the
+        label does not."""
+        for d in self.RAISES:
+            self.assertEqual(classify_desc(d)[2], 'neutral',
+                             f'{d}: a raise is two-sided and measures -0.85 pts; '
+                             f'a signed label here is directional language '
+                             f'dressed as data')
+
+    def test_offer_for_sale_is_not_a_raise(self):
+        """An OFS is an existing holder selling: shares change hands, the
+        company receives NOTHING and is not diluted. Sharing an event_type with
+        a QIP would make every 'capital raised' figure wrong."""
+        ofs = classify_desc('Offer for sale')[1]
+        self.assertEqual(ofs, 'OFS')
+        for d in self.RAISES:
+            self.assertNotEqual(classify_desc(d)[1], ofs,
+                                'OFS must not share an event_type with a raise')
+
+    def test_authorised_capital_is_its_own_event_type(self):
+        """Enabling headroom the company may never use — a consumer must be able
+        to exclude it rather than count a resolution as money received."""
+        self.assertEqual(classify_desc('Increase in Authorised Capital')[1],
+                         'AUTHORISED_CAPITAL')
+
+    def test_proceeds_reports_are_general_and_never_a_raise(self):
+        """A monitoring report is filed quarterly ABOUT a raise that already
+        happened. Counting it as a raise turns one event into many — the
+        migration-216 double-counting shape."""
+        for d in ('Monitoring Agency Report', 'Utilisation of Funds',
+                  'Statement of deviation(s) or variation(s) under Reg. 32'):
+            fam, et, pol, _ = classify_desc(d)
+            self.assertEqual(fam, 'GENERAL', f'{d} is routine compliance')
+            self.assertEqual(et, 'FUND_UTILISATION')
+            for r in self.RAISES:
+                self.assertNotEqual(et, classify_desc(r)[1],
+                                    'a proceeds report must not be a raise')
+
+    def test_contested_subjects_stay_unclassified(self):
+        """Refused on purpose, and the refusal is the assertion. A corporate
+        guarantee is a contingent LIABILITY, not a raise; Redemption and
+        Forfeiture turn on the document. Placing them to make the group look
+        complete is the failure this pins."""
+        for d in ('Giving guarantees/indemnity/ becoming a surety for third party',
+                  'Redemption', 'Forfeiture'):
+            self.assertEqual(classify_desc(d)[0], UNCLASSIFIED,
+                             f'{d} was considered and refused — see the comment '
+                             f'above AMBIGUOUS_DESCS')
+
+    def test_general_and_unclassified_stay_distinct(self):
+        """The file's own rule: GENERAL is 'confidently routine, discard',
+        UNCLASSIFIED is 'the map does not know' and is the model's queue."""
+        self.assertNotEqual('GENERAL', UNCLASSIFIED)
+        for d in AMBIGUOUS_DESCS:
+            self.assertEqual(classify_desc(d)[0], UNCLASSIFIED,
+                             f'{d} is ambiguous, not routine')
+
+    def test_version_is_bumped(self):
+        self.assertNotEqual(TAXONOMY_VERSION, 'v1',
+                            'DESC_MAP changed, so the stamp must change — it is '
+                            'how a row is traced to the map that labelled it')
+
+    def test_no_entry_is_both_mapped_and_ambiguous(self):
+        clash = set(DESC_MAP) & set(AMBIGUOUS_DESCS)
+        self.assertEqual(clash, set(), f'a desc cannot be both: {clash}')
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+class ReclassifyGuards(unittest.TestCase):
+    """Extending DESC_MAP must also repair what is already stored.
+
+    ⚠ `derive_events` selects `WHERE e.id IS NULL`, so a new map entry reaches
+    only FUTURE filings. When the fund-raising cluster was added, 14,522 of
+    31,962 stored events were UNCLASSIFIED — a scanner on the new event types
+    would have seen almost nothing while the change looked applied. Same shape
+    as repairing `stage` without repairing `stage_since`.
+
+    These read the production source, because the four guards live inside one
+    UPDATE's WHERE clause and each one looks removable.
+    """
+
+    @staticmethod
+    def _fn(name):
+        """The function's EXECUTABLE source, with the docstring removed.
+
+        Not a nicety: the first version of `test_the_dating_is_never_touched`
+        failed on `reclassify_events`'s own docstring, which names the four
+        columns it promises not to touch. A source guard that reads prose tests
+        the comment, not the code.
+        """
+        import ast, inspect, textwrap
+        from scripts import ingest_nse_filings as m
+        tree = ast.parse(textwrap.dedent(inspect.getsource(getattr(m, name))))
+        fn = tree.body[0]
+        if (fn.body and isinstance(fn.body[0], ast.Expr)
+                and isinstance(fn.body[0].value, ast.Constant)
+                and isinstance(fn.body[0].value.value, str)):
+            fn.body = fn.body[1:]
+        return ast.unparse(tree)
+
+    def test_reclassify_exists_and_runs_in_the_pipeline_path(self):
+        from scripts import ingest_nse_filings as m
+        self.assertTrue(callable(getattr(m, 'reclassify_events', None)))
+        run_src = self._fn('run')
+        self.assertIn('reclassify_events(conn)', run_src,
+                      'the scheduled ingest must re-label on every pass, or a '
+                      'future DESC_MAP addition needs a manual backfill nobody '
+                      'remembers to run')
+
+    def test_llm_and_human_labels_are_never_overwritten(self):
+        src = self._fn('reclassify_events')
+        self.assertIn("classified_by = 'desc_map'", src,
+                      'an llm or human judgement must never be stomped by the '
+                      'deterministic lookup. All rows are desc_map today, which '
+                      'is exactly when this guard is easy to omit unnoticed.')
+
+    def test_only_unclassified_rows_are_relabelled(self):
+        src = self._fn('reclassify_events')
+        self.assertIn('e.family = %s', src)
+        self.assertIn('UNCLASSIFIED', src,
+                      'this re-labels an ABSENCE; revising an answer the map '
+                      'already gave is a deliberate migration, not an ingest '
+                      'side effect')
+
+    def test_the_dating_is_never_touched(self):
+        """Day 0 carries lookahead risk and has exactly one implementation
+        (`kd_day_zero_trade_date`). Re-deriving it here would be a second."""
+        src = self._fn('reclassify_events')
+        for col in ('day_0_trade_date', 'disseminated_at',
+                    'is_result_announcement', 'board_meeting_id'):
+            self.assertNotIn(col, src,
+                             f'{col} must not appear in a reclassification — '
+                             f'this changes the LABEL, not the dating')
+
+    def test_it_stamps_the_taxonomy_version(self):
+        src = self._fn('reclassify_events')
+        self.assertIn('classifier_version', src)
+        self.assertIn('TAXONOMY_VERSION', src)
+
+    def test_the_insert_stamps_the_same_version(self):
+        src = self._fn('derive_events')
+        self.assertIn('TAXONOMY_VERSION', src,
+                      "derive_events hardcoded 'v1'; a new row and a relabelled "
+                      'row must be traceable to the same map')
+        self.assertNotIn("'v1'", src, 'the version must not be hardcoded')

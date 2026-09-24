@@ -37,7 +37,8 @@ from datetime import date, datetime, timedelta
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
 from lib.config import DATABASE_URL                      # noqa: E402
-from lib.filing_taxonomy import classify_desc            # noqa: E402
+from lib.filing_taxonomy import (classify_desc, DESC_MAP,  # noqa: E402
+                                 TAXONOMY_VERSION, UNCLASSIFIED)
 from pipeline.utils.nse_session import NseSession        # noqa: E402
 
 log = logging.getLogger(__name__)
@@ -221,10 +222,10 @@ def derive_events(conn) -> tuple[int, int, int]:
                         COALESCE(%s, (SELECT id FROM km_equity_symbols
                                        WHERE isin=%s AND exchange='NSE' AND is_active
                                        ORDER BY id LIMIT 1)),
-                        %s,%s,%s,%s,%s,%s,%s,'desc_map','v1',%s,%s,ARRAY[%s])
+                        %s,%s,%s,%s,%s,%s,%s,'desc_map',%s,%s,%s,ARRAY[%s])
                 ON CONFLICT (primary_raw_id) DO NOTHING
             """, (isin, equity_id, isin, name, diss, day0, family, event_type,
-                  polarity, desc_raw, conf, raw_id, raw_id))
+                  polarity, desc_raw, TAXONOMY_VERSION, conf, raw_id, raw_id))
             written += c2.rowcount
 
     # What is STILL unresolvable, so it is a number rather than an absence.
@@ -243,9 +244,66 @@ def derive_events(conn) -> tuple[int, int, int]:
     return written, deferred, unresolvable
 
 
+def reclassify_events(conn) -> int:
+    """Re-label stored events that DESC_MAP can now place but could not before.
+
+    ⚠ WITHOUT THIS, EXTENDING DESC_MAP FIXES NOTHING THAT IS ALREADY STORED.
+    `derive_events` selects `WHERE e.id IS NULL` — rows with no event yet — so a
+    new map entry reaches only future filings while every historical row keeps
+    `family='UNCLASSIFIED'` and `event_type=NULL`. Measured when the
+    fund-raising cluster was added on 2026-09-24: **14,522 of 31,962 events**
+    were UNCLASSIFIED, so a scanner built on the new event types would have seen
+    almost nothing and the change would have looked applied. Exactly the shape
+    of the stage/stage_since repair: fixing the RULE is not fixing the DATA.
+
+    It runs on every pass, which makes the map self-healing — a future DESC_MAP
+    addition needs no manual backfill.
+
+    Four properties are load-bearing:
+
+    1. **Only `classified_by='desc_map'` rows are touched.** An `llm` or `human`
+       label is a judgement this deterministic lookup must never stomp. No such
+       rows exist yet (all 31,962 are `desc_map`), which is precisely when the
+       guard is easy to leave out and impossible to notice missing.
+    2. **Only rows that are still UNCLASSIFIED.** This re-labels an absence; it
+       never revises an answer the map already gave. A changed mapping is a
+       deliberate migration, not a side effect of an ingest run.
+    3. **Only where the map now has an entry**, so a quiet run writes 0 rows.
+    4. **The DATING is never touched** — not `day_0_trade_date`, not
+       `disseminated_at`, not `is_result_announcement`, not `board_meeting_id`.
+       A reclassification is about the label. Day 0 carries lookahead risk and
+       has exactly one implementation (`kd_day_zero_trade_date`); re-deriving it
+       here would be a second.
+    """
+    known = sorted(DESC_MAP.keys())
+    if not known:
+        return 0
+    with conn.cursor() as cur:
+        cur.execute("""
+            UPDATE km_corporate_events e SET
+              family            = m.family,
+              event_type        = m.event_type,
+              polarity          = m.polarity,
+              confidence        = 1.0,
+              classifier_version = %s,
+              updated_at        = now()
+            FROM (SELECT * FROM unnest(%s::text[], %s::text[], %s::text[], %s::text[])
+                         AS t(desc_raw, family, event_type, polarity)) m
+            WHERE e.desc_raw = m.desc_raw
+              AND e.classified_by = 'desc_map'
+              AND e.family = %s
+        """, (TAXONOMY_VERSION,
+              known,
+              [DESC_MAP[d][0] for d in known],
+              [DESC_MAP[d][1] for d in known],
+              [DESC_MAP[d][2] for d in known],
+              UNCLASSIFIED))
+        return cur.rowcount
+
+
 def run(conn, session, start: date, end: date, dry_run=False) -> dict:
     stats = {'fetched': 0, 'inserted': 0, 'revisions': 0, 'events': 0,
-             'calls': 0, 'deferred': 0, 'unresolvable': 0}
+             'calls': 0, 'deferred': 0, 'unresolvable': 0, 'reclassified': 0}
     cur = start
     while cur <= end:
         win_end = min(cur + timedelta(days=BACKFILL_WINDOW_DAYS - 1), end)
@@ -266,6 +324,13 @@ def run(conn, session, start: date, end: date, dry_run=False) -> dict:
          stats['unresolvable']) = derive_events(conn)
         conn.commit()
         log.info(f'  events derived: {stats["events"]:,}')
+        # Self-healing: picks up whatever DESC_MAP learned since these rows were
+        # first written. 0 on a run where the map has not changed.
+        stats['reclassified'] = reclassify_events(conn)
+        conn.commit()
+        if stats['reclassified']:
+            log.info(f'  {stats["reclassified"]:,} stored events re-labelled '
+                     f'from UNCLASSIFIED by taxonomy {TAXONOMY_VERSION}')
         if stats['deferred']:
             # Normal, and expected to be large on an evening run. Stated plainly
             # so nobody reads a healthy result as a half-failure.
@@ -310,7 +375,7 @@ def ingest_filings_for_pipeline(conn, trade_date, force: bool = False) -> tuple[
     end = _date.today()
     start = end - _td(days=PIPELINE_WINDOW_DAYS)
     stats = run(conn, NseSession(), start, end, dry_run=False)
-    moved = stats['inserted'] + stats['events']
+    moved = stats['inserted'] + stats['events'] + stats['reclassified']
     if stats['deferred']:
         log.info(f'[filings_ingest] {stats["deferred"]} deferred '
                  f'(after the close; awaiting the next session)')
@@ -327,8 +392,24 @@ def main():
     ap.add_argument('--to', dest='dto', default=None)
     ap.add_argument('--dry-run', action='store_true',
                     help='fetch and report, write nothing')
+    ap.add_argument('--reclassify', action='store_true',
+                    help='re-label stored UNCLASSIFIED events against the '
+                         'current DESC_MAP and exit — no NSE fetch. Run this '
+                         'after extending the map; the scheduled ingest also '
+                         'does it on every pass.')
     args = ap.parse_args()
     logging.basicConfig(level=logging.INFO, format='%(message)s')
+
+    if args.reclassify:
+        conn = get_conn()
+        try:
+            n = reclassify_events(conn)
+            conn.commit()
+            print(f're-labelled {n:,} stored events against taxonomy '
+                  f'{TAXONOMY_VERSION}')
+        finally:
+            conn.close()
+        return
 
     end = date.fromisoformat(args.dto) if args.dto else date.today()
     start = (date.fromisoformat(args.dfrom) if args.dfrom
@@ -343,6 +424,7 @@ def main():
               f'new {stats["inserted"]:,}  revisions {stats["revisions"]}  '
               f'events {stats["events"]:,}  '
               f'deferred {stats["deferred"]:,}  '
+              f'reclassified {stats["reclassified"]:,}  '
               f'unresolvable {stats["unresolvable"]:,}')
     finally:
         if conn:
