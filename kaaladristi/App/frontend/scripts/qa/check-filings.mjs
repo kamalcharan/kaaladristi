@@ -370,4 +370,27 @@ function FILING_ALL_DESCS(C) {
   return C.FILING_GROUPS.flatMap((g) => g.descs);
 }
 
+// ── 12. Every filter reaches the React Query key ────────────────────────
+{
+  // ⚠ THE FAILURE THIS CATCHES IS SILENT IN EVERY OTHER WAY. A field missing
+  // from queryKey does not error, does not warn, and does not filter: React
+  // Query sees an unchanged key and serves the cached page, so the control
+  // lights up and the list does not move. `subjects` shipped exactly like
+  // that — the service was right, the state was right, the key was short.
+  const svc  = code('../../src/services/filings.ts');
+  const hook = fs.readFileSync(new URL('../../src/hooks/useFilings.ts', import.meta.url), 'utf8');
+
+  const iface = svc.slice(svc.indexOf('interface FilingsQuery'));
+  const body  = iface.slice(iface.indexOf('{') + 1, iface.indexOf('}'));
+  const fields = [...body.matchAll(/^\s*(\w+)\??:/gm)].map((m) => m[1]);
+  assert.ok(fields.length >= 8, `expected the full query shape, parsed ${fields}`);
+
+  const keyBlock = hook.slice(hook.indexOf('queryKey:'), hook.indexOf('queryFn:'));
+  const missing = fields.filter((f) => !new RegExp(`\\bq\\.${f}\\b`).test(keyBlock));
+  assert.deepEqual(missing, [],
+    `these filters never reach queryKey, so changing them serves a cached `
+    + `page instead of filtering: ${missing.join(', ')}`);
+  ok(`all ${fields.length} FilingsQuery fields are in the React Query key`);
+}
+
 console.log(`\n✓ filings: ${pass} checks passed`);
