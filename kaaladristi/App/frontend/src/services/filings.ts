@@ -25,9 +25,9 @@
  * that bar.
  */
 
-import { from } from './postgrest';
+import { from, orValue } from './postgrest';
 import {
-  descsForGroups, HIGH_PRIORITY_DESCS, FILING_GROUPS,
+  descsForGroups, HIGH_PRIORITY_DESCS, FILING_GROUPS, aliasDescs,
 } from '@/constants/filingCategories';
 
 export type FilingTab = 'all' | 'priority' | 'call' | 'results';
@@ -55,6 +55,8 @@ export interface FilingsQuery {
   fromDate?: string;
   toDate?: string;
   groupIds?: string[];
+  /** Exact `desc_raw` values (sub-chips). Takes precedence over groupIds. */
+  subjects?: string[];
   tab?: FilingTab;
   sort?: FilingSortKey;
   ascending?: boolean;
@@ -125,6 +127,11 @@ export async function fetchFilings(q: FilingsQuery = {}): Promise<FilingsResult>
     b = b.is('is_result_announcement', 'true');
   } else if (tab === 'call') {
     b = b.in('desc_raw', descsForGroups(['call']));
+  } else if (q.subjects && q.subjects.length) {
+    // A sub-chip is an exact subject, so it REPLACES the category filter
+    // rather than intersecting with it — a subject the user clicked from a
+    // row must never come back empty because its group was deselected.
+    b = b.in('desc_raw', q.subjects);
   } else if (q.groupIds && q.groupIds.length) {
     // Category chips apply on the All tab only — on a filtered tab they would
     // silently intersect and show an empty page the user cannot explain.
@@ -146,10 +153,26 @@ export async function fetchFilings(q: FilingsQuery = {}): Promise<FilingsResult>
   }
 
   // ── Filters ────────────────────────────────────────────────────────────
-  // Search is company name OR symbol-ish text. The QueryBuilder has no .or(),
-  // so this matches company_name only — the field users actually type.
+  // Search matches the COMPANY or the SUBJECT. Company-only was the first
+  // version and it made the subject vocabulary unsearchable: typing the thing
+  // you are looking for returned nothing.
+  //
+  // Two halves, because neither alone is enough:
+  //   * `desc_raw.ilike` catches the wording NSE actually uses ("rights",
+  //     "buyback", "auditor").
+  //   * `aliasDescs` catches what ILIKE structurally cannot — "QIP" appears
+  //     nowhere inside "Qualified Institutional Placement", nor "OFS" inside
+  //     "Offer for sale". Those are exact-value ORs, and there are few of them.
   const search = q.search?.trim();
-  if (search) b = b.ilike('company_name', `*${search}*`);
+  if (search) {
+    const like = orValue(`*${search}*`);
+    const conds = [`company_name.ilike.${like}`, `desc_raw.ilike.${like}`];
+    const aliases = aliasDescs(search);
+    if (aliases.length) {
+      conds.push(`desc_raw.in.(${aliases.map(orValue).join(',')})`);
+    }
+    b = b.or(conds);
+  }
   if (q.fromDate) b = b.gte('day_0_trade_date', q.fromDate);
   if (q.toDate) b = b.lte('day_0_trade_date', q.toDate);
 

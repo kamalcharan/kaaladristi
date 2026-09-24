@@ -56,6 +56,20 @@ function load(rel) {
   return exports;
 }
 
+/**
+ * Source with comments removed.
+ *
+ * ⚠ Three sabotages passed before this existed: the service's own comment
+ * block names `desc_raw.ilike`, `aliasDescs` and `orValue` while explaining
+ * why each is needed, so deleting the CODE left the check reading the prose.
+ * A guard that reads a comment tests the comment.
+ */
+function code(rel) {
+  return fs.readFileSync(new URL(rel, import.meta.url), 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .split('\n').filter((l) => !l.trim().startsWith('//')).join('\n');
+}
+
 const C = load('../../src/constants/filingCategories.ts');
 let pass = 0;
 const ok = (n) => { pass++; console.log(`  ✓ ${n}`); };
@@ -240,6 +254,93 @@ const ok = (n) => { pass++; console.log(`  ✓ ${n}`); };
     + 'otherwise indistinguishable from a filter that returned nothing');
   assert.ok(/Clear/.test(view), 'a narrowed row needs a way back');
   ok('category chips narrow, and the unfiltered state says so');
+}
+
+// ── 10. Sub-chips: reachable, clickable, and searchable ─────────────────
+{
+  const view = fs.readFileSync(new URL('../../src/views/FilingsView.tsx', import.meta.url), 'utf8');
+  const svc  = fs.readFileSync(new URL('../../src/services/filings.ts', import.meta.url), 'utf8');
+
+  // The subject is a CONTROL, not decoration.
+  assert.ok(/onPickSubject/.test(view),
+    'the subject line in a result row must filter to that subject — it is the '
+    + 'only vocabulary that tells a QIP from a newspaper advert');
+  assert.ok(/e\.stopPropagation\(\)/.test(view),
+    'the row toggles the detail panel, so the sub-chip must stop propagation '
+    + 'or clicking it just expands the row');
+  {
+    // Scope to FilingRowItem's own body: the page has plenty of legitimate
+    // <button>s elsewhere, and a whole-file regex reads them as this defect.
+    const start = view.indexOf('function FilingRowItem(');
+    // Comments stripped first: this body's own comment explains why it is not
+    // a <button>, and a regex that reads prose tests the comment, not the code.
+    // (Same trap as the reclassify docstring in test_filing_intelligence.py.)
+    const body = view
+      .slice(start, start + 1 + view.slice(start + 1).indexOf('\nfunction '))
+      .split('\n').filter((l) => !l.trim().startsWith('//')).join('\n');
+    assert.ok(/role="button"/.test(body) && /aria-expanded/.test(body),
+      'the row wrapper must carry role=button + aria-expanded');
+    assert.ok(!/<button/.test(body),
+      'the row wrapper must NOT be a <button> — a button inside a button is '
+      + 'invalid HTML and browsers drop the inner one, so the sub-chip would '
+      + 'render and never fire');
+    assert.ok(/onKeyDown/.test(body),
+      'a div with role=button must restore Enter/Space by hand');
+  }
+  // Sub-chips only once narrowed — 117 at once is a wall, not a filter.
+  assert.ok(/selected\.length === 1 \? descsForGroup/.test(view),
+    'sub-chips must appear only when ONE category is picked');
+
+  // A subject picked from a row must be visible somewhere.
+  assert.ok(/subject && subChips\.length === 0/.test(view),
+    'a subject set from a result row has no chip above it, so it must render '
+    + 'its own removable chip or it filters invisibly');
+
+  // The query must honour it, and it must REPLACE the category filter.
+  assert.ok(/q\.subjects && q\.subjects\.length/.test(view.length ? svc : svc),
+    'the service must accept exact subjects');
+  const subjIdx = svc.indexOf('q.subjects');
+  const grpIdx  = svc.indexOf('q.groupIds && q.groupIds.length');
+  assert.ok(subjIdx > 0 && grpIdx > subjIdx,
+    'the subject branch must come BEFORE the category branch — a subject '
+    + 'clicked from a row must not come back empty because its group was '
+    + 'deselected');
+  ok('sub-chips render, filter, and outrank the category');
+}
+
+// ── 11. Search reaches the subject, including what ILIKE cannot ─────────
+{
+  const svc = code('../../src/services/filings.ts');
+  const pg  = code('../../src/services/postgrest.ts');
+
+  assert.ok(/desc_raw\.ilike/.test(svc),
+    'search must match the SUBJECT, not the company name alone — typing the '
+    + 'thing you are looking for returned nothing');
+  // The CALL, not the import — deleting the call leaves the import behind.
+  assert.ok(/aliasDescs\(\s*search\s*\)/.test(svc),
+    '"QIP" appears nowhere inside "Qualified Institutional Placement", so '
+    + 'ILIKE structurally cannot find it; the alias table is not optional');
+  assert.ok(/orValue\(`\*\$\{search\}\*`\)/.test(svc) && /export function orValue/.test(pg),
+    'values inside or=(...) must be quoted: PostgREST splits on , and ) and '
+    + 'NSE subjects contain both, e.g. "Action(s) taken or orders passed"');
+
+  const C = load('../../src/constants/filingCategories.ts');
+  for (const [term, want] of [['QIP', 'Qualified Institutional Placement'],
+                              ['ofs', 'Offer for sale'],
+                              ['cirp', 'Corporate Insolvency Resolution Process']]) {
+    assert.ok(C.aliasDescs(term).includes(want),
+      `"${term}" must resolve to "${want}" — substring search cannot`);
+  }
+  assert.equal(C.aliasDescs('x').length, 0, 'a 1-char term must not fan out');
+  for (const d of C.aliasDescs('QIP')) {
+    assert.ok(new Set(FILING_ALL_DESCS(C)).has(d),
+      `alias target "${d}" is not a real NSE subject — it would match nothing`);
+  }
+  ok(`search covers company + subject + ${Object.keys(C.DESC_ALIASES).length} aliases`);
+}
+
+function FILING_ALL_DESCS(C) {
+  return C.FILING_GROUPS.flatMap((g) => g.descs);
 }
 
 console.log(`\n✓ filings: ${pass} checks passed`);

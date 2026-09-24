@@ -164,6 +164,21 @@ class QueryBuilder {
     return this;
   }
 
+  /** OR across several conditions: or=(cond1,cond2,...).
+   *
+   *  Each condition is raw PostgREST syntax, e.g. `company_name.ilike."*abc*"`.
+   *
+   *  ⚠ QUOTE EVERY VALUE with `orValue()`. Inside `or=(...)` PostgREST splits
+   *  on commas and parentheses, so an unquoted user string containing `,` or
+   *  `)` — both common in NSE subject lines, e.g. "Action(s) taken or orders
+   *  passed" — silently becomes two malformed conditions rather than an error.
+   */
+  or(conditions: string[]): this {
+    if (!conditions.length) return this;
+    this.state.params.append('or', `(${conditions.join(',')})`);
+    return this;
+  }
+
   /** Array contains: column @> {val1, val2}. e.g. tags=cs.{Mercury} for a text[] column. */
   contains(column: string, values: (string | number)[]): this {
     const formatted = values.map(v => typeof v === 'string' ? `"${v}"` : v);
@@ -424,3 +439,15 @@ export async function rpc(
 export const db = { from, rpc };
 
 export default db;
+
+/**
+ * Quote a value for use inside `or=(...)`.
+ *
+ * PostgREST treats `,` and `)` as structure inside an or-group, so any value
+ * carrying them must be double-quoted, and `"` / `\\` inside the value escaped.
+ * This is the difference between a search for "Action(s) taken" returning rows
+ * and returning a 400 nobody reads.
+ */
+export function orValue(v: string): string {
+  return `"${v.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
+}

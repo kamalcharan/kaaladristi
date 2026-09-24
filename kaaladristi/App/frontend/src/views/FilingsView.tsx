@@ -26,7 +26,7 @@ import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Search, ArrowUpDown, AlertTriangle, FileText, ChevronLeft, ChevronRight,
-  ChevronDown, ExternalLink, LineChart,
+  ChevronDown, ExternalLink, LineChart, X,
 } from 'lucide-react';
 import { Card, PageHeader, Tabs, EmptyState } from '@/components/ui';
 import { cn } from '@/lib/utils';
@@ -34,7 +34,7 @@ import { useFilings } from '@/hooks/useFilings';
 import { FILINGS_PAGE_SIZE, type FilingTab, type FilingSortKey, type FilingRow } from '@/services/filings';
 import {
   FILING_GROUPS, MUTED_GROUP_IDS, DEFAULT_GROUP_IDS,
-  groupForDesc, groupLabel,
+  groupForDesc, groupLabel, descsForGroup,
 } from '@/constants/filingCategories';
 
 const TABS = [
@@ -112,17 +112,27 @@ const GRID =
   'grid grid-cols-[92px_minmax(0,1fr)_16px] ' +
   'sm:grid-cols-[104px_minmax(0,1.3fr)_minmax(0,1fr)_16px] gap-x-3';
 
-function FilingRowItem({ row }: { row: FilingRow }) {
+function FilingRowItem({
+  row, onPickSubject,
+}: { row: FilingRow; onPickSubject: (desc: string) => void }) {
   const [open, setOpen] = useState(false);
   const gid = groupForDesc(row.descRaw);
   const time = fmtTime(row.disseminatedAt);
 
+  // ⚠ role=button on a div, NOT a <button>. The subject is itself a control
+  // (click it to filter to that sub-chip) and a button inside a button is
+  // invalid HTML — browsers drop the inner one, so the sub-chip would render
+  // and simply not fire. Keyboard parity is restored by hand below.
   return (
     <div className="border-b border-kd-border last:border-b-0">
-      <button
-        type="button"
+      <div
+        role="button"
+        tabIndex={0}
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpen((v) => !v); }
+        }}
         className={cn(
           GRID,
           'w-full text-left gap-y-1 px-3 py-2.5 items-start',
@@ -142,13 +152,13 @@ function FilingRowItem({ row }: { row: FilingRow }) {
           </div>
           {/* Category shows here on phones, where the third column is gone */}
           <div className="sm:hidden mt-0.5">
-            <CategoryChip gid={gid} desc={row.descRaw} />
+            <CategoryChip gid={gid} desc={row.descRaw} onPickSubject={onPickSubject} />
           </div>
         </div>
 
         {/* Category + subject */}
         <div className="hidden sm:block min-w-0">
-          <CategoryChip gid={gid} desc={row.descRaw} />
+          <CategoryChip gid={gid} desc={row.descRaw} onPickSubject={onPickSubject} />
         </div>
 
         <ChevronDown
@@ -157,7 +167,7 @@ function FilingRowItem({ row }: { row: FilingRow }) {
             open && 'rotate-180',
           )}
         />
-      </button>
+      </div>
 
       {open && <FilingDetail row={row} />}
     </div>
@@ -246,10 +256,19 @@ function FilingDetail({ row }: { row: FilingRow }) {
   );
 }
 
-function CategoryChip({ gid, desc }: { gid: string; desc: string }) {
+/**
+ * The category badge plus the SUB-CHIP — NSE's own subject line, and a control.
+ *
+ * The subject was plain muted text, which meant the one piece of vocabulary
+ * that actually distinguishes a QIP from a newspaper advert was visible and
+ * unusable. Clicking it filters the page to that exact subject.
+ */
+function CategoryChip({
+  gid, desc, onPickSubject,
+}: { gid: string; desc: string; onPickSubject?: (desc: string) => void }) {
   const legal = gid === 'legal' || gid === 'auditor';
   return (
-    <div className="flex flex-col gap-0.5 min-w-0">
+    <div className="flex flex-col gap-0.5 min-w-0 items-start">
       <span
         className={cn(
           'inline-flex items-center gap-1 self-start px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider',
@@ -261,7 +280,23 @@ function CategoryChip({ gid, desc }: { gid: string; desc: string }) {
         {legal && <AlertTriangle className="w-2.5 h-2.5" />}
         {groupLabel(gid)}
       </span>
-      <span className="text-[11px] text-muted leading-snug break-words">{desc}</span>
+      {onPickSubject && desc ? (
+        <button
+          type="button"
+          // The row wraps this and toggles the detail panel; without this the
+          // click would expand the row instead of filtering.
+          onClick={(e) => { e.stopPropagation(); onPickSubject(desc); }}
+          title={`Show only "${desc}"`}
+          className={cn(
+            'text-left text-[11px] leading-snug break-words rounded px-1 -mx-1',
+            'text-muted hover:text-[var(--accent)] hover:underline transition-colors',
+          )}
+        >
+          {desc}
+        </button>
+      ) : (
+        <span className="text-[11px] text-muted leading-snug break-words">{desc}</span>
+      )}
     </div>
   );
 }
@@ -277,14 +312,18 @@ export default function FilingsView() {
   // clicking sixteen chips off. A chip row is read as "pick one", always.
   const [selected, setSelected] = useState<string[]>([]);
   const groupIds = selected.length ? selected : DEFAULT_GROUP_IDS;
+  // One exact subject (a sub-chip). Narrower than a category, so it REPLACES
+  // the category filter rather than intersecting with it.
+  const [subject, setSubject] = useState<string | null>(null);
   const [sort, setSort] = useState<FilingSortKey>('date');
   const [ascending, setAscending] = useState(false);
   const [page, setPage] = useState(0);
 
   const q = useMemo(() => ({
     tab, search, fromDate, toDate, groupIds, sort, ascending, page,
+    subjects: subject ? [subject] : undefined,
     pageSize: FILINGS_PAGE_SIZE,
-  }), [tab, search, fromDate, toDate, groupIds, sort, ascending, page]);
+  }), [tab, search, fromDate, toDate, groupIds, subject, sort, ascending, page]);
 
   const { data, isLoading } = useFilings(q);
 
@@ -296,8 +335,20 @@ export default function FilingsView() {
 
   const toggleGroup = (id: string) => {
     setSelected((cur) => cur.includes(id) ? cur.filter((g) => g !== id) : [...cur, id]);
+    // A category and a subject are two rungs of one ladder; keeping both would
+    // show a subject filtered by a category it may not belong to.
+    setSubject(null);
     setPage(0);
   };
+
+  const pickSubject = (desc: string) => {
+    setSubject((cur) => (cur === desc ? null : desc));
+    setPage(0);
+  };
+
+  // Sub-chips appear once the user has narrowed to ONE category. Eighteen
+  // groups' worth of subjects is 117 chips, which is a wall, not a filter.
+  const subChips = selected.length === 1 ? descsForGroup(selected[0]) : [];
 
   const total = data?.total ?? 0;
   const pages = Math.max(1, Math.ceil(total / FILINGS_PAGE_SIZE));
@@ -357,10 +408,10 @@ export default function FilingsView() {
                   ? `Showing ${selected.length} of ${FILING_GROUPS.length} categories`
                   : 'Showing all categories — pick one to narrow'}
               </span>
-              {selected.length > 0 && (
+              {(selected.length > 0 || subject) && (
                 <button
                   type="button"
-                  onClick={() => { setSelected([]); setPage(0); }}
+                  onClick={() => { setSelected([]); setSubject(null); setPage(0); }}
                   className="text-[var(--accent)] hover:underline"
                 >
                   Clear
@@ -391,6 +442,51 @@ export default function FilingsView() {
               );
             })}
           </div>
+
+          {/* Sub-chips — NSE's own subject lines inside the picked category.
+              This is where a QIP or a preferential issue is actually
+              reachable: "Capital Raise" bundles thirteen of them. */}
+          {subChips.length > 0 && (
+            <div className="flex flex-wrap gap-1 pt-0.5 pl-0.5 border-l-2 border-kd-border ml-0.5">
+              {subChips.map((d) => {
+                const on = subject === d;
+                return (
+                  <button
+                    key={d}
+                    type="button"
+                    onClick={() => pickSubject(d)}
+                    className={cn(
+                      'ml-1 px-1.5 py-0.5 rounded text-[10px] border transition-colors',
+                      on
+                        ? 'bg-[var(--accent)]/20 border-[var(--accent)]/50 text-[var(--accent)]'
+                        : 'bg-transparent border-kd-border text-muted hover:text-primary',
+                    )}
+                  >
+                    {d}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {/* An active subject set from a RESULT ROW has no chip above to show
+              it, so it would otherwise filter invisibly. */}
+          {subject && subChips.length === 0 && (
+            <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+              <span className="text-[11px] text-muted">Subject:</span>
+              <button
+                type="button"
+                onClick={() => pickSubject(subject)}
+                className={cn(
+                  'inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px]',
+                  'bg-[var(--accent)]/20 border border-[var(--accent)]/50 text-[var(--accent)]',
+                )}
+              >
+                {subject}
+                <X className="w-2.5 h-2.5" />
+              </button>
+            </div>
+          )}
           </div>
         )}
       </Card>
@@ -429,7 +525,9 @@ export default function FilingsView() {
             />
           </div>
         ) : (
-          data.rows.map((r) => <FilingRowItem key={r.id} row={r} />)
+          data.rows.map((r) => (
+            <FilingRowItem key={r.id} row={r} onPickSubject={pickSubject} />
+          ))
         )}
       </Card>
 

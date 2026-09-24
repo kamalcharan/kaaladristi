@@ -298,3 +298,65 @@ export function descsForGroups(groupIds: string[]): string[] {
 export const DEFAULT_GROUP_IDS: string[] = FILING_GROUPS
   .filter((g) => !MUTED_GROUP_IDS.has(g.id))
   .map((g) => g.id);
+
+/** The sub-chips behind one group, in the catalogue's own order. */
+export function descsForGroup(groupId: string): string[] {
+  return FILING_GROUPS.find((g) => g.id === groupId)?.descs ?? [];
+}
+
+/**
+ * Short names people actually type, mapped to NSE's own wording.
+ *
+ * ⚠ Substring search over `desc_raw` CANNOT find these. "QIP" does not appear
+ * anywhere in "Qualified Institutional Placement", "OFS" is absent from "Offer
+ * for sale", and "CIRP" from "Corporate Insolvency Resolution Process" — so a
+ * search box that only does ILIKE returns zero rows for the three terms a user
+ * is most likely to try. Each entry is an acronym or a market nickname, never a
+ * synonym we invented.
+ */
+export const DESC_ALIASES: Record<string, string[]> = {
+  qip: ['Qualified Institutional Placement'],
+  ofs: ['Offer for sale'],
+  fccb: ['FCCBs'],
+  cirp: ['Corporate Insolvency Resolution Process'],
+  insolvency: ['Corporate Insolvency Resolution Process'],
+  nclt: ['Corporate Insolvency Resolution Process'],
+  sast: ['Disclosure under SEBI Takeover Regulations'],
+  takeover: ['Disclosure under SEBI Takeover Regulations'],
+  pit: ['Trading Plan under PIT', 'Trading Window'],
+  esop: ['ESOP/ESOS/ESPS', 'Options to purchase securities'],
+  agm: ['Shareholders meeting', 'Extension of Annual General Meeting'],
+  egm: ['Shareholders meeting'],
+  concall: ['Analysts/Institutional Investor Meet/Con. Call Updates'],
+  'con call': ['Analysts/Institutional Investor Meet/Con. Call Updates'],
+  earnings: ['Outcome of Board Meeting', 'Integrated Filing- Financial'],
+  results: ['Outcome of Board Meeting', 'Integrated Filing- Financial'],
+  fundraise: ['Qualified Institutional Placement', 'Preferential issue',
+              'Rights Issue', 'Issue of Securities', 'FCCBs'],
+  'fund raise': ['Qualified Institutional Placement', 'Preferential issue',
+                 'Rights Issue', 'Issue of Securities', 'FCCBs'],
+  'fund raising': ['Qualified Institutional Placement', 'Preferential issue',
+                   'Rights Issue', 'Issue of Securities', 'FCCBs'],
+  pref: ['Preferential issue'],
+  split: ['Stock split'],
+  merger: ['Amalgamation/Merger', 'Scheme of Arrangement'],
+  order: ['Bagging/Receiving of orders/contracts', 'Awarding of order(s)/contract(s)'],
+};
+
+/**
+ * Subjects a search term should also match — its ALIASES plus any group label
+ * it names. Substring matching over the subject text itself is left to the
+ * server (`desc_raw.ilike`), so this returns only what ILIKE cannot find.
+ */
+export function aliasDescs(term: string): string[] {
+  const t = term.trim().toLowerCase();
+  if (t.length < 2) return [];
+  const out = new Set<string>();
+  for (const [k, descs] of Object.entries(DESC_ALIASES)) {
+    if (k.includes(t) || t.includes(k)) descs.forEach((d) => out.add(d));
+  }
+  for (const g of FILING_GROUPS) {
+    if (g.label.toLowerCase().includes(t)) g.descs.forEach((d) => out.add(d));
+  }
+  return [...out];
+}
