@@ -383,3 +383,138 @@ Two honest readings of this specimen:
   **no announcement on file** to explain either. (OPTIEMUS also has no 09-15
   bar although the market traded that session.) n=1; not a rule. But it is the
   case for the `wg_journeys` / Big Money layer rather than the filing layer.
+
+---
+
+## MEASURED 2026-09-24 (2) — ingest idempotency, taxonomy growth, and two real gaps
+
+### Re-running the ingest is free — it never deletes and never duplicates
+
+`km_filings_raw` is **append-only with a content-hash short-circuit**, so the
+20:10 slot cannot damage what 06:10/09:10/12:10 already wrote:
+
+1. Every announcement carries NSE's own `seq` as `source_ann_id`, under a
+   **UNIQUE (source, source_ann_id)**.
+2. Before inserting, the ingest SELECTs that key and compares `content_hash`.
+   Identical → `continue`, **no DB statement at all**. Not an upsert that
+   rewrites the row, not a delete-and-reinsert: nothing happens.
+3. Changed content (NSE revised the filing) → a **new row** with
+   `supersedes_id` pointing at the old one. The original is never modified.
+4. `derive_events()` classifies only raw rows that have no event yet, so
+   `km_corporate_events` is incremental too.
+
+The window is `PIPELINE_WINDOW_DAYS = 5` — deliberately much wider than the gap
+between runs, because a re-fetch costs nothing and a too-narrow window loses a
+filing permanently.
+
+Verified live across two reads ~40 minutes apart on 2026-09-24, spanning the
+06:10 and 09:10 slots: raw 31,803 → 32,484, events 31,962, and
+**`count(*) = count(DISTINCT primary_raw_id)` exactly** — every event maps to
+its own raw row, so nothing was re-derived. 177 events share an
+(isin, disseminated_at, desc_raw) triple, which is two genuinely distinct
+filings at the same timestamp, not a duplicate: the distinct-primary equality
+rules that out.
+
+⚠ **One real defect, currently 0.012% of rows.** A *second* revision of the
+same announcement is silently dropped. The lookup is
+`WHERE source_ann_id = seq`, which always finds the ORIGINAL row, and the new
+row is keyed `seq#r{revisions}` where `revisions` counts revisions **within
+this run**. So revision 2 in a later run recomputes the same `#r1` suffix and
+loses to `ON CONFLICT DO NOTHING`. It also means `supersedes_id` always points
+at the original rather than forming a chain. Live today: **4 revision rows out
+of 32,484**, so this is recorded, not fixed.
+
+### The tags are a PREDEFINED snapshot, and the backend already has the honest bucket
+
+`constants/filingCategories.ts` holds **117 exact NSE subject strings in 18
+groups** — a hand-built snapshot, no learning, no growth. Measured against the
+live DB 2026-09-24: **117 distinct `desc_raw`, 0 unmapped, 0 stale.** Complete
+today.
+
+**But NSE does add subjects.** Nine of those 117 first appeared mid-August, all
+after the corpus started on 07-10: `Reasons for Delayed/Non-submission of
+Financial Results` (08-07), `Offer for sale` (08-03), `Forfeiture` (08-04),
+`Addendum` (08-11), `Redemption` / `One time settlement` / `Extension of Annual
+General Meeting` (08-13), `Postponement of commercial production/operations`
+(08-14), `Delay/default in the payment of fines/penalties/dues etc. to
+authority` (08-17). So the map goes stale by arithmetic, not by neglect.
+
+⚠ **A new subject lands in `Other` silently, and nothing raises a hand.**
+`groupForDesc` returns `OTHER_GROUP_ID` on a miss, `check-filings.mjs` is a
+pure-node test with no DB so it structurally cannot see a new value, and no
+`integrity_checks` class counts unmapped subjects. This is the
+presence-not-correctness shape again: the page keeps working and a category
+quietly under-reports.
+
+The BACKEND does it right and is the model to copy. `lib/filing_taxonomy.py`
+separates **`GENERAL`** ("confidently routine, discard") from
+**`UNCLASSIFIED`** ("the map does not know"), with its own file comment
+explaining that conflating them fills the review queue with noise in week one
+and gets it ignored by week two — the same distinction as "flag is false" vs
+"no flag". Live family split over 31,962 events:
+
+| family | n | share |
+|---|---|---|
+| `UNCLASSIFIED` | 14,522 | **45.4%** |
+| `GENERAL` | 12,714 | 39.8% |
+| `SPARK` | 2,782 | 8.7% |
+| `OWNERSHIP` | 774 | 2.4% |
+| `CORPORATE_ACTION` | 603 | 1.9% |
+| `NEGATIVE_SPARK` | 567 | 1.8% |
+
+So the *classified* intelligence layer covers **14.8%** of the stream. The
+45.4% is not a bug — it is the queue Sprint 3 was scoped to send to Qwen.
+
+### ⚠ Fund raising: the TAG exists, the INTELLIGENCE does not
+
+Asked directly, and the answer splits. The frontend group **`capital` /
+"Capital Raise"** carries 13 subjects including `Preferential issue`,
+`Qualified Institutional Placement`, `Rights Issue`, `Issue of Securities`,
+`Increase in Authorised Capital`, `Conversion`, `FCCBs`, `Utilisation of
+Funds`. Nothing is missing from the Filings page — it filters all of them.
+
+**`lib/filing_taxonomy.py` maps exactly ONE of them.**
+
+| desc_raw | n | family | event_type |
+|---|---|---|---|
+| Allotment of Securities | 211 | `OWNERSHIP` | `ALLOTMENT` |
+| Issue of Securities | 53 | **`UNCLASSIFIED`** | NULL |
+| Qualified Institutional Placement | 13 | **`UNCLASSIFIED`** | NULL |
+| Preferential issue | 13 | **`UNCLASSIFIED`** | NULL |
+| Utilisation of Funds | 9 | **`UNCLASSIFIED`** | NULL |
+| Rights Issue | 9 | **`UNCLASSIFIED`** | NULL |
+| Increase in Authorised Capital | 5 | **`UNCLASSIFIED`** | NULL |
+| Conversion | 4 | **`UNCLASSIFIED`** | NULL |
+| Offer for sale | 3 | **`UNCLASSIFIED`** | NULL |
+| FCCBs | 1 | **`UNCLASSIFIED`** | NULL |
+
+A QIP and a preferential allotment are among the most consequential things a
+smallcap files — who is buying, at what price, and how much dilution — and
+today they carry no `family`, no `event_type` and no `polarity`, so no scanner,
+VaNi fact or drift study can reason about one. **Fixing it is ~10 lines in
+`DESC_MAP`, not an LLM**: these are exact NSE strings with unambiguous
+meanings. It is the cheapest unclaimed intelligence in the layer. Not done here
+— it needs the owner's call on polarity, which is genuinely contested (a QIP is
+capital in, and dilution).
+
+### PEAD and filing intelligence are DIFFERENT questions on overlapping rows
+
+| | PEAD (migration 221) | the filed big-move rule |
+|---|---|---|
+| event | a **results** announcement only | **any** filing |
+| Day 0 gate | reaction **> +5%** | move **≥ +15%** |
+| horizon | **20 sessions** | 5 sessions |
+| measured | +0.95% vs universe −0.59% → **+1.54 pts**, n=278 | median **+2.59** vs **−0.69** unfiled → **+3.28 pts**, n=70 |
+| predictability | **scheduled** — the board-meeting intimation says the date in advance | **unscheduled** |
+| what it is | slow drift after a known, recurring event | continuation after an unforeseeable repricing |
+
+Overlap, measured: of **78** filed ≥+15% stock-days, **47 are results-driven
+and 31 are not**. So at the extreme they share ~60% of their rows — but at
+PEAD's own +5% gate the filed population is 555 stock-days against PEAD's 278
+results, i.e. PEAD is the narrower, results-only slice.
+
+They are worth keeping as two scanners in one **Events** category rather than
+merging: the drift horizons differ by 4×, one can be waited for and the other
+cannot, and merging them would put a 20-session drift and a 5-session
+continuation under one ordering. OPTIEMUS is the pure non-results case — a
+binding term sheet, no earnings anywhere near it.
