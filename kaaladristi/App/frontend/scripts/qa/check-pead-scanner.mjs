@@ -173,11 +173,22 @@ const ok = (n) => { pass++; console.log(`  ✓ ${n}`); };
   const view = fs.readFileSync(new URL('../../src/views/ScanView.tsx', import.meta.url), 'utf8');
   assert.ok(/EMPTY_COPY/.test(view) && /pead_drift:/.test(view),
     'a SEASONAL scanner needs its own empty copy');
-  assert.ok(/No results filed in the last 20 sessions/.test(view),
+  // Read the head VALUE, not the file — a prose comment about the wrong wording
+  // would otherwise satisfy or break either assertion below.
+  const peadHead = (view.match(/pead_drift:\s*\{\s*head:\s*'([^']*)'/) ?? [])[1] ?? '';
+  assert.ok(/result/i.test(peadHead),
     'the empty state must name what is missing — RESULTS, not opportunities. '
     + '104 names in the week of 2026-08-10 and ONE on 2026-09-23: this list is '
     + 'empty four weeks in five by design, and "no stocks match" reads as a '
     + 'broken screen');
+  assert.ok(/5%|gate|qualif/i.test(peadHead),
+    'the head must say membership failed, not that nothing was FILED. An empty '
+    + 'list proves the conjunction (a result AND a >+5% reaction) failed; it '
+    + 'does not prove no result was filed, and usually one was — 13 were filed '
+    + 'in the window on 2026-09-23 with none clearing the gate');
+  assert.ok(!/^No results filed/.test(peadHead),
+    'reinstating "No results filed in the last N sessions" restores a claim the '
+    + 'screen cannot make and that is false in the common case');
   // Count the FALLBACKS, not the lookups: swapping `??` for `&&` keeps the
   // lookup count identical and silently blanks the generic line.
   const heads = view.match(/EMPTY_COPY\[presetId\]\?\.head\s*\?\?/g) ?? [];

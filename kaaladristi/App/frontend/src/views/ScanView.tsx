@@ -1720,11 +1720,15 @@ const SCAN_DISCLAIMER =
  * lesson as fpbEvents reporting an absence it never measured.
  */
 const EMPTY_COPY: Record<string, { head: string; body: string }> = {
+  // The head must state only what an empty result actually proves. "No results
+  // filed" is a stronger claim than membership failing, and it is usually FALSE:
+  // 13 results were filed in the window on 2026-09-23 and none cleared the gate.
   pead_drift: {
-    head: 'No results filed in the last 20 sessions.',
-    body: 'This list only fills during results season — a company has to '
-        + 'announce results AND jump more than 5% that day to appear. Between '
-        + 'quarters it is empty, which is the honest reading, not a fault.',
+    head: 'No results cleared the +5% reaction gate in the last 20 sessions.',
+    body: 'Results may well have been filed — a stock only appears here if it '
+        + 'also jumped more than 5% on the session the market could first act '
+        + 'on the announcement. Four weeks in five this list is empty, which is '
+        + 'the honest reading, not a fault.',
   },
 };
 
