@@ -44,6 +44,7 @@ import argparse
 import datetime as dt
 import json
 import os
+import re
 import sys
 from urllib.parse import quote
 
@@ -254,29 +255,121 @@ def chain(sess, days: int) -> int:
     return 2
 
 
-def depth(sess) -> int:
-    """How many quarters back the listing still answers. That count IS the gate."""
+
+# ── What the chain run established ─────────────────────────────────────────
+#
+# The listing row carries the finished XBRL url itself:
+#   "xbrl": "https://nsearchives.nseindia.com/corporate/xbrl/INDAS_..._.xml"
+# so the corporates-financial-results-data route is NOT needed, and the
+# "NOT in the listing row: [seq_id, ind]" warning the first chain run printed
+# was noise — seqNumber IS seq_id camelCased, and nothing needed either.
+#
+# ⚠ from_date/to_date filter the REPORTING PERIOD, not the filing date. That is
+# why sliding 90-day windows returned 6/7/15/59 rows while aligned ones
+# returned 3,300-3,900: a window containing no whole quarter matches only odd
+# period filers. Always query on calendar-quarter boundaries.
+
+def quarters(n: int):
+    """The last n COMPLETE calendar quarters, newest first, as (start, end)."""
     today = dt.date.today()
-    print('Archive depth — a SUE needs ~8 quarters of the company own past EPS.\n')
-    reachable = 0
-    for q in range(0, 13):
-        d_to = today - dt.timedelta(days=90 * q)
-        d_from = d_to - dt.timedelta(days=90)
-        url = (f'{LISTING}?index=equities&period=Quarterly'
-               f'&from_date={d_from.strftime("%d-%m-%Y")}&to_date={d_to.strftime("%d-%m-%Y")}')
+    q_idx = (today.month - 1) // 3          # 0..3, the quarter we are INSIDE
+    y, q = today.year, q_idx - 1            # step back to the last complete one
+    for _ in range(n):
+        if q < 0:
+            y, q = y - 1, 3
+        m = q * 3 + 1
+        end_m = m + 2
+        last = 31 if end_m in (1, 3, 5, 7, 8, 10, 12) else (30 if end_m != 2 else (
+            29 if (y % 4 == 0 and (y % 100 != 0 or y % 400 == 0)) else 28))
+        yield dt.date(y, m, 1), dt.date(y, end_m, last)
+        q -= 1
+
+
+def quarter_listing(sess, start, end):
+    url = (f'{LISTING}?index=equities&period=Quarterly'
+           f'&from_date={start.strftime("%d-%m-%Y")}&to_date={end.strftime("%d-%m-%Y")}')
+    return url, rows_of(sess.get(url, referer=RESULTS_REFERER))
+
+
+# Values a seasonal-random-walk SUE needs: an EPS for the quarter, and the
+# period it belongs to. Namespaces vary (in-capmkt:, ind-as:), so match on the
+# local name.
+def tag_values(body: str, tag: str, limit: int = 4):
+    pat = re.compile(r'<[A-Za-z0-9_.-]*:?' + re.escape(tag) + r'(?:\s[^>]*)?>([^<]{1,60})<')
+    return pat.findall(body)[:limit]
+
+
+def depth(sess, n: int = 12) -> int:
+    """Rows AND xbrl coverage per aligned quarter. The count is the gate."""
+    print('Archive depth on CALENDAR-QUARTER boundaries.')
+    print('A seasonal-random-walk SUE needs ~8 quarters of the company OWN past EPS.\n')
+    usable = 0
+    for start, end in quarters(n):
         try:
-            rows = rows_of(sess.get(url, referer=RESULTS_REFERER))
+            _url, rows = quarter_listing(sess, start, end)
         except Exception as exc:                         # noqa: BLE001
-            print(f'  Q-{q:<2} {d_from} .. {d_to}  ERR {type(exc).__name__}')
+            print(f'  {start} .. {end}  ERR {type(exc).__name__}')
             continue
-        n = 0 if not rows else len(rows)
-        if n:
-            reachable += 1
-        print(f'  Q-{q:<2} {d_from} .. {d_to}  rows={n}')
-    print(f'\n  quarters answering with rows: {reachable}/13')
-    print('  >= 8 -> a seasonal-random-walk SUE is buildable from NSE alone.\n'
-          '  <  8 -> it is not, and that is the finding.')
-    return 0 if reachable >= 8 else 2
+        rows = rows or []
+        # A row with no xbrl url is not usable for a surprise, however many
+        # rows the quarter reports. Count the url, not the row.
+        with_x = sum(1 for r in rows if isinstance(r, dict) and (r.get('xbrl') or '').endswith('.xml'))
+        if with_x:
+            usable += 1
+        pct = f'{100 * with_x / len(rows):.0f}%' if rows else '-'
+        print(f'  {start} .. {end}  rows={len(rows):<6} with xbrl={with_x:<6} ({pct})')
+    print(f'\n  quarters with at least one xbrl document: {usable}/{n}')
+    print('  >= 8 -> buildable from NSE alone, no broker consensus feed.')
+    return 0 if usable >= 8 else 2
+
+
+def xbrl(sess, count: int) -> int:
+    """Fetch real XBRL documents and print the EPS figures found. The last gate."""
+    start, end = next(iter(quarters(1)))
+    url, rows = quarter_listing(sess, start, end)
+    rows = [r for r in (rows or []) if (r.get('xbrl') or '').endswith('.xml')]
+    print(f'Newest complete quarter {start} .. {end}: {len(rows)} rows carrying an xbrl url.')
+    if not rows:
+        print('  FINDING: no xbrl urls in the newest complete quarter. Report it.')
+        return 2
+
+    got = 0
+    for r in rows[:count]:
+        print(f"\n· {r.get('symbol'):<14} {str(r.get('companyName'))[:34]:<36} "
+              f"{r.get('relatingTo')} {r.get('fromDate')}..{r.get('toDate')} "
+              f"{r.get('consolidated')}")
+        print(f"  {r['xbrl'][:120]}")
+        try:
+            resp = sess.get(r['xbrl'], referer=RESULTS_REFERER)
+        except Exception as exc:                         # noqa: BLE001
+            print(f'    ERR {type(exc).__name__}: {exc}')
+            continue
+        if resp.status_code != 200:
+            print(f'    {resp.status_code} — not retrievable')
+            continue
+        body = resp.text or ''
+        print(f'    200  {len(body)} bytes')
+        found = {}
+        for tag in WANTED:
+            v = tag_values(body, tag)
+            if v:
+                found[tag] = v
+        if not found:
+            # Say so rather than guessing: an unparseable document is the
+            # finding, and the head of the body is how the next person sees why.
+            print(f'    NO WANTED TAGS. head: {body[:220]}')
+            continue
+        got += 1
+        for tag, v in found.items():
+            print(f'    {tag:<32} {v}')
+
+    print(f'\n  documents yielding an EPS-shaped figure: {got}/{min(count, len(rows))}')
+    if got:
+        print('  The surprise leg is buildable: a per-quarter EPS, per company,\n'
+              '  parsed from XML with no LLM. Next is a plan, not another probe.')
+        return 0
+    print('  FINDING: urls resolve but carry none of the wanted tags. Report it.')
+    return 2
 
 
 def main() -> int:
@@ -288,16 +381,24 @@ def main() -> int:
     ap.add_argument('--chain', action='store_true',
                     help='listing -> seq_id -> data route with format=xbrl')
     ap.add_argument('--depth', action='store_true',
-                    help='how many quarters back the listing still answers')
+                    help='rows and xbrl coverage per aligned calendar quarter')
+    ap.add_argument('--xbrl', type=int, metavar='N', default=0,
+                    help='fetch N real XBRL documents and print the EPS figures')
+    ap.add_argument('--quarters', type=int, default=12,
+                    help='how many complete quarters --depth walks back')
     ap.add_argument('--days', type=int, default=14,
                     help='listing window for --chain (default 14)')
     args = ap.parse_args()
 
     # --chain and --depth never touch the database: they probe NSE alone, so a
     # DB outage must not block the one question that gates the surprise leg.
-    if args.chain or args.depth:
+    if args.chain or args.depth or args.xbrl:
         sess = NseSession()
-        return chain(sess, args.days) if args.chain else depth(sess)
+        if args.chain:
+            return chain(sess, args.days)
+        if args.xbrl:
+            return xbrl(sess, args.xbrl)
+        return depth(sess, args.quarters)
 
     conn = psycopg2.connect(DATABASE_URL)
     conn.set_session(readonly=True, autocommit=True)
