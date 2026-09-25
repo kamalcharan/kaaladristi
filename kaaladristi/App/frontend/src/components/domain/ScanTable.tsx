@@ -28,17 +28,26 @@ const PRESET_COL_OVERRIDES: Partial<Record<string, string[]>> = {
   // merged into one number: measuring drift from Day -1 would fold the
   // announcement jump into it, which is how a PEAD study reports an effect it
   // never measured.
-  // Standouts leads with the evidence, not a score. The basket says WHY the
-  // stock is eligible and the scanner chips say WHO is flagging it; the raw
-  // preset count is deliberately NOT a column — the chips already are the
-  // count, and a bare number invites reading it as a strength score.
+  // Owner's field order, and it is the SAME vocabulary the Sector Rotation
+  // constituents table uses (Flow 5D / Flow 22D / RSI / Magic RS / 1D %), so a
+  // user arriving from an index detail page reads identical column names
+  // meaning identical things.
+  //
+  // The evidence — which baskets hold the stock, which scanners flag it — is
+  // NOT here. Both are lists of names, and a list of names in a dense grid is
+  // 380px of width that pushes every number off screen (measured against the
+  // live page). They render as chips under the symbol instead.
+  //
+  // magic_rs_chg_22d is deliberately absent: the owner's set is these seven and
+  // anything beyond is bonus. It is also the field a user cannot read raw —
+  // "+42" is the 98th percentile, but 8 of the 55 stocks at or above it are
+  // still BELOW their own mean, so the number alone misdescribes ~15% of the
+  // rows it would appear on. If it returns it needs a word, not a figure.
   standouts: [
-    'symbol', 'close', 'standout_baskets', 'standout_presets',
-    'pct_chng', 'magic_rs', 'magic_rs_chg_22d', 'rvol', 'stage',
+    'symbol', 'close', 'score_5d', 'score_22d', 'pct_chng', 'rvol', 'rsi_14', 'magic_rs',
   ],
   standouts_caution: [
-    'symbol', 'close', 'standout_baskets', 'standout_presets',
-    'pct_chng', 'magic_rs', 'magic_rs_chg_22d', 'rvol', 'stage',
+    'symbol', 'close', 'score_5d', 'score_22d', 'pct_chng', 'rvol', 'rsi_14', 'magic_rs',
   ],
 
   pead_drift: [
@@ -237,6 +246,13 @@ export default function ScanTable({ stocks, presetId, onRowClick }: ScanTablePro
   const optionalCols  = groupOptionalCols
   const defaultCols   = getStudioDescriptor(presetId)?.tableColumns ?? PRESET_COL_OVERRIDES[presetId] ?? groupDefaultCols
 
+  // The symbol column carries the evidence chips on Standouts, so it needs the
+  // room — but only there. Header and cell read ONE value: they were already
+  // drifting (header took cfg.width, the cell hardcoded 158), which is how a
+  // sticky column ends up misaligned with its own heading.
+  const showsEvidence = presetId === 'standouts' || presetId === 'standouts_caution'
+  const symbolWidth   = showsEvidence ? 230 : (ALL_FIELDS.symbol?.width ?? 158)
+
   // visible = default cols + optional cols not hidden, deduped
   const activeCols = [...defaultCols, ...optionalCols.filter(c => !hiddenCols.has(c))]
     .filter((c, i, arr) => arr.indexOf(c) === i)
@@ -367,7 +383,8 @@ export default function ScanTable({ stocks, presetId, onRowClick }: ScanTablePro
                       left: isSticky ? 0 : undefined,
                       zIndex: isSticky ? 13 : 10,
                       background: 'var(--card)',
-                      width: cfg.width, minWidth: cfg.width,
+                      width: colKey === 'symbol' ? symbolWidth : cfg.width,
+                      minWidth: colKey === 'symbol' ? symbolWidth : cfg.width,
                       padding: '0 10px',
                       textAlign: colKey === 'symbol' ? 'left' : 'right',
                       fontSize: 12, letterSpacing: '0.06em', textTransform: 'uppercase',
@@ -442,7 +459,7 @@ export default function ScanTable({ stocks, presetId, onRowClick }: ScanTablePro
                           position: 'sticky', left: 0, zIndex: 2,
                           background: rowBg === 'transparent' ? 'var(--card)' : rowBg,
                           padding: '0 10px',
-                          width: 158, minWidth: 158,
+                          width: symbolWidth, minWidth: symbolWidth,
                           borderBottom: '1px solid color-mix(in srgb, var(--border) 55%, transparent)',
                           borderRight: '1px solid var(--border)',
                         }}
@@ -478,9 +495,43 @@ export default function ScanTable({ stocks, presetId, onRowClick }: ScanTablePro
                                 fontSize: 12, color: 'var(--text-muted)',
                                 fontFamily: 'var(--font-body)',
                                 overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                                maxWidth: 110,
+                                maxWidth: showsEvidence ? 180 : 110,
                               }}>
                                 {company}
+                              </div>
+                            )}
+                            {/* Standouts evidence. Chips, not columns: these are
+                                lists of names, and as grid cells they cost 380px
+                                and push every number off screen. The BASKET says
+                                why the stock is eligible, the SCANNERS say who is
+                                flagging it — and the chip count IS the agreement
+                                count, so no bare number is rendered (a figure
+                                there reads as a strength score, which nothing
+                                measures). */}
+                            {showsEvidence && (
+                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3, marginTop: 3 }}>
+                                {(stock.standout_baskets ?? []).slice(0, 2).map((b) => (
+                                  <span key={`b-${b}`} title={(stock.standout_baskets ?? []).join(' · ')} style={{
+                                    fontSize: 10, padding: '1px 4px', borderRadius: 3, maxWidth: 100,
+                                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                                    background: 'color-mix(in srgb, var(--accent) 12%, transparent)',
+                                    color: 'var(--accent)', fontFamily: 'var(--font-body)',
+                                  }}>{b}</span>
+                                ))}
+                                {(stock.standout_baskets?.length ?? 0) > 2 && (
+                                  <span title={(stock.standout_baskets ?? []).join(' · ')} style={{
+                                    fontSize: 10, padding: '1px 4px', borderRadius: 3,
+                                    color: 'var(--text-faint)', fontFamily: 'var(--font-mono)',
+                                  }}>+{(stock.standout_baskets?.length ?? 0) - 2}</span>
+                                )}
+                                {(stock.standout_presets ?? []).map((n) => (
+                                  <span key={`p-${n}`} title={(stock.standout_presets ?? []).join(' · ')} style={{
+                                    fontSize: 10, padding: '1px 4px', borderRadius: 3, maxWidth: 100,
+                                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                                    background: 'color-mix(in srgb, var(--text-primary) 7%, transparent)',
+                                    color: 'var(--text-secondary)', fontFamily: 'var(--font-body)',
+                                  }}>{n}</span>
+                                ))}
                               </div>
                             )}
                           </div>

@@ -45,11 +45,19 @@
 -- pead_drift already carries NULL for the same class of reason (it stays out of
 -- the Workspace Discovery union). Do not "complete" these rows.
 --
--- ⚠ ITS OWN CATEGORY, sort 7. Standouts is the only preset whose membership is
--- a function of the OTHER presets. Dropped into Market it would hold rows from
--- Price Action siblings, and a category strip reads as ALTERNATIVES, not as one
--- tab containing the others — every badge count would double-count. Same reason
--- pead_drift got its own category rather than joining Price Action.
+-- IN THE MARKET CATEGORY (sort 4), owner decision. Three of that category's
+-- four presets already qualify a stock by the state of its GROUP —
+-- smart_money and quiet_accumulation on INDUSTRIES, power_sell on
+-- rotating-out industries — which is this shape with index baskets instead of
+-- industries.
+--
+-- ⚠ Standouts overlaps its siblings BY CONSTRUCTION: it contains names the
+-- other presets flagged, including Price Action ones, so the category badge
+-- counts are not a partition. Accepted, because they never were — a stock sits
+-- in both Breakout Surge and Weekly Movers on an ordinary day.
+--
+-- ⚠ is_default_tab FALSE on both: Market already has one (smart_money), and
+-- two rows claiming the default race for which tab opens.
 --
 -- ⚠ THE ARRAY AND THIS TABLE MOVE TOGETHER. getPresetMeta() reads
 -- kd_scan_presets FIRST and falls back to SCAN_PRESETS only offline, so editing
@@ -75,16 +83,16 @@ VALUES
    'Standouts',
    'Stocks inside a curated basket that several scanners are flagging on the same side',
    'Names carried by at least two strength scanners at once, inside an index basket from the catalog. Sorted by how many scanners agree. Two is the measured floor: at one, 79 stocks carried a strength and a caution flag simultaneously; at two that conflict disappears. Agreement is an observation, not a forecast.',
-   710, 200, TRUE,
-   'standouts', 'Standouts', '#8b5cf6', 7,
-   'NSE_BSE', 'daily', NULL, TRUE, NULL),
+   450, 200, TRUE,
+   'market', 'Market', '#8b5cf6', 4,
+   'NSE_BSE', 'daily', NULL, FALSE, NULL),
 
   ('standouts_caution',
    'Standouts · Caution',
    'Stocks inside a curated basket that several scanners are flagging as weakening',
    'The same rule read on the caution side: names carried by at least two weakening scanners at once, inside an index basket from the catalog. Shown beside the strength list on purpose — surfacing strength while hiding risk is the asymmetry this product refuses.',
-   720, 200, TRUE,
-   'standouts', 'Standouts', '#8b5cf6', 7,
+   460, 200, TRUE,
+   'market', 'Market', '#8b5cf6', 4,
    'NSE_BSE', 'daily', NULL, FALSE, NULL)
 ON CONFLICT (id) DO UPDATE SET
   name            = EXCLUDED.name,
@@ -112,7 +120,7 @@ NOTIFY pgrst, 'reload schema';
 -- Both rows present, in their own category, with vani_side NULL:
 --
 --   SELECT id, name, category, category_sort, universe, vani_side, is_default_tab
---     FROM kd_scan_presets WHERE category = 'standouts' ORDER BY sort_order;
+--     FROM kd_scan_presets WHERE id LIKE 'standouts%' ORDER BY sort_order;
 --
 -- vani_side MUST read NULL on both. If either is 'strength' or 'caution', the
 -- preset is counting itself and the list is wrong.

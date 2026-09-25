@@ -87,14 +87,19 @@ export const SCAN_PRESETS: ScanDefinition[] = [
   // those families being broken. Metadata (incl. category color) comes from
   // kd_scan_presets; empty color keeps the literal ratchet flat.
   // Standouts — several same-side scanners agreeing on a name that sits in a
-  // curated basket. Its own category because it is the only preset whose
-  // membership is a function of the OTHER presets: dropped into Market it
-  // would contain rows from Price Action siblings, and a category strip reads
-  // as alternatives, not as one tab holding the others.
+  // curated basket. In MARKET (owner decision): three of that category's four
+  // presets already qualify a stock by the state of its GROUP (smart_money and
+  // quiet_accumulation on industries, power_sell on rotating-out industries),
+  // which is exactly this shape with baskets instead of industries.
+  // ⚠ Standouts overlaps its siblings by construction — it contains names the
+  // other presets flagged, including Price Action ones. That is understood and
+  // accepted: Price Action siblings already overlap each other (a stock can be
+  // in Breakout Surge and Weekly Movers at once), so the badge counts were
+  // never a partition.
   // ⚠ vani_side MUST stay NULL on both — the fetcher selects on vani_side, so
   // a value here makes the preset count itself.
-  { id: 'standouts',            name: 'Standouts',             description: 'Stocks inside a curated basket that several scanners are flagging on the same side', limit: 200, universe: 'NSE_BSE', category: 'standouts',     category_label: 'Standouts',     category_color: CAT_MARKET, category_sort: 7, is_default_tab: true,  timeframe: 'daily', vani_rule: null },
-  { id: 'standouts_caution',    name: 'Standouts · Caution',   description: 'Stocks inside a curated basket that several scanners are flagging as weakening',      limit: 200, universe: 'NSE_BSE', category: 'standouts',     category_label: 'Standouts',     category_color: CAT_MARKET, category_sort: 7, is_default_tab: false, timeframe: 'daily', vani_rule: null },
+  { id: 'standouts',            name: 'Standouts',             description: 'Stocks inside a curated basket that several scanners are flagging on the same side', limit: 200, universe: 'NSE_BSE', category: 'market',        category_label: 'Market',        category_color: CAT_MARKET, category_sort: 4, is_default_tab: true,  timeframe: 'daily', vani_rule: null },
+  { id: 'standouts_caution',    name: 'Standouts · Caution',   description: 'Stocks inside a curated basket that several scanners are flagging as weakening',      limit: 200, universe: 'NSE_BSE', category: 'market',        category_label: 'Market',        category_color: CAT_MARKET, category_sort: 4, is_default_tab: false, timeframe: 'daily', vani_rule: null },
   { id: 'pead_drift',           name: 'Post-Result Drift',     description: 'Stocks that jumped more than 5% on their results day, still inside the 20-session window that move was measured over', limit: 200, universe: 'NSE_ONLY', category: 'events', category_label: 'Filing Intelligence', category_color: '', category_sort: 6, is_default_tab: true, timeframe: 'daily', vani_rule: null },
 ];
 

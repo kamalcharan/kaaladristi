@@ -92,15 +92,35 @@ const ok = (m) => { n++; console.log(`  ✓ ${m}`); };
   ok('reads throw, emptiness returns empty');
 }
 
-// ── 6. The raw count is NOT a column ───────────────────────────────────────
+// ── 6. Evidence is CHIPS, and the owner's seven fields are the columns ────
 {
   const over = table.slice(table.indexOf('standouts:'), table.indexOf('pead_drift:'));
-  assert.ok(/standout_baskets/.test(over) && /standout_presets/.test(over),
-    'the basket and the flagging scanners are the evidence for a row and must be columns');
-  assert.ok(!/standout_count|preset_count|standout_presets_count/.test(table),
-    'the raw agreement COUNT must not be a column — the chips already are the '
-    + 'count, and a bare number reads as a strength score, which nothing measures');
-  ok('evidence columns present, raw count absent');
+  assert.ok(!/standout_baskets|standout_presets/.test(over),
+    'the basket and scanner lists must NOT be grid columns — as cells they cost '
+    + '380px and push every number off screen on the live page');
+  const cols = (over.match(/standouts(?:_caution)?: \[([^\]]*)\]/) ?? [])[1] ?? '';
+  const want = ['symbol','close','score_5d','score_22d','pct_chng','rvol','rsi_14','magic_rs'];
+  const got  = [...cols.matchAll(/'([a-z0-9_]+)'/g)].map((m) => m[1]);
+  assert.deepEqual(got, want,
+    `columns must be the owner's seven after symbol, IN ORDER — got ${got.join(', ')}`);
+  assert.ok(!/magic_rs_chg_22d/.test(over),
+    'magic_rs_chg_22d is bonus, not a default: "+42" is the 98th percentile yet 8 '
+    + 'of the 55 stocks at or above it are still BELOW their own mean, so the raw '
+    + 'figure misdescribes ~15% of the rows it would appear on');
+  assert.ok(/showsEvidence/.test(table) && /standout_baskets/.test(table)
+            && /standout_presets/.test(table),
+    'the evidence must still RENDER, as chips under the symbol');
+  // Assert the LITERAL is gone, not merely that the constant is declared: the
+  // first version of this check passed against a cell that had been re-hardcoded
+  // to 158 while symbolWidth sat unused two hundred lines above.
+  assert.ok(!/width:\s*158\b/.test(table),
+    'the sticky symbol column must take its width from ONE value used by both the '
+    + 'header and the cell. A literal here is how they drifted before (header read '
+    + 'cfg.width, the cell hardcoded 158), which misaligns a sticky column with its '
+    + 'own heading');
+  assert.ok((table.match(/symbolWidth/g) ?? []).length >= 4,
+    'symbolWidth must be read by BOTH the header and the cell (width + minWidth each)');
+  ok('evidence renders as chips; columns are the seven, in order');
 }
 
 // ── 7. The universe read is capped, not an in.(<1500 ids>) ────────────────
@@ -127,21 +147,28 @@ const ok = (m) => { n++; console.log(`  ✓ ${m}`); };
   ok('superseded +1.54 estimate retired from the PEAD tooltip');
 }
 
-// ── 9. Own category, and the array agrees with the migration ──────────────
+// ── 9. Market category, and the array agrees with the migration ──────────
 {
   const rows = engine.match(/id:\s*'standouts(?:_caution)?'[^\n]*/g) ?? [];
   for (const r of rows) {
-    assert.ok(/category:\s*'standouts'/.test(r),
-      'Standouts needs its OWN category: its membership is a function of the '
-      + 'other presets, so inside Market or Price Action every badge double-counts');
+    assert.ok(/category:\s*'market'/.test(r),
+      "owner decision: Standouts sits in MARKET, whose smart_money, "
+      + 'quiet_accumulation and power_sell presets already qualify a stock by the '
+      + 'state of its group — this is that shape with baskets instead of industries');
+    assert.ok(/category_sort:\s*4/.test(r), 'Market is sort 4');
   }
   const label = (rows[0].match(/category_label:\s*'([^']+)'/) ?? [])[1];
-  assert.ok(label, 'category_label must be set in the array');
-  assert.ok(migration.includes(`'${label}'`),
-    `the migration must set the same category_label as the array ("${label}") — `
-    + 'getPresetMeta reads the DB row FIRST and the array is only the offline '
-    + 'fallback, so a drift leaves the page rendering whichever copy answers');
-  ok(`own category, label "${label}" consistent with migration 223`);
+  assert.equal(label, 'Market', 'category_label must match the category');
+  assert.ok(migration.includes("'market', 'Market'"),
+    'the migration must set the same category as the array — getPresetMeta reads '
+    + 'the DB row FIRST and the array is only the offline fallback, so a drift '
+    + 'leaves the page rendering whichever copy answers');
+  // Market already has a default tab (smart_money); two would race.
+  const defaults = (migration.match(/'daily', NULL, TRUE,/g) ?? []).length;
+  assert.equal(defaults, 0,
+    'neither Standouts row may claim is_default_tab — smart_money already holds '
+    + "Market's default and two claimants race for which tab opens");
+  ok('Market category, sort 4, no default-tab clash, migration agrees');
 }
 
 console.log(`\n✓ standouts: ${n} checks passed`);
