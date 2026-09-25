@@ -969,6 +969,11 @@ async function fetchPeadDrift(exchangeFilter: ExchangeFilter): Promise<ScanStock
 // exactly the assumption that has already failed here once.
 const STANDOUTS_MIN_PRESETS = 2;
 
+// A stock can sit in at most this many matview arms. Seventeen exist; the live
+// maximum is five. Sized with headroom so the fetch is bounded without silently
+// truncating — an undersized cap is how 2,412 rows went missing once.
+const SCAN_PRESET_ARMS_MAX = 20;
+
 /**
  * Basket membership, with the dual-listing resolved.
  *
@@ -1090,41 +1095,43 @@ async function fetchStandouts(exchangeFilter: ExchangeFilter, side: 'strength' |
   // today. It is not an error and must not be dressed as one.
   if (!ids.length) return [];
 
-  const latest = (await fetchRecentDates(1))[0] ?? null;
-  if (!latest) return [];
-
-  const { data: rows, error: barErr } = await from('km_equity_eod')
-    .select([
-      'equity_id', 'trade_date', 'close', 'open', 'high', 'low',
-      'pct_chng', 'magic_rs', 'magic_rs_zone', 'magic_rs_chg_5d', 'magic_rs_chg_22d',
-      'magic_rs_chg_66d', 'magic_rs_align', 'rss_value', 'rss_spread',
-      'rsi_14', 'rvol', 'flow_type', 'supertrend_dir',
-      'sma_50', 'sma_200', 'sma_150', 'ema_20', 'atr_14',
-      'w52_high', 'w52_low', 'lifetime_high',
-      'avg_amt_5d', 'avg_amt_22d', 'delivery_surge_x',
-      'sniper_inst', 'sniper_hot', 'accum_distrib',
-      'volume_divergence_flag', 'delivery_pct',
-      'dot_svd', 'dot_sbd', 'dot_syd',
-      'stage', 'is_vani_s2', 'rs_percentile', 'score_5d', 'score_22d',
-      'km_equity_symbols(id,symbol,company_name,exchange,industry,mcap_cr,isin)',
-    ].join(','))
-    .eq('trade_date', latest)
+  // ⚠ READ THE MATVIEW, NOT km_equity_eod.
+  //
+  // scanRowToScanStock is a MATVIEW-ROW mapper — it reads ~75 fields and about
+  // thirty exist ONLY on km_scan_results: ret_5d/22d/66d, every rel_*, d_pct,
+  // xamt, deliv_value_cr, breakout_level/breakdown_level, the gl_* set,
+  // wg_phase, listing_age_years, the 3-year-high fields, pct_wtd/pct_mtd,
+  // vani_flag. Handing it a bar row left all of them undefined, so the Columns
+  // picker rendered "—" on columns the database had values for. Reported live
+  // on PASUPTAC and AUSTENG.
+  //
+  // Every Standouts member is in >= 2 presets BY DEFINITION, so each one always
+  // has matview rows — this source can never be thinner than the membership.
+  //
+  // Per-arm rows carry IDENTICAL stock columns (verified: PASUPTAC across
+  // monthly_movers/weekly_movers and AUSTENG across three arms agree on close,
+  // pct_chng, rvol, ret_*, rel_*, d_pct, xamt, mcap_cr, magic_rs), so taking the
+  // first row per stock is safe rather than arbitrary.
+  const { data: rows, error: barErr } = await from('km_scan_results')
+    .select('*')
     .in('equity_id', ids)
-    .limit(ids.length)
+    .limit(ids.length * SCAN_PRESET_ARMS_MAX)
     .execute();
-  if (barErr) throw new Error(`Standouts: bar data could not be read — ${barErr.message}`);
+  if (barErr) throw new Error(`Standouts: scanner rows could not be read — ${barErr.message}`);
 
   const out: ScanStock[] = [];
+  const seen = new Set<number>();
   for (const row of (rows ?? []) as any[]) {
-    const sym = row.km_equity_symbols;
-    if (!sym) continue;
-    if (exchangeFilter === 'NSE' && sym.exchange !== 'NSE') continue;
-    if (exchangeFilter === 'BSE' && sym.exchange !== 'BSE') continue;
+    const id = Number(row.equity_id);
+    if (seen.has(id)) continue;          // one row per stock; the arms agree
+    if (exchangeFilter === 'NSE' && row.exchange !== 'NSE') continue;
+    if (exchangeFilter === 'BSE' && row.exchange !== 'BSE') continue;
+    seen.add(id);
 
-    const presets = Array.from(hitsByEquity.get(Number(row.equity_id)) ?? []);
-    const stock = scanRowToScanStock({ ...row, ...sym, equity_id: row.equity_id });
-    stock.standout_baskets = membership.get(Number(row.equity_id)) ?? null;
-    stock.standout_presets = presets.map((id) => nameOf.get(id) ?? id).sort();
+    const presets = Array.from(hitsByEquity.get(id) ?? []);
+    const stock = scanRowToScanStock(row);
+    stock.standout_baskets = membership.get(id) ?? null;
+    stock.standout_presets = presets.map((pid) => nameOf.get(pid) ?? pid).sort();
     out.push(stock);
   }
 

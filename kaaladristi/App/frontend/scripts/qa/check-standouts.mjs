@@ -125,6 +125,22 @@ const ok = (m) => { n++; console.log(`  ✓ ${m}`); };
 
 // ── 7. The universe read is capped, not an in.(<1500 ids>) ────────────────
 {
+  // The row source must be the MATVIEW. scanRowToScanStock reads ~30 fields that
+  // exist only there; a bar row leaves every one undefined and the Columns
+  // picker shows "—" on data the database holds.
+  const fn0  = engine.slice(engine.indexOf('async function fetchStandouts'));
+  const sbody = fn0.slice(0, fn0.indexOf('\nasync function', 10));
+  assert.ok(/from\('km_scan_results'\)[\s\S]{0,120}select\('\*'\)/.test(sbody),
+    'the display rows must come from km_scan_results, not km_equity_eod — every '
+    + 'member is in >= 2 presets by definition, so the matview can never be '
+    + 'thinner than the membership');
+  assert.ok(!/from\('km_equity_eod'\)/.test(sbody),
+    'a km_equity_eod row fed to scanRowToScanStock blanks ret_*, rel_*, d_pct, '
+    + 'xamt, the gl_* set, wg_phase, pct_wtd/pct_mtd and ~20 more');
+  assert.ok(/seen\.has\(id\)/.test(sbody),
+    'a stock has one matview row per arm — dedupe, or it appears once per preset');
+  ok('rows come from the matview, one per stock');
+
   assert.ok(/ACTIVE_UNIVERSE_CAP/.test(engine),
     'reuse the sized cap rather than a fresh literal — an undersized one already '
     + 'dropped 2,412 rows and resolved a dual-listed stock to its BSE row');
