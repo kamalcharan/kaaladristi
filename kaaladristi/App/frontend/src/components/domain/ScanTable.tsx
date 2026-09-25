@@ -117,25 +117,63 @@ const PRESET_COL_OVERRIDES: Partial<Record<string, string[]>> = {
   ],
 }
 
-const DEFAULT_SORT: Record<string, { key: string; dir: 'asc' | 'desc' }> = {
-  stage_2_leaders:  { key: 'magic_rs',         dir: 'desc' },
-  stage_2_watch:    { key: 'rs_percentile',     dir: 'desc' },
+// Keys are `keyof ScanStock`, not `string`: the Studio descriptors already
+// type their `sort.key` that way, and this map did not, so a typo here
+// compiled and then silently fell through sortStocks as an undefined
+// property -- every row null, nulls-last, i.e. fetch order, which looks
+// like a working table in an order nobody chose.
+const DEFAULT_SORT: Record<string, { key: keyof ScanStock; dir: 'asc' | 'desc' }> = {
+  // ── Stage family: newest entrant to the stage first (owner, 2026-09-25).
+  // `stage_since` is the classifier's own record of when the label last
+  // changed, so it answers "what just arrived here", which is why these lists
+  // are opened. It is a default column on the stage_analysis group, so the
+  // sorted header shows its arrow. It is also a DATE string: compareValues
+  // falls through to localeCompare for it, which is correct for ISO dates, and
+  // sortStocks puts nulls last in BOTH directions, so a row with no recorded
+  // entry never masquerades as the freshest one.
+  //
+  // ⚠ The direction is the same (desc = most recent) on the watch lists and
+  // the leader lists. It is not a strength ranking, so it does not flip sign
+  // with the side of the list the way rs_percentile did.
+  stage_2_leaders:  { key: 'stage_since',       dir: 'desc' },
+  stage_2_watch:    { key: 'stage_since',       dir: 'desc' },
+  stage_3_watch:    { key: 'stage_since',       dir: 'desc' },
+  stage_4_leaders:  { key: 'stage_since',       dir: 'desc' },
   vani_opportunity: { key: 'rs_percentile',     dir: 'desc' },
-  stage_4_leaders:  { key: 'rs_percentile',     dir: 'asc'  },
-  stage_3_watch:    { key: 'rs_percentile',     dir: 'asc'  },
   vani_exit_watch:  { key: 'rs_percentile',     dir: 'asc'  },
+  // Delivery-led, and deliberately the SURGE rather than raw delivery_pct:
+  // this list is about delivery that has stepped up against the stock's own
+  // baseline (avg_amt_5d / avg_amt_22d), and raw delivery_pct floats illiquid
+  // names that always settle high. Matches fetchConvictionFlow's own ranking.
   conviction_flow:  { key: 'delivery_surge_x',  dir: 'desc' },
   // Tightest compression first — bursts (high quality) still sort near the top.
   flower_pot_burst: { key: 'fpb_compression_score', dir: 'desc' },
-  // Delivery-first, matching fetchVolumeDrive's engine ranking. Without an
-  // entry here the table falls through to magic_rs desc, which silently
-  // discards that ranking — and magic_rs measured 0.85x (INVERTED) against a
-  // next-day move, so it would sort the list by a feature with no predictive
-  // value.
-  volume_drive:     { key: 'delivery_pct',      dir: 'desc' },
-  // v4 journey tabs — match each fetcher's engine ranking.
-  waking_giants:    { key: 'base_years',        dir: 'desc' },
-  wg_ascent:        { key: 'align_score',       dir: 'desc' },
+  // RVOL-first (owner, 2026-09-25) — this preset selects on the volume dot, so
+  // the volume reading is what ranks it.
+  // ⚠ The previous key was delivery_pct, which matched fetchVolumeDrive's
+  // engine ranking; that ranking is now only the fetcher's cut, not the
+  // display order. Do NOT fall back to magic_rs here: it measured 0.85x
+  // (INVERTED) against a next-day move, so it would sort the list by a feature
+  // with no predictive value — which is what happened before this map existed.
+  // ⚠ `rvol` divides by a 50-bar mean that INCLUDES today, so it understates a
+  // genuine spurt (19.2x on OPTIEMUS 2026-09-22 against ~52x measured against
+  // prior bars only). Fine as an ordering, wrong as a quoted figure.
+  volume_drive:     { key: 'rvol',              dir: 'desc' },
+  // Score-first (owner doctrine), matching breakout_surge's Studio ranking.
+  // Without an entry here it fell through to the magic_rs default.
+  power_buy:        { key: 'score_5d',          dir: 'desc' },
+  // Standouts: the strength list leads on the 5-day flow, the caution list on
+  // the 22-day, weakest first. Note the FETCHER still orders by agreement
+  // count (how many same-side scanners flag the stock) because that is what
+  // the result_limit cuts on; this map only decides the displayed order.
+  standouts:         { key: 'score_5d',         dir: 'desc' },
+  standouts_caution: { key: 'score_22d',        dir: 'asc'  },
+  // v4 journey tabs. Waking Giants and Ascent lead on the WAKE DATE, newest
+  // first (owner, 2026-09-25) — `wake_date` is already a rendered column on
+  // both. Stirring keeps gl_acc_days: it has no wake yet, which is the whole
+  // point of that tab.
+  waking_giants:    { key: 'wake_date',         dir: 'desc' },
+  wg_ascent:        { key: 'wake_date',         dir: 'desc' },
   wg_stirring:      { key: 'gl_acc_days',       dir: 'desc' },
 }
 

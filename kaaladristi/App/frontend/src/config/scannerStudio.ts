@@ -452,7 +452,13 @@ export const STUDIO_DESCRIPTORS: Record<string, StudioDescriptor> = {
     industryQuestion: CAUTION_INDUSTRY_Q,
     exportName: 'Breakdown_Surge',
     source: 'matview',
-    sort: { key: 'pct_from_breakdown', dir: 'asc' },
+    // Owner, 2026-09-25: rank by the 22-day flow, weakest first -- the mirror
+    // of breakout_surge's 5D ranking. % below the floor says how far a stock
+    // has already fallen, which floats whatever fell hardest yesterday; the
+    // 22D score says how sustained the weakness is, which is the question this
+    // list is opened with. asc because on a caution list the worst reading
+    // leads.
+    sort: { key: 'score_22d', dir: 'asc' },
     tableColumns: ['symbol', 'close', 'score_5d', 'score_22d', 'pct_chng', 'breakdown_level', 'pct_from_breakdown', 'avg_amt_5d', 'avg_amt_22d', 'rvol', 'rsi_14', 'magic_rs', 'mcap_cr', 'delivery_pct'],
     cardHero: { key: 'pct_from_breakdown', label: '% Below Floor', kind: 'pct', colorKey: 'pct_from_breakdown' },
     cardLevels: [
@@ -499,7 +505,15 @@ export const STUDIO_DESCRIPTORS: Record<string, StudioDescriptor> = {
     // A retest CAN repeat on consecutive sessions, so the card is real here.
     exportName: 'Golden_Line_Retest',
     source: 'matview',
-    sort: { key: 'gl_days_above', dir: 'desc' },
+    // Owner, 2026-09-25: order by the retest DATE, freshest first. That is
+    // `gl_sessions_since` ascending, not `gl_event_date` descending -- the two
+    // rank identically and only the former is a rendered column, so the sorted
+    // header carries its own arrow instead of the table appearing to be in no
+    // order at all. `gl_days_above` (the previous key) is the retest bar's own
+    // days-above-the-line, which is a DURATION, not a recency: it ranged 12 to
+    // 117 on the 2026-09-24 bar and put the longest-established reclaim on top
+    // while the retest printed this morning sat wherever it fell.
+    sort: { key: 'gl_sessions_since', dir: 'asc' },
     // migration 218: the window is seven sessions, so "how long ago" is now the
     // first thing a reader needs — a retest three sessions old is a different
     // observation from one printed this morning, and without the column every

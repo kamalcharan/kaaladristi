@@ -34,7 +34,6 @@ import '@/services/thesis/adapters'; // registers SETUP_ADAPTERS entries
  *  of them silently drops the user outside the Story View. */
 const storySetupSuffix = (presetId: string): string =>
   getSetupAdapter(presetId) ? `&tab=chart&setup=${presetId}` : '';
-import { useVaNiStore } from '@/stores/vaniStore';
 import { useIsPhone, isPhoneNow } from '@/hooks/useMediaQuery';
 import { useTopbarHeight } from '@/hooks/useTopbarHeight';
 
@@ -1298,7 +1297,6 @@ function ScannerResults({ presetId }: { presetId: string }) {
   const [filters, setFilters] = useState<ScanFilters>(() => defaultFiltersFor(presetId));
   const [viewMode, setViewMode] = useViewMode();
 
-  const openVaNiWithIntent = useVaNiStore((s) => s.openWithIntent);
   const { data: presets = SCAN_PRESETS } = useScanPresets();
   const preset = presets.find((p) => p.id === presetId) ?? SCAN_PRESETS.find((p) => p.id === presetId);
   const { data: allCountsData } = useAllScanCounts('combined');
@@ -1430,31 +1428,23 @@ function ScannerResults({ presetId }: { presetId: string }) {
       {categoryTabStrip}
 
       <div style={{ marginBottom: '24px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
-          <h1 style={{
-            fontFamily: 'var(--font-display)', fontSize: '28px', fontWeight: 500,
-            letterSpacing: '-0.02em', lineHeight: 1,
-            color: 'var(--text-primary)',
-          }}>
-            {preset.name}
-          </h1>
-          {!SCANNER_INTRODUCTIONS[presetId] && (
-            <button
-              onClick={() => openVaNiWithIntent('scanner.explain_preset')}
-              style={{
-                display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0,
-                padding: '5px 12px', borderRadius: 8,
-                border: '1px solid var(--accent-indigo)',
-                background: 'color-mix(in srgb, var(--accent-indigo) 8%, transparent)',
-                color: 'var(--accent-indigo)', fontSize: 12, fontWeight: 500,
-                cursor: 'pointer', fontFamily: 'var(--font-body)',
-                transition: 'all 0.15s',
-              }}
-            >
-              <span style={{ fontSize: 12 }}>✦</span> VaNi explains this screener
-            </button>
-          )}
-        </div>
+        {/* No "VaNi explains this screener" button beside the title. Every
+            /scanner* route already carries the companion -- docked on the 24
+            preset routes, and as the rail or an inline panel everywhere else
+            (Layout's `scannerRoute` test is deliberately wider than
+            `scannerDocked` for exactly that reason). The button asked the
+            question the panel already answers, and only rendered on the
+            presets carrying no shipped introduction, so it read as an
+            inconsistency between screeners rather than a feature. Removed
+            2026-09-25 at the owner's request. The flex row it sat in went with
+            it -- space-between around a lone heading is not a layout. */}
+        <h1 style={{
+          fontFamily: 'var(--font-display)', fontSize: '28px', fontWeight: 500,
+          letterSpacing: '-0.02em', lineHeight: 1,
+          color: 'var(--text-primary)',
+        }}>
+          {preset.name}
+        </h1>
         <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: 6 }}>
           {preset.description}
         </p>
