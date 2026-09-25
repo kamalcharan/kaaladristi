@@ -20,7 +20,7 @@ import os
 import re
 import sys
 import time
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 from typing import Optional
 
 import psycopg2
@@ -77,12 +77,50 @@ def _claim_job(conn) -> Optional[dict]:
     return dict(row) if row else None
 
 
+class _SqlNow:
+    """Sentinel: write this column with SQL now(), not a Python timestamp.
+
+    `completed_at` used to be set from a NAIVE UTC datetime. psycopg2 sends a
+    naive value as a bare timestamp literal, and PostgreSQL resolves a bare
+    literal against the SESSION TimeZone -- Asia/Kolkata here. So every
+    completion instant was stored 5h30m BEFORE it happened: measured
+    2026-09-25, 1,594 of 1,594 jobs since 09-15 carried `completed_at` EARLIER
+    than their own `started_at`, mean skew 328 minutes.
+
+    That is not cosmetic. Two guards compare `completed_at` against `now()`:
+
+      * `_parent_fix_failed` (PARENT_FAILURE_WINDOW_MIN, 120) -- the deferral
+        added 2026-09-23 after the Stage 2 outage, where a dependent ran
+        against columns its parent's failed forced fix had already nullified;
+      * the cascade debounce (CASCADE_DEBOUNCE_MIN, 30).
+
+    A row stamped 5.5 hours early can never fall inside a 120- or 30-minute
+    window, so BOTH were structurally inert -- no job has ever reached status
+    'deferred'. The protection existed, passed its tests (which build their own
+    rows) and could not fire in production.
+
+    `started_at` was always right because `_claim_job` writes it as SQL
+    `now()`. Completion now follows the same rule: the DATABASE clock stamps
+    the database's own rows, so there is no Python clock, no timezone
+    assumption, and no second way to get it wrong. Do NOT "simplify" this back
+    to a Python datetime -- an aware one would also be correct, but it leaves
+    the naive form one deleted `timezone.utc` away from returning.
+    """
+    __slots__ = ()
+
+
+SQL_NOW = _SqlNow()
+
+
 def _update_job(conn, job_id: int, **fields) -> None:
     if not fields:
         return
     set_parts = []
     params: list = []
     for k, v in fields.items():
+        if isinstance(v, _SqlNow):
+            set_parts.append(f'{k} = now()')
+            continue
         set_parts.append(f'{k} = %s')
         params.append(v)
     params.append(job_id)
@@ -354,12 +392,12 @@ def _run_fix(conn, job: dict) -> None:
     if not dim:
         _update_job(conn, job_id, status='failed',
                     error_msg='fix job missing dimension',
-                    completed_at=datetime.utcnow())
+                    completed_at=SQL_NOW)
         return
     if trade_date_val is None:
         _update_job(conn, job_id, status='failed',
                     error_msg='fix job missing trade_date',
-                    completed_at=datetime.utcnow())
+                    completed_at=SQL_NOW)
         return
 
     trade_date_obj = trade_date_val if isinstance(trade_date_val, date) else \
@@ -395,7 +433,7 @@ def _run_fix(conn, job: dict) -> None:
             _update_job(conn, job_id, status='deferred',
                         progress_text=f'deferred: parent {blocked_by} failed for this date',
                         progress_pct=100,
-                        completed_at=datetime.utcnow())
+                        completed_at=SQL_NOW)
             log.warning(
                 f'Job #{job_id} ({dim} {trade_date_obj}): deferred — parent '
                 f'{blocked_by} failed for this date within '
@@ -410,7 +448,7 @@ def _run_fix(conn, job: dict) -> None:
         conn.rollback()
         _update_job(conn, job_id, status='failed',
                     error_msg=str(e)[:500],
-                    completed_at=datetime.utcnow(),
+                    completed_at=SQL_NOW,
                     progress_pct=100)
         _record_failure_finding(conn, dim, trade_date_obj, str(e), job_id)
         return
@@ -418,7 +456,7 @@ def _run_fix(conn, job: dict) -> None:
         conn.rollback()
         _update_job(conn, job_id, status='failed',
                     error_msg=str(e)[:500],
-                    completed_at=datetime.utcnow(),
+                    completed_at=SQL_NOW,
                     progress_pct=100)
         _record_failure_finding(conn, dim, trade_date_obj, str(e), job_id)
         return
@@ -432,7 +470,7 @@ def _run_fix(conn, job: dict) -> None:
         error_msg=result.error_msg,
         progress_text=f'done: {result.fill_rate_before:.1f}% → {result.fill_rate_after:.1f}%',
         progress_pct=100,
-        completed_at=datetime.utcnow(),
+        completed_at=SQL_NOW,
     )
     log.info(
         f'Job #{job_id} ({dim} {trade_date_obj} force={force}): '
@@ -479,7 +517,7 @@ def _run_daily(conn, job: dict) -> None:
     if trade_date_val is None:
         _update_job(conn, job_id, status='failed',
                     error_msg='daily_run job missing trade_date',
-                    completed_at=datetime.utcnow())
+                    completed_at=SQL_NOW)
         return
 
     trade_date_obj = trade_date_val if isinstance(trade_date_val, date) else \
@@ -501,14 +539,14 @@ def _run_daily(conn, job: dict) -> None:
         conn.rollback()
         _update_job(conn, job_id, status='failed',
                     error_msg=str(e)[:500],
-                    completed_at=datetime.utcnow(),
+                    completed_at=SQL_NOW,
                     progress_pct=100)
         return
     except Exception as e:
         conn.rollback()
         _update_job(conn, job_id, status='failed',
                     error_msg=str(e)[:500],
-                    completed_at=datetime.utcnow(),
+                    completed_at=SQL_NOW,
                     progress_pct=100)
         return
 
@@ -537,7 +575,7 @@ def _run_daily(conn, job: dict) -> None:
         progress_text=f'daily_run {outcome.overall_status} '
                       f'({len(outcome.steps)} steps, {rows} rows)',
         progress_pct=100,
-        completed_at=datetime.utcnow(),
+        completed_at=SQL_NOW,
     )
     log.info(f'Job #{job_id} daily_run {trade_date_obj}: {outcome.overall_status} '
              f'({len(outcome.steps)} steps, {rows} rows)')
@@ -611,12 +649,12 @@ def _run_backfill(conn, job: dict) -> None:
     if not dim:
         _update_job(conn, job_id, status='failed',
                     error_msg='backfill job missing dimension',
-                    completed_at=datetime.utcnow())
+                    completed_at=SQL_NOW)
         return
     if from_val is None or to_val is None:
         _update_job(conn, job_id, status='failed',
                     error_msg='backfill job missing date_from / date_to',
-                    completed_at=datetime.utcnow())
+                    completed_at=SQL_NOW)
         return
 
     from_d = from_val if isinstance(from_val, date) else date.fromisoformat(str(from_val))
@@ -633,7 +671,7 @@ def _run_backfill(conn, job: dict) -> None:
         conn.rollback()
         _update_job(conn, job_id, status='failed',
                     error_msg=f'failed to resolve trading days: {e}'[:500],
-                    completed_at=datetime.utcnow())
+                    completed_at=SQL_NOW)
         return
 
     if not dates:
@@ -641,7 +679,7 @@ def _run_backfill(conn, job: dict) -> None:
                     progress_text=f'No trading days in {from_d}..{to_d}',
                     progress_pct=100,
                     rows_affected=0,
-                    completed_at=datetime.utcnow())
+                    completed_at=SQL_NOW)
         log.info(f'Job #{job_id}: backfill {dim} {from_d}..{to_d} — 0 trading days')
         return
 
@@ -720,7 +758,7 @@ def _run_backfill(conn, job: dict) -> None:
         error_msg='; '.join(errors[:3])[:500] if errors else None,
         progress_text=summary,
         progress_pct=100,
-        completed_at=datetime.utcnow(),
+        completed_at=SQL_NOW,
     )
     log.info(f'Job #{job_id}: {summary}')
 
@@ -747,7 +785,7 @@ def process_one(conn) -> bool:
     else:
         _update_job(conn, job_id, status='failed',
                     error_msg=f'Unknown job_type: {job_type}',
-                    completed_at=datetime.utcnow())
+                    completed_at=SQL_NOW)
     return True
 
 

@@ -1103,7 +1103,7 @@ def process_one(db):
     if not handler:
         _update_job(db, job_id, status='failed',
                     error_msg=f'Unknown job type: {job_type}',
-                    completed_at=datetime.utcnow().isoformat())
+                    completed_at=_now_iso())
         log.error(f'Job #{job_id}: unknown type {job_type}')
         return True
 
@@ -1128,7 +1128,7 @@ def process_one(db):
     except Exception as e:
         _update_job(db, job_id, status='failed',
                     error_msg=str(e)[:500],
-                    completed_at=datetime.utcnow().isoformat())
+                    completed_at=_now_iso())
         log.error(f'Job #{job_id}: FAILED — {e}')
 
     return True
