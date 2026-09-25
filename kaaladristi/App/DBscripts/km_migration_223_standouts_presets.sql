@@ -117,10 +117,18 @@ COMMIT;
 NOTIFY pgrst, 'reload schema';
 
 -- ── Verification ────────────────────────────────────────────────────────────
--- Both rows present, in their own category, with vani_side NULL:
+-- Both rows present, in the MARKET category, with vani_side NULL:
 --
 --   SELECT id, name, category, category_sort, universe, vani_side, is_default_tab
 --     FROM kd_scan_presets WHERE id LIKE 'standouts%' ORDER BY sort_order;
+--
+-- category MUST read 'market' and category_sort 4. getPresetMeta() reads this
+-- table FIRST and the SCAN_PRESETS array is only the offline fallback, so a row
+-- left on an older category wins over the code and the preset renders in a
+-- category the frontend no longer knows about (the migration-218 universe trap).
+-- This file is idempotent -- ON CONFLICT DO UPDATE rewrites category,
+-- category_label, category_color, category_sort, sort_order and is_default_tab
+-- -- so re-running it is the fix.
 --
 -- vani_side MUST read NULL on both. If either is 'strength' or 'caution', the
 -- preset is counting itself and the list is wrong.
