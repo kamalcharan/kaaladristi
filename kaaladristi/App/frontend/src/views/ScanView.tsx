@@ -602,14 +602,11 @@ function Stage2Results({ preset, timeframe, viewMode, onViewModeChange }: {
   );
 
 
-  const SkeletonCard = () => (
-    <div style={{
-      height: '64px', borderRadius: '10px',
-      background: 'linear-gradient(90deg, var(--card) 25%, color-mix(in srgb, var(--text-primary) 3%, transparent) 50%, var(--card) 75%)',
-      backgroundSize: '200% 100%', animation: 'pulse 1.5s ease-in-out infinite',
-      border: '1px solid var(--border)',
-    }} />
-  );
+  // SkeletonCard lived here, defined and never rendered -- it was the loading
+  // state this layout was meant to have and never got. Deleted rather than
+  // wired: DristiQLoader is the house loading state on all five scanner
+  // layouts, and a second one that appears on exactly one of them is how a
+  // product starts looking assembled from parts.
 
   return (
     <>
@@ -669,13 +666,40 @@ function Stage2Results({ preset, timeframe, viewMode, onViewModeChange }: {
         </div>
       </div>
 
-      {/* Table view */}
-      {viewMode === 'table' && !isLoading && !error && (
-        <ScanTable
-          stocks={displayStocks}
-          presetId={preset.id}
-          onRowClick={(s) => navigate(`/chart/equity/${s.equity_id}?name=${encodeURIComponent(navName(s))}${thesisSetupSuffix}`)}
-        />
+      {/* Table view. The loader and the error card are NOT optional here: this
+          branch used to read `!isLoading && !error`, so a Stage 2 table showed
+          the filter bar, the Action Island and then nothing at all -- first
+          while the scan ran, and then FOREVER if it failed, with no message and
+          no retry. Silence is the same shape as an empty result, which is the
+          one thing a scanner must never be ambiguous about. Same three-way
+          shape as Conviction Flow, Flower Pot, the Studios and the generic
+          layout, so all five read alike. */}
+      {viewMode === 'table' && (
+        isLoading ? (
+          <DristiQLoader />
+        ) : error ? (
+          <Card rounded="xxl" className="py-12 text-center">
+            <p style={{ fontSize: '13px', color: 'var(--bear)', marginBottom: '12px' }}>
+              Failed to run scan. Check data connection.
+            </p>
+            <button
+              onClick={() => refetch()}
+              style={{
+                padding: '6px 16px', background: 'var(--accent-glow)',
+                border: '1px solid var(--accent-dim)', borderRadius: '6px',
+                color: 'var(--accent)', fontSize: '12px', cursor: 'pointer',
+              }}
+            >
+              Retry
+            </button>
+          </Card>
+        ) : (
+          <ScanTable
+            stocks={displayStocks}
+            presetId={preset.id}
+            onRowClick={(s) => navigate(`/chart/equity/${s.equity_id}?name=${encodeURIComponent(navName(s))}${thesisSetupSuffix}`)}
+          />
+        )
       )}
 
       {/* VaNi Section (cards mode only) */}
@@ -1779,7 +1803,7 @@ export default function ScanView() {
       </fieldset>
       <span className="text-xs text-muted">Starting suggestions for {label}. Every scanner is available.</span>
     </div>
-    {presetId?<ScannerResults presetId={presetId}/>:<p>Loading scanners…</p>}
+    {presetId?<ScannerResults presetId={presetId}/>:<DristiQLoader message="Loading scanners…"/>}
     <p className="text-xs text-muted text-center p-4">{SCAN_DISCLAIMER}</p>
   </div>
 }
