@@ -909,6 +909,26 @@ table above is in the migration 219 header.
 ## Current Plan
 
 
+### ▶ START HERE — session handover, 2026-09-25
+
+**`docs/claude/handover-2026-09-25-scanners-pipeline.md`.** Scanner default
+ordering per the owner's spec, VaNi Weakness Watch retired (migration 224), the
+five scanner layouts' loading/error states, and the `km_jobs.completed_at`
+timezone bug (migration 225) that had left two pipeline guards structurally
+inert since the day they shipped.
+
+**Migrations 223, 224 and 225 are APPLIED and the backend IS deployed** — both
+verified against the live DB, not assumed. **The frontend is NOT built**: every
+frontend change in that handover is invisible until `cd App/frontend &&
+npm run build` runs on the VPS. That is the first thing to do.
+
+One design question is left open for the owner and is the natural next piece of
+work: **the gap sweep reads `health_grid(conn, days=3)`**, so a forced fix that
+fails — which nullifies its columns first — leaves a date permanently broken
+once it ages out of that window. It cost four days of NULL `flow_type` on
+2026-09-21 and a hand-queued job to recover. Measure what a wider window would
+enqueue each night before changing it.
+
 ### Filing Intelligence — Sprint 2 SHIPPED 2026-09-18 · ⏳ OWNER REVIEW PENDING
 
 **Handover: `docs/claude/filing-intelligence-handover.md`.**
