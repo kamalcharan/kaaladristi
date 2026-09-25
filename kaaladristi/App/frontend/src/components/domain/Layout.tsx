@@ -41,7 +41,7 @@ export default function Layout() {
   // again on every other route.
   const pathname = useLocation().pathname;
   const structureDocked = pathname.startsWith('/market-structure');
-  const scannerDocked = /^\/scanner\/(breakout_surge|weekly_movers|monthly_movers|weekly_decliners|monthly_decliners|breakdown_watch|gl_breakout|gl_retest|flower_pot_burst|stage_2_watch|stage_2_leaders|stage_3_watch|stage_4_leaders|vani_exit_watch|conviction_flow|power_buy|volume_drive|waking_giants|wg_ascent|wg_stirring|power_sell|smart_money|quiet_accumulation|distribution_warning)\/?$/.test(pathname);
+  const scannerDocked = /^\/scanner\/(breakout_surge|weekly_movers|monthly_movers|weekly_decliners|monthly_decliners|breakdown_watch|gl_breakout|gl_retest|flower_pot_burst|stage_2_watch|stage_2_leaders|stage_3_watch|stage_4_leaders|conviction_flow|power_buy|volume_drive|waking_giants|wg_ascent|wg_stirring|power_sell|smart_money|quiet_accumulation|distribution_warning)\/?$/.test(pathname);
   const sectorDocked = pathname.startsWith('/sector-rotation');
   const vaniDocked = pathname.startsWith('/workspace') || structureDocked || sectorDocked;
 

@@ -75,7 +75,15 @@ export const SCAN_PRESETS: ScanDefinition[] = [
   { id: 'stage_2_watch',        name: 'Stage 2 Watch',         description: 'Stocks approaching Stage 2 — MA stacking confirmed, SMA200 not yet rising. Watch for Stage 2 breakout.', limit: 100, universe: 'NSE_ONLY', category: 'stage_analysis', category_label: 'Stage Analysis', category_color: CAT_STAGE, category_sort: 2, is_default_tab: true, timeframe: 'daily', vani_rule: 'is_vani_smart' },
   { id: 'stage_4_leaders',      name: 'Stage 4 Leaders',       description: 'Confirmed downtrend — death cross, below both MAs',                                        limit: 200, universe: 'NSE_ONLY', category: 'stage_analysis', category_label: 'Stage Analysis', category_color: CAT_STAGE, category_sort: 2, is_default_tab: false, timeframe: 'daily', vani_rule: 'is_vani_weakness' },
   { id: 'stage_3_watch',        name: 'Stage 3 Watch',         description: 'Entering weakness — SMA50 converging toward SMA200',                                       limit: 100, universe: 'NSE_ONLY', category: 'stage_analysis', category_label: 'Stage Analysis', category_color: CAT_STAGE, category_sort: 2, is_default_tab: false, timeframe: 'daily', vani_rule: 'is_vani_weakness' },
-  { id: 'vani_exit_watch',      name: 'VaNi Weakness Watch',   description: 'Highest conviction weakness — lowest RS, death cross confirmed',                            limit: 25,  universe: 'NSE_ONLY', category: 'stage_analysis', category_label: 'Stage Analysis', category_color: CAT_STAGE, category_sort: 2, is_default_tab: false, timeframe: 'daily', vani_rule: 'always_true' },
+  // vani_exit_watch ('VaNi Weakness Watch') retired 2026-09-25 (migration 224),
+  // mirroring vani_opportunity's retirement on 2026-07-13. It was Stage 4 Leaders
+  // filtered to rs_percentile < 20 and capped at 25 -- sorting Stage 4 Leaders by
+  // RS percentile ascending is the same shortlist, and rs_percentile is already a
+  // default column on that group. The row stays in kd_scan_presets with
+  // is_active = false; this array is only the offline fallback, so both had to
+  // move together or the scanner would reappear whenever the API is unreachable.
+  // fetchVaNiExitWatch and its executeScan branch are deliberately KEPT: the id is
+  // an address that the thesis ?setup= adapter registry still answers on.
   // Placeholder rows only — real metadata (incl. category color) comes from
   // kd_scan_presets (migration 177); empty color keeps the literal ratchet flat.
   { id: 'waking_giants',        name: 'Waking Giants',         description: 'Stocks breaking out of a multi-year hibernation at the Golden Line — the first sessions of a structural transition', limit: 60, universe: 'NSE_ONLY', category: 'discovery', category_label: 'Discovery', category_color: '', category_sort: 5, is_default_tab: false, timeframe: 'daily', vani_rule: null },
@@ -1049,8 +1057,14 @@ async function fetchStandouts(exchangeFilter: ExchangeFilter, side: 'strength' |
   // Which presets count for this side. Read from the DB row, never a hardcoded
   // list: `vani_side` is the field that already decides this everywhere else,
   // and a second copy of the strength/caution split would drift from it.
+  // ⚠ is_active, or a RETIRED preset keeps voting. kd_scan_presets is the
+  // registry, not the live menu: vani_opportunity has been is_active = false
+  // since 2026-07-13 and vani_exit_watch since migration 224, and both still
+  // carry a vani_side. A preset the user cannot open must not contribute an
+  // agreement count to a list that claims several scanners agree.
   const { data: presetRows, error: presetErr } = await from('kd_scan_presets')
     .select('id,name,vani_side')
+    .is('is_active', 'true')
     .limit(500)
     .execute();
   if (presetErr) throw new Error(`Standouts: preset sides could not be read — ${presetErr.message}`);

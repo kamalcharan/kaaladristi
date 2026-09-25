@@ -173,4 +173,56 @@ const studioSortOf = (preset) => {
   ok('no "VaNi explains this screener" button in the screener header');
 }
 
+// ── 7. VaNi Weakness Watch is retired everywhere, not just in one place ────
+// `is_active = false` in kd_scan_presets is what actually hides it (the
+// presets endpoint selects WHERE is_active = true), but SCAN_PRESETS is the
+// OFFLINE FALLBACK for that same row -- leave the array entry and the scanner
+// comes back whenever the API is unreachable. Same shape as the migration-218
+// `universe` trap. The id is deliberately still routed: it is an address the
+// thesis ?setup= adapter registry answers on.
+{
+  const engine  = code(read('../../src/services/scanEngine.ts'));
+  const filters = code(read('../../src/components/domain/ScanFilterBar.tsx'));
+  const intros  = code(read('../../src/constants/scannerIntroductions.ts'));
+  const catalog = code(read('../../src/constants/catalogItems.ts'));
+  const layout  = code(read('../../src/components/domain/Layout.tsx'));
+  const sql     = read('../../../DBscripts/km_migration_224_retire_vani_exit_watch.sql')
+                    .replace(/^\s*--.*$/gm, '');
+
+  assert.ok(!/id:\s*'vani_exit_watch'/.test(engine),
+    'the SCAN_PRESETS fallback entry must be gone, or the preset returns whenever '
+    + 'the presets API is unreachable');
+  assert.ok(!/'vani_exit_watch'/.test(filters), 'gone from the Stage filter group');
+  assert.ok(!/'vani_exit_watch'/.test(intros),  'gone from STAGE_SCANNER_IDS and its copy');
+  assert.ok(!/id:\s*'vani_exit_watch'/.test(catalog), 'gone from the Catalog scanner list');
+  assert.ok(!/vani_exit_watch/.test(layout), 'gone from the docked-companion route list');
+  assert.ok(!/vani_exit_watch\s*:/.test(defaultSortBody), 'gone from DEFAULT_SORT');
+
+  assert.ok(/UPDATE\s+kd_scan_presets[\s\S]{0,200}is_active\s*=\s*FALSE[\s\S]{0,200}'vani_exit_watch'/i.test(sql),
+    'migration 224 must set is_active FALSE on the row');
+  assert.ok(!/DELETE\s+FROM\s+kd_scan_presets/i.test(sql),
+    'the row must be deactivated, never deleted -- the id is an address and a freed '
+    + 'id can be reused by something that means a different thing');
+
+  assert.ok(/if \(scanId === 'vani_exit_watch'\)/.test(engine),
+    'the executeScan branch stays: the thesis ?setup= adapter registry still answers on this id');
+
+  const fs = engine.slice(engine.indexOf('async function fetchStandouts'));
+  assert.ok(/\.is\('is_active', 'true'\)/.test(fs.slice(0, 1200)),
+    'fetchStandouts must filter is_active -- a retired preset that still carries a '
+    + 'vani_side would keep voting in an agreement count');
+  ok('Weakness Watch retired in the DB, the fallback array and every UI list');
+}
+
+// ── 8. Retiring copy bumps the introduction version ───────────────────────
+{
+  const intros = read('../../src/constants/scannerIntroductions.ts');
+  const m = intros.match(/SCANNER_INTRODUCTION_VERSION\s*=\s*(\d+)/);
+  assert.ok(m, 'the introduction copy must carry a version');
+  assert.ok(Number(m[1]) >= 10,
+    'the shared stage lesson names each scanner\'s role, so dropping one is a content '
+    + 'change and must bump SCANNER_INTRODUCTION_VERSION');
+  ok(`scanner introductions at version ${m[1]}`);
+}
+
 console.log(`\nscanner sort: ${n} checks passed`);

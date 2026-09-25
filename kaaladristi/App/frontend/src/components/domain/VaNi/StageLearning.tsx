@@ -9,7 +9,7 @@ const stages=[
 ]
 export default function StageLearning({presetId}:{presetId:string}){
  const title=useId()
- const focus=presetId==='stage_2_leaders'?1:presetId==='stage_3_watch'?2:presetId==='stage_4_leaders'||presetId==='vani_exit_watch'?3:null
+ const focus=presetId==='stage_2_leaders'?1:presetId==='stage_3_watch'?2:presetId==='stage_4_leaders'?3:null
  return <div data-stage-learning={presetId}>
  <figure className="vani-learning-story"><div className="vani-learning-eyebrow">Understand the four stages</div>
  <svg viewBox="0 0 320 150" role="img" aria-labelledby={title} className="vani-learning-diagram"><title id={title}>Illustration of a base, advance, transition and decline. These are observed conditions, not a guaranteed sequence.</title>

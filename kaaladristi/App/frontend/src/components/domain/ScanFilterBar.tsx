@@ -74,7 +74,7 @@ const JOURNEY_WAKE_PRESETS = new Set(['waking_giants']);
 
 const STAGE_PRESETS = new Set([
   'stage_2_leaders', 'stage_2_watch',
-  'stage_3_watch', 'stage_4_leaders', 'vani_exit_watch',
+  'stage_3_watch', 'stage_4_leaders',
 ]);
 
 type FilterGroup = 'stage' | 'conviction' | 'studio' | 'fpb' | 'drive' | 'journey' | 'standard';

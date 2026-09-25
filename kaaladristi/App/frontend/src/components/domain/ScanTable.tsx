@@ -140,7 +140,6 @@ const DEFAULT_SORT: Record<string, { key: keyof ScanStock; dir: 'asc' | 'desc' }
   stage_3_watch:    { key: 'stage_since',       dir: 'desc' },
   stage_4_leaders:  { key: 'stage_since',       dir: 'desc' },
   vani_opportunity: { key: 'rs_percentile',     dir: 'desc' },
-  vani_exit_watch:  { key: 'rs_percentile',     dir: 'asc'  },
   // Delivery-led, and deliberately the SURGE rather than raw delivery_pct:
   // this list is about delivery that has stepped up against the stock's own
   // baseline (avg_amt_5d / avg_amt_22d), and raw delivery_pct floats illiquid

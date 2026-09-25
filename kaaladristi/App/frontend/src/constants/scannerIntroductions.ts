@@ -1,9 +1,13 @@
 /** Reviewed educational copy. Shipped with the app: no LLM request or time expiry.
  * Increment the version whenever these explanations or their underlying rules change.
+ * Version 10 (migration 224) drops VaNi Weakness Watch, retired from the Stage
+ * family. Its copy leaving is itself a content change: the shared stage lesson
+ * names each scanner's role, so a lesson still describing a fifth entry would
+ * be teaching a screener the user cannot open.
  * Version 9 (migration 218) adds the Golden Line pair, which had been the only
  * Studio family with no introduction at all, and restates the retest as a
  * seven-session window across both exchanges. */
-export const SCANNER_INTRODUCTION_VERSION = 9
+export const SCANNER_INTRODUCTION_VERSION = 10
 export interface ScannerIntroductionCopy {name:string;story:string;read:string;caution:string;signals:{title:string;text:string}[]}
 const score = {title:'5D and 22D scores',text:'Read the recent score alongside the broader baseline. A stronger recent reading can help you spot a difference between the two horizons; it does not prove improvement since yesterday. These are research scores, not measured investor inflows.'}
 const rs = {title:'MagicRS',text:'MagicRS adds relative-strength context against NIFTY 500. A stock can rise yet lag the benchmark, or fall while holding up better than it. Read the displayed zone alongside the price move; relative strength is not a forecast.'}
@@ -28,7 +32,7 @@ export const SCANNER_INTRODUCTIONS:Record<string,ScannerIntroductionCopy> = {
 }
 
 /** One shared stage lesson, with an accurate role for each existing scanner. */
-export const STAGE_SCANNER_IDS = ['stage_2_watch','stage_2_leaders','stage_3_watch','stage_4_leaders','vani_exit_watch'] as const
+export const STAGE_SCANNER_IDS = ['stage_2_watch','stage_2_leaders','stage_3_watch','stage_4_leaders'] as const
 const stageSignals = [
  {title:'Stage and confirmation',text:'The recorded stage describes the stock’s trend structure. Stage 2 Watch contains candidates; it is different from the recorded Stage 2 cohort. Check the stage and confirmation fields rather than treating every watchlist name as an established advance.'},
  {title:'Moving averages',text:'These smooth past closing prices so you can compare the shorter and longer trend. Their position and slope provide context, but they respond after price changes and can give mixed readings around transitions.'},
@@ -40,7 +44,6 @@ const stageRoles:Record<string,{name:string;story:string;read:string}> = {
  stage_2_leaders:{name:'Stage 2 Leaders',story:'This scanner collects stocks recorded in Stage 2: the advancing part of the framework. It lets you compare stocks already showing an upward trend structure.',read:'Start with the recorded stage and confirmation, then compare time in stage, distance from prior highs and MagicRS. A rising stock can still be extended or lag its benchmark.'},
  stage_3_watch:{name:'Stage 3 Watch',story:'This scanner focuses on recorded Stage 3 stocks whose shorter and longer moving averages are close together. It helps you inspect a trend that is losing clarity.',read:'Check the chart for a broadening range or weakening advance, then inspect moving averages and relative strength. Stage 3 can resolve in either direction; it does not establish a coming decline.'},
  stage_4_leaders:{name:'Stage 4 Leaders',story:'This is the declining-trend scanner. It selects recorded Stage 4 stocks with price below the 50-day average and the 50-day average below the 200-day average.',read:'Read “Leaders” here as the scanner’s name, not positive leadership. Compare the weakness and relative-strength readings; a rebound within a decline does not by itself establish recovery.'},
- vani_exit_watch:{name:'VaNi Weakness Watch',story:'This is a focused Stage 4 weakness shortlist, not a fifth stage. It applies the declining price/average structure plus weak relative-strength ranking, then keeps a small set of the weakest-ranked names.',read:'Use it to inspect concentrated weakness within the Stage 4 family. Its VaNi mark reflects membership of this curated shortlist; it is not a separate model verdict or an instruction to exit a position.'},
 }
 for(const id of STAGE_SCANNER_IDS) SCANNER_INTRODUCTIONS[id]={...stageRoles[id],caution:'Stages describe observed conditions, not a fixed timetable. Stocks can revisit stages or change direction; the illustrated sequence is not a forecast or a buy/sell instruction.',signals:stageSignals}
 

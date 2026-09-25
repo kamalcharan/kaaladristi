@@ -420,23 +420,12 @@ const WIDGETS: CatalogItem[] = [
       { text: 'Confirm with price action', type: 'limit' },
     ],
   },
-  {
-    id: 'vani_exit_watch',
-    display_name: 'VaNi Exit Watch',
-    description: 'Highest conviction weakness — death cross confirmed with RS percentile below 20',
-    block_type: 'scanner',
-    placement: 'output_panel',
-    data_source: 'api_endpoint',
-    applicable_to: ['equity'],
-    tier_required: 'paid',
-    vani_explanation: 'VaNi Exit Watch is the short-side equivalent of VaNi Opportunity — Stage 4 confirmed, death cross active, RS percentile below 20. Bottom 25 weakest stocks by relative strength. Use for exit timing or hedge candidates; not a blanket sell recommendation.',
-    vani_tags: [
-      { text: 'RS percentile <20', type: 'works' },
-      { text: 'Death cross confirmed', type: 'works' },
-      { text: 'Bottom 25 only', type: 'works' },
-      { text: 'Not a sell recommendation', type: 'limit' },
-    ],
-  },
+  // vani_exit_watch ('VaNi Exit Watch' / VaNi Weakness Watch) retired 2026-09-25
+  // (migration 224): it was Stage 4 Leaders filtered to rs_percentile < 20, capped
+  // at 25. Stage 4 Leaders covers the same family and renders rs_percentile as a
+  // default column, so sorting it ascending gives the same shortlist -- no
+  // capability lost. Its strength twin vani_opportunity went the same way on
+  // 2026-07-13 (see the note above conviction_flow).
   {
     id: 'chart_player',
     display_name: 'Historical Player',
