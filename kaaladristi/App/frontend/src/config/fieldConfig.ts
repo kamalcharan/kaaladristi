@@ -483,11 +483,33 @@ export const ALL_FIELDS: Record<string, FieldConfig> = {
     colorFn: () => 'var(--text-secondary)',
   },
 
+  // ── Standouts fields ──
+  // Both render the EVIDENCE for a row's presence. The preset COUNT is
+  // deliberately absent: the chips already are the count, and a bare number
+  // gets read as a strength score, which it is not — nothing measures whether
+  // more agreement predicts more.
+  standout_baskets: {
+    key: 'standout_baskets',
+    label: 'Baskets',
+    tooltip: 'The curated indices this stock belongs to. One row per stock however many baskets carry it — a dual-listed name is resolved to its NSE listing first, so the same company never appears twice. More than one basket means the name is showing up in several themes at once.',
+    type: 'category',
+    width: 160,
+    formatFn: (val: any) => (Array.isArray(val) && val.length ? val.join(' · ') : '—'),
+  },
+  standout_presets: {
+    key: 'standout_presets',
+    label: 'Flagged by',
+    tooltip: 'The scanners flagging this stock on THIS side. Membership needs at least two, measured: at one, 79 stocks carried a strength and a caution flag simultaneously; at two that conflict disappears entirely. This is scanner agreement, not a ranking — no measurement says more agreement predicts a larger move.',
+    type: 'category',
+    width: 220,
+    formatFn: (val: any) => (Array.isArray(val) && val.length ? val.join(' · ') : '—'),
+  },
+
   // ── Post-Result Drift (PEAD) fields ──
   result_reaction_pct: {
     key: 'result_reaction_pct',
     label: 'Reaction',
-    tooltip: 'How the stock closed on Day 0 versus the session before the result (Day -1 -> Day 0). This is the announcement reaction, NOT the drift. Measured across 2,245 results: a reaction above +5% was followed by +1.54 points of excess return over the next 20 sessions; every band below +2% underperformed.',
+    tooltip: 'How the stock closed on Day 0 versus the session before the result (Day -1 -> Day 0). This is the announcement reaction, NOT the drift. Measured across 2,245 results, a reaction above +5% was the best of five bands and every band below +2% underperformed. The SIZE of that edge is not stable: split in half, the same sample gives +0.82 and +5.95 points, and the second half is one cluster of consecutive Day 0 dates sharing a single forward window. Read the band as a ranking, not as an expected return.',
     type: 'pct',
     width: 84,
     colorFn: (val: any) => (Number(val) >= 5 ? 'var(--bull)' : 'var(--text-secondary)'),

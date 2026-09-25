@@ -28,6 +28,19 @@ const PRESET_COL_OVERRIDES: Partial<Record<string, string[]>> = {
   // merged into one number: measuring drift from Day -1 would fold the
   // announcement jump into it, which is how a PEAD study reports an effect it
   // never measured.
+  // Standouts leads with the evidence, not a score. The basket says WHY the
+  // stock is eligible and the scanner chips say WHO is flagging it; the raw
+  // preset count is deliberately NOT a column — the chips already are the
+  // count, and a bare number invites reading it as a strength score.
+  standouts: [
+    'symbol', 'close', 'standout_baskets', 'standout_presets',
+    'pct_chng', 'magic_rs', 'magic_rs_chg_22d', 'rvol', 'stage',
+  ],
+  standouts_caution: [
+    'symbol', 'close', 'standout_baskets', 'standout_presets',
+    'pct_chng', 'magic_rs', 'magic_rs_chg_22d', 'rvol', 'stage',
+  ],
+
   pead_drift: [
     'symbol', 'close', 'result_reaction_pct', 'result_drift_pct',
     'result_day_0', 'result_sessions_elapsed',

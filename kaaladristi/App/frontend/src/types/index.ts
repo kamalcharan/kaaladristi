@@ -629,6 +629,15 @@ export interface ScanStock {
   result_sessions_elapsed?: number | null;
   /** How many outcomes that one board meeting produced (migration 216). */
   result_siblings?: number | null;
+
+  // ── Standouts — populated ONLY by the standouts / standouts_caution presets ──
+  // Derived on read. A stock qualifies by appearing in several scanners ON ONE
+  // SIDE, inside a basket the catalog already curates. Nothing is stored.
+  /** Baskets this stock belongs to, resolved and deduped — one entry per index. */
+  standout_baskets?: string[] | null;
+  /** Display names of the scanners that carry it, same side only. These ARE the
+   *  evidence on the row; the raw count is deliberately not rendered. */
+  standout_presets?: string[] | null;
   fpb_phase?: 'BURST' | 'SETUP' | 'SHATTER' | null;
   fpb_quality?: number | null;              // burst quality score (BURST rows)
   fpb_compression_score?: number | null;    // compression tightness (higher = tighter)

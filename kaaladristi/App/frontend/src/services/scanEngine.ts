@@ -86,6 +86,15 @@ export const SCAN_PRESETS: ScanDefinition[] = [
   // and an empty list sitting inside Price Action or Discovery would read as
   // those families being broken. Metadata (incl. category color) comes from
   // kd_scan_presets; empty color keeps the literal ratchet flat.
+  // Standouts — several same-side scanners agreeing on a name that sits in a
+  // curated basket. Its own category because it is the only preset whose
+  // membership is a function of the OTHER presets: dropped into Market it
+  // would contain rows from Price Action siblings, and a category strip reads
+  // as alternatives, not as one tab holding the others.
+  // ⚠ vani_side MUST stay NULL on both — the fetcher selects on vani_side, so
+  // a value here makes the preset count itself.
+  { id: 'standouts',            name: 'Standouts',             description: 'Stocks inside a curated basket that several scanners are flagging on the same side', limit: 200, universe: 'NSE_BSE', category: 'standouts',     category_label: 'Standouts',     category_color: CAT_MARKET, category_sort: 7, is_default_tab: true,  timeframe: 'daily', vani_rule: null },
+  { id: 'standouts_caution',    name: 'Standouts · Caution',   description: 'Stocks inside a curated basket that several scanners are flagging as weakening',      limit: 200, universe: 'NSE_BSE', category: 'standouts',     category_label: 'Standouts',     category_color: CAT_MARKET, category_sort: 7, is_default_tab: false, timeframe: 'daily', vani_rule: null },
   { id: 'pead_drift',           name: 'Post-Result Drift',     description: 'Stocks that jumped more than 5% on their results day, still inside the 20-session window that move was measured over', limit: 200, universe: 'NSE_ONLY', category: 'events', category_label: 'Filing Intelligence', category_color: '', category_sort: 6, is_default_tab: true, timeframe: 'daily', vani_rule: null },
 ];
 
@@ -921,6 +930,205 @@ async function fetchPeadDrift(exchangeFilter: ExchangeFilter): Promise<ScanStock
     const d = String(b.result_day_0 ?? '').localeCompare(String(a.result_day_0 ?? ''));
     if (d !== 0) return d;
     return (b.result_reaction_pct ?? 0) - (a.result_reaction_pct ?? 0);
+  });
+  return out;
+}
+
+
+// ── Standouts ───────────────────────────────────────────────────────────────
+//
+// A stock is a standout when it appears in SEVERAL scanners ON ONE SIDE while
+// sitting in a basket the catalog already curates. It answers the two-step the
+// product forces today — pick a flowing sector, then drill in to find the names
+// — in one list.
+//
+// ⚠ THE GATE IS 2, AND IT IS MEASURED. Counting presets blind mixes direction:
+// breakdown_watch + power_sell + distribution_warning is three presets and is
+// the opposite of a standout. Split by `vani_side` and measured across every
+// basket on the 2026-09-24 bar (1,526 stocks after the resolve below):
+//
+//     min presets   strength   caution   ON BOTH SIDES
+//     >= 1             440        488         79
+//     >= 2             164        188          0
+//     >= 3              59         76          0
+//
+// At >= 1, seventy-nine stocks carry a strength AND a caution flag at once. At
+// >= 2 that conflict vanishes entirely — so the threshold is the point where
+// direction becomes unambiguous, not a number someone liked. Sorting by count
+// descending floats the >= 3 set to the top without an arbitrary top-N cut.
+//
+// ⚠ NOT MEASURED: whether preset-count predicts anything. It is a membership
+// RULE with a workable distribution, and it ships as an observation. The RS
+// study is the standing reminder — rs_percentile's top decile scored WORSE
+// than its second bucket over 153,556 windows, so "more of a good ranking" is
+// exactly the assumption that has already failed here once.
+const STANDOUTS_MIN_PRESETS = 2;
+
+/**
+ * Basket membership, with the dual-listing resolved.
+ *
+ * ⚠ SWAP, NEVER DROP. A basket can hold the BSE scrip of a dual-listed company
+ * while `km_scan_results` keys its rows to the NSE listing — measured on the
+ * curated baskets: of 27 dual-listed BSE constituents, only 3 had their NSE
+ * twin also in a basket, so 24 would join to nothing. Resolving by ISIN to the
+ * active NSE listing keeps every curated name; dropping the BSE row instead
+ * would silently delete two dozen stocks the user chose on purpose.
+ */
+async function fetchBasketMembership(): Promise<Map<number, string[]>> {
+  const { data: consRows, error: consErr } = await from('km_index_constituents')
+    .select('equity_id,index_id,km_index_symbols(id,name,category,is_active)')
+    .limit(20000)
+    .execute();
+  if (consErr) throw new Error(`Standouts: basket membership could not be read — ${consErr.message}`);
+
+  const rawIds = new Set<number>();
+  const basketsByRawId = new Map<number, string[]>();
+  for (const r of (consRows ?? []) as any[]) {
+    const idx = Array.isArray(r.km_index_symbols) ? r.km_index_symbols[0] : r.km_index_symbols;
+    if (!idx || idx.is_active === false || !idx.name) continue;
+    const eq = Number(r.equity_id);
+    if (!Number.isFinite(eq)) continue;
+    rawIds.add(eq);
+    const list = basketsByRawId.get(eq) ?? [];
+    if (!list.includes(idx.name)) list.push(idx.name);
+    basketsByRawId.set(eq, list);
+  }
+  if (!rawIds.size) return new Map();
+
+  // ⚠ ONE full-universe read, not an `in.(<1,500 ids>)`. A URL that long is the
+  // silent-truncation trap PostgREST already cost us once (ACTIVE_UNIVERSE_CAP's
+  // own comment: an undersized cap dropped 2,412 rows and a dual-listed stock
+  // resolved to its BSE row). Reuse that constant rather than sizing a new one.
+  //
+  // fetchEquityUniverse() cannot serve this: it DROPS dual-listed BSE rows, and
+  // the BSE row's ISIN is exactly what the swap needs.
+  const { data: uni, error: uniErr } = await from('km_equity_symbols')
+    .select('id,isin,exchange')
+    .is('is_active', 'true')
+    .limit(ACTIVE_UNIVERSE_CAP)
+    .execute();
+  if (uniErr) throw new Error(`Standouts: equity universe could not be read — ${uniErr.message}`);
+
+  const byId = new Map<number, { isin: string | null; exchange: string }>();
+  const nseIdByIsin = new Map<string, number>();
+  for (const r of (uni ?? []) as any[]) {
+    const id = Number(r.id);
+    if (!Number.isFinite(id)) continue;
+    const isin = r.isin ? String(r.isin) : null;
+    const exchange = String(r.exchange ?? '');
+    byId.set(id, { isin, exchange });
+    if (exchange === 'NSE' && isin && !nseIdByIsin.has(isin)) nseIdByIsin.set(isin, id);
+  }
+
+  // Fold onto the resolved id. Two baskets holding the two listings of one
+  // company collapse to a single entry, which is the dedup the list needs.
+  const out = new Map<number, string[]>();
+  for (const [rawId, names] of basketsByRawId) {
+    const sym = byId.get(rawId);
+    const twin = sym && sym.exchange !== 'NSE' && sym.isin ? nseIdByIsin.get(sym.isin) : undefined;
+    const resolved = twin ?? rawId;
+    const list = out.get(resolved) ?? [];
+    for (const n of names) if (!list.includes(n)) list.push(n);
+    out.set(resolved, list);
+  }
+  return out;
+}
+
+/** Scan: Standouts — several same-side scanners agreeing, inside a curated basket. */
+async function fetchStandouts(exchangeFilter: ExchangeFilter, side: 'strength' | 'caution'): Promise<ScanStock[]> {
+  // Which presets count for this side. Read from the DB row, never a hardcoded
+  // list: `vani_side` is the field that already decides this everywhere else,
+  // and a second copy of the strength/caution split would drift from it.
+  const { data: presetRows, error: presetErr } = await from('kd_scan_presets')
+    .select('id,name,vani_side')
+    .limit(500)
+    .execute();
+  if (presetErr) throw new Error(`Standouts: preset sides could not be read — ${presetErr.message}`);
+
+  const nameOf = new Map<string, string>();
+  const sameSide = new Set<string>();
+  for (const p of (presetRows ?? []) as any[]) {
+    if (!p.id) continue;
+    nameOf.set(String(p.id), String(p.name ?? p.id));
+    // ⚠ A NULL vani_side is OUT, deliberately. pead_drift carries NULL so it
+    // stays clear of the union, and this preset must too — a Standouts row
+    // that counted Standouts would feed its own input.
+    if (p.vani_side === side) sameSide.add(String(p.id));
+  }
+  if (!sameSide.size) throw new Error('Standouts: no presets carry this side.');
+
+  const membership = await fetchBasketMembership();
+  if (!membership.size) return [];
+
+  const { data: scanRows, error: scanErr } = await from('km_scan_results')
+    .select('equity_id,preset_id')
+    .limit(50000)
+    .execute();
+  if (scanErr) throw new Error(`Standouts: scanner results could not be read — ${scanErr.message}`);
+
+  // Count DISTINCT presets per stock, same side only, basket members only.
+  const hitsByEquity = new Map<number, Set<string>>();
+  for (const r of (scanRows ?? []) as any[]) {
+    const id = Number(r.equity_id);
+    const preset = String(r.preset_id ?? '');
+    if (!Number.isFinite(id) || !sameSide.has(preset)) continue;
+    if (!membership.has(id)) continue;
+    const set = hitsByEquity.get(id) ?? new Set<string>();
+    set.add(preset);
+    hitsByEquity.set(id, set);
+  }
+
+  const ids = Array.from(hitsByEquity.entries())
+    .filter(([, presets]) => presets.size >= STANDOUTS_MIN_PRESETS)
+    .map(([id]) => id);
+  // An empty list is a measurement: no basket name has this much agreement
+  // today. It is not an error and must not be dressed as one.
+  if (!ids.length) return [];
+
+  const latest = (await fetchRecentDates(1))[0] ?? null;
+  if (!latest) return [];
+
+  const { data: rows, error: barErr } = await from('km_equity_eod')
+    .select([
+      'equity_id', 'trade_date', 'close', 'open', 'high', 'low',
+      'pct_chng', 'magic_rs', 'magic_rs_zone', 'magic_rs_chg_5d', 'magic_rs_chg_22d',
+      'magic_rs_chg_66d', 'magic_rs_align', 'rss_value', 'rss_spread',
+      'rsi_14', 'rvol', 'flow_type', 'supertrend_dir',
+      'sma_50', 'sma_200', 'sma_150', 'ema_20', 'atr_14',
+      'w52_high', 'w52_low', 'lifetime_high',
+      'avg_amt_5d', 'avg_amt_22d', 'delivery_surge_x',
+      'sniper_inst', 'sniper_hot', 'accum_distrib',
+      'volume_divergence_flag', 'delivery_pct',
+      'dot_svd', 'dot_sbd', 'dot_syd',
+      'stage', 'is_vani_s2', 'rs_percentile', 'score_5d', 'score_22d',
+      'km_equity_symbols(id,symbol,company_name,exchange,industry,mcap_cr,isin)',
+    ].join(','))
+    .eq('trade_date', latest)
+    .in('equity_id', ids)
+    .limit(ids.length)
+    .execute();
+  if (barErr) throw new Error(`Standouts: bar data could not be read — ${barErr.message}`);
+
+  const out: ScanStock[] = [];
+  for (const row of (rows ?? []) as any[]) {
+    const sym = row.km_equity_symbols;
+    if (!sym) continue;
+    if (exchangeFilter === 'NSE' && sym.exchange !== 'NSE') continue;
+    if (exchangeFilter === 'BSE' && sym.exchange !== 'BSE') continue;
+
+    const presets = Array.from(hitsByEquity.get(Number(row.equity_id)) ?? []);
+    const stock = scanRowToScanStock({ ...row, ...sym, equity_id: row.equity_id });
+    stock.standout_baskets = membership.get(Number(row.equity_id)) ?? null;
+    stock.standout_presets = presets.map((id) => nameOf.get(id) ?? id).sort();
+    out.push(stock);
+  }
+
+  // Most agreement first. The >= 3 set therefore leads without a hard cut, and
+  // the tail stays visible instead of being silently truncated.
+  out.sort((a, b) => {
+    const d = (b.standout_presets?.length ?? 0) - (a.standout_presets?.length ?? 0);
+    if (d !== 0) return d;
+    return (b.magic_rs ?? -Infinity) - (a.magic_rs ?? -Infinity);
   });
   return out;
 }
@@ -2104,6 +2312,8 @@ export async function executeScan(
   if (scanId === 'stage_3_watch')        return fetchStage3Watch(exchangeFilter);
   if (scanId === 'vani_exit_watch')      return fetchVaNiExitWatch(exchangeFilter);
   if (scanId === 'pead_drift')           return fetchPeadDrift(exchangeFilter);
+  if (scanId === 'standouts')            return fetchStandouts(exchangeFilter, 'strength');
+  if (scanId === 'standouts_caution')    return fetchStandouts(exchangeFilter, 'caution');
   // The database is authoritative. Empty results are valid; failed reads fail.
   if (scanId === 'breakout_surge_daily') scanId = 'breakout_surge';
   const strictPriceAction = ['breakout_surge','breakdown_watch','weekly_movers','monthly_movers','weekly_decliners','monthly_decliners'].includes(scanId);
