@@ -1,11 +1,14 @@
 import { create } from 'zustand';
 import type { KmProfile } from '@/types';
 import type { KdSession, KdUser } from '@/services/auth';
-import { getSession, getProfile, onAuthStateChange, signOut } from '@/services/auth';
+import { getSession, getProfile, onAuthStateChange, isAuthRejection, redirectToLogin } from '@/services/auth';
 
-/** Errors that mean the token is dead (expired/invalid) rather than the
- *  network being flaky — the only correct response is a clean sign-out. */
+/** Errors that mean the token is dead (expired/invalid/rejected) rather than
+ *  the network being flaky — the only correct response is a clean sign-out.
+ *  isAuthRejection() covers HTTP 401, PostgREST PGRST301/302/303 and the
+ *  JWSError / JWT-expired messages; the regex keeps the older text matches. */
 export function isAuthError(err: unknown): boolean {
+  if (isAuthRejection(err)) return true;
   const msg = err instanceof Error ? err.message : String(err);
   return /jwt|expired|unauthoriz|not authenticated|HTTP 401|\b401\b/i.test(msg);
 }
@@ -108,9 +111,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
             profile = await getProfile();
           } catch (err2) {
             if (isAuthError(err2)) {
+              // The stored token is dead (rotated secret, expiry, revoked).
+              // Never `authError`: that renders the Connection Error screen,
+              // whose Reload sends the same dead token again, forever.
               console.error('[auth] token rejected on retry — signing out:', err2);
-              await signOut();
-              set({ user: null, session: null, profile: null, isAdmin: false, isLoading: false });
+              set({ user: null, session: null, profile: null, isAdmin: false, isLoading: false, authError: null });
+              redirectToLogin();
               return;
             }
             profileErr = err2;
@@ -136,6 +142,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       }
     } catch (err) {
       console.error('[auth] initialize() failed:', err);
+      if (isAuthError(err)) {
+        set({ user: null, session: null, profile: null, isAdmin: false, isLoading: false, authError: null });
+        redirectToLogin();
+        return;
+      }
       set({
         isLoading: false,
         authError: err instanceof Error ? err.message : 'Failed to initialize auth',

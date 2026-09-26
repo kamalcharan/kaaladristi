@@ -95,6 +95,8 @@ export interface PostgRESTError {
   message: string;
   code: string;
   details?: string;
+  /** HTTP status of the rejected response; absent on timeout / network failure. */
+  status?: number;
 }
 
 interface QueryState {
@@ -351,6 +353,7 @@ class QueryBuilder {
             message: errBody.message || `HTTP ${resp.status}`,
             code: errBody.code || `PGRST${resp.status}`,
             details: errBody.details,
+            status: resp.status,
           },
         };
       }
@@ -416,7 +419,7 @@ export async function rpc(
       const errBody = await resp.json().catch(() => ({}));
       return {
         data: null,
-        error: { message: errBody.message || `HTTP ${resp.status}`, code: errBody.code || 'RPC_ERROR' },
+        error: { message: errBody.message || `HTTP ${resp.status}`, code: errBody.code || 'RPC_ERROR', status: resp.status },
       };
     }
     const data = await resp.json();

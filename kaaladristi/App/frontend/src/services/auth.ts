@@ -6,6 +6,7 @@
 
 import { rpc } from './postgrest';
 import { from } from './postgrest';
+import type { PostgRESTError } from './postgrest';
 import type { KmProfile } from '@/types';
 
 const SESSION_KEY = 'kd_session';
@@ -51,6 +52,46 @@ function tokenExpired(token: string): boolean {
   } catch {
     return true;
   }
+}
+
+// ── Auth rejection ───────────────────────────────────────────────────────────
+
+/** PostgREST's JWT error codes: PGRST301 (JWT could not be verified — the
+ *  `JWSError JWSInvalidSignature` every browser saw after the 2026-09-26
+ *  secret rotation), PGRST302 (anonymous access disabled), PGRST303 (JWT
+ *  expired / not yet valid / bad claims). */
+const PGRST_AUTH_CODES = new Set(['PGRST301', 'PGRST302', 'PGRST303']);
+const AUTH_REJECTION_MESSAGE = /JWSError|JWSInvalidSignature|JWT expired/i;
+
+/** True when a failure means the server REJECTED our credentials, as opposed
+ *  to the network or the server being down. Accepts an Error, a
+ *  PostgRESTError, or anything carrying `status` / `code` / `message`. */
+export function isAuthRejection(err: unknown): boolean {
+  if (err == null) return false;
+  const o = (typeof err === 'object' ? err : { message: String(err) }) as
+    { status?: unknown; code?: unknown; message?: unknown };
+  if (o.status === 401) return true;
+  if (typeof o.code === 'string' && PGRST_AUTH_CODES.has(o.code)) return true;
+  const msg = typeof o.message === 'string' ? o.message : '';
+  return AUTH_REJECTION_MESSAGE.test(msg);
+}
+
+/** The one place a dead session goes: drop the stored token, tell listeners,
+ *  and send the browser to /login. A full navigation on purpose — every
+ *  in-memory reader of the session starts over, and nothing can keep sending
+ *  the rejected token. No-op on the redirect when already on /login. */
+export function redirectToLogin(): void {
+  clearSession();
+  notifyListeners('SIGNED_OUT', null);
+  if (typeof window === 'undefined') return;
+  if (window.location.pathname === '/login') return;
+  window.location.replace('/login');
+}
+
+/** Re-throw a PostgREST error as an Error that still carries `code` and
+ *  `status`, so isAuthRejection() can read them after the throw. */
+function toError(error: PostgRESTError): Error {
+  return Object.assign(new Error(error.message), { code: error.code, status: error.status });
 }
 
 export function getStoredSession(): KdSession | null {
@@ -176,14 +217,14 @@ export async function getProfile(): Promise<KmProfile | null> {
 
   if (error) {
     if (error.code === 'PGRST116') return null;
-    throw new Error(error.message);
+    throw toError(error);
   }
 
   const profile = data as KmProfile | null;
 
   // Get latest active subscription expires_at
   if (profile) {
-    const { data: subData } = await from('user_subscriptions')
+    const { data: subData, error: subError } = await from('user_subscriptions')
       .select('expires_at, status')
       .eq('user_id', profile.id)
       .eq('status', 'active')
@@ -191,6 +232,10 @@ export async function getProfile(): Promise<KmProfile | null> {
       .limit(1)
       .maybeSingle()
       .execute();
+
+    // A rejected token here is a dead session like anywhere else; any other
+    // failure keeps the pre-existing behaviour (no expiry, profile still loads).
+    if (subError && isAuthRejection(subError)) throw toError(subError);
 
     if (subData) {
       profile.expires_at = (subData as any).expires_at ?? null;
