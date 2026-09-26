@@ -475,8 +475,8 @@ today. They are **not** migrated to the client; they are deleted in 1b.
 
 | consumer today | today | after 1a |
 |---|---|---|
-| `deploy.sh:48` — `curl localhost:8101/api/pipeline2/ping` after deploy | unauthenticated | `curl -fsS http://localhost:8101/internal/health` from the VPS shell (docker network / host loopback). `/internal/` has no `location` in `nginx/dristiq-vps.conf`, `nginx/nginx.conf` or `App/frontend/nginx.conf`, so it is unreachable through the edge; the handler is the existing `ping` body (`SELECT 1` + worker state) re-registered at the new path with no guard |
-| `/opt/vikuna/rotate_jwt_secret.sh` — also calls `/api/pipeline2/ping` (per ops) | unauthenticated | **must finish its run before 1a deploys** in `enforce`; in `audit` it keeps working. After 1a it should call `/internal/health` too — its next edit, not 1a's |
+| `deploy.sh:48` — `curl localhost:8101/api/pipeline2/ping` after deploy | unauthenticated | `docker exec kd-pipeline-api2 python -c '…urllib…/internal/health'` — port 8101 is NOT published to the host, and the image (`python:3.11-slim`) has neither curl nor wget, so the probe is a stdlib one-liner run inside the container (`scripts/auth_acceptance.py` case 6a does the same; `HEALTH_CMD` overrides it). `/internal/` has no `location` in the edge conf beyond a `return 404`, so it is unreachable from outside; the handler is the existing `ping` body (`SELECT 1` + worker state) re-registered at the new path with no guard |
+| `/opt/vikuna/rotate_jwt_secret.sh` — also calls `/api/pipeline2/ping` (per ops) | unauthenticated | The rotation is DONE (26 Sep 2026, 12:05 IST) — nothing in 1a waits on it. The script's next edit should probe `/internal/health` via `docker exec` like `deploy.sh`; until then it appears in the audit log as a `curl` caller with `reason=missing` and is repointed before `enforce` |
 | `hooks/useBackendStatus.ts:11` — the frontend "Backend offline" pill (`JobMonitor.tsx:47`, `RuleDetail.tsx:1230`) | unauthenticated `GET /api/pipeline2/ping` | **stays, as a `user` route** through the `api` client. It is rendered only behind `ProtectedRoute` (Layout), so a session always exists; a 401 there means the session is dead, which the client already handles by redirecting to login — which is exactly what "backend offline" should not mask. Keep the 15-second poll; the route is `SELECT 1` |
 
 `GET /api/pipeline2/ping` therefore does not go away in 1a; it is the frontend's
@@ -518,7 +518,9 @@ Plan:
    `browser` caller on a mounted page is a missed call site; fix and redeploy
    the frontend. Lines from `curl`/`python-requests` are ops scripts to point
    at `/internal/health` or to give a session.
-3. Confirm the rotation script has run and now targets `/internal/health`.
+3. Repoint any ops script the audit log shows as a `curl`/`python-requests`
+   caller at `/internal/health` via `docker exec` (the rotation script is the
+   known one; the rotation itself is already done).
 4. Switch `AUTH_MODE=enforce`, restart `kd-pipeline-api2`, run §7.
 5. Rollback = `AUTH_MODE=audit` + restart. No schema, no frontend change needed
    to roll back, because the frontend sends tokens in both modes.
@@ -572,7 +574,7 @@ from env; prints one PASS/FAIL row per case; exits non-zero on any FAIL).
 | 8 | Full logged-in flow (Playwright, real login via `kd_auth_login`): login → workspace loads (`GET /api/framework/{id}` 200, `GET /api/pipeline2/last-run` 200) → `/scan` (`GET /api/scan/presets` 200) → open a scanner companion (`POST /api/vani/ask` 200) → `/sector-rotation` leadership (`POST /api/vani/ask` `sector.leadership.context` 200) → `/rules/:id` (`GET /api/confidence/yearly/:id` 200) → account → pricing (`POST /api/payments/create-order` reaches Razorpay order creation) → logout → `/scan` redirects to `/login` | zero 401s in the network log while logged in; every `/api/` request carries a bearer |
 | 9 | Existing QA harness: `npm run build` (theme + persona gates), `check-price-action-events.mjs`, `check-journey-events.mjs`, `check-sector-horizons.mjs`, `check-persona.mjs` (pure node, unaffected), and the Playwright checks that mock FastAPI (`check-scanner-vani.mjs`, `check-sector-ui.mjs`, `check-fpb-actions.mjs`, `qa-screenshots.mjs`, …) run **against a dev server pointed at an `audit`-mode backend or with their FastAPI routes mocked** | all green; any harness that hits a real `enforce` backend with its fake `kd_session` token is a harness bug to fix by mocking, not a reason to loosen a guard |
 | 10 | Expired guest token (mint, wait 15 min or forge `exp` in the past with the real secret in the test) on `/api/guest/spotlight` | `401 expired`; the landing client re-mints and succeeds |
-| 11 | Issuer rate limit: 13 rapid `POST /api/guest/token` from one IP | the first 12 (6 rate + 6 burst) `200`, then `429` with `Retry-After`, served by nginx |
+| 11 | Issuer rate limit: 16 rapid `POST /api/guest/token` from one IP | the first **11** (one at the 6/min rate + `burst=10`) `200`, then `429` served by nginx — measured against the shipped conf with `nginx` 1.24 and echo upstreams, 2026-09-26 |
 | 12 | `AUTH_MODE=audit` regression: with the mode flipped back, case 1 returns `200` and the `auth.audit` log shows one line per request with `reason=missing` | rollback path proven |
 
 ---
@@ -625,5 +627,15 @@ the guest router and `/internal/health` in `pipeline2_api.py`, CORS from
 `location` and the `/internal/` 404), `AUTH_MODE`/`CORS_ORIGINS` in
 `docker-compose.yml` and `App/frontend/.env.example`, `deploy.sh` on
 `/internal/health`, the frontend client in `services/apiClient.ts`, the
-acceptance script `App/backend/scripts/auth_acceptance.py`, and the unit
-suite `App/backend/test_auth_guards.py`.
+acceptance script `App/backend/scripts/auth_acceptance.py`, the unit
+suite `App/backend/test_auth_guards.py`, the post-deploy smoke test
+`scripts/smoke_after_deploy.sh` and the runbook
+`docs/security/phase-1a-deploy-checklist.md`. Deploy readiness (2026-09-26):
+the edge conf `nginx/dristiq-vps.conf` resolves upstreams dynamically
+(`resolver 127.0.0.11 valid=10s ipv6=off` + variable `proxy_pass`, with an
+explicit `rewrite ^/db/(.*)$ /$1 break;` replacing the trailing-slash strip),
+verified with `nginx -t` and a proxy test against echo upstreams: `/db/`
+prefix stripped with the query string kept, Authorization forwarded,
+`/internal/` 404 at the edge, the issuer limit passes 11 rapid requests then
+answers 429. `deploy.sh` and the acceptance script probe `/internal/health`
+with `docker exec` (8101 is not published; the image has no curl/wget).
