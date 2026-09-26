@@ -5,11 +5,15 @@ Contract: `.claude/skills/api-auth-contract/SKILL.md` §7.
 
     cd App/backend
     BASE_URL=https://dristiq.com \
-    INTERNAL_URL=http://localhost:8101 \
     POSTGREST_URL=https://dristiq.com/db \
     KD_USER_EMAIL=... KD_USER_PASSWORD=... \
     RAZORPAY_WEBHOOK_SECRET=... \
-    python scripts/auth_acceptance.py [--expect-mode enforce|audit] [--skip-webhook] [--skip-ratelimit]
+    python scripts/auth_acceptance.py [--expect-mode enforce|audit] [--skip-webhook] [--skip-ratelimit] [--skip-internal]
+
+Case 6a probes /internal/health INSIDE the kd-pipeline-api2 container
+(`docker exec … python -c …`, HEALTH_CMD to override) because port 8101 is
+not published to the VPS host. Run the script on the VPS, or pass
+--skip-internal from anywhere else.
 
 Prints one PASS/FAIL row per case and exits non-zero on any FAIL. Read-only
 against the database: it logs in (kd_auth_login), mints guest tokens, and
@@ -23,7 +27,7 @@ Cases (numbers match SKILL.md §7):
   3  user token on guest routes → 401 wrong_role
   4  guest token on PostgREST /db/* → non-2xx, zero data (status recorded)
   5  webhook: valid HMAC accepted, tampered rejected, missing rejected
-  6  /internal/health: in-network 200 with auth_mode; via edge → not the JSON
+  6  /internal/health: docker-exec probe 200 with auth_mode; via edge → not the JSON
   7  landing page data path works logged out (issuer + the two guest GETs)
   8  logged-in flow: the core routes answer 200 with a real session token
  10  expired guest token → 401 expired
@@ -41,6 +45,7 @@ import hashlib
 import hmac
 import json
 import os
+import subprocess
 import sys
 import time
 import uuid
@@ -52,7 +57,14 @@ except ImportError:  # pragma: no cover
     sys.exit(2)
 
 BASE = os.getenv('BASE_URL', 'https://dristiq.com').rstrip('/')
-INTERNAL = os.getenv('INTERNAL_URL', 'http://localhost:8101').rstrip('/')
+# In-container probe: the image (python:3.11-slim) has neither curl nor wget,
+# so the probe is a stdlib urllib one-liner. Prints the health JSON on stdout.
+HEALTH_CMD = os.getenv('HEALTH_CMD') or (
+    "docker exec kd-pipeline-api2 python -c "
+    "'import json,sys,urllib.request as u; "
+    "r=u.urlopen(\"http://127.0.0.1:8101/internal/health\",timeout=5); b=r.read().decode(); print(b); "
+    "sys.exit(0 if r.status==200 and json.loads(b).get(\"ok\") is True else 1)'"
+)
 PGRST = os.getenv('POSTGREST_URL', f'{BASE}/db').rstrip('/')
 USER_EMAIL = os.getenv('KD_USER_EMAIL', '')
 USER_PASSWORD = os.getenv('KD_USER_PASSWORD', '')
@@ -153,6 +165,7 @@ def main() -> int:
     ap.add_argument('--expect-mode', choices=['enforce', 'audit'], default='enforce')
     ap.add_argument('--skip-webhook', action='store_true')
     ap.add_argument('--skip-ratelimit', action='store_true')
+    ap.add_argument('--skip-internal', action='store_true', help='not on the VPS: skip the docker-exec health probe (6a)')
     args = ap.parse_args()
     enforce = args.expect_mode == 'enforce'
 
@@ -228,13 +241,15 @@ def main() -> int:
                f'{ok_r.status_code}/{bad_r.status_code}/{none_r.status_code}')
 
     # ── 6: /internal/health ────────────────────────────────────────────────
-    try:
-        r = req('GET', f'{INTERNAL}/internal/health')
-        j = r.json() if r.status_code == 200 else {}
-        record('6a /internal/health in-network', r.status_code == 200 and j.get('ok') is True and 'auth_mode' in j,
-               f'{r.status_code} auth_mode={j.get("auth_mode")}')
-    except Exception as e:  # not on the VPS
-        record('6a /internal/health in-network', False, f'unreachable from here: {e.__class__.__name__}')
+    if not args.skip_internal:
+        try:
+            p = subprocess.run(HEALTH_CMD, shell=True, capture_output=True, text=True, timeout=30)
+            j = json.loads(p.stdout.strip() or '{}') if p.returncode == 0 else {}
+            record('6a /internal/health in-container (docker exec)',
+                   p.returncode == 0 and j.get('ok') is True and j.get('auth_mode') == args.expect_mode,
+                   f'rc={p.returncode} auth_mode={j.get("auth_mode")} {(p.stderr or "").strip()[:120]}')
+        except Exception as e:
+            record('6a /internal/health in-container (docker exec)', False, f'{e.__class__.__name__}: {e}')
     r = req('GET', f'{BASE}/internal/health')
     is_json_health = r.headers.get('content-type', '').startswith('application/json') and '"auth_mode"' in r.text
     record('6b /internal/health via edge -> not served', not is_json_health, f'{r.status_code} {r.headers.get("content-type", "")}')

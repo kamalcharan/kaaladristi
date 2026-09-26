@@ -46,9 +46,14 @@ docker exec vikuna-nginx nginx -s reload
 echo "[check] Waiting 8s for backend..."
 sleep 8
 # /internal/health is the ops probe (no nginx location — in-network only);
-# /api/pipeline2/ping now requires a user token (Phase 1a).
-if curl -sf http://localhost:8101/internal/health > /dev/null 2>&1; then
-    echo "[check] kd-pipeline-api2 OK"
+# /api/pipeline2/ping now requires a user token (Phase 1a). Port 8101 is NOT
+# published to the host, so the probe runs INSIDE the container. The image is
+# python:3.11-slim — no curl, no wget — so it is a stdlib urllib one-liner.
+HEALTH_JSON="$(docker exec kd-pipeline-api2 python -c 'import json,sys,urllib.request as u
+r=u.urlopen("http://127.0.0.1:8101/internal/health",timeout=5); b=r.read().decode(); print(b)
+sys.exit(0 if r.status==200 and json.loads(b).get("ok") is True else 1)' 2>/dev/null)"
+if [ $? -eq 0 ]; then
+    echo "[check] kd-pipeline-api2 OK: $HEALTH_JSON"
 else
     echo "[check] WARNING: health check failed — check logs:"
     echo "  docker compose logs kd-pipeline-api2 --tail 30"
