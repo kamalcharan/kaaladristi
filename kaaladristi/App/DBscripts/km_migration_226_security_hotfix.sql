@@ -205,7 +205,10 @@ END $$;
 -- km_profiles as the owner, so there is no policy recursion.
 
 -- ── 6. user_subscriptions: replace the USING (true) policy ────────────────
+-- Idempotent: re-running 226 after a partial apply, or after the rollback,
+-- must not fail on "policy already exists".
 DROP POLICY IF EXISTS service_manage_subscriptions ON public.user_subscriptions;
+DROP POLICY IF EXISTS subscriptions_service_all    ON public.user_subscriptions;
 CREATE POLICY subscriptions_service_all ON public.user_subscriptions
   FOR ALL TO service_role, kd_app
   USING (true) WITH CHECK (true);

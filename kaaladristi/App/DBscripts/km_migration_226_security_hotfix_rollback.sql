@@ -22,7 +22,10 @@ ALTER DEFAULT PRIVILEGES FOR ROLE kd_app IN SCHEMA public
   GRANT EXECUTE ON FUNCTIONS TO PUBLIC;
 
 -- ── 6. user_subscriptions: original permissive policy back ────────────────
-DROP POLICY IF EXISTS subscriptions_service_all ON public.user_subscriptions;
+-- Idempotent in both directions: safe to run whether or not 226 was applied
+-- (running this against a pre-226 database is a no-op for this block).
+DROP POLICY IF EXISTS subscriptions_service_all    ON public.user_subscriptions;
+DROP POLICY IF EXISTS service_manage_subscriptions ON public.user_subscriptions;
 CREATE POLICY service_manage_subscriptions ON public.user_subscriptions
   FOR ALL USING (true) WITH CHECK (true);
 
