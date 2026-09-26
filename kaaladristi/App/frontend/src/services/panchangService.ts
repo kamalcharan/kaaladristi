@@ -7,7 +7,7 @@ import {
   IMPACT_OPTIONS,
 } from '@/constants/signalScale';
 
-const PIPELINE_API = (import.meta.env.VITE_PIPELINE_API_URL?.trim() || '');
+import { api } from '@/services/apiClient';
 
 // Re-export so callers can use the canonical scale directly
 export type { MarketImpact };
@@ -68,7 +68,7 @@ export async function fetchSectors(): Promise<string[]> {
 // ── API functions ──────────────────────────────────────────────────────────────
 
 export async function fetchPanchangCalendar(year: number, month: number): Promise<PanchangRow[]> {
-  const res = await fetch(`${PIPELINE_API}/api/panchang/calendar?year=${year}&month=${month}`);
+  const res = await api.fetch(`/api/panchang/calendar?year=${year}&month=${month}`);
   if (!res.ok) throw new Error(`[panchang/calendar] HTTP ${res.status}`);
   return res.json();
 }
@@ -83,7 +83,7 @@ export interface NotePayload {
 }
 
 export async function createPanchangNote(payload: NotePayload): Promise<{ id: number }> {
-  const res = await fetch(`${PIPELINE_API}/api/panchang/notes`, {
+  const res = await api.fetch('/api/panchang/notes', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -93,7 +93,7 @@ export async function createPanchangNote(payload: NotePayload): Promise<{ id: nu
 }
 
 export async function updatePanchangNote(id: number, payload: NotePayload): Promise<void> {
-  const res = await fetch(`${PIPELINE_API}/api/panchang/notes/${id}`, {
+  const res = await api.fetch(`/api/panchang/notes/${id}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -102,7 +102,7 @@ export async function updatePanchangNote(id: number, payload: NotePayload): Prom
 }
 
 export async function deletePanchangNote(id: number): Promise<void> {
-  const res = await fetch(`${PIPELINE_API}/api/panchang/notes/${id}`, {
+  const res = await api.fetch(`/api/panchang/notes/${id}`, {
     method: 'DELETE',
   });
   if (!res.ok) throw new Error(`[delete panchang note] HTTP ${res.status}`);
@@ -114,8 +114,8 @@ export interface GenerateResult {
 }
 
 export async function generatePanchangMonth(year: number, month: number): Promise<GenerateResult> {
-  const res = await fetch(
-    `${PIPELINE_API}/api/panchang/generate?year=${year}&month=${month}`,
+  const res = await api.fetch(
+    `/api/panchang/generate?year=${year}&month=${month}`,
     { method: 'POST' },
   );
   if (!res.ok) throw new Error(`[panchang/generate] HTTP ${res.status}`);

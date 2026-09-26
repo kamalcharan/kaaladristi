@@ -1,28 +1,6 @@
 // Pipeline API client — /api/pipeline2/* routes on pipeline2_api.py.
 
-const PIPELINE_API = (import.meta.env.VITE_PIPELINE_API_URL?.trim() || '');
-
-async function apiGet<T>(path: string): Promise<T> {
-  const resp = await fetch(`${PIPELINE_API}${path}`);
-  if (!resp.ok) {
-    const err = await resp.json().catch(() => ({}));
-    throw new Error(err.detail || `API error ${resp.status}`);
-  }
-  return resp.json();
-}
-
-async function apiPost<T>(path: string, body?: unknown): Promise<T> {
-  const resp = await fetch(`${PIPELINE_API}${path}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: body ? JSON.stringify(body) : undefined,
-  });
-  if (!resp.ok) {
-    const err = await resp.json().catch(() => ({}));
-    throw new Error(err.detail || `API error ${resp.status}`);
-  }
-  return resp.json();
-}
+import { api } from '@/services/apiClient';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -109,30 +87,30 @@ export interface DimensionsList {
 // ── Endpoints ──────────────────────────────────────────────────────────────
 
 export const fetchHealthGrid = (days = 30) =>
-  apiGet<HealthGrid>(`/api/pipeline2/health?days=${days}`);
+  api.get<HealthGrid>(`/api/pipeline2/health?days=${days}`);
 
 export const fetchJobs = (limit = 20, dimension?: string, status?: string) => {
   const qs = new URLSearchParams({ limit: String(limit) });
   if (dimension) qs.set('dimension', dimension);
   if (status) qs.set('status', status);
-  return apiGet<JobsResponse>(`/api/pipeline2/jobs?${qs.toString()}`);
+  return api.get<JobsResponse>(`/api/pipeline2/jobs?${qs.toString()}`);
 };
 
 export const fetchJob = (id: number) =>
-  apiGet<Job>(`/api/pipeline2/jobs/${id}`);
+  api.get<Job>(`/api/pipeline2/jobs/${id}`);
 
 export const enqueueFix = (body: {
   dimension: string;
   trade_date: string;
   exchange?: string | null;
   force?: boolean;
-}) => apiPost<{ job_id: number; status: string }>('/api/pipeline2/fix', body);
+}) => api.post<{ job_id: number; status: string }>('/api/pipeline2/fix', body);
 
 export const enqueueDailyRun = (body: {
   trade_date?: string;
   force?: boolean;
 } = {}) =>
-  apiPost<{ job_id: number; status: string }>('/api/pipeline2/daily-run', body);
+  api.post<{ job_id: number; status: string }>('/api/pipeline2/daily-run', body);
 
 export const enqueueBackfill = (body: {
   dimension: string;        // dim key or 'all'
@@ -140,7 +118,7 @@ export const enqueueBackfill = (body: {
   date_to: string;
   exchange?: string | null;
   force?: boolean;
-}) => apiPost<BackfillResponse>('/api/pipeline2/backfill', body);
+}) => api.post<BackfillResponse>('/api/pipeline2/backfill', body);
 
 export interface CancelResponse {
   status: string;
@@ -149,10 +127,10 @@ export interface CancelResponse {
 }
 
 export const cancelJob = (jobId: number) =>
-  apiPost<CancelResponse>('/api/pipeline2/cancel', { job_id: jobId });
+  api.post<CancelResponse>('/api/pipeline2/cancel', { job_id: jobId });
 
 export const cancelBatch = (batchId: string) =>
-  apiPost<CancelResponse>('/api/pipeline2/cancel', { batch_id: batchId });
+  api.post<CancelResponse>('/api/pipeline2/cancel', { batch_id: batchId });
 
 export type CalendarMarkStatus = 'holiday' | 'no_data' | 'clear';
 
@@ -164,13 +142,13 @@ export interface CalendarMarkResponse {
 }
 
 export const markCalendar = (tradeDate: string, status: CalendarMarkStatus) =>
-  apiPost<CalendarMarkResponse>('/api/pipeline2/calendar/mark', {
+  api.post<CalendarMarkResponse>('/api/pipeline2/calendar/mark', {
     trade_date: tradeDate,
     status,
   });
 
 export const fetchDimensions = () =>
-  apiGet<DimensionsList>('/api/pipeline2/dimensions');
+  api.get<DimensionsList>('/api/pipeline2/dimensions');
 
 export interface SchedulerJobInfo {
   next: string | null;
@@ -184,7 +162,7 @@ export interface SchedulerInfo {
 }
 
 export const fetchSchedulerInfo = () =>
-  apiGet<SchedulerInfo>('/api/pipeline2/scheduler');
+  api.get<SchedulerInfo>('/api/pipeline2/scheduler');
 
 export interface LastRun {
   exists: boolean;
@@ -199,4 +177,4 @@ export interface LastRun {
 }
 
 export const fetchLastRun = () =>
-  apiGet<LastRun>('/api/pipeline2/last-run');
+  api.get<LastRun>('/api/pipeline2/last-run');

@@ -5,6 +5,7 @@ import { from } from '@/services/postgrest';
 import { displaySymbol } from '@/lib/symbolUtils';
 import { fetchEquityUniverse, type EquityRow } from '@/services/equityUniverse';
 import { PageHeader } from '@/components/ui';
+import { api } from '@/services/apiClient';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -14,7 +15,6 @@ interface Suggestion {
   reason: string | null;
 }
 
-const PIPELINE_URL = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? '';
 const MONO: React.CSSProperties = { fontFamily: 'var(--font-mono)' };
 const DISPLAY: React.CSSProperties = { fontFamily: 'var(--font-display)' };
 
@@ -205,7 +205,7 @@ export default function CustomIndexManagePage() {
     setComputeMsg(null);
     setError(null);
     try {
-      const res = await fetch(`${PIPELINE_URL}/api/custom-index/${indexId}/compute`, {
+      const res = await api.fetch(`/api/custom-index/${indexId}/compute`, {
         method: 'POST',
       });
       if (!res.ok) {
@@ -227,7 +227,7 @@ export default function CustomIndexManagePage() {
     setSuggesting(true);
     setError(null);
     try {
-      const res = await fetch(`${PIPELINE_URL}/api/custom-index/${indexId}/suggest`, {
+      const res = await api.fetch(`/api/custom-index/${indexId}/suggest`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ llm: 'claude' }),

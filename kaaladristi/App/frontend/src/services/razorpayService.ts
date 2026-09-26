@@ -1,12 +1,6 @@
-import { useAuthStore } from '@/stores/authStore'
+import { api } from '@/services/apiClient'
 
-const PIPELINE_URL = (import.meta.env.VITE_PIPELINE_API_URL as string) || ''
 const RAZORPAY_KEY_ID = (import.meta.env.VITE_RAZORPAY_KEY_ID as string) || ''
-
-function authHeaders(): Record<string, string> {
-  const token = useAuthStore.getState().session?.access_token
-  return token ? { Authorization: `Bearer ${token}` } : {}
-}
 
 function loadRazorpayScript(): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -42,9 +36,9 @@ export async function reconcilePayment(
   user_id: string,
   refs: CheckoutRefs,
 ): Promise<{ status: ReconcileStatus; tier: string | null }> {
-  const res = await fetch(`${PIPELINE_URL}/api/payments/reconcile`, {
+  const res = await api.fetch('/api/payments/reconcile', {
     method:  'POST',
-    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    headers: { 'Content-Type': 'application/json' },
     body:    JSON.stringify({
       user_id,
       order_id:        refs.order_id,
@@ -71,9 +65,9 @@ export async function startOrderCheckout(
   onSuccess: (refs: CheckoutRefs) => void,
   onDismiss?: () => void,
 ): Promise<void> {
-  const res = await fetch(`${PIPELINE_URL}/api/payments/create-order`, {
+  const res = await api.fetch('/api/payments/create-order', {
     method:  'POST',
-    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    headers: { 'Content-Type': 'application/json' },
     body:    JSON.stringify({ user_id, tier }),
   })
   if (!res.ok) throw new Error(`Order creation failed: ${await res.text()}`)

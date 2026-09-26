@@ -3,8 +3,7 @@ import { usePageContext } from '@/hooks/usePageContext';
 import { useState, useEffect } from 'react';
 import { ThumbsUp, ThumbsDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
-
-const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? '';
+import { api } from '@/services/apiClient';
 
 interface VaNiFeedbackProps {
   logId: string;
@@ -33,7 +32,7 @@ export default function VaNiFeedback({ logId, analyticsContext }: VaNiFeedbackPr
     setPending(true);
     setError(false);
     try {
-      const response = await fetch(`${pipelineUrl}/api/vani/feedback`, {
+      const response = await api.fetch('/api/vani/feedback', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ log_id: logId, rating }),

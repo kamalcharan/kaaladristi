@@ -2,8 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { executeScan, getAllScanCounts, fetchScanPresets, fetchVaniHighlights, fetchFpbActive, fetchScanReadyDate, fetchScanMembershipHistory, SCAN_PRESETS, type ExchangeFilter, type ScanTimeframe, type ScanCountsResult, type VaniHighlights, type FpbActiveRow, type ScanMembershipRow } from '@/services/scanEngine';
 import type { ScanStock, ScanDefinition } from '@/types';
 import { usePipelineStatus } from '@/hooks/usePipelineStatus';
-
-const PIPELINE_URL = import.meta.env.VITE_PIPELINE_API_URL ?? '';
+import { api } from '@/services/apiClient';
 
 export interface Stage2Stock {
   equity_id: number;
@@ -65,8 +64,7 @@ async function fetchStage2(filters: Stage2Filters): Promise<Stage2Result> {
   if (filters.supertrend) params.set('supertrend', filters.supertrend);
   if (filters.sort) params.set('sort', filters.sort);
   if (filters.order) params.set('order', filters.order);
-  const url = `${PIPELINE_URL}/api/scan/run/stage_2_leaders?${params.toString()}`;
-  const res = await fetch(url);
+  const res = await api.fetch(`/api/scan/run/stage_2_leaders?${params.toString()}`);
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json();
 }

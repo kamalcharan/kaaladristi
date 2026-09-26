@@ -34,7 +34,13 @@ _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 if _SCRIPT_DIR not in sys.path:
     sys.path.insert(0, _SCRIPT_DIR)
 
-from lib.auth import get_current_user_id as _get_current_user_id  # noqa: E402
+from lib.auth import (  # noqa: E402
+    get_current_user_id as _get_current_user_id,
+    route_guard as _route_guard,
+    require_guest as _require_guest,
+    mint_guest_token as _mint_guest_token,
+    AUTH_MODE as _AUTH_MODE,
+)
 from lib.config import DATABASE_URL  # noqa: E402
 from lib.db_client import get_db as _get_db  # noqa: E402
 
@@ -190,12 +196,28 @@ async def lifespan(app: FastAPI):
         log.info('worker subprocess stopped')
 
 
-app = FastAPI(title='Kāla-Drishti Pipeline v2 API', version='2.0.0', lifespan=lifespan)
+# Every route carries a guard (Phase 1a, `.claude/skills/api-auth-contract/SKILL.md`):
+# `route_guard` dispatches by path — exempt (webhook, guest issuer, /internal/health),
+# guest (/api/guest/*), user (everything else). AUTH_MODE off|audit|enforce, default audit.
+app = FastAPI(
+    title='Kāla-Drishti Pipeline v2 API',
+    version='2.0.0',
+    lifespan=lifespan,
+    dependencies=[Depends(_route_guard)],
+)
 
+# CORS is locked to the production origin(s); dev adds localhost through the
+# same variable (comma-separated). Tokens travel in the Authorization header,
+# so credentials are never needed.
+_CORS_ORIGINS = [
+    o.strip() for o in
+    (os.getenv('CORS_ORIGINS') or 'https://dristiq.com,https://www.dristiq.com').split(',')
+    if o.strip()
+]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=['*'],
-    allow_credentials=True,
+    allow_origins=_CORS_ORIGINS,
+    allow_credentials=False,
     allow_methods=['*'],
     allow_headers=['*'],
 )
@@ -3526,9 +3548,10 @@ def fpb_confluence_outlook(date: str = None):
     return {"date": date, "insight": insight, "ai": True, "groups": groups}
 
 
-@app.get('/api/pipeline2/ping')
-def ping():
-    """Minimal liveness check for nginx / docker healthcheck."""
+def _health_body() -> dict:
+    """Shared by GET /api/pipeline2/ping (frontend liveness pill, `user`
+    guard) and GET /internal/health (ops probe: deploy.sh, the JWT rotation
+    script; no nginx location, so reachable only on the docker network)."""
     db_ok = False
     try:
         c = _conn()
@@ -3545,7 +3568,23 @@ def ping():
         'ok': True,
         'db': 'ok' if db_ok else 'error',
         'worker_running': bool(_worker_process and _worker_process.poll() is None),
+        'auth_mode': _AUTH_MODE,
     }
+
+
+@app.get('/internal/health')
+def internal_health():
+    """Ops liveness probe. Exempt from the route guard by path; the edge nginx
+    has no /internal/ location, so it is unreachable from outside."""
+    return _health_body()
+
+
+@app.get('/api/pipeline2/ping')
+def ping():
+    """Minimal liveness check for the frontend's backend-status pill."""
+    return _health_body()
+
+
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -8864,9 +8903,10 @@ def _spotlight_build() -> dict:
         conn.close()
 
 
-@app.get('/api/landing/spotlight')
 def landing_spotlight():
-    """Public: today's depersonalized spotlight chart for the landing page."""
+    """Guest: today's depersonalized spotlight chart for the landing page.
+    Registered on the guest router as GET /api/guest/spotlight (Phase 1a);
+    the old unauthenticated /api/landing/spotlight path is gone."""
     return _spotlight_build()['public']
 
 
@@ -8878,3 +8918,32 @@ def landing_spotlight_reveal(_uid: str = Depends(_get_current_user_id)):
     if not pick:
         return {'mode': 'index', 'index_name': 'NIFTY 500'}
     return {'mode': 'equity', **pick}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# GUEST NAMESPACE (Phase 1a — `.claude/skills/api-auth-contract/SKILL.md` §3)
+# ─────────────────────────────────────────────────────────────────────────────
+# The logged-out landing page reaches exactly two readings, both re-registered
+# here on the SAME handler functions the app uses (reuse before rebuild — no
+# new data queries). The guest dependency sits on the router, so a handler
+# never knows which door it was entered through; a handler that reads `sub`,
+# a profile or bookmarks is not guest material.
+#
+# The issuer is exempt from the route guard by path; nginx rate-limits it
+# (6r/m per IP, burst 10). It signs with the same JWT_SECRET PostgREST holds,
+# but PostgREST refuses `role: guest` (no such DB role — SET ROLE fails), so a
+# guest token buys nothing on /db/*.
+
+from fastapi import APIRouter as _APIRouter  # noqa: E402
+
+
+@app.post('/api/guest/token')
+def guest_token():
+    """Mint a 15-minute guest token (`role: guest`, `aud: dristiq-guest`)."""
+    return _mint_guest_token()
+
+
+_guest_router = _APIRouter(prefix='/api/guest', dependencies=[Depends(_require_guest)])
+_guest_router.add_api_route('/panchang/daily', panchang_daily, methods=['GET'])
+_guest_router.add_api_route('/spotlight', landing_spotlight, methods=['GET'])
+app.include_router(_guest_router)

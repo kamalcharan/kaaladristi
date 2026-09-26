@@ -1,7 +1,7 @@
 import { from } from './postgrest';
 import { toIso, getDaysInMonth } from '@/lib/dateUtils';
 
-const PIPELINE_API = (import.meta.env.VITE_PIPELINE_API_URL?.trim() || '');
+import { api } from '@/services/apiClient';
 
 export interface AstroCalendarEvent {
   id: number;
@@ -81,7 +81,7 @@ export async function fetchMonthSignals(year: number, month: number): Promise<As
   const firstDay = toIso(year, month, 1);
   const lastDay  = toIso(year, month, getDaysInMonth(year, month));
 
-  const res = await fetch(`${PIPELINE_API}/api/panchang/week?from=${firstDay}&to=${lastDay}`);
+  const res = await api.fetch(`/api/panchang/week?from=${firstDay}&to=${lastDay}`);
   if (!res.ok) return [];
 
   type RuleDay = {
@@ -152,7 +152,7 @@ export async function fetchKeyEvents(year: number, month: number): Promise<Astro
 // ── Admin CRUD (pipeline2_api) ────────────────────────────────────────────────
 
 export async function createCalendarEvent(payload: AstroCalendarPayload): Promise<{ id: number }> {
-  const res = await fetch(`${PIPELINE_API}/api/astro/calendar`, {
+  const res = await api.fetch('/api/astro/calendar', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -162,7 +162,7 @@ export async function createCalendarEvent(payload: AstroCalendarPayload): Promis
 }
 
 export async function updateCalendarEvent(id: number, payload: AstroCalendarPayload): Promise<void> {
-  const res = await fetch(`${PIPELINE_API}/api/astro/calendar/${id}`, {
+  const res = await api.fetch(`/api/astro/calendar/${id}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -171,7 +171,7 @@ export async function updateCalendarEvent(id: number, payload: AstroCalendarPayl
 }
 
 export async function deleteCalendarEvent(id: number): Promise<void> {
-  const res = await fetch(`${PIPELINE_API}/api/astro/calendar/${id}`, {
+  const res = await api.fetch(`/api/astro/calendar/${id}`, {
     method: 'DELETE',
   });
   if (!res.ok) throw new Error(`[delete calendar event] HTTP ${res.status}`);

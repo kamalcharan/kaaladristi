@@ -1,11 +1,11 @@
 import { from } from './postgrest';
 import type { AstroSignal, AstroTransit } from '@/types';
 
-const PIPELINE_API = (import.meta.env.VITE_PIPELINE_API_URL?.trim() || '');
+import { api } from '@/services/apiClient';
 
 export async function fetchAstroTransits(from_date: string, to_date: string): Promise<AstroTransit[]> {
   const params = new URLSearchParams({ from_date, to_date });
-  const res = await fetch(`${PIPELINE_API}/api/astro/transits?${params}`);
+  const res = await api.fetch(`/api/astro/transits?${params}`);
   if (!res.ok) throw new Error(`[astro/transits] HTTP ${res.status}`);
   return res.json() as Promise<AstroTransit[]>;
 }

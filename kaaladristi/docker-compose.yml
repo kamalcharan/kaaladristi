@@ -46,6 +46,13 @@ services:
       # Must match PostgREST's PGRST_JWT_SECRET — without it every auth-gated
       # call 500s with 'JWT_SECRET not configured' (Workspace fails to load).
       JWT_SECRET: "${JWT_SECRET:-}"
+      # Phase 1a route guards: off | audit | enforce (default audit — log,
+      # never block). Flip to enforce after the 24-48h audit window.
+      AUTH_MODE: "${AUTH_MODE:-audit}"
+      # CORS allow-list, comma-separated. Production origins by default; add
+      # http://localhost:5173 etc. in dev. Tokens travel in headers, so
+      # credentials are never allowed.
+      CORS_ORIGINS: "${CORS_ORIGINS:-https://dristiq.com,https://www.dristiq.com}"
       # VaNi interaction log + observation cache (separate vani_db instance)
       VANI_DB_URL: "${VANI_DB_URL:-}"
     volumes:

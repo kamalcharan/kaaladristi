@@ -22,6 +22,7 @@ import { ACTIVE_UNIVERSE_CAP } from './equityUniverse';
  *  See fetchPeadDrift for the table. */
 const PEAD_MIN_REACTION_PCT = 5;
 import { from, rpc } from './postgrest';
+import { api } from '@/services/apiClient';
 import { studioPresetsBySource } from '@/config/scannerStudio';
 import type {
   ScanStock,
@@ -32,8 +33,6 @@ import type {
 } from '@/types';
 
 export type ScanTimeframe = 'daily' | 'weekly' | 'monthly';
-
-const PIPELINE_URL = (import.meta.env.VITE_PIPELINE_API_URL as string) || '';
 
 // ── Scan Definitions ───────────────────────────────────────────
 
@@ -2505,7 +2504,7 @@ export function invalidateScanCache(): void {
 
 /** Fetch scan preset definitions from the DB (via pipeline API). */
 export async function fetchScanPresets(): Promise<ScanDefinition[]> {
-  const res = await fetch(`${PIPELINE_URL}/api/scan/presets`);
+  const res = await api.fetch('/api/scan/presets');
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const rows = (await res.json()) as Array<{
     id: string;

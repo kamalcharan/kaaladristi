@@ -6,14 +6,7 @@
  * frontend gate is presentation only.
  */
 
-import { useAuthStore } from '@/stores/authStore'
-
-const PIPELINE_URL = (import.meta.env.VITE_PIPELINE_API_URL as string) || ''
-
-function authHeaders(): Record<string, string> {
-  const token = useAuthStore.getState().session?.access_token
-  return token ? { Authorization: `Bearer ${token}` } : {}
-}
+import { api } from '@/services/apiClient'
 
 export const ADMIN_TIERS = ['free', 'trial', 'quarterly', 'annual', 'beta'] as const
 export type AdminTier = (typeof ADMIN_TIERS)[number]
@@ -34,9 +27,9 @@ export interface AdminUser {
 }
 
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${PIPELINE_URL}${path}`, {
+  const res = await api.fetch(path, {
     ...init,
-    headers: { 'Content-Type': 'application/json', ...authHeaders(), ...(init?.headers ?? {}) },
+    headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
   })
   if (!res.ok) {
     let msg = `HTTP ${res.status}`

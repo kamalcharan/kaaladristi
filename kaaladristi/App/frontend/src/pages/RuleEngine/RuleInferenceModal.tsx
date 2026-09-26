@@ -24,6 +24,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { X, Trash2, Sparkles, Loader2, PenLine, ChevronLeft } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { from } from '@/services/postgrest';
+import { api } from '@/services/apiClient';
 import { fetchLookupByCategory } from '@/services/dcLookup';
 import { MARKET_STATUS, MARKET_STATUS_MAP, STATUS_COLOR_CLASSES } from '@/constants/marketStatus';
 import {
@@ -33,8 +34,6 @@ import {
   OUTCOME_OPTIONS, PROB_OPTIONS, SCOPE_OPTIONS, AdminTagsField, type RuleFormValues,
 } from './RuleFormModal';
 import type { RuleInput } from './ruleService';
-
-const PIPELINE_API = import.meta.env.VITE_PIPELINE_API_URL ?? '';
 
 type Outcome = 'worked' | 'partial' | 'failed' | 'running' | 'turned' | 'inconclusive' | 'pending';
 type Llm = 'claude' | 'qwen';
@@ -83,7 +82,7 @@ const inputCls = 'w-full px-4 py-3 bg-kd-elevated border border-kd-border rounde
 const labelCls = 'block text-[12px] uppercase tracking-widest font-bold text-muted mb-2';
 
 async function fetchInference(ruleId: number): Promise<InferenceResponse> {
-  const res = await fetch(`${PIPELINE_API}/api/rules/${ruleId}/inference`);
+  const res = await api.fetch(`/api/rules/${ruleId}/inference`);
   if (!res.ok) throw new Error(`inference ${res.status}`);
   return res.json();
 }
@@ -410,7 +409,7 @@ export default function RuleInferenceModal({
     setGenerating(true);
     setError(null);
     try {
-      const res = await fetch(`${PIPELINE_API}/api/rules/${ruleId}/inference/generate`, {
+      const res = await api.fetch(`/api/rules/${ruleId}/inference/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ llm, pair_rule_id: pairRuleId ? Number(pairRuleId) : null }),
@@ -434,7 +433,7 @@ export default function RuleInferenceModal({
     setError(null);
     try {
       const applPayload = applToInput(appl);
-      const res = await fetch(`${PIPELINE_API}/api/rules/${ruleId}/inference`, {
+      const res = await api.fetch(`/api/rules/${ruleId}/inference`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -460,7 +459,7 @@ export default function RuleInferenceModal({
   }
 
   async function handleDelete(id: number) {
-    await fetch(`${PIPELINE_API}/api/rules/inference/${id}`, { method: 'DELETE' });
+    await api.fetch(`/api/rules/inference/${id}`, { method: 'DELETE' });
     qc.invalidateQueries({ queryKey: ['rule-inference', ruleId] });
   }
 

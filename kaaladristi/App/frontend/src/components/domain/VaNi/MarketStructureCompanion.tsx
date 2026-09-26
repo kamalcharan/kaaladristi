@@ -14,12 +14,12 @@ import { trackEvent } from '@/lib/analytics';
 import { markGuideWalked } from '@/services/guideProgress';
 import VaNiFeedback from './VaNiFeedback';
 import VaNiBrand from './VaNiBrand';
+import { api } from '@/services/apiClient';
 
 interface ReadingResponse {
   response: string | null; error?: string; facts?: string[]; log_id?: string;
   cached: boolean; context_changed?: boolean; pending?: boolean; date?: string; roc_date?: string;
 }
-const API = import.meta.env.VITE_PIPELINE_API_URL?.trim() || '';
 const lesson = [
   { title: 'Start with participation', text: 'Read the score zone and the 20, 50 and 150 EMA bands. A green band marks a contrarian watch area; it is not an entry signal. Treat a ringed event as provisional because coverage fell.', section: 'participation' as const },
   { title: 'Then read pressure and momentum', text: 'Daily pressure compares >5% movers; five-day extremes show whether large moves are clustering. ROC state compares ROC 13 with its signal, while alignment compares ROC 13 with ROC 55.', section: 'momentum' as const },
@@ -59,7 +59,7 @@ export default function MarketStructureCompanion() {
     staleTime: 30 * 60 * 1000, retry: false,
     refetchInterval: query => query.state.data?.pending ? 1500 : false,
     queryFn: async () => {
-      const response = await fetch(`${API}/api/vani/ask`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      const response = await api.fetch('/api/vani/ask', { method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ intent_id: intent, date: data.selectedDate ?? undefined,
           structure_period: data.period, structure_snapshot: data.snapshot, explanation_depth: depth }),
       });

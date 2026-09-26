@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { from } from '@/services/postgrest';
 import { displaySymbol } from '@/lib/symbolUtils';
 import { fetchEquityUniverse, type EquityRow } from '@/services/equityUniverse';
+import { api } from '@/services/apiClient';
 
 // ── RowItem ───────────────────────────────────────────────────────────────────
 
@@ -154,8 +155,7 @@ export default function CustomIndexCreatePage() {
       if (constErr) throw new Error(constErr.message);
 
       try {
-        const api=import.meta.env.VITE_PIPELINE_API_URL?.trim() || '';
-        const response=await fetch(`${api}/api/custom-index/${newIndex.id}/compute`,{method:'POST'});
+        const response=await api.fetch(`/api/custom-index/${newIndex.id}/compute`,{method:'POST'});
         if(!response.ok) throw new Error('Index saved, but calculation failed. Open Manage and retry Calculate.');
         const calculation=await response.json();
         if(calculation.leadership_refresh_error) {

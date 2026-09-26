@@ -13,8 +13,7 @@
  */
 
 import { useQuery } from '@tanstack/react-query';
-
-const API_BASE = import.meta.env.VITE_PIPELINE_API_URL ?? '';
+import { api } from '@/services/apiClient';
 
 interface PanchangDailyResponse {
   date: string;
@@ -84,22 +83,19 @@ interface AstroDailySignalResponse {
 }
 
 async function fetchPanchang(date: string): Promise<PanchangDailyResponse> {
-  const url = `${API_BASE}/api/panchang/daily?date=${date}`;
-  const res = await fetch(url);
+  const res = await api.fetch(`/api/panchang/daily?date=${date}`);
   if (!res.ok) throw new Error(`Panchang fetch failed: ${res.status}`);
   return res.json();
 }
 
 async function fetchPlanScore(date: string): Promise<PlanScoreResponse> {
-  const url = `${API_BASE}/api/intraday/plan-score?date=${date}`;
-  const res = await fetch(url);
+  const res = await api.fetch(`/api/intraday/plan-score?date=${date}`);
   if (!res.ok) throw new Error(`Plan score fetch failed: ${res.status}`);
   return res.json();
 }
 
 async function fetchAstroSignal(date: string): Promise<AstroDailySignalResponse | null> {
-  const url = `${API_BASE}/api/astro/daily-signal?date=${date}`;
-  const res = await fetch(url);
+  const res = await api.fetch(`/api/astro/daily-signal?date=${date}`);
   if (res.status === 404) return null; // no signal computed yet — not an error
   if (!res.ok) throw new Error(`Astro signal fetch failed: ${res.status}`);
   return res.json();

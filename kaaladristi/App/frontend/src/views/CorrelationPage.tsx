@@ -14,6 +14,7 @@ import InlineGate from '@/components/workspace/InlineGate'
 import { getCatalogItem } from '@/constants/catalogItems'
 import { ASTRO_GROUP_OVERLAYS } from '@/constants/astroGroupOverlays'
 import VaNiFeedback from '@/components/domain/VaNi/VaNiFeedback'
+import { api } from '@/services/apiClient'
 
 const WALK_TIERS = ['trial', 'quarterly', 'annual', 'beta'] as const
 
@@ -452,7 +453,7 @@ export default function CorrelationPage() {
   const navigate          = useNavigate()
   const correlations      = useFrameworkStore(s => s.vaniCorrelations)
   const dismissCorrelation = useFrameworkStore(s => s.dismissVaNiCorrelation)
-  const { profile, session, isAdmin } = useAuthStore()
+  const { profile, isAdmin } = useAuthStore()
   const queryClient = useQueryClient()
   const canWalk              = WALK_TIERS.includes(profile?.tier as typeof WALK_TIERS[number])
   const [walkGateOpen, setWalkGateOpen] = useState(false)
@@ -504,13 +505,10 @@ export default function CorrelationPage() {
   const { data: insightData, isLoading: insightLoading } = useQuery({
     queryKey: ['corr-insight', itemA, itemB, result?.shape, refreshCount],
     queryFn: async () => {
-      const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? ''
-      const token = session?.access_token
-      const r = await fetch(`${pipelineUrl}/api/vani/correlation-insight`, {
+      const r = await api.fetch('/api/vani/correlation-insight', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
         },
         body: JSON.stringify({
           item_a:             itemA,
@@ -795,9 +793,8 @@ export default function CorrelationPage() {
                       <button
                         title="Regenerate — bypasses cache"
                         onClick={async () => {
-                          const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? ''
                           try {
-                            await fetch(`${pipelineUrl}/api/vani/correlation-insight/${encodeURIComponent(itemA ?? '')}/${encodeURIComponent(itemB ?? '')}/${encodeURIComponent(result?.shape ?? '')}`, { method: 'DELETE' })
+                            await api.fetch(`/api/vani/correlation-insight/${encodeURIComponent(itemA ?? '')}/${encodeURIComponent(itemB ?? '')}/${encodeURIComponent(result?.shape ?? '')}`, { method: 'DELETE' })
                           } catch {}
                           // Remove all cached versions of this query (any refreshCount)
                           queryClient.removeQueries({ queryKey: ['corr-insight', itemA, itemB, result?.shape] })

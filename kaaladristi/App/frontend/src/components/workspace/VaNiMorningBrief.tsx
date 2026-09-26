@@ -11,6 +11,7 @@ import { getCatalogItem } from '@/constants/catalogItems'
 import { ASTRO_GROUP_OVERLAYS } from '@/constants/astroGroupOverlays'
 import { fetchCatalogRules } from '@/pages/RuleEngine/ruleService'
 import VaNiFeedback from '@/components/domain/VaNi/VaNiFeedback'
+import { api } from '@/services/apiClient'
 
 function todayKey(userId: string) {
   const d = new Date().toISOString().slice(0, 10)
@@ -81,9 +82,6 @@ function VaNiLoader() {
   )
 }
 
-const PIPELINEURL = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? ''
-
-
 interface VaniBriefObs {
   type:          string
   title:         string
@@ -110,8 +108,6 @@ function useVaniDailyBrief(
   confluences: Array<{ item_a: string; item_b: string; item_a_display: string; item_b_display: string; instances: number; status: string }>,
   astroRulesReady: boolean,
 ) {
-  const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? ''
-
   // Stable cache key: sorted astro catalog_item_ids + sorted confluence pairs
   const overlayKeys = activeOverlays
     .filter(o => o.type === 'astro_zone' || o.type === 'astro_marker')
@@ -125,7 +121,7 @@ function useVaniDailyBrief(
   return useQuery({
     queryKey: ['vani-morning-brief', today, overlayKeys.join(','), confluenceKeys.join(',')],
     queryFn: async () => {
-      const res = await fetch(`${pipelineUrl}/api/vani/daily`, {
+      const res = await api.fetch('/api/vani/daily', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ date: today, user_id: userId, active_overlays: activeOverlays, confluences }),
@@ -212,8 +208,8 @@ export default function VaNiMorningBrief({ modalOpen, onModalOpen, onModalClose,
                 title="Clear this observation's cache"
                 onClick={async (e) => {
                   e.stopPropagation()
-                  await fetch(
-                    `${PIPELINEURL}/api/vani/observation-cache/${encodeURIComponent(item.item_key!)}/${today}`,
+                  await api.fetch(
+                    `/api/vani/observation-cache/${encodeURIComponent(item.item_key!)}/${today}`,
                     { method: 'DELETE' },
                   ).catch(() => {})
                   queryClient.removeQueries({ queryKey: ['vani-morning-brief'] })
@@ -316,8 +312,8 @@ export default function VaNiMorningBrief({ modalOpen, onModalOpen, onModalClose,
                 title="Clear this observation's cache"
                 onClick={async (e) => {
                   e.stopPropagation()
-                  await fetch(
-                    `${PIPELINEURL}/api/vani/observation-cache/${encodeURIComponent(item.item_key!)}/${today}`,
+                  await api.fetch(
+                    `/api/vani/observation-cache/${encodeURIComponent(item.item_key!)}/${today}`,
                     { method: 'DELETE' },
                   ).catch(() => {})
                   queryClient.removeQueries({ queryKey: ['vani-morning-brief'] })
@@ -623,8 +619,8 @@ function MorningModal({ items, profile, onClose }: {
                           title="Clear this observation's cache"
                           onClick={async (e) => {
                             e.stopPropagation()
-                            await fetch(
-                              `${PIPELINEURL}/api/vani/observation-cache/${encodeURIComponent(obs.item_key!)}/${today}`,
+                            await api.fetch(
+                              `/api/vani/observation-cache/${encodeURIComponent(obs.item_key!)}/${today}`,
                               { method: 'DELETE' },
                             ).catch(() => {})
                             queryClient.removeQueries({ queryKey: ['vani-morning-brief'] })

@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { api } from '@/services/apiClient';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -90,10 +91,8 @@ function ruleTypeLabel(rt: string): string {
 
 // ── Data fetch ────────────────────────────────────────────────────────────────
 
-const PIPELINE_API = (import.meta.env.VITE_PIPELINE_API_URL as string | undefined)?.trim() ?? '';
-
 async function fetchPanchangFull(date: string): Promise<PanchangFull | null> {
-  const res = await fetch(`${PIPELINE_API}/api/panchang/daily?date=${encodeURIComponent(date)}`);
+  const res = await api.fetch(`/api/panchang/daily?date=${encodeURIComponent(date)}`);
   if (!res.ok) return null;
   return res.json() as Promise<PanchangFull>;
 }

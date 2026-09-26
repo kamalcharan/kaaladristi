@@ -3,6 +3,7 @@ import { fetchPanchang, fetchMarketBreadth, fetchBreadthRoc, fetchConfluenceHist
 import { fetchAstroSignal, fetchAstroWeek, fetchAstroTransits } from '@/services/astro';
 import { fetchInferencesForRange } from '@/services/dcInference';
 import { from } from '@/services/postgrest';
+import { api } from '@/services/apiClient';
 import { usePipelineStatus } from '@/hooks/usePipelineStatus';
 import type { IndexCatalogItem } from '@/types';
 
@@ -50,11 +51,10 @@ export function useBreadthRoc(days = 66, enabled = true) {
 }
 
 export function useBreadthRocInsight() {
-  const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? '';
   return useQuery({
     queryKey: ['breadth_roc_insight'],
     queryFn: async (): Promise<{ date: string; insight: string | null; ai: boolean }> => {
-      const res = await fetch(`${pipelineUrl}/api/ai/breadth-roc-insight`);
+      const res = await api.fetch('/api/ai/breadth-roc-insight');
       if (!res.ok) return { date: '', insight: null, ai: false };
       return res.json();
     },
@@ -64,11 +64,10 @@ export function useBreadthRocInsight() {
 }
 
 export function useBreadthInsight() {
-  const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? '';
   return useQuery({
     queryKey: ['breadth_insight'],
     queryFn: async (): Promise<{ date: string; insight: string | null; ai: boolean }> => {
-      const res = await fetch(`${pipelineUrl}/api/ai/breadth-insight`);
+      const res = await api.fetch('/api/ai/breadth-insight');
       if (!res.ok) return { date: '', insight: null, ai: false };
       return res.json();
     },
@@ -78,11 +77,10 @@ export function useBreadthInsight() {
 }
 
 export function usePanchangInsight(date: string) {
-  const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? '';
   return useQuery({
     queryKey: ['panchang_insight', date],
     queryFn: async (): Promise<{ date: string; insight: string | null; ai: boolean }> => {
-      const res = await fetch(`${pipelineUrl}/api/ai/panchang-insight?date=${encodeURIComponent(date)}`);
+      const res = await api.fetch(`/api/ai/panchang-insight?date=${encodeURIComponent(date)}`);
       if (!res.ok) return { date, insight: null, ai: false };
       return res.json();
     },
@@ -93,7 +91,6 @@ export function usePanchangInsight(date: string) {
 }
 
 export function useInstrumentInsight(id: number, type: string = 'index', date?: string) {
-  const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? '';
   return useQuery({
     queryKey: ['instrument_insight', type, id, date],
     queryFn: async (): Promise<{
@@ -102,7 +99,7 @@ export function useInstrumentInsight(id: number, type: string = 'index', date?: 
     }> => {
       const params = new URLSearchParams({ id: String(id), type });
       if (date) params.set('date', date);
-      const res = await fetch(`${pipelineUrl}/api/ai/instrument-insight?${params}`);
+      const res = await api.fetch(`/api/ai/instrument-insight?${params}`);
       if (!res.ok) return { id, type, date: date ?? '', insight: null, ai: false, alignment: '' };
       return res.json();
     },
@@ -113,14 +110,13 @@ export function useInstrumentInsight(id: number, type: string = 'index', date?: 
 }
 
 export function useMarketPulseInsight(date?: string) {
-  const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? '';
   return useQuery({
     queryKey: ['market_pulse_insight', date],
     queryFn: async (): Promise<{
       date: string; insight: string | null; ai: boolean; astro_direction: string;
     }> => {
       const params = date ? `?date=${encodeURIComponent(date)}` : '';
-      const res = await fetch(`${pipelineUrl}/api/ai/market-pulse-insight${params}`);
+      const res = await api.fetch(`/api/ai/market-pulse-insight${params}`);
       if (!res.ok) return { date: date ?? '', insight: null, ai: false, astro_direction: '' };
       return res.json();
     },
@@ -130,13 +126,12 @@ export function useMarketPulseInsight(date?: string) {
 }
 
 export function useSectorInsight(indexId: number | null, date?: string) {
-  const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? '';
   return useQuery({
     queryKey: ['sector_insight', indexId, date],
     queryFn: async (): Promise<{ index_id: number; date: string; insight: string | null; ai: boolean }> => {
       const params = new URLSearchParams({ index_id: String(indexId) });
       if (date) params.set('date', date);
-      const res = await fetch(`${pipelineUrl}/api/ai/sector-insight?${params}`);
+      const res = await api.fetch(`/api/ai/sector-insight?${params}`);
       if (!res.ok) return { index_id: indexId!, date: date ?? '', insight: null, ai: false };
       return res.json();
     },
@@ -240,11 +235,10 @@ export type FpbGroup = { key: string; label: string; equity_ids: number[]; relea
 export type FpbResponse = {date:string; insight:string|null; ai:boolean; groups?:FpbGroup[]};
 
 export function useFpbRecentOutcomes(enabled = true) {
-  const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? '';
   return useQuery({
     queryKey: ['fpb_recent_outcomes'],
     queryFn: async (): Promise<FpbResponse> => {
-      const res = await fetch(`${pipelineUrl}/api/ai/fpb-recent-outcomes`);
+      const res = await api.fetch('/api/ai/fpb-recent-outcomes');
       if (!res.ok) throw new Error('Flower Pot evidence is unavailable');
       const data = await res.json();
       if (!data.insight || !data.ai) throw new Error('VaNi explanation unavailable');
@@ -258,11 +252,10 @@ export function useFpbRecentOutcomes(enabled = true) {
 }
 
 export function useFpbWhyWatchCoil(enabled = true) {
-  const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? '';
   return useQuery({
     queryKey: ['fpb_why_watch_coil'],
     queryFn: async (): Promise<FpbResponse> => {
-      const res = await fetch(`${pipelineUrl}/api/ai/fpb-why-watch-coil`);
+      const res = await api.fetch('/api/ai/fpb-why-watch-coil');
       if (!res.ok) throw new Error('Flower Pot evidence is unavailable');
       const data = await res.json();
       if (!data.insight || !data.ai) throw new Error('VaNi explanation unavailable');
@@ -275,11 +268,10 @@ export function useFpbWhyWatchCoil(enabled = true) {
 }
 
 export function useFpbCoilingIndustries(enabled = true) {
-  const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? '';
   return useQuery({
     queryKey: ['fpb_coiling_industries'],
     queryFn: async (): Promise<FpbResponse> => {
-      const res = await fetch(`${pipelineUrl}/api/ai/fpb-coiling-industries`);
+      const res = await api.fetch('/api/ai/fpb-coiling-industries');
       if (!res.ok) throw new Error('Flower Pot evidence is unavailable');
       const data = await res.json();
       if (!data.insight || !data.ai) throw new Error('VaNi explanation unavailable');
@@ -293,11 +285,10 @@ export function useFpbCoilingIndustries(enabled = true) {
 }
 
 export function useFpbConfluenceOutlook(enabled = true) {
-  const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? '';
   return useQuery({
     queryKey: ['fpb_confluence_outlook'],
     queryFn: async (): Promise<FpbResponse> => {
-      const res = await fetch(`${pipelineUrl}/api/ai/fpb-confluence-outlook`);
+      const res = await api.fetch('/api/ai/fpb-confluence-outlook');
       if (!res.ok) throw new Error('Flower Pot evidence is unavailable');
       const data = await res.json();
       if (!data.insight || !data.ai) throw new Error('VaNi explanation unavailable');
@@ -311,11 +302,10 @@ export function useFpbConfluenceOutlook(enabled = true) {
 }
 
 export function useFpbNewCoils(enabled = true) {
-  const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? '';
   return useQuery({
     queryKey: ['fpb_new_coils'],
     queryFn: async (): Promise<FpbResponse> => {
-      const res = await fetch(`${pipelineUrl}/api/ai/fpb-new-coils`);
+      const res = await api.fetch('/api/ai/fpb-new-coils');
       if (!res.ok) throw new Error('Flower Pot evidence is unavailable');
       const data = await res.json();
       if (!data.insight || !data.ai) throw new Error('VaNi explanation unavailable');

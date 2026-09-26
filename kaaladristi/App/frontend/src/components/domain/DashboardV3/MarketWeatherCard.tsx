@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { api } from '@/services/apiClient';
 
 // ── Part 1: Types, helpers, sample data ──────────────────────────────────────
 
@@ -563,10 +564,8 @@ function FooterTally({ astro }: { astro: MarketWeatherProps['components']['astro
 
 // ── Data hook ─────────────────────────────────────────────────────────────────
 
-const PIPELINE_API = (import.meta.env.VITE_PIPELINE_API_URL as string | undefined)?.trim() ?? '';
-
 async function fetchComposite(date: string): Promise<MarketWeatherProps> {
-  const res = await fetch(`${PIPELINE_API}/api/dashboard/composite?date=${encodeURIComponent(date)}`);
+  const res = await api.fetch(`/api/dashboard/composite?date=${encodeURIComponent(date)}`);
   if (!res.ok) throw new Error(`composite ${res.status}`);
   return res.json() as Promise<MarketWeatherProps>;
 }
@@ -593,7 +592,7 @@ function CardShell({ data, date }: { data: MarketWeatherProps; date: string }) {
     if (!histCtx && !histLoading) {
       setHistLoading(true);
       try {
-        const res = await fetch(`${PIPELINE_API}/api/dashboard/context?date=${encodeURIComponent(date)}`);
+        const res = await api.fetch(`/api/dashboard/context?date=${encodeURIComponent(date)}`);
         if (res.ok) setHistCtx(await res.json());
       } catch {
         setHistCtx({ available: false });

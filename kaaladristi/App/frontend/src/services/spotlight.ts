@@ -15,10 +15,9 @@
  */
 
 import { useAuthStore } from '@/stores/authStore';
+import { api } from '@/services/apiClient';
 
 export const SPOTLIGHT_INTENT_KEY = 'kd_post_login_intent';
-
-const PIPELINE_API = (import.meta.env.VITE_PIPELINE_API_URL?.trim() || '');
 
 export function storeSpotlightIntent(): void {
   try { localStorage.setItem(SPOTLIGHT_INTENT_KEY, 'spotlight'); } catch { /* ignore */ }
@@ -36,9 +35,7 @@ export async function resolveSpotlightIntent(): Promise<string | null> {
   if (!token) return null;
 
   try {
-    const res = await fetch(`${PIPELINE_API}/api/landing/spotlight/reveal`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
+    const res = await api.fetch('/api/landing/spotlight/reveal');
     if (!res.ok) return null;
     const j = await res.json() as { mode: string; equity_id?: number; symbol?: string };
     if (j.mode === 'equity' && j.equity_id) {

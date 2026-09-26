@@ -8,13 +8,7 @@ import type { FrameworkTemplate } from '@/constants/frameworkTemplates'
 import { useAuthStore } from '@/stores/authStore'
 import { onAuthStateChange } from '@/services/auth'
 import type { CorrelationResult } from '@/hooks/useCorrelationResult'
-
-const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? ''
-
-function authHeaders(): Record<string, string> {
-  const token = useAuthStore.getState().session?.access_token
-  return token ? { Authorization: `Bearer ${token}` } : {}
-}
+import { api } from '@/services/apiClient'
 
 // Same 15s cap the postgrest client enforces — so a hung pipeline API
 // (the /api/framework/* PUT this store calls during onboarding) surfaces as
@@ -23,11 +17,11 @@ function authHeaders(): Record<string, string> {
 // just the status code.
 const FRAMEWORK_FETCH_TIMEOUT_MS = 15000
 
-async function frameworkFetch(url: string, init: RequestInit): Promise<Response> {
+async function frameworkFetch(path: string, init: RequestInit): Promise<Response> {
   const ctrl = new AbortController()
   const timer = setTimeout(() => ctrl.abort(), FRAMEWORK_FETCH_TIMEOUT_MS)
   try {
-    return await fetch(url, { ...init, signal: ctrl.signal })
+    return await api.fetch(path, { ...init, signal: ctrl.signal })
   } finally {
     clearTimeout(timer)
   }
@@ -173,9 +167,7 @@ export const useFrameworkStore = create<FrameworkStore>((set, get) => ({
   loadFramework: async (userId: string) => {
     set({ isLoading: true, error: null })
     try {
-      const res = await frameworkFetch(`${pipelineUrl}/api/framework/${userId}`, {
-        headers: authHeaders(),
-      })
+      const res = await frameworkFetch(`/api/framework/${userId}`, {})
       if (!res.ok) throw new Error(await extractError(res))
       const raw = await res.json()
       const data: UserFramework = raw
@@ -292,9 +284,9 @@ export const useFrameworkStore = create<FrameworkStore>((set, get) => ({
     if (!framework) return false
     set({ isSaving: true })
     try {
-      const res = await frameworkFetch(`${pipelineUrl}/api/framework/${framework.user_id}`, {
+      const res = await frameworkFetch(`/api/framework/${framework.user_id}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json', ...authHeaders() },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(framework),
       })
       if (!res.ok) throw new Error(await extractError(res))

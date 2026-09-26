@@ -45,7 +45,9 @@ docker exec vikuna-nginx nginx -s reload
 # 7. Health check
 echo "[check] Waiting 8s for backend..."
 sleep 8
-if curl -sf http://localhost:8101/api/pipeline2/ping > /dev/null 2>&1; then
+# /internal/health is the ops probe (no nginx location — in-network only);
+# /api/pipeline2/ping now requires a user token (Phase 1a).
+if curl -sf http://localhost:8101/internal/health > /dev/null 2>&1; then
     echo "[check] kd-pipeline-api2 OK"
 else
     echo "[check] WARNING: health check failed — check logs:"

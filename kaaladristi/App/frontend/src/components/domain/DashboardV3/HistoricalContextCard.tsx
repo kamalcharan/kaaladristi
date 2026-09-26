@@ -1,6 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-
-const PIPELINE_API = (import.meta.env.VITE_PIPELINE_API_URL as string | undefined)?.trim() ?? '';
+import { api } from '@/services/apiClient';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -24,7 +23,7 @@ interface HistoricalContext {
 }
 
 async function fetchContext(date: string): Promise<HistoricalContext> {
-  const res = await fetch(`${PIPELINE_API}/api/dashboard/context?date=${encodeURIComponent(date)}`);
+  const res = await api.fetch(`/api/dashboard/context?date=${encodeURIComponent(date)}`);
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json();
 }

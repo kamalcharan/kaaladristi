@@ -9,6 +9,7 @@
  */
 
 import { from } from './postgrest';
+import { api } from '@/services/apiClient';
 import { displaySymbol } from '@/lib/symbolUtils';
 import type { MarketBreadthDay, BreadthRocDay } from '@/types';
 
@@ -585,8 +586,7 @@ export interface SectorPulseSnapshot {
   rows: SectorIndexRow[]; history: SectorIndexRow[]; facts: string[];
 }
 export async function fetchSectorPulseContext(): Promise<SectorPulseSnapshot> {
-  const api = import.meta.env.VITE_PIPELINE_API_URL?.trim() || '';
-  const response = await fetch(`${api}/api/vani/ask`, {
+  const response = await api.fetch('/api/vani/ask', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ intent_id: 'sector.pulse.context' }),
   });

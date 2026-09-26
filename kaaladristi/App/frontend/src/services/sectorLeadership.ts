@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import type { MagicRsDataPoint } from '@/components/domain/VisualPulse/MagicRsSubchart';
 import type { SectorTab } from '@/services/sectorRotation';
+import { api } from '@/services/apiClient';
 export interface LeadershipSample {
  date:string; weekly:boolean|null; monthly:boolean|null; weekly_date:string|null; monthly_date:string|null;
  eligible:number; total:number; leaders:number|null; watch:number|null; leaders_pct:number|null; watch_pct:number|null;
@@ -15,8 +16,7 @@ export interface LeadershipRow {
 }
 export interface LeadershipSnapshot { membership?:Record<string,number[]>; snapshot:string; date:string; start:string; months:number; rows:LeadershipRow[]; counts:Record<string,number> }
 export async function askLeadership(body:object) {
- const api=import.meta.env.VITE_PIPELINE_API_URL?.trim() || '';
- const res=await fetch(`${api}/api/vani/ask`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+ const res=await api.fetch('/api/vani/ask',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
  if(!res.ok) throw new Error('Longer-term readings could not be loaded. Please retry.');
  const data=await res.json();
  if(data.error) throw new Error(data.error);

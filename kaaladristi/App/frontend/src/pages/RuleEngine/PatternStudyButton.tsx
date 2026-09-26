@@ -11,8 +11,7 @@ import { useState, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Activity, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-
-const PIPELINE_API = import.meta.env.VITE_PIPELINE_API_URL ?? '';
+import { api } from '@/services/apiClient';
 
 interface PatternStatus {
   job_id: string | null;
@@ -33,7 +32,7 @@ export default function PatternStudyButton() {
   const { data: status } = useQuery({
     queryKey: ['rule-engine', 'pattern-status'],
     queryFn: async (): Promise<PatternStatus> => {
-      const res = await fetch(`${PIPELINE_API}/api/patterns/status`);
+      const res = await api.fetch('/api/patterns/status');
       if (!res.ok) throw new Error(`status ${res.status}`);
       return res.json();
     },
@@ -54,7 +53,7 @@ export default function PatternStudyButton() {
   const start = async () => {
     setStartError(null);
     try {
-      const res = await fetch(`${PIPELINE_API}/api/patterns/run`, { method: 'POST' });
+      const res = await api.fetch('/api/patterns/run', { method: 'POST' });
       if (res.status === 409) { setTracking(true); return; }
       if (!res.ok) throw new Error(`start failed: ${res.status}`);
       setTracking(true);

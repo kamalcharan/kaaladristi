@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tansta
 import { useParams, useNavigate } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, Loader2, AlertCircle, Copy, Trash2, Lock, Play, WifiOff, X, Eraser, Sparkles } from 'lucide-react';
 import { from } from '@/services/postgrest';
+import { api } from '@/services/apiClient';
 import { useAuthStore } from '@/stores/authStore';
 import { fmtDate } from '@/lib/dateUtils';
 import { useToast, ToastContainer } from '@/components/ui';
@@ -206,10 +207,8 @@ async function fetchUpcomingTransits(ruleId: number): Promise<RuleTransit[]> {
   return (data as RuleTransit[]) ?? [];
 }
 
-const PIPELINE_API = import.meta.env.VITE_PIPELINE_API_URL ?? '';
-
 async function fetchYearlyConfidence(ruleId: number): Promise<RuleConfidenceYearly[]> {
-  const res = await fetch(`${PIPELINE_API}/api/confidence/yearly/${ruleId}`);
+  const res = await api.fetch(`/api/confidence/yearly/${ruleId}`);
   if (!res.ok) throw new Error(`Yearly confidence fetch failed: ${res.status}`);
   return res.json();
 }

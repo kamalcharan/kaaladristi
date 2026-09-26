@@ -1,6 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-
-const PIPELINE_API = (import.meta.env.VITE_PIPELINE_API_URL?.trim() || '');
+import { api } from '@/services/apiClient';
 
 async function pingBackend(): Promise<true> {
   // Use the lightweight liveness endpoint (a trivial `SELECT 1`), NOT
@@ -8,7 +7,7 @@ async function pingBackend(): Promise<true> {
   // (per-dimension coverage over km_equity_eod) and can take >4s under heavy DB
   // load (backfills/recomputes), which was false-tripping "Backend offline"
   // even though the backend was up. /ping stays fast regardless of DB load.
-  const res = await fetch(`${PIPELINE_API}/api/pipeline2/ping`, { signal: AbortSignal.timeout(6000) });
+  const res = await api.fetch('/api/pipeline2/ping', { signal: AbortSignal.timeout(6000) });
   if (!res.ok) throw new Error('unhealthy');
   return true;
 }

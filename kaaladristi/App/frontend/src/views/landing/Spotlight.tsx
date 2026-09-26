@@ -1,5 +1,5 @@
 // "Today on DristiQ" proof band — the landing page's live product evidence.
-// Renders the depersonalized spotlight payload from /api/landing/spotlight:
+// Renders the depersonalized spotlight payload from /api/guest/spotlight:
 //   · equity mode — today's highest-confluence chart, identity masked
 //     ("revealed inside" is the signup hook)
 //   · index mode  — NIFTY 500 market structure (the conservative regime state)
@@ -14,8 +14,7 @@ import { createChart, CandlestickSeries, LineSeries, ColorType, type IChartApi }
 import { C, MONO } from './tokens';
 import { FadeUp, SectionHeader } from './shared';
 import { storeSpotlightIntent } from '@/services/spotlight';
-
-const PIPELINE_API = (import.meta.env.VITE_PIPELINE_API_URL?.trim() || '');
+import { guestApi } from '@/services/apiClient';
 
 interface SpotlightBar {
   t: string; o: number | null; h: number | null; l: number | null; c: number | null;
@@ -43,7 +42,7 @@ export function Spotlight() {
 
   useEffect(() => {
     let dead = false;
-    fetch(`${PIPELINE_API}/api/landing/spotlight`)
+    guestApi.fetch('/api/guest/spotlight')
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
       .then((j) => { if (!dead) setData(j as SpotlightPayload); })
       .catch(() => { if (!dead) setFailed(true); });

@@ -95,8 +95,8 @@ the marked ones to `admin` and deletes the dead ones.
 
 Counts: **user 109 · guest 1 · signature 1** = 111 (the 109 includes the five
 `/api/admin/users*` routes, which keep their existing admin check on top of
-the `user` decode rules). Dead: **27**. 1b targets: admin 50, user 59,
-guest 1, signature 1.
+the `user` decode rules). Dead: **27**. 1b targets: admin 54, user 55,
+guest 1, signature 1 (Rule Engine routes classified by calling page — §9.5).
 
 ### Pipeline ops
 
@@ -113,7 +113,7 @@ guest 1, signature 1.
 | 699 | GET /api/pipeline2/dimensions | none | user | admin | no | pipeline2.ts:173 |
 | 716 | GET /api/pipeline2/last-run | none | user | user | no | pipeline2.ts:202 (workspace `PipelineHealthBar`, `LastRunBanner`) |
 | 751 | GET /api/pipeline2/scheduler | none | user | admin | no | pipeline2.ts:187 |
-| 3529 | GET /api/pipeline2/ping | none | user | user | no | FE/hooks/useBackendStatus.ts:11 (see §5); `deploy.sh:48` moves to `/internal/health` |
+| 3529 | GET /api/pipeline2/ping | none | user | admin (decision §9.4) | no | FE/hooks/useBackendStatus.ts:11 (see §5); `deploy.sh:48` moves to `/internal/health` |
 | 823 | POST /api/pipeline/refresh-breadth | none | user | admin | **yes** | — |
 | 830 | POST /api/pipeline/refresh-breadth-roc | none | user | admin | **yes** | — |
 
@@ -169,22 +169,22 @@ guest 1, signature 1.
 | 3812 | POST /api/discovery/run-missing | none | user | admin | no | discoveryService.ts:53 |
 | 3844 | POST /api/discovery/run-rule/{rule_id} | none | user | admin | no | discoveryService.ts:58 |
 | 3856 | GET /api/discovery/status | none | user | user | no | discoveryService.ts:63 |
-| 3891 | GET /api/discovery/signal-counts | none | user | user | no | discoveryService.ts:69 |
+| 3891 | GET /api/discovery/signal-counts | none | user | admin | no | discoveryService.ts:69 |
 | 3922 | GET /api/discovery/transit-counts | none | user | user | **yes** | — |
-| 3947 | POST /api/discovery/cancel | none | user | admin | no | discoveryService.ts:75 |
+| 3947 | POST /api/discovery/cancel | none | user | user (JobMonitor, all profiles) | no | discoveryService.ts:75 |
 | 3956 | POST /api/discovery/run-clean | none | user | admin | no | discoveryService.ts:80 |
 | 3982 | POST /api/discovery/rule/{rule_id}/drop-signals | none | user | admin | no | discoveryService.ts:90 |
 | 4007 | GET /api/discovery/diagnose | none | user | admin | no | discoveryService.ts:95 |
 | 4241 | POST /api/patterns/run | none | user | admin | no | pages/RuleEngine/PatternStudyButton.tsx:57 |
-| 4259 | GET /api/patterns/status | none | user | user | no | PatternStudyButton.tsx:36 |
+| 4259 | GET /api/patterns/status | none | user | admin | no | PatternStudyButton.tsx:36 |
 | 4284 | POST /api/confidence/compute | none | user | admin | no | discoveryService.ts:85 |
 | 4295 | GET /api/confidence/status | none | user | user | no | components/domain/JobMonitor.tsx:20 |
 | 4301 | GET /api/confidence/summary | none | user | user | **yes** | — |
-| 4336 | GET /api/confidence/yearly/{rule_id} | none | user | user | no | pages/RuleEngine/RuleDetail.tsx:212 |
+| 4336 | GET /api/confidence/yearly/{rule_id} | none | user | admin | no | pages/RuleEngine/RuleDetail.tsx:212 |
 | 4427 | GET /api/confluence/historical | none | user | user | **yes** (hook unused) | services/panchang.ts:40 |
 | 4504 | GET /api/confluence/heatmap | none | user | user | no | services/panchang.ts:34 |
 | 4642 | GET /api/confluence/timeline | none | user | user | no | services/panchang.ts:46 |
-| 6864 | GET /api/rules/{rule_id}/inference | none | user | user | no | RuleInferenceModal.tsx:86, RuleInferencePanel.tsx:52 |
+| 6864 | GET /api/rules/{rule_id}/inference | none | user | admin | no | RuleInferenceModal.tsx:86, RuleInferencePanel.tsx:52 |
 | 6972 | POST /api/rules/{rule_id}/inference | none | user | admin | no | RuleInferenceModal.tsx:437 |
 | 7080 | POST /api/rules/{rule_id}/inference/generate | none | user | admin | no | RuleInferenceModal.tsx:413 |
 | 7155 | DELETE /api/rules/inference/{inference_id} | none | user | admin | no | RuleInferenceModal.tsx:463 |
@@ -505,7 +505,8 @@ auth.audit route=GET /api/scan/presets guard=user reason=missing ip=<X-Forwarded
 
 `caller` hint = `Referer` path (which page fired it) or `User-Agent` class
 (`browser` / `curl` / `python-requests`) — never the token, never a body. Reason
-is one of `missing | invalid | expired | wrong_role | wrong_aud`.
+is one of `missing | invalid | expired | wrong_role | wrong_aud | bad_sub`
+(`bad_sub`: a user token whose `sub` is absent or not a UUID).
 
 Plan:
 
@@ -524,6 +525,32 @@ Plan:
 
 `AUTH_MODE` is read once at startup and shown on `/internal/health` so a deploy
 can be checked without reading logs.
+
+Review query for the 24–48 h audit window (run on the VPS; the API logs to
+stdout at INFO, so the lines are in `docker logs`). It groups failures by
+route, reason and caller, ignoring ops tools, so every remaining row is a call
+site the frontend still sends without a token:
+
+```bash
+docker logs --since 48h kd-pipeline-api2 2>&1 \
+  | grep -F 'auth.audit' \
+  | grep -vE 'caller=(curl|python-requests)' \
+  | sed -E 's/.*route=([A-Z]+ [^ ]+) guard=([a-z]+) reason=([a-z_]+) ip=[^ ]+ caller=(.*)/\1  \2  \3  \4/' \
+  | sort | uniq -c | sort -rn
+```
+
+Read it as: `reason=missing` + `caller=page:/...` = a missed call site on that
+page (fix the frontend, redeploy); `reason=wrong_role` on a `user` route = a
+guest token reaching the app (the client's path assertion should make this
+impossible — investigate); `reason=expired` from `page:/` = the landing page's
+re-mint did not fire. The ops-tool lines the filter drops are the second query:
+
+```bash
+docker logs --since 48h kd-pipeline-api2 2>&1 | grep -F 'auth.audit' | grep -E 'caller=(curl|python-requests)' | sort | uniq -c
+```
+
+Any row there is a script to point at `/internal/health` or give a session
+before `enforce`.
 
 ---
 
@@ -566,39 +593,37 @@ from env; prints one PASS/FAIL row per case; exits non-zero on any FAIL).
 
 ---
 
-## 9. Open questions (not decided here)
+## 9. Decisions (closed by the owner, 2026-09-27 — none open)
 
-1. **PostgREST status for a guest token.** §1 verifies the SQL-level rejection
-   (`42704`, `role "guest" does not exist`); the HTTP status PostgREST wraps it
-   in could not be read from this container (egress blocked). Test §7.4 pins
-   it; if the deployed PostgREST turns it into a `500` rather than a `401`/`403`,
-   decide whether that is acceptable noise in its error log or whether the
-   guest client should be forbidden from ever holding a `/db/` URL (it already
-   is by construction in §4 — this only matters for hand-crafted requests).
-2. **Guest `sub`.** Random UUID per token (this design) vs. a fixed sentinel
-   UUID for all guests. Random gives per-visit correlation in the audit log;
-   fixed is simpler and makes "is this a guest" a one-value check. Random is
-   assumed here.
-3. **`aud` on user tokens.** The `user` guard accepts `aud` absent (today's
-   tokens carry none — `kd_generate_token` sets `role, sub, email, iss, iat,
-   exp`). Should 1c's short-lived tokens add `aud: 'app'` so the guard can
-   require it, and should `kd_generate_token` be changed now to start emitting
-   it (a migration-228 candidate)? Deferred to 1c unless the owner wants the
-   claim in place first.
-4. **`/api/pipeline2/last-run` and `ping` as `user` in 1b.** Both render on
-   user-facing surfaces (workspace health bar, the offline pill). If 1b makes
-   the whole `/api/pipeline2/` prefix admin, those two need either a separate
-   prefix or an explicit exception. Table §2 marks them `user`; confirm.
-5. **Rule-engine reads as `user`.** `/rules`, `/rules/:id`, discovery status,
-   confidence yearly and rule inference GETs are marked `user` in 1b because
-   the pages render for any logged-in profile today. If the Rule Engine is
-   meant to be admin-only, all of §2 "Rule engine" becomes `admin` and the
-   `RuleInsightCard` on user pages needs `GET /api/ai/rule-insight` and
-   `active-rule-today` to stay `user`.
-6. **Landing `Referer` exclusion in nginx.** The `limit_req` zone keys on IP
-   only. Shared-NAT offices could hit 6/min across many visitors; raise to
-   `12r/m` at first sign of legitimate 429s rather than switching to an in-app
-   limiter.
-7. **QA harness token.** Whether to give the harness a real signed token
-   (requires `JWT_SECRET` in CI) or keep mocking FastAPI. Mocking is assumed
-   (§7.9).
+1. **PostgREST status for a guest token** is pinned by acceptance test §7.4;
+   the contract requires non-2xx and zero data, whatever the numeric status.
+2. **Guest `sub`** is a random UUID per token.
+3. **`aud` on user tokens** is deferred to 1c. The `user` guard accepts `aud`
+   absent or `'app'` and rejects any other value.
+4. **1b targets:** `GET /api/pipeline2/last-run` stays `user`;
+   `GET /api/pipeline2/ping` becomes `admin` (1b must then move the
+   `useBackendStatus` pill to a `user`-safe probe or admin-gate it — not 1a).
+5. **Rule Engine routes are classified by calling page.** `/rules` is
+   `adminOnly` in the sidebar (`Sidebar.tsx:65`), so every route called only
+   from `pages/RuleEngine/*` has 1b target `admin`. Routes reached from
+   `Layout`-mounted or user components stay `user`: `discovery/status`,
+   `discovery/cancel` and `confidence/status` (`JobMonitor`, mounted in
+   `Layout.tsx:192` for every profile), `ai/rule-insight` and
+   `ai/active-rule-today` (`RuleInsightCard`, `WorkspaceCanvas`,
+   `OverlayExplainPopover`, `useConfluenceDetection`), and the three
+   `confluence/*` routes (`MarketStructureView`, `ConfluenceDotGrid`). The
+   §2 table reflects this.
+6. **Guest issuer `limit_req`:** `6r/m` per IP, `burst=10`, `nodelay`.
+7. **QA harness** keeps mocking FastAPI; the §7 acceptance tests use a real
+   token minted through `kd_auth_login`.
+
+Implementation record (Phase 1a build, same branch): backend guards in
+`lib/auth.py` (`AUTH_MODE`, `route_guard`, `require_guest`, `mint_guest_token`),
+the guest router and `/internal/health` in `pipeline2_api.py`, CORS from
+`CORS_ORIGINS`, nginx `limit_req` in `nginx/dristiq-vps.conf`,
+`nginx/nginx.conf` and `App/frontend/nginx.conf` (all three carry the issuer
+`location` and the `/internal/` 404), `AUTH_MODE`/`CORS_ORIGINS` in
+`docker-compose.yml` and `App/frontend/.env.example`, `deploy.sh` on
+`/internal/health`, the frontend client in `services/apiClient.ts`, the
+acceptance script `App/backend/scripts/auth_acceptance.py`, and the unit
+suite `App/backend/test_auth_guards.py`.

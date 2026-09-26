@@ -1,12 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { useAuthStore } from '@/stores/authStore'
-
-const PIPELINE_URL = (import.meta.env.VITE_PIPELINE_API_URL as string) || ''
-
-function authHeaders(): Record<string, string> {
-  const token = useAuthStore.getState().session?.access_token
-  return token ? { Authorization: `Bearer ${token}` } : {}
-}
+import { api } from '@/services/apiClient'
 
 export interface CorrelationInstance {
   start_date:    string
@@ -65,9 +58,9 @@ export function useCorrelationResult(
     fetchedRef.current = true
     setLoading(true)
 
-    fetch(`${PIPELINE_URL}/api/correlation/compute`, {
+    api.fetch('/api/correlation/compute', {
       method:  'POST',
-      headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify({ item_a: itemA, item_b: itemB, benchmark }),
     })
       .then(res => {

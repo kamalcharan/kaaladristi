@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { from } from '@/services/postgrest';
 import { displaySymbol, isNumericSymbol } from '@/lib/symbolUtils';
 import { PageHeader } from '@/components/ui';
+import { api } from '@/services/apiClient';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -27,8 +28,6 @@ interface Theme {
 type Llm = 'claude' | 'qwen';
 
 // ── Page ──────────────────────────────────────────────────────────────────────
-
-const PIPELINE_URL = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? '';
 
 const MONO: React.CSSProperties = { fontFamily: 'var(--font-mono)' };
 const DISPLAY: React.CSSProperties = { fontFamily: 'var(--font-display)' };
@@ -102,7 +101,7 @@ export default function CustomIndexDiscoverPage() {
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch(`${PIPELINE_URL}/api/custom-index/themes?status=new`);
+        const res = await api.fetch('/api/custom-index/themes?status=new');
         if (!res.ok) return;
         const data = await res.json();
         if (!cancelled && Array.isArray(data.themes) && data.themes.length > 0) {
@@ -121,7 +120,7 @@ export default function CustomIndexDiscoverPage() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`${PIPELINE_URL}/api/custom-index/discover`, {
+      const res = await api.fetch('/api/custom-index/discover', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ llm }),
@@ -148,7 +147,7 @@ export default function CustomIndexDiscoverPage() {
     setTargeting(true);
     setError(null);
     try {
-      const res = await fetch(`${PIPELINE_URL}/api/custom-index/target`, {
+      const res = await api.fetch('/api/custom-index/target', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ theme_name: name, llm }),
@@ -172,7 +171,7 @@ export default function CustomIndexDiscoverPage() {
   async function setThemeStatus(id: number | undefined, status: 'used' | 'dismissed') {
     if (!id) return; // pre-persistence theme (staging insert failed) — nothing to update
     try {
-      await fetch(`${PIPELINE_URL}/api/custom-index/themes/${id}`, {
+      await api.fetch(`/api/custom-index/themes/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status }),

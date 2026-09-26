@@ -5,11 +5,11 @@
  * invent numbers — one substrate, VaNi is the voice.
  */
 
-const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? '';
+import { api } from '@/services/apiClient';
 
 export async function narrateVani(subject: string, facts: string, question?: string): Promise<string | null> {
   try {
-    const res = await fetch(`${pipelineUrl}/api/ai/vani-narrate`, {
+    const res = await api.fetch('/api/ai/vani-narrate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ subject, facts, question: question ?? null }),

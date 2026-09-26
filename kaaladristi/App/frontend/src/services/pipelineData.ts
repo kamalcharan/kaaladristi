@@ -1,4 +1,5 @@
 import { from } from './postgrest';
+import { api } from '@/services/apiClient';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -75,51 +76,25 @@ export interface JobResponse {
   message: string;
 }
 
-// ── Pipeline API Base URL ────────────────────────────────────────────────────
-
-const PIPELINE_API = (import.meta.env.VITE_PIPELINE_API_URL?.trim() || '');
-
-async function apiGet<T>(path: string): Promise<T> {
-  const resp = await fetch(`${PIPELINE_API}${path}`);
-  if (!resp.ok) {
-    const err = await resp.json().catch(() => ({}));
-    throw new Error(err.detail || `API error: ${resp.status}`);
-  }
-  return resp.json();
-}
-
-async function apiPost<T>(path: string, body?: unknown): Promise<T> {
-  const resp = await fetch(`${PIPELINE_API}${path}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: body ? JSON.stringify(body) : undefined,
-  });
-  if (!resp.ok) {
-    const err = await resp.json().catch(() => ({}));
-    throw new Error(err.detail || `API error: ${resp.status}`);
-  }
-  return resp.json();
-}
-
 // ── Pipeline API Calls ───────────────────────────────────────────────────────
 
-export const fetchPipelineHealth = () => apiGet<PipelineHealth>('/api/pipeline/health');
-export const fetchPipelineStatus = () => apiGet<PipelineStatus>('/api/pipeline/status');
-export const fetchBreezeStatus = () => apiGet<BreezeStatus>('/api/pipeline/breeze-status');
-export const fetchSchedulerStatus = () => apiGet<SchedulerStatus>('/api/pipeline/scheduler');
-export const fetchDownloadTypes = () => apiGet<DownloadType[]>('/api/pipeline/downloads');
+export const fetchPipelineHealth = () => api.get<PipelineHealth>('/api/pipeline/health');
+export const fetchPipelineStatus = () => api.get<PipelineStatus>('/api/pipeline/status');
+export const fetchBreezeStatus = () => api.get<BreezeStatus>('/api/pipeline/breeze-status');
+export const fetchSchedulerStatus = () => api.get<SchedulerStatus>('/api/pipeline/scheduler');
+export const fetchDownloadTypes = () => api.get<DownloadType[]>('/api/pipeline/downloads');
 
 export const triggerPipelineRun = (date?: string, exchange: string = 'ALL', force: boolean = false) =>
-  apiPost<JobResponse>('/api/pipeline/run', { date, exchange, force });
+  api.post<JobResponse>('/api/pipeline/run', { date, exchange, force });
 
 export const triggerBackfill = (dateFrom: string, dateTo: string, exchange: string = 'ALL') =>
-  apiPost<JobResponse>('/api/pipeline/backfill', { date_from: dateFrom, date_to: dateTo, exchange });
+  api.post<JobResponse>('/api/pipeline/backfill', { date_from: dateFrom, date_to: dateTo, exchange });
 
 export const connectBreeze = (sessionToken: string) =>
-  apiPost<{ status: string; message: string }>('/api/pipeline/breeze-connect', { session_token: sessionToken });
+  api.post<{ status: string; message: string }>('/api/pipeline/breeze-connect', { session_token: sessionToken });
 
 export const triggerStepRerun = (tradeDate: string, step: string, exchange: string = 'NSE') =>
-  apiPost<JobResponse>('/api/pipeline/run-step', { trade_date: tradeDate, step, exchange });
+  api.post<JobResponse>('/api/pipeline/run-step', { trade_date: tradeDate, step, exchange });
 
 export interface CoverageSummary {
   trade_date: string;
@@ -140,7 +115,7 @@ export interface CoverageSummary {
 }
 
 export const fetchCoverageSummary = (tradeDate?: string) =>
-  apiGet<CoverageSummary>(`/api/pipeline/coverage-summary${tradeDate ? `?trade_date=${tradeDate}` : ''}`);
+  api.get<CoverageSummary>(`/api/pipeline/coverage-summary${tradeDate ? `?trade_date=${tradeDate}` : ''}`);
 
 // ── Direct DB reads (PostgREST — no Pipeline API dependency) ─────────────────
 

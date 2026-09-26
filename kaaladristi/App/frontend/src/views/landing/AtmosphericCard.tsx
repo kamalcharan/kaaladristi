@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { C, SERIF, MONO, SANS, formatPaksha, todayIST } from './tokens';
 import { fmtDate } from '@/lib/dateUtils';
-import { fetchPanchang } from '@/services/panchang';
+import { fetchGuestPanchang } from '@/services/panchang';
 import type { DailyPanchang } from '@/types';
 
 // ── Atmosphere model ──────────────────────────────────────────────────────
@@ -37,7 +37,7 @@ export function useTodayAtmo(): { atmo: Atmo | null; loading: boolean } {
   const [atmo, setAtmo] = useState<Atmo | null>(null);
   const [loading, setLoading] = useState(true);
   useEffect(() => {
-    fetchPanchang(todayIST())
+    fetchGuestPanchang(todayIST())
       .then(p => { if (p) setAtmo(deriveAtmo(p)); })
       .catch(() => {})
       .finally(() => setLoading(false));

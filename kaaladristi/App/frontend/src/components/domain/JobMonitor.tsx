@@ -4,8 +4,7 @@ import { Activity, WifiOff, X, ChevronDown, ChevronUp, XCircle, CheckCircle, Loa
 import { cn } from '@/lib/utils';
 import { fetchDiscoveryStatus, cancelDiscovery } from '@/pages/RuleEngine/discoveryService';
 import { useBackendStatus } from '@/hooks';
-
-const PIPELINE_API = (import.meta.env.VITE_PIPELINE_API_URL?.trim() || '');
+import { api } from '@/services/apiClient';
 
 interface ConfidenceState {
   running: boolean;
@@ -17,7 +16,7 @@ interface ConfidenceState {
 }
 
 async function fetchConfidenceStatus(): Promise<ConfidenceState> {
-  const res = await fetch(`${PIPELINE_API}/api/confidence/status`);
+  const res = await api.fetch('/api/confidence/status');
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json();
 }

@@ -6,9 +6,7 @@
  */
 
 import { useMutation, useQuery } from '@tanstack/react-query';
-
-const pipelineUrl =
-  (import.meta.env.VITE_PIPELINE_API_URL as string) ?? '';
+import { api } from '@/services/apiClient';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -140,7 +138,7 @@ export interface VaNiAskResponse {
 export function useVaNiAsk() {
   return useMutation({
     mutationFn: async (req: VaNiAskRequest): Promise<VaNiAskResponse> => {
-      const res = await fetch(`${pipelineUrl}/api/vani/ask`, {
+      const res = await api.fetch('/api/vani/ask', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(req),
@@ -201,7 +199,7 @@ export function useVaNiAutorun(
     gcTime: 1000 * 60 * 60,
     retry: 1,
     queryFn: async () => {
-      const res = await fetch(`${pipelineUrl}/api/vani/ask`, {
+      const res = await api.fetch('/api/vani/ask', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

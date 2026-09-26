@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
+import { api } from '@/services/apiClient'
 
 export interface RuleInsight {
   rule_id:   number
@@ -10,11 +11,10 @@ export interface RuleInsight {
 
 /** VaNi plain-language explanation of an astro rule. Backed by GET /api/ai/rule-insight. */
 export function useRuleInsight(ruleId: number | null) {
-  const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? ''
   return useQuery({
     queryKey: ['rule-insight', ruleId],
     queryFn: async () => {
-      const res = await fetch(`${pipelineUrl}/api/ai/rule-insight?rule_id=${ruleId}`)
+      const res = await api.fetch(`/api/ai/rule-insight?rule_id=${ruleId}`)
       if (!res.ok) throw new Error('Failed to fetch rule insight')
       return res.json() as Promise<RuleInsight>
     },
@@ -52,11 +52,10 @@ export interface ActiveRuleToday {
  * Backed by GET /api/ai/active-rule-today. `tag` is the bare group tag, e.g. "Mercury".
  */
 export function useActiveRuleToday(tag: string | null) {
-  const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? ''
   return useQuery({
     queryKey: ['active-rule-today', tag],
     queryFn: async () => {
-      const res = await fetch(`${pipelineUrl}/api/ai/active-rule-today?tag=${encodeURIComponent(tag!)}`)
+      const res = await api.fetch(`/api/ai/active-rule-today?tag=${encodeURIComponent(tag!)}`)
       if (!res.ok) throw new Error('Failed to fetch active rule')
       return res.json() as Promise<ActiveRuleToday>
     },

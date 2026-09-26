@@ -9,8 +9,7 @@
  */
 
 import { useQuery } from '@tanstack/react-query';
-
-const PIPELINE_API = import.meta.env.VITE_PIPELINE_API_URL ?? '';
+import { api } from '@/services/apiClient';
 
 type MarketImpact = 'bullish' | 'bearish' | 'volatile' | 'neutral' | 'mixed';
 // Same vocabulary as RuleEvalView.tsx's OUTCOME_STYLES/OUTCOME_ORDER
@@ -49,7 +48,7 @@ const TIER_COLOR: Record<string, string> = {
 };
 
 async function fetchInference(ruleId: number): Promise<InferenceRow[]> {
-  const res = await fetch(`${PIPELINE_API}/api/rules/${ruleId}/inference`);
+  const res = await api.fetch(`/api/rules/${ruleId}/inference`);
   if (!res.ok) throw new Error(`inference ${res.status}`);
   const data = await res.json();
   const rows: InferenceRow[] = Array.isArray(data?.inferences) ? data.inferences : [];

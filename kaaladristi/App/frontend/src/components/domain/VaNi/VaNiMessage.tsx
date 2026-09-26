@@ -3,8 +3,7 @@ import { usePageContext } from '@/hooks/usePageContext';
 import { ArrowRight, Trash2, Loader2 } from 'lucide-react';
 import VaNiFeedback from './VaNiFeedback';
 import type { ChatMessage } from './types';
-
-const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? '';
+import { api } from '@/services/apiClient';
 
 /** The "V" avatar that marks every VaNi utterance. Shared so the autorun
  *  brief, the answer bubble and the thinking row can never drift apart. */
@@ -96,8 +95,8 @@ export default function VaNiMessage({
           {isAdmin && msg.intentId && onClearCache && (
             <button
               onClick={async () => {
-                await fetch(
-                  `${pipelineUrl}/api/vani/cache?intent_id=${encodeURIComponent(msg.intentId!)}`,
+                await api.fetch(
+                  `/api/vani/cache?intent_id=${encodeURIComponent(msg.intentId!)}`,
                   { method: 'DELETE' },
                 );
                 onClearCache(msg);

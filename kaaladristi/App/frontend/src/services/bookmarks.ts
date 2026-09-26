@@ -5,16 +5,9 @@
  * (stores/frameworkStore.ts) — not direct PostgREST/RLS.
  */
 
-import { useAuthStore } from '@/stores/authStore';
 import { from } from '@/services/postgrest';
 import { SECTOR_TAB_CATEGORIES } from '@/services/sectorRotation';
-
-const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? '';
-
-function authHeaders(): Record<string, string> {
-  const token = useAuthStore.getState().session?.access_token;
-  return token ? { Authorization: `Bearer ${token}` } : {};
-}
+import { api } from '@/services/apiClient';
 
 /** FastAPI error responses carry the real reason in a JSON `detail` field
  *  (e.g. a Postgres "permission denied for table ..." message) — a bare
@@ -57,9 +50,9 @@ export async function setPosition(
   equityId: number,
   entry: PositionEntry,
 ): Promise<BookmarkRow> {
-  const res = await fetch(`${pipelineUrl}/api/bookmarks/${userId}/${equityId}/position`, {
+  const res = await api.fetch(`/api/bookmarks/${userId}/${equityId}/position`, {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(entry),
   });
   if (!res.ok) throw new Error(await _errorDetail(res));
@@ -67,17 +60,15 @@ export async function setPosition(
 }
 
 export async function fetchBookmarks(userId: string): Promise<BookmarkRow[]> {
-  const res = await fetch(`${pipelineUrl}/api/bookmarks/${userId}`, {
-    headers: authHeaders(),
-  });
+  const res = await api.fetch(`/api/bookmarks/${userId}`);
   if (!res.ok) throw new Error(await _errorDetail(res));
   return res.json();
 }
 
 export async function addBookmark(userId: string, equityId: number): Promise<BookmarkRow> {
-  const res = await fetch(`${pipelineUrl}/api/bookmarks/${userId}`, {
+  const res = await api.fetch(`/api/bookmarks/${userId}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ equity_id: equityId }),
   });
   if (!res.ok) throw new Error(await _errorDetail(res));
@@ -85,9 +76,8 @@ export async function addBookmark(userId: string, equityId: number): Promise<Boo
 }
 
 export async function removeBookmark(userId: string, equityId: number): Promise<void> {
-  const res = await fetch(`${pipelineUrl}/api/bookmarks/${userId}/${equityId}`, {
+  const res = await api.fetch(`/api/bookmarks/${userId}/${equityId}`, {
     method: 'DELETE',
-    headers: authHeaders(),
   });
   if (!res.ok) throw new Error(await _errorDetail(res));
 }

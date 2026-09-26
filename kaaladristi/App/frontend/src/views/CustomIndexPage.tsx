@@ -3,8 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { from } from '@/services/postgrest';
 import { PageHeader } from '@/components/ui';
-
-const PIPELINE_URL = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? '';
+import { api } from '@/services/apiClient';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -68,7 +67,7 @@ export default function CustomIndexPage() {
   async function calculateIndex(id: number, range?: DateRange) {
     setComputeState((prev) => ({ ...prev, [id]: { status: 'loading' } }));
     try {
-      const res = await fetch(`${PIPELINE_URL}/api/custom-index/${id}/compute`, {
+      const res = await api.fetch(`/api/custom-index/${id}/compute`, {
         method: 'POST',
         ...(range
           ? { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(range) }
@@ -113,7 +112,7 @@ export default function CustomIndexPage() {
     )) return;
     setDeletingId(id);
     try {
-      const res = await fetch(`${PIPELINE_URL}/api/custom-index/${id}`, { method: 'DELETE' });
+      const res = await api.fetch(`/api/custom-index/${id}`, { method: 'DELETE' });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         throw new Error(body.detail ?? `HTTP ${res.status}`);

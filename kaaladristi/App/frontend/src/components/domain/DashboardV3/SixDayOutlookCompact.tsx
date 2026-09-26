@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { api } from '@/services/apiClient';
 
 // ── Date helpers ──────────────────────────────────────────────────────────────
 
@@ -83,10 +84,8 @@ interface WeekDay {
 
 // ── Fetch ─────────────────────────────────────────────────────────────────────
 
-const PIPELINE_API = (import.meta.env.VITE_PIPELINE_API_URL as string | undefined)?.trim() ?? '';
-
 async function fetchPanchangWeek(from: string, to: string): Promise<WeekDay[]> {
-  const res = await fetch(`${PIPELINE_API}/api/panchang/week?from=${from}&to=${to}`);
+  const res = await api.fetch(`/api/panchang/week?from=${from}&to=${to}`);
   if (!res.ok) return [];
   return res.json() as Promise<WeekDay[]>;
 }

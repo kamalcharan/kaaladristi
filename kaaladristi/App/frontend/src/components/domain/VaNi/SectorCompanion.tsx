@@ -19,8 +19,8 @@ import { sectorSessionDate, sectorSignal, SECTOR_FLOW_LABEL } from '@/lib/sector
 import VaNiFeedback from './VaNiFeedback';
 import VaNiBrand, {VaNiConsulting} from './VaNiBrand';
 import '@/styles/sectorResearch.css';
+import { api } from '@/services/apiClient';
 
-const API = import.meta.env.VITE_PIPELINE_API_URL?.trim() || '';
 const intents = {
   'sector.overview': 'What’s happening here?',
   'sector.entering': 'Where is flow entering?', 'sector.fading': 'Where is flow fading?', 'sector.leaving': 'Where is flow leaving?',
@@ -43,7 +43,7 @@ interface Response {
   period?: number; history?: SectorIndexRow[]; rows?: SectorIndexRow[]; index_count?: number;
 }
 async function ask(body: object): Promise<Response> {
-  const res = await fetch(`${API}/api/vani/ask`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const res = await api.fetch('/api/vani/ask', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   if (!res.ok) throw new Error('VaNi is unavailable. Your research data remains accessible.');
   const data = await res.json();
   return data;
