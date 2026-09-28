@@ -348,6 +348,25 @@ def prune_pending(conn) -> int:
 
 STATUSES = ('pending', 'reading', 'done', 'failed', 'unreadable', 'skipped')
 
+# Columns a pass WRITES that a later migration added. Checked before a row is
+# claimed: on 2026-09-28 the backend shipped ahead of migration 230 and the
+# first gate-1 skip crashed the whole backfill mid-row (the row stuck in
+# `reading`). A missing column is the same honest state as a missing API key
+# — nothing claimed, rows stay pending, the pass completes and says why.
+REQUIRED_COLUMNS = {'triage_reason': 'migration 230'}
+
+
+def schema_missing(conn) -> Optional[str]:
+    with conn.cursor() as cur:
+        cur.execute("""
+            SELECT column_name FROM information_schema.columns
+             WHERE table_name = 'km_filing_reads' AND column_name = ANY(%s)
+        """, (list(REQUIRED_COLUMNS),))
+        have = {r[0] for r in cur.fetchall()}
+    conn.rollback()
+    missing = [f'{c} ({m})' for c, m in REQUIRED_COLUMNS.items() if c not in have]
+    return f'km_filing_reads lacks {", ".join(missing)} — apply it first' if missing else None
+
 
 def status_counts(conn) -> dict:
     with conn.cursor() as cur:
@@ -524,6 +543,11 @@ def read_pending(conn, session=None, client=None, limit: int = MAX_PER_PASS,
             log.warning('[filing_reader] ANTHROPIC_API_KEY not set — rows stay pending')
             return stats
         client = _client()
+    missing = schema_missing(conn)
+    if missing:
+        stats['skipped'] = missing
+        log.error(f'[filing_reader] {missing} — nothing claimed, rows stay pending')
+        return stats
     if session is None:
         from pipeline.utils.nse_session import NseSession
         session = NseSession()
@@ -540,7 +564,16 @@ def read_pending(conn, session=None, client=None, limit: int = MAX_PER_PASS,
         row = _claim_next(conn, retry_failed=retry_failed, pass_started=pass_started)
         if row is None:
             break
-        status = read_one(conn, row, client, session, model=model)
+        try:
+            status = read_one(conn, row, client, session, model=model)
+        except Exception as e:
+            # A bug in the reader is this row's failure, not the pass's: mark
+            # it (the next pass retries under the attempt cap) and go on. If
+            # even the mark fails the fault is the table, and that propagates.
+            conn.rollback()
+            log.exception(f'[filing_reader] read {row["read_id"]} crashed')
+            _finish(conn, row['read_id'], 'failed', f'reader: {e}')
+            status = 'failed'
         stats['read'] += 1
         key = 'triaged' if status == 'skipped' else status
         stats[key] = stats.get(key, 0) + 1

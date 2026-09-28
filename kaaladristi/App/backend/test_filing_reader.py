@@ -420,6 +420,45 @@ class Reads(unittest.TestCase):
                          ('done', 'done', 'skipped'))
         self.assertEqual(len(client.messages.calls), 2)
 
+    def test_a_missing_migration_stops_the_pass_before_any_row_is_claimed(self):
+        # the 2026-09-28 shape: backend deployed, migration 230 not yet applied
+        self._event('routine', '2026-09-28 10:00+05:30', 'SPARK', event_type='MGMT_EXIT')
+        fr.enqueue_pending(self.conn)
+        with self.conn.cursor() as c:
+            c.execute('ALTER TABLE km_filing_reads DROP COLUMN triage_reason')
+        self.conn.commit()
+        try:
+            client = _Client()
+            stats = fr.read_pending(self.conn, session=_Session({'http://x/a.pdf': _pdf([self.ROUTINE_MGMT])}), client=client)
+            self.assertIn('migration 230', stats['skipped'])
+            self.assertEqual(stats['read'], 0)
+            self.assertEqual(client.messages.calls, [])
+            r = self._rows()['routine']
+            self.assertEqual((r['status'], r['attempts']), ('pending', 0), 'nothing was claimed')
+        finally:
+            with self.conn.cursor() as c:
+                c.execute('ALTER TABLE km_filing_reads ADD COLUMN triage_reason TEXT')
+            self.conn.commit()
+
+    def test_a_reader_crash_fails_that_row_and_the_pass_goes_on(self):
+        self._event('boom', '2026-09-28 10:00+05:30', url='http://x/boom.pdf')
+        self._event('fine', '2026-09-28 09:00+05:30', url='http://x/fine.pdf')
+        fr.enqueue_pending(self.conn)
+        real = fr.build_messages
+
+        def explode(row, doc, pdf):
+            if row.get('company_name') == 'boom':
+                raise RuntimeError('unexpected shape')
+            return real(row, doc, pdf)
+        with mock.patch.object(fr, 'build_messages', side_effect=explode):
+            stats = fr.read_pending(self.conn, client=_Client(), session=_Session({
+                'http://x/boom.pdf': _pdf([ORDER_TEXT]), 'http://x/fine.pdf': _pdf([ORDER_TEXT])}))
+        rows = self._rows()
+        self.assertEqual((stats['read'], stats['done'], stats['failed']), (2, 1, 1))
+        self.assertEqual(rows['boom']['status'], 'failed')
+        self.assertIn('unexpected shape', rows['boom']['error'])
+        self.assertEqual(rows['fine']['status'], 'done')
+
     def test_gate1_never_gates_an_order_or_an_acquisition(self):
         self._event('order', '2026-09-28 10:00+05:30', 'SPARK', event_type='LARGE_ORDER')
         fr.enqueue_pending(self.conn)
