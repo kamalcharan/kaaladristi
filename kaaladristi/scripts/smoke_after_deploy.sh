@@ -123,6 +123,10 @@ sys.exit(0 if r.status==200 and json.loads(b).get("ok") is True else 1)' 2>/dev/
   if [ $? -eq 0 ]; then
     mode="$(printf '%s' "$hj" | sed -n 's/.*"auth_mode":"\([^"]*\)".*/\1/p')"
     ok "7b /internal/health in-container" "ok auth_mode=$mode"
+    case "$hj" in
+      *'"role":"full"'*'"worker_lease":true'*'"scheduler_lease":true'*) ok "7c VPS is the one executor" "role=full, both leases held" ;;
+      *) bad "7c VPS is the one executor" "expected role=full with worker_lease and scheduler_lease true: $(printf '%s' "$hj" | head -c 200)" ;;
+    esac
   else
     bad "7b /internal/health in-container" "docker exec probe failed"
   fi

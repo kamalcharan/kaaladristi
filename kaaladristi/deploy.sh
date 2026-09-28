@@ -54,6 +54,12 @@ r=u.urlopen("http://127.0.0.1:8101/internal/health",timeout=5); b=r.read().decod
 sys.exit(0 if r.status==200 and json.loads(b).get("ok") is True else 1)' 2>/dev/null)"
 if [ $? -eq 0 ]; then
     echo "[check] kd-pipeline-api2 OK: $HEALTH_JSON"
+    # The VPS must be the ONE executor: role full and both leases held.
+    # An api-only role here, or a missing lease, means no jobs will run tonight.
+    case "$HEALTH_JSON" in
+        *'"role":"full"'*'"worker_lease":true'*'"scheduler_lease":true'*) echo "[check] role=full, worker + scheduler leases held" ;;
+        *) echo "[check] WARNING: expected role=full with both leases held — see above" ;;
+    esac
 else
     echo "[check] WARNING: health check failed — check logs:"
     echo "  docker compose logs kd-pipeline-api2 --tail 30"

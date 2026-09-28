@@ -34,6 +34,8 @@ _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 if _SCRIPT_DIR not in sys.path:
     sys.path.insert(0, _SCRIPT_DIR)
 
+from lib.config import PIPELINE2_ROLE as _PIPELINE2_ROLE  # noqa: E402
+from pipeline2 import lease as _lease  # noqa: E402
 from lib.auth import (  # noqa: E402
     get_current_user_id as _get_current_user_id,
     route_guard as _route_guard,
@@ -140,9 +142,18 @@ def _conn(statement_timeout_ms: int = 0):
 def _reset_stale_jobs():
     """On startup, reset any jobs stuck in 'running' back to 'queued'.
     These are orphaned from a previous worker that was killed mid-job.
-    Handlers are designed to be re-entrant (force=False skips done work)."""
+    Handlers are designed to be re-entrant (force=False skips done work).
+
+    Only when NO worker holds its lease: a job is orphaned only if the worker
+    that claimed it is gone. Before this guard, starting a second API
+    anywhere (a dev machine, a redeploy racing the old container) requeued
+    the live worker's in-flight job — including a running daily_run."""
     try:
         conn = _conn()
+        if _lease.holders(conn)['worker']:
+            log.info('A worker holds its lease — skipping stale-job reset')
+            conn.close()
+            return
         with conn.cursor() as cur:
             cur.execute(
                 "UPDATE km_jobs SET status = 'queued', started_at = NULL "
@@ -161,23 +172,33 @@ def _reset_stale_jobs():
 async def lifespan(app: FastAPI):
     global _scheduler, _worker_process
 
-    log.info('pipeline2 API starting')
+    log.info(f'pipeline2 API starting (PIPELINE2_ROLE={_PIPELINE2_ROLE})')
 
-    # Reset any jobs orphaned by a previous process kill
-    _reset_stale_jobs()
-
-    # Start worker subprocess
-    worker_cmd = [sys.executable, '-m', 'pipeline2.worker', '--watch']
-    _worker_process = subprocess.Popen(
-        worker_cmd, cwd=_SCRIPT_DIR,
-    )
-    log.info(f'worker subprocess started (PID {_worker_process.pid})')
-
-    # Start scheduler
-    if DATABASE_URL:
-        _scheduler = v2_scheduler.start_scheduler(DATABASE_URL)
+    if _PIPELINE2_ROLE == 'api-only':
+        # A dev machine pointed at production: serve the routes, run no jobs.
+        # No worker, no scheduler, no stale-job reset — each of those would
+        # act on the VPS's queue.
+        log.info('api-only: worker, scheduler and stale-job reset are OFF')
     else:
-        log.warning('DATABASE_URL not set — scheduler not started')
+        # Reset any jobs orphaned by a previous process kill (skipped while a
+        # live worker holds its lease — see _reset_stale_jobs)
+        _reset_stale_jobs()
+
+        # Start worker subprocess. It takes the worker lease itself and exits
+        # 0 if another worker already holds it.
+        worker_cmd = [sys.executable, '-m', 'pipeline2.worker', '--watch']
+        _worker_process = subprocess.Popen(
+            worker_cmd, cwd=_SCRIPT_DIR,
+        )
+        log.info(f'worker subprocess started (PID {_worker_process.pid})')
+
+        # Start scheduler (None when another scheduler holds its lease)
+        if DATABASE_URL:
+            _scheduler = v2_scheduler.start_scheduler(DATABASE_URL)
+            if _scheduler is None:
+                log.warning('scheduler not started: another instance holds the scheduler lease')
+        else:
+            log.warning('DATABASE_URL not set — scheduler not started')
 
     yield
 
@@ -3553,6 +3574,7 @@ def _health_body() -> dict:
     guard) and GET /internal/health (ops probe: deploy.sh, the JWT rotation
     script; no nginx location, so reachable only on the docker network)."""
     db_ok = False
+    leases = {'worker': None, 'scheduler': None}
     try:
         c = _conn()
         try:
@@ -3560,6 +3582,7 @@ def _health_body() -> dict:
                 cur.execute('SELECT 1')
                 cur.fetchone()
             db_ok = True
+            leases = _lease.holders(c)
         finally:
             c.close()
     except Exception:
@@ -3567,7 +3590,12 @@ def _health_body() -> dict:
     return {
         'ok': True,
         'db': 'ok' if db_ok else 'error',
+        'role': _PIPELINE2_ROLE,
         'worker_running': bool(_worker_process and _worker_process.poll() is None),
+        # Held by ANY session (pg_locks) — the VPS in `full` role must show both
+        # true; an api-only instance reports what the VPS holds.
+        'worker_lease': leases['worker'],
+        'scheduler_lease': leases['scheduler'],
         'auth_mode': _AUTH_MODE,
     }
 

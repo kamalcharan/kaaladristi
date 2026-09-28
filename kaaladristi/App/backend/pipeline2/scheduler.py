@@ -325,8 +325,25 @@ def _tier_expiry_sweep(dsn: str):
         conn.close()
 
 
-def start_scheduler(dsn: str) -> BackgroundScheduler:
-    """Start APScheduler with the 18:00 IST daily run and 19:30 IST gap sweep."""
+_lease_conn = None   # held for the life of the process: the scheduler lease lives on it
+
+
+def start_scheduler(dsn: str) -> BackgroundScheduler | None:
+    """Start APScheduler with the 18:00 IST daily run and 19:30 IST gap sweep.
+
+    Returns None — and starts nothing — when another scheduler holds the
+    scheduler lease (pipeline2/lease.py). Two schedulers double the 19:30
+    sweep and every cascade it triggers, even with a single worker.
+    """
+    global _lease_conn
+    from . import lease
+    _lease_conn = psycopg2.connect(dsn)
+    if not lease.try_acquire(_lease_conn, lease.SCHEDULER_LEASE):
+        log.warning('Scheduler not started: another scheduler holds the lease')
+        _lease_conn.close()
+        _lease_conn = None
+        return None
+
     sched = BackgroundScheduler(timezone=IST)
 
     sched.add_job(

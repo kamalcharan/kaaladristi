@@ -37,6 +37,7 @@ from lib.config import DATABASE_URL  # noqa: E402
 from . import handlers  # noqa: E402
 from . import orchestrator  # noqa: E402
 from . import watermarks  # noqa: E402
+from . import lease  # noqa: E402
 
 
 logging.basicConfig(
@@ -821,6 +822,15 @@ def main():
     args = parser.parse_args()
 
     conn = _connect()
+    # One worker per database. The lease is a session advisory lock on THIS
+    # connection; a second worker anywhere (another container, a dev machine
+    # running pipeline2_api) gets False here and exits cleanly instead of
+    # claiming jobs alongside the first — two forced fixes updating
+    # km_equity_eod at once is where every nightly deadlock came from.
+    if not lease.try_acquire(conn, lease.WORKER_LEASE):
+        log.warning('Worker not started: another worker holds the lease')
+        conn.close()
+        return 0
     try:
         if args.watch:
             interval = args.watch
@@ -837,6 +847,11 @@ def main():
                         except RuntimeError as reconnect_err:
                             log.error(f'Fatal reconnect failure: {reconnect_err}')
                             raise SystemExit(1)
+                        # A new session holds no lease: re-take it, and stop
+                        # if another worker took over in the meantime.
+                        if not lease.try_acquire(conn, lease.WORKER_LEASE):
+                            log.error('Lease lost to another worker after reconnect — exiting')
+                            raise SystemExit(0)
                     else:
                         try:
                             conn.rollback()
@@ -860,4 +875,4 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    raise SystemExit(main() or 0)

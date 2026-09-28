@@ -45,6 +45,23 @@ BREEZE_API_KEY = os.getenv('BREEZE_API_KEY', '').strip()
 BREEZE_API_SECRET = os.getenv('BREEZE_API_SECRET', '').strip()
 BREEZE_SESSION_TOKEN = os.getenv('BREEZE_SESSION_TOKEN', '').strip()
 
+# Which parts of pipeline2 this process runs.
+#   full      API + worker subprocess + scheduler   (the VPS; the default)
+#   api-only  API only — no worker, no scheduler, no stale-job reset. For a
+#             dev machine whose only database IS production: it serves every
+#             route from prod without becoming a second pipeline.
+# Either way the worker and scheduler take a session lease (pipeline2/lease.py),
+# so a second `full` instance refuses to run them instead of splitting the queue.
+PIPELINE2_ROLES = ('full', 'api-only')
+_raw_role = (os.getenv('PIPELINE2_ROLE') or 'full').strip().lower()
+if _raw_role not in PIPELINE2_ROLES:
+    import logging as _logging
+    _logging.getLogger('config').warning(
+        "PIPELINE2_ROLE=%r is not one of %s — running as 'full' (the lease still "
+        "refuses a second worker/scheduler)", _raw_role, PIPELINE2_ROLES)
+    _raw_role = 'full'
+PIPELINE2_ROLE = _raw_role
+
 # Pipeline defaults
 BATCH_SIZE = 500           # rows per PostgREST upsert
 REQUEST_DELAY = 0.5        # seconds between Breeze API calls

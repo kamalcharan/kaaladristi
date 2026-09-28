@@ -49,6 +49,8 @@ services:
       # Phase 1a route guards: off | audit | enforce (default audit — log,
       # never block). Flip to enforce after the 24-48h audit window.
       AUTH_MODE: "${AUTH_MODE:-audit}"
+      # full = this container runs the worker + scheduler (the VPS). Never api-only here.
+      PIPELINE2_ROLE: "${PIPELINE2_ROLE:-full}"
       # CORS allow-list, comma-separated. Production origins by default; add
       # http://localhost:5173 etc. in dev. Tokens travel in headers, so
       # credentials are never allowed.
