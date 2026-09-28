@@ -76,6 +76,16 @@ export function isAuthRejection(err: unknown): boolean {
   return AUTH_REJECTION_MESSAGE.test(msg);
 }
 
+/** Narrower than isAuthRejection: the server said the JWT ITSELF is bad.
+ *  A 401 carrying a SQL permission state (42501) is a missing grant on a
+ *  table, which the same token may well have just read elsewhere. */
+export function isTokenRejection(err: unknown): boolean {
+  if (err == null) return false;
+  const o = err as { code?: unknown; message?: unknown };
+  if (typeof o.code === 'string' && PGRST_AUTH_CODES.has(o.code)) return true;
+  return AUTH_REJECTION_MESSAGE.test(typeof o.message === 'string' ? o.message : '');
+}
+
 /** The one place a dead session goes: drop the stored token, tell listeners,
  *  and send the browser to /login. A full navigation on purpose — every
  *  in-memory reader of the session starts over, and nothing can keep sending
@@ -254,9 +264,16 @@ export async function getProfile(): Promise<KmProfile | null> {
       .maybeSingle()
       .execute();
 
-    // A rejected token here is a dead session like anywhere else; any other
-    // failure keeps the pre-existing behaviour (no expiry, profile still loads).
-    if (subError && isAuthRejection(subError)) throw toError(subError);
+    // Only a rejected TOKEN (PostgREST's PGRST301/302/303, or a JWS message)
+    // is a dead session here. A permission denial on this table is not:
+    // `authenticated` holds no SELECT grant on user_subscriptions (migration
+    // 226 recorded it, 232 grants it) and PostgREST answers that with a bare
+    // 401 + SQL state 42501 — which a status-only check read as "token dead"
+    // and turned every dev login into sign-in → /setup → sign-out on
+    // 2026-09-28. The profile row itself loaded a moment earlier with the
+    // same token, so the token is fine; only expires_at is unavailable.
+    if (subError && isTokenRejection(subError)) throw toError(subError);
+    if (subError) console.warn('[auth] user_subscriptions unavailable, expires_at unknown:', subError.code, subError.message);
 
     if (subData) {
       profile.expires_at = (subData as any).expires_at ?? null;
