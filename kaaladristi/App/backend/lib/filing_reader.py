@@ -93,7 +93,25 @@ def _resolve_backend(value: Optional[str]) -> str:
 
 
 BACKEND = _resolve_backend(os.getenv('FILING_READ_BACKEND'))
-LOCAL_URL = (os.getenv('FILING_READ_LOCAL_URL') or os.getenv('LLM_BASE_URL') or '').strip().rstrip('/')
+
+
+def _local_url() -> str:
+    """Where the local server is. FILING_READ_LOCAL_URL, else LLM_BASE_URL,
+    else — when the VaNi layer is already pointed at an OpenAI-compatible
+    server (AI_PROVIDER=openai + AI_BASE_URL) — that same server, with the
+    /v1 the reader's path needs. The owner's .env says where Qwen is ONCE;
+    the reader should not make it say so twice."""
+    url = (os.getenv('FILING_READ_LOCAL_URL') or os.getenv('LLM_BASE_URL') or '').strip().rstrip('/')
+    if url:
+        return url
+    if (os.getenv('AI_PROVIDER') or '').strip().lower() == 'openai':
+        base = (os.getenv('AI_BASE_URL') or '').strip().rstrip('/')
+        if base:
+            return base if base.endswith('/v1') else base + '/v1'
+    return ''
+
+
+LOCAL_URL = _local_url()
 
 
 def _local_key() -> str:
@@ -310,7 +328,7 @@ def backend_missing() -> Optional[str]:
     if BACKEND == 'anthropic':
         return None if _api_key() else 'ANTHROPIC_API_KEY not set'
     if BACKEND == 'local':
-        return None if LOCAL_URL else 'FILING_READ_LOCAL_URL / LLM_BASE_URL not set'
+        return None if LOCAL_URL else 'FILING_READ_LOCAL_URL / LLM_BASE_URL / AI_BASE_URL not set'
     return f'FILING_READ_BACKEND={BACKEND!r} is not anthropic or local'
 
 

@@ -331,6 +331,19 @@ class LocalBackend(unittest.TestCase):
         with mock.patch.dict(os.environ, {'FILING_READ_MODEL': '', 'CLAUDE_MODEL': 'claude-haiku-4-5'}):
             self.assertEqual(fr._resolve_model('anthropic'), 'claude-haiku-4-5')
 
+    def test_local_url_inherits_the_vani_layers_openai_server(self):
+        env = {'FILING_READ_LOCAL_URL': '', 'LLM_BASE_URL': '', 'AI_PROVIDER': 'openai', 'AI_BASE_URL': 'https://llm.dristiq.com'}
+        with mock.patch.dict(os.environ, env):
+            self.assertEqual(fr._local_url(), 'https://llm.dristiq.com/v1', 'the /v1 the reader needs is appended once')
+        with mock.patch.dict(os.environ, dict(env, AI_BASE_URL='https://llm.dristiq.com/v1/')):
+            self.assertEqual(fr._local_url(), 'https://llm.dristiq.com/v1', 'never doubled')
+        with mock.patch.dict(os.environ, dict(env, AI_PROVIDER='anthropic')):
+            self.assertEqual(fr._local_url(), '', 'an Anthropic AI_BASE_URL is not a local server')
+        with mock.patch.dict(os.environ, dict(env, FILING_READ_LOCAL_URL='http://x:8080/v1')):
+            self.assertEqual(fr._local_url(), 'http://x:8080/v1', 'the explicit override wins')
+        with mock.patch.dict(os.environ, dict(env, LLM_BASE_URL='http://y:8080/v1')):
+            self.assertEqual(fr._local_url(), 'http://y:8080/v1')
+
     def test_local_key_resolves_and_never_takes_an_anthropic_key(self):
         with mock.patch.dict(os.environ, {'FILING_READ_LOCAL_KEY': 'vk-1', 'LLM_API_KEY': 'vk-2', 'AI_API_KEY': 'vk-3'}):
             self.assertEqual(fr._local_key(), 'vk-1')
@@ -351,7 +364,7 @@ class LocalBackend(unittest.TestCase):
              mock.patch.dict(os.environ, {'ANTHROPIC_API_KEY': '', 'AI_API_KEY': ''}):
             self.assertIn('ANTHROPIC_API_KEY', fr.backend_missing())
         with mock.patch.object(fr, 'BACKEND', 'local'), mock.patch.object(fr, 'LOCAL_URL', ''):
-            self.assertIn('LLM_BASE_URL', fr.backend_missing())
+            self.assertIn('AI_BASE_URL', fr.backend_missing())
         with mock.patch.object(fr, 'BACKEND', 'local'), mock.patch.object(fr, 'LOCAL_URL', 'http://x/v1'):
             self.assertIsNone(fr.backend_missing())
         with mock.patch.object(fr, 'BACKEND', 'gemini'):
