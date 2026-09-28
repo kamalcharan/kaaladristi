@@ -837,17 +837,56 @@ the VPS, and a local-Qwen yes/no on the first ~1,200 characters is the next
 rung if the rules prove too coarse. Measure the `skipped` rows before adding
 it.
 
-Local Qwen **cannot be the reader**, on three measured limits, not on quality:
-its context is 4,096 tokens (CLAUDE.md), and a material filing's text layer is
-usually 3–15k tokens before the prompt; it has no vision, and the scanned PDFs
-(the chars-per-page gate exists because they are common) are sent as the
-document itself; and `_fallback_complete` already fails on the far smaller
-companion prompts (Known Issues, 2026-09-14). What Qwen CAN do is triage —
-"is this the routine kind of filing" from the ~150-char `summary_text` — and
-that is the one place it could cut spend; it is not built because the
-taxonomy already routes GENERAL/UNCLASSIFIED away from the read for free.
-Never `claude_complete`'s raw-`requests` path for this; that helper predates
-the SDK being in the image.
+**Local Qwen CAN be the reader — CORRECTED 2026-09-28.** An earlier version
+of this paragraph said it could not, on three limits. Two of them were the
+deployment, not the model, and the third was never a limit:
+
+* *"4,096-token context"* — a LAUNCH FLAG on the VPS `llm-server` container,
+  not a property of Qwen3-4B (32k natively). The documents measured on the
+  first 145 paid reads average 3,724 input tokens, max ~15k, so 4,096 holds
+  fewer than half; 16,384 holds all but a handful. The reader now trims a
+  document to whole pages inside `FILING_READ_LOCAL_CTX` and records
+  `pages_read < page_count`, so an over-long read is a visible partial, never
+  a silent truncation at the server's end — which is the annexure, where the
+  substance sits. ⚠ The env value must match what the server was started
+  with; too high means the server truncates silently.
+* *"no vision"* — owner: *"python libraries should convert into metadata and
+  send it to qwen — image models will be expensive"*. A scanned page is now
+  rendered by pypdfium2 and read by Tesseract (`ocr_text`), on BOTH backends;
+  `read_source='ocr'` (migration 231) records the provenance because OCR
+  misreads figures in tables. Measured share of scanned documents: 2 of 145.
+  A scan Tesseract cannot read is `unreadable` on the local backend and the
+  PDF-as-images route on the Anthropic one.
+* *"`_fallback_complete` already fails on the companion prompts"* — most
+  likely the same context flag; a symptom, not a third reason.
+
+What IS still open is **quality**, and it is measurable for free:
+`scripts/compare_filing_readers.py` re-reads every paid verdict from the
+stored text through the local backend and reports impact/magnitude agreement
+per event type, with each disagreement listed. Agreement with Haiku is not the
+same as being right, but a backend that disagrees on the sign of an order win
+is not one to trust unmeasured. **Run it before flipping
+`FILING_READ_BACKEND=local`**, after raising the server's context.
+
+`FILING_READ_BACKEND` selects `anthropic` (the SDK, priced per row) or
+`local`/`qwen` (`LocalClient` over the OpenAI-compatible server at
+`FILING_READ_LOCAL_URL`, else `LLM_BASE_URL`; `temperature 0`, `/no_think` +
+`enable_thinking=false`, the verdict shape enforced by a `json_schema`
+`response_format` grammar and validated by the same pydantic model; the row's
+`model` column reads `local:<name>` and `cost_usd` is 0). `read_one` does not
+know which it has — both expose `messages.parse` returning `parsed_output`
+and `usage`. Never `claude_complete`'s raw-`requests` path for this; that
+helper predates the SDK being in the image.
+
+**Also 2026-09-28, from the same 145 reads: MGMT_CHANGE joined the never-read
+list.** Gate 1 let 31 appointments through and 30 came back neutral+minor —
+a quarter of the spend for one finding, and by construction: an appointment
+is procedural under rule 2 of the prompt. MGMT_EXIT stays (8 notable negatives
+in 11 reads). `FILING_READ_NEVER_TYPES` overrides the list. And **31 of the
+first 176 rows were "unreadable" because NSE ships KMP resignations and some
+SAST filings as a `.zip` holding the PDF beside its XBRL** — 279 of the
+pending MGMT_EXIT queue too, so half of the best negative-signal type was never
+being read. `unwrap_document` opens the zip and takes the largest PDF member.
 
 **Output — one row per event in `km_filing_reads`** (migration 229):
 
@@ -864,7 +903,7 @@ the SDK being in the image.
 | `reasoning` | two or three sentences |
 | `evidence_quote` | the sentence(s) from the document the verdict rests on — **what makes it auditable** |
 | `confidence` | 0–1 |
-| `model`, `reader_version`, `input_tokens`, `output_tokens`, `pages_read`, `page_count`, `read_source` (`text` / `pdf`) | audit |
+| `model`, `reader_version`, `input_tokens`, `output_tokens`, `pages_read`, `page_count`, `read_source` (`text` / `pdf` / `ocr` — migration 231) | audit |
 | `fetched_at`, `started_at`, `finished_at`, `attempts`, `last_error` | the status row's clock |
 
 `reader_version` keys the result: a prompt change is a re-queue that never

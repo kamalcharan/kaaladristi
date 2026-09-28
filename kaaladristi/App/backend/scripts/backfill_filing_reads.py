@@ -56,8 +56,11 @@ def main():
         released = fr.release_stale_reading(conn)
         counts = fr.status_counts(conn)
         print(f'enqueued {n:,} new · pruned {pruned:,} out of scope · released {released} stale · {counts}')
-        if not fr.has_api_key():
-            print('ANTHROPIC_API_KEY not set — nothing read'); return
+        missing = fr.backend_missing()
+        if missing:
+            print(f'{missing} — nothing read'); return
+        print(f'backend {fr.BACKEND} · model {args.model}'
+              + (f' · ctx {fr.LOCAL_CTX_TOKENS} · {fr.LOCAL_URL}' if fr.BACKEND == 'local' else ''))
 
         t0 = time.time()
 

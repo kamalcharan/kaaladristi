@@ -28,8 +28,10 @@ What these pin, none of it visible in a type:
 from __future__ import annotations
 
 import ast
+import io
 import os
 import unittest
+import zipfile
 from unittest import mock
 
 from lib import filing_reader as fr
@@ -45,7 +47,8 @@ MIGRATIONS = ('km_migration_212_filings_ingest.sql',
               'km_migration_217_bulk_deals.sql',
               'km_migration_228_day_zero_calendar.sql',
               'km_migration_229_filing_reads.sql',
-              'km_migration_230_filing_reads_triage.sql')
+              'km_migration_230_filing_reads_triage.sql',
+              'km_migration_231_filing_reads_ocr_source.sql')
 
 
 # ── PDFs built by hand: pypdf reads them, no other library is needed ──────
@@ -226,8 +229,11 @@ class Extraction(unittest.TestCase):
         # everything else is read as-is, scanned or not
         for et in ('LARGE_ORDER', 'ACQUISITION', 'REGULATORY_ACTION', 'INSOLVENCY', 'SAST', 'QIP', None):
             self.assertIsNone(fr.triage({'event_type': et}, doc('', scanned=True)), et)
-        # gate 0's never-list is exactly the procedural four
-        self.assertEqual(set(fr.NEVER_READ_TYPES), {'RECORD_DATE', 'ESOP', 'ALLOTMENT', 'AUTHORISED_CAPITAL'})
+        # gate 0's never-list: the procedural four plus MGMT_CHANGE (measured:
+        # 30 of 31 appointments neutral+minor). MGMT_EXIT is NOT on it.
+        self.assertEqual(set(fr.NEVER_READ_TYPES),
+                         {'RECORD_DATE', 'ESOP', 'ALLOTMENT', 'AUTHORISED_CAPITAL', 'MGMT_CHANGE'})
+        self.assertNotIn('MGMT_EXIT', fr.NEVER_READ_TYPES)
         self.assertGreaterEqual(fr.MIN_MCAP_CR, 100)
 
     def test_api_key_accepts_the_ai_client_pair(self):
@@ -239,6 +245,152 @@ class Extraction(unittest.TestCase):
         with mock.patch.dict(os.environ, {'ANTHROPIC_API_KEY': '', 'AI_API_KEY': 'local-qwen'}):
             self.assertEqual(fr._api_key(), '')
             self.assertFalse(fr.has_api_key())
+
+
+class _Post:
+    """A stub for requests.post: records the body, answers like llama.cpp."""
+    def __init__(self, content, usage=None, status=200):
+        self.calls, self.content, self.status = [], content, status
+        self.usage = usage or {'prompt_tokens': 3100, 'completion_tokens': 290}
+
+    def __call__(self, url, json=None, timeout=None):
+        self.calls.append({'url': url, 'body': json, 'timeout': timeout})
+        m = mock.Mock(status_code=self.status)
+        m.raise_for_status = (lambda: None) if self.status < 400 else mock.Mock(side_effect=RuntimeError('HTTP 500'))
+        m.json = lambda: {'model': 'Qwen3-4B-Q4_K_M.gguf', 'usage': self.usage,
+                          'choices': [{'message': {'role': 'assistant', 'content': self.content}}]}
+        return m
+
+
+VERDICT_JSON = ('{"impact":"positive","magnitude":"major","headline":"Rs 134 crore order from BHEL",'
+                '"reasoning":"A new-client order that is large against the market cap.",'
+                '"evidence_quote":"the Company has received a purchase order worth Rs. 133.98 crore",'
+                '"confidence":0.8,"amount_value":133.98,"amount_unit":"INR_CR","amount_basis":"order_value",'
+                '"relative_to":"mcap","relative_pct":22.3,"role":"new_client"}')
+
+
+class LocalBackend(unittest.TestCase):
+    def test_the_wire_shape_is_openai_compatible_with_a_json_schema_grammar(self):
+        post = _Post(VERDICT_JSON)
+        client = fr.LocalClient('http://llm:8080/v1', 'qwen3-4b', ctx_tokens=16384, max_tokens=1200,
+                                timeout_sec=900, post=post)
+        doc = fr.DocumentText(ORDER_TEXT, 1, 1, len(ORDER_TEXT), False)
+        resp = client.messages.parse(model='ignored', max_tokens=4000, system=fr.SYSTEM_PROMPT,
+                                     messages=fr.build_messages({'company_name': 'HEC'}, doc, None),
+                                     output_format=fr.FilingVerdict)
+        self.assertEqual(resp.parsed_output.impact, 'positive')
+        self.assertEqual(resp.parsed_output.amount_value, 133.98)
+        self.assertEqual((resp.usage.input_tokens, resp.usage.output_tokens), (3100, 290))
+        call = post.calls[0]
+        self.assertEqual(call['url'], 'http://llm:8080/v1/chat/completions')
+        self.assertEqual(call['timeout'], 900)
+        b = call['body']
+        self.assertEqual(b['model'], 'qwen3-4b')
+        self.assertEqual(b['max_tokens'], 1200, 'the local reply budget, not the SDK one')
+        self.assertEqual(b['temperature'], 0)
+        self.assertEqual(b['response_format']['type'], 'json_schema')
+        schema = b['response_format']['json_schema']['schema']
+        self.assertIn('evidence_quote', schema['properties'])
+        self.assertTrue(b['response_format']['json_schema']['strict'])
+        self.assertFalse(b['chat_template_kwargs']['enable_thinking'])
+        sys_msg = b['messages'][0]['content']
+        self.assertTrue(sys_msg.startswith('/no_think'))
+        self.assertIn(fr.SYSTEM_PROMPT, sys_msg)
+        self.assertIn('evidence_quote:', sys_msg, 'the field meanings travel with the schema')
+        self.assertIn('133.98 crore', b['messages'][1]['content'])
+
+    def test_a_think_block_and_a_code_fence_are_stripped_before_parsing(self):
+        for wrapped in (f'<think>\nhmm\n</think>\n{VERDICT_JSON}', f'```json\n{VERDICT_JSON}\n```'):
+            client = fr.LocalClient('http://llm:8080/v1', 'q', post=_Post(wrapped))
+            doc = fr.DocumentText('x', 1, 1, 1, False)
+            resp = client.messages.parse(system='s', messages=fr.build_messages({}, doc, None),
+                                         output_format=fr.FilingVerdict)
+            self.assertEqual(resp.parsed_output.magnitude, 'major')
+
+    def test_the_local_backend_refuses_a_pdf_as_images(self):
+        client = fr.LocalClient('http://llm:8080/v1', 'q', post=_Post(VERDICT_JSON))
+        doc = fr.DocumentText('', 2, 2, 0, True)
+        with self.assertRaises(fr.LocalUnsupported):
+            client.messages.parse(system='s', messages=fr.build_messages({}, doc, b'%PDF-1.4 fake'),
+                                  output_format=fr.FilingVerdict)
+
+    def test_a_local_read_costs_nothing_and_says_which_backend_in_the_model_column(self):
+        self.assertEqual(fr._cost('local:qwen3-4b', 9000, 400), 0.0)
+        self.assertIsNone(fr._cost('some-unknown-model', 1, 1))
+        self.assertEqual(fr._resolve_backend('qwen'), 'local', "'qwen' is accepted as the owner's word for it")
+        self.assertEqual(fr._resolve_backend(None), 'anthropic')
+        with mock.patch.object(fr, 'LOCAL_MODEL', 'Qwen3-4B'):
+            self.assertEqual(fr._resolve_model('local'), 'local:Qwen3-4B')
+        with mock.patch.dict(os.environ, {'FILING_READ_MODEL': '', 'CLAUDE_MODEL': 'claude-haiku-4-5'}):
+            self.assertEqual(fr._resolve_model('anthropic'), 'claude-haiku-4-5')
+
+    def test_backend_missing_names_what_is_unset(self):
+        with mock.patch.object(fr, 'BACKEND', 'anthropic'), \
+             mock.patch.dict(os.environ, {'ANTHROPIC_API_KEY': '', 'AI_API_KEY': ''}):
+            self.assertIn('ANTHROPIC_API_KEY', fr.backend_missing())
+        with mock.patch.object(fr, 'BACKEND', 'local'), mock.patch.object(fr, 'LOCAL_URL', ''):
+            self.assertIn('LLM_BASE_URL', fr.backend_missing())
+        with mock.patch.object(fr, 'BACKEND', 'local'), mock.patch.object(fr, 'LOCAL_URL', 'http://x/v1'):
+            self.assertIsNone(fr.backend_missing())
+        with mock.patch.object(fr, 'BACKEND', 'gemini'):
+            self.assertIn('gemini', fr.backend_missing())
+
+    def test_fit_to_chars_keeps_whole_pages_and_records_the_trim(self):
+        pages = ['A' * 1000, 'B' * 1000, 'C' * 1000, 'D' * 1000]
+        doc = fr._from_pages(pages, 4, 'text')
+        self.assertIs(fr.fit_to_chars(doc, 10_000), doc, 'fits: untouched')
+        cut = fr.fit_to_chars(doc, 2_500)
+        self.assertEqual((cut.pages_read, cut.page_count), (2, 4), 'two whole pages fit; the trim is on the row')
+        self.assertNotIn('C', cut.text)
+        one = fr.fit_to_chars(doc, 300)
+        self.assertEqual((one.pages_read, len(one.text)), (1, 300), 'never fewer than one page; page 1 is cut hard')
+        self.assertGreater(fr.local_doc_char_budget(16384, 1200), 40_000)
+        self.assertGreaterEqual(fr.local_doc_char_budget(4096, 1200), 2_000,
+                                'a 4k server still gets the first ~2,000 characters, never nothing')
+
+    def test_unwrap_document_opens_an_nse_zip_and_takes_the_pdf(self):
+        pdf = _pdf([ORDER_TEXT])
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, 'w') as z:
+            z.writestr('BLUEDART_ROID_98872_KMP.xml', '<xbrl/>')
+            z.writestr('cover.pdf', b'%PDF-1.4 tiny')
+            z.writestr('BLUEDART_ROID_98872_KMP_Doc.PDF', pdf)
+        self.assertEqual(fr.unwrap_document(buf.getvalue()), pdf, 'the largest PDF member, whatever its case')
+        self.assertEqual(fr.unwrap_document(pdf), pdf, 'a PDF passes through untouched')
+        self.assertEqual(fr.unwrap_document(b'<html>'), b'<html>')
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, 'w') as z:
+            z.writestr('only.xml', '<xbrl/>')
+        with self.assertRaises(ValueError):
+            fr.unwrap_document(buf.getvalue())
+
+    @unittest.skipUnless(fr.ocr_available(), 'tesseract-ocr not installed')
+    def test_ocr_reads_a_scanned_page_with_tesseract_not_a_vision_model(self):
+        from PIL import Image, ImageDraw, ImageFont
+        img = Image.new('RGB', (1400, 500), 'white')
+        d = ImageDraw.Draw(img)
+        try:
+            font = ImageFont.load_default(size=44)
+        except TypeError:
+            font = ImageFont.load_default()
+        lines = ['Sub: Intimation under Regulation 30 of SEBI LODR.',
+                 'The Company has received a purchase order',
+                 'worth Rs. 133.98 crore from Bharat Heavy',
+                 'Electricals Limited for transmission towers,',
+                 'to be executed over eighteen months from the',
+                 'existing capacity. This is the largest single',
+                 'order received by the Company to date.']
+        for i, line in enumerate(lines):                  # enough text to clear the chars-per-page gate
+            d.text((40, 30 + 62 * i), line, fill='black', font=font)
+        buf = io.BytesIO(); img.save(buf, 'PDF')
+        scanned = buf.getvalue()
+        layer = fr.extract_text(scanned)
+        self.assertTrue(layer.needs_pdf, 'an image PDF has no text layer')
+        doc = fr.ocr_text(scanned)
+        self.assertEqual((doc.source, doc.page_count, doc.pages_read), ('ocr', 1, 1))
+        self.assertIn('133.98', doc.text)
+        self.assertIn('purchase order', doc.text.lower())
+        self.assertFalse(doc.needs_pdf)
 
 
 class Wiring(unittest.TestCase):
@@ -502,7 +654,8 @@ class Reads(unittest.TestCase):
         self._event('scan', '2026-09-28 10:00+05:30')
         fr.enqueue_pending(self.conn)
         client, session = _Client(), _Session({'http://x/a.pdf': _pdf(['', ''])})
-        fr.read_pending(self.conn, session=session, client=client)
+        with mock.patch.object(fr, 'ocr_available', return_value=False):   # no Tesseract: the SDK reads the images
+            fr.read_pending(self.conn, session=session, client=client)
         r = self._rows()['scan']
         self.assertEqual((r['status'], r['source']), ('done', 'pdf'))
         self.assertEqual(self._raw('scan')[1], 'needs_ocr')
@@ -561,6 +714,87 @@ class Reads(unittest.TestCase):
         fr.read_pending(self.conn, session=_Session({}), client=client)
         self.assertEqual(self._rows()['nodoc']['status'], 'unreadable')
         self.assertEqual(client.messages.calls, [])
+
+    def test_a_zip_wrapped_pdf_is_read_like_any_other(self):
+        self._event('kmp', '2026-09-28 10:00+05:30', 'SPARK', event_type='MGMT_EXIT', url='http://x/KMP_Doc.zip')
+        fr.enqueue_pending(self.conn)
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, 'w') as z:
+            z.writestr('KMP.xml', '<xbrl/>'); z.writestr('KMP_Doc.pdf', _pdf([self.KEY_MGMT]))
+        client = _Client()
+        stats = fr.read_pending(self.conn, session=_Session({'http://x/KMP_Doc.zip': buf.getvalue()}), client=client)
+        self.assertEqual((stats['done'], stats['unreadable']), (1, 0))
+        self.assertEqual(self._rows()['kmp']['status'], 'done')
+        self.assertIn('Chief Financial Officer', self._raw('kmp')[0])
+
+    def test_a_scanned_pdf_is_ocrd_and_read_as_text_with_its_provenance_recorded(self):
+        self._event('scan', '2026-09-28 10:00+05:30')
+        fr.enqueue_pending(self.conn)
+        ocr_doc = fr._from_pages([ORDER_TEXT], 2, 'ocr')
+        client = _Client()
+        with mock.patch.object(fr, 'ocr_available', return_value=True), \
+             mock.patch.object(fr, 'ocr_text', return_value=ocr_doc) as ocr:
+            fr.read_pending(self.conn, session=_Session({'http://x/a.pdf': _pdf(['', ''])}), client=client)
+        self.assertEqual(ocr.call_count, 1)
+        r = self._rows()['scan']
+        self.assertEqual((r['status'], r['source'], r['page_count']), ('done', 'ocr', 2))
+        self.assertEqual(self._raw('scan')[1], 'ok', 'OCR text is stored like a text layer')
+        content = client.messages.calls[0]['messages'][0]['content']
+        self.assertEqual([c['type'] for c in content], ['text'], 'no document block: the text went, not the images')
+        self.assertIn('133.98', content[0]['text'])
+
+    def test_a_blank_scan_stays_a_scan_after_ocr(self):
+        self._event('blank', '2026-09-28 10:00+05:30')
+        fr.enqueue_pending(self.conn)
+        client = _Client()
+        with mock.patch.object(fr, 'ocr_available', return_value=True), \
+             mock.patch.object(fr, 'ocr_text', return_value=fr._from_pages(['', ''], 2, 'ocr')):
+            fr.read_pending(self.conn, session=_Session({'http://x/a.pdf': _pdf(['', ''])}), client=client)
+        r = self._rows()['blank']
+        self.assertEqual((r['status'], r['source']), ('done', 'pdf'), 'Anthropic backend: the PDF route')
+
+    def test_the_local_backend_reads_text_free_and_refuses_an_unocrd_scan(self):
+        self._event('hec', '2026-09-28 10:00+05:30', url='http://x/a.pdf')
+        self._event('scan', '2026-09-28 10:01+05:30', url='http://x/s.pdf')
+        fr.enqueue_pending(self.conn)
+        post = _Post(VERDICT_JSON)
+        client = fr.LocalClient('http://llm:8080/v1', 'qwen3-4b', post=post)
+        with mock.patch.object(fr, 'ocr_available', return_value=False):
+            stats = fr.read_pending(self.conn, client=client, model='local:qwen3-4b',
+                                    session=_Session({'http://x/a.pdf': _pdf([ORDER_TEXT]),
+                                                      'http://x/s.pdf': _pdf(['', ''])}))
+        self.assertEqual((stats['done'], stats['unreadable'], stats['failed']), (1, 1, 0))
+        rows = self._rows()
+        self.assertEqual((rows['hec']['status'], rows['hec']['impact'], rows['hec']['model']),
+                         ('done', 'positive', 'local:qwen3-4b'))
+        self.assertEqual(float(rows['hec']['cost']), 0.0)
+        self.assertEqual(rows['hec']['input_tokens'], 3100)
+        self.assertEqual(rows['scan']['status'], 'unreadable')
+        self.assertIn('OCR', rows['scan']['error'])
+        self.assertEqual(len(post.calls), 1, 'the scan never reached the server')
+        self.assertEqual(fr.status_counts(self.conn)['done'], 1)
+
+    def test_the_local_backend_trims_a_long_document_to_whole_pages_and_records_it(self):
+        self._event('long', '2026-09-28 10:00+05:30')
+        fr.enqueue_pending(self.conn)
+        pages = [f'Page {i} ' + ('lorem ipsum ' * 200) for i in range(1, 7)]   # ~2,400 chars a page
+        post = _Post(VERDICT_JSON)
+        client = fr.LocalClient('http://llm:8080/v1', 'q', post=post)
+        with mock.patch.object(fr, 'LOCAL_CTX_TOKENS', 3000), mock.patch.object(fr, 'LOCAL_MAX_TOKENS', 300):
+            fr.read_pending(self.conn, client=client, session=_Session({'http://x/a.pdf': _pdf(pages)}))
+        r = self._rows()['long']
+        self.assertEqual(r['status'], 'done')
+        self.assertEqual(r['page_count'], 6)
+        self.assertLess(r['pages_read'], 6, 'the trim is on the row')
+        sent = post.calls[0]['body']['messages'][1]['content']
+        self.assertIn('Page 1', sent); self.assertNotIn('Page 6', sent)
+        self.assertGreaterEqual(len(self._raw('long')[0]), 6 * 2000, 'the FULL text is stored; only the prompt was trimmed')
+
+    def test_a_management_appointment_is_never_queued(self):
+        self._event('appt', '2026-09-28 10:00+05:30', 'SPARK', event_type='MGMT_CHANGE')
+        self._event('exit', '2026-09-28 10:01+05:30', 'SPARK', event_type='MGMT_EXIT')
+        self.assertEqual(fr.enqueue_pending(self.conn), 1)
+        self.assertEqual(sorted(self._rows()), ['exit'])
 
     def test_not_a_pdf_is_unreadable(self):
         self._event('html', '2026-09-28 10:00+05:30')

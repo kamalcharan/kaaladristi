@@ -1,8 +1,10 @@
 FROM python:3.11-slim
 
-# Build tools needed for pyswisseph (C extension)
+# Build tools needed for pyswisseph (C extension); tesseract-ocr for the
+# filing reader's scanned documents (lib/filing_reader.py ocr_text — a
+# Python library reads the pages, no vision model is paid for)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc g++ make \
+    gcc g++ make tesseract-ocr \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

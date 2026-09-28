@@ -26,11 +26,25 @@ Three rules that are load-bearing and not visible in any type:
 
 The document is read from its text layer (pypdf) when the text layer is real
 (>= CHARS_PER_PAGE_FLOOR chars/page, the Sprint 3 gate: a scanned PDF reports
-success with near-nothing). Otherwise the PDF itself is sent — the Messages
-API reads scanned pages natively, so there is no OCR stack. Text is never
+success with near-nothing). A scanned document is OCR'd with Tesseract
+(pypdfium2 renders the pages, pytesseract reads them — owner, 2026-09-28:
+"python libraries should convert into metadata and send it to qwen, image
+models will be expensive"), and only when no OCR is installed does the
+Anthropic backend fall back to sending the PDF as images. Text is never
 truncated; a document over FILING_READ_MAX_PAGES is read to the cap and the
 row records pages_read < page_count, so a partial read never presents as a
 full one. The PDF is never stored (the 279 GB rule); the text is.
+
+Two backends, one interface (FILING_READ_BACKEND):
+  anthropic — the official SDK, Haiku by default, priced per row.
+  local     — any OpenAI-compatible server (the VPS's llama.cpp Qwen3 at
+              LLM_BASE_URL), free, text only, the verdict shape enforced by a
+              JSON-schema grammar. Its context window is finite
+              (FILING_READ_LOCAL_CTX), so a long document is trimmed to whole
+              pages that fit and the row records pages_read < page_count —
+              the same honest partial-read rule as the page cap.
+`read_one` does not know which one it has: both expose
+`messages.parse(...)` returning `.parsed_output` and `.usage`.
 """
 
 from __future__ import annotations
@@ -41,6 +55,7 @@ import logging
 import os
 import re
 import time
+import zipfile
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -51,15 +66,49 @@ log = logging.getLogger('filing_reader')
 READER_VERSION = 'v1'
 MATERIAL_FAMILIES = ('SPARK', 'NEGATIVE_SPARK', 'OWNERSHIP', 'CORPORATE_ACTION')
 
-# The reader's model is ITS OWN setting, not AI_MODEL: AI_MODEL is the VaNi
-# layer's model and on the VPS it names the local Qwen server, which cannot
-# take a 20-page PDF (4k context, no vision). Owner, 2026-09-28: Haiku.
+# ── which model reads ────────────────────────────────────────────────────
+#
+# FILING_READ_BACKEND=anthropic (default): the official SDK. The model is the
+# reader's OWN setting, not AI_MODEL — AI_MODEL is the VaNi layer's and on the
+# VPS it names the local Qwen server. Owner, 2026-09-28: Haiku.
+#
+# FILING_READ_BACKEND=local: the OpenAI-compatible server at
+# FILING_READ_LOCAL_URL (else LLM_BASE_URL — the same llama.cpp Qwen3 the VaNi
+# fallback uses). Free, so the per-row cost is 0. Text only: a scanned page
+# reaches it through Tesseract or not at all. ⚠ The server's context window
+# is a LAUNCH FLAG on that container, not a property of the model — Qwen3-4B
+# takes 32k natively, and the VPS server was recorded at 4,096, which holds
+# fewer than half of the documents measured (mean 3,724 tokens, max ~15k).
+# FILING_READ_LOCAL_CTX must say what the server was actually started with;
+# the reader trims the document to whole pages inside that budget and the
+# row records pages_read < page_count, so an over-long read never presents as
+# a full one. Wrong (too high) here means the server truncates SILENTLY at its
+# own limit — the end of the document, where the annexure sits.
 DEFAULT_MODEL = 'claude-haiku-4-5'
 
 
-def _resolve_model() -> str:
-    """FILING_READ_MODEL, else CLAUDE_MODEL (the owner's .env convention for
-    'the Claude model'), else the default. Never AI_MODEL — see above."""
+def _resolve_backend(value: Optional[str]) -> str:
+    b = (value or 'anthropic').strip().lower()
+    return 'local' if b == 'qwen' else b          # 'qwen' is the owner's word for it
+
+
+BACKEND = _resolve_backend(os.getenv('FILING_READ_BACKEND'))
+LOCAL_URL = (os.getenv('FILING_READ_LOCAL_URL') or os.getenv('LLM_BASE_URL') or '').strip().rstrip('/')
+LOCAL_MODEL = (os.getenv('FILING_READ_LOCAL_MODEL') or os.getenv('AI_MODEL') or 'qwen3-4b').strip()
+LOCAL_CTX_TOKENS = int(os.getenv('FILING_READ_LOCAL_CTX', '16384'))
+LOCAL_MAX_TOKENS = int(os.getenv('FILING_READ_LOCAL_MAX_TOKENS', '1200'))   # the verdict measures ~330
+LOCAL_TIMEOUT_SEC = int(os.getenv('FILING_READ_LOCAL_TIMEOUT_SEC', '900'))  # CPU inference; slow is fine
+LOCAL_PROMPT_RESERVE_TOKENS = 1800     # system prompt + schema + context block, measured ~1,400
+CHARS_PER_TOKEN = 3.5                  # conservative for English filings (measured 3.7–4.1)
+
+
+def _resolve_model(backend: str = None) -> str:
+    """anthropic: FILING_READ_MODEL, else CLAUDE_MODEL (the owner's .env
+    convention for 'the Claude model'), else the default. Never AI_MODEL — see
+    above. local: 'local:<name>', which is what the row's `model` column says
+    so a free read is never mistaken for a paid one in a cost query."""
+    if (BACKEND if backend is None else backend) == 'local':
+        return f'local:{LOCAL_MODEL}'
     return (os.getenv('FILING_READ_MODEL') or os.getenv('CLAUDE_MODEL') or '').strip() or DEFAULT_MODEL
 
 
@@ -104,7 +153,17 @@ PRICES = {
 #     casual vacancy is the read.
 # Everything else (orders, acquisitions, regulatory, litigation, insolvency,
 # SAST, raises) is read as-is: ~1,500 rows over six months, ~30 a day.
-NEVER_READ_TYPES = ('RECORD_DATE', 'ESOP', 'ALLOTMENT', 'AUTHORISED_CAPITAL')
+#
+# MGMT_CHANGE joined the never-list on 2026-09-28, MEASURED on the first 145
+# paid reads: gate 1 let 31 appointments through and the model called 30 of
+# them neutral+minor — a quarter of the spend for one finding. That is the
+# verdict vocabulary working as designed (an appointment is procedural, rule
+# 2 of the prompt), not a gate too loose. MGMT_EXIT stays: 8 notable
+# negatives in 11 reads, the best negative signal in the table.
+# FILING_READ_NEVER_TYPES overrides the whole list (comma-separated).
+_DEFAULT_NEVER = ('RECORD_DATE', 'ESOP', 'ALLOTMENT', 'AUTHORISED_CAPITAL', 'MGMT_CHANGE')
+NEVER_READ_TYPES = tuple(t.strip().upper() for t in os.getenv('FILING_READ_NEVER_TYPES', '').split(',')
+                         if t.strip()) or _DEFAULT_NEVER
 MIN_MCAP_CR = float(os.getenv('FILING_READ_MIN_MCAP_CR', '100'))
 KEY_PERSON_TYPES = ('MGMT_CHANGE', 'MGMT_EXIT')
 
@@ -208,8 +267,11 @@ def _api_key() -> str:
 
 
 def _client():
-    """The official SDK client. Honours ANTHROPIC_BASE_URL from the environment
-    (the SDK reads it itself) for a proxy or gateway."""
+    """The client for the configured backend. anthropic: the official SDK,
+    honouring ANTHROPIC_BASE_URL from the environment (the SDK reads it
+    itself). local: LocalClient over the OpenAI-compatible server."""
+    if BACKEND == 'local':
+        return LocalClient(LOCAL_URL, LOCAL_MODEL, LOCAL_CTX_TOKENS, LOCAL_MAX_TOKENS, LOCAL_TIMEOUT_SEC)
     import anthropic
     return anthropic.Anthropic(api_key=_api_key())
 
@@ -218,21 +280,174 @@ def has_api_key() -> bool:
     return bool(_api_key())
 
 
+def backend_missing() -> Optional[str]:
+    """Why the configured backend cannot run, or None. The reader never
+    claims a row it cannot read: rows stay pending, the pass completes."""
+    if BACKEND == 'anthropic':
+        return None if _api_key() else 'ANTHROPIC_API_KEY not set'
+    if BACKEND == 'local':
+        return None if LOCAL_URL else 'FILING_READ_LOCAL_URL / LLM_BASE_URL not set'
+    return f'FILING_READ_BACKEND={BACKEND!r} is not anthropic or local'
+
+
 def _cost(model: str, inp: int, out: int) -> Optional[float]:
+    if model.startswith('local:'):
+        return 0.0
     p = PRICES.get(model)
     if not p:
         return None
     return round(inp * p[0] / 1e6 + out * p[1] / 1e6, 5)
 
 
+# ── the local backend ────────────────────────────────────────────────────
+
+class LocalUnsupported(Exception):
+    """The local backend was handed something it cannot read (a PDF as images)."""
+
+
+_THINK_RE = re.compile(r'<think>.*?</think>\s*', re.DOTALL)
+
+
+def _schema_instruction(schema: dict) -> str:
+    """The verdict's fields, as a small model needs to see them: the grammar
+    enforces the SHAPE, this tells it what each field MEANS."""
+    props = schema.get('properties', {})
+    lines = ['Return ONLY a JSON object with these fields, no prose before or after it:']
+    for name, spec in props.items():
+        desc = spec.get('description') or ''
+        lines.append(f'  {name}: {desc}' if desc else f'  {name}')
+    return '\n'.join(lines)
+
+
+class _LocalResp:
+    __slots__ = ('parsed_output', 'usage', 'model')
+
+    def __init__(self, parsed, inp, out, model):
+        self.parsed_output = parsed
+        self.usage = _Usage(inp, out)
+        self.model = model
+
+
+class _Usage:
+    __slots__ = ('input_tokens', 'output_tokens')
+
+    def __init__(self, inp, out):
+        self.input_tokens, self.output_tokens = inp, out
+
+
+class _LocalMessages:
+    def __init__(self, base_url, model, ctx_tokens, max_tokens, timeout_sec, post=None):
+        self.base_url, self.model = base_url, model
+        self.ctx_tokens, self.max_tokens, self.timeout_sec = ctx_tokens, max_tokens, timeout_sec
+        if post is None:
+            import requests
+            post = requests.post
+        self._post = post
+
+    def parse(self, *, model=None, max_tokens=None, system, messages, output_format):
+        blocks = messages[0]['content']
+        if any(b.get('type') == 'document' for b in blocks):
+            raise LocalUnsupported('the local backend reads text only; a scanned document needs OCR')
+        user = '\n'.join(b['text'] for b in blocks if b.get('type') == 'text')
+        schema = output_format.model_json_schema()
+        body = {
+            'model': self.model,
+            'messages': [
+                # /no_think + enable_thinking=false: both conventions, so the
+                # 4B model spends its tokens on the verdict, not a monologue.
+                {'role': 'system', 'content': '/no_think\n' + system + '\n\n' + _schema_instruction(schema)},
+                {'role': 'user', 'content': user},
+            ],
+            'max_tokens': self.max_tokens,
+            'temperature': 0,
+            'response_format': {'type': 'json_schema',
+                                'json_schema': {'name': output_format.__name__, 'schema': schema, 'strict': True}},
+            'chat_template_kwargs': {'enable_thinking': False},
+        }
+        resp = self._post(f'{self.base_url}/chat/completions', json=body, timeout=self.timeout_sec)
+        resp.raise_for_status()
+        data = resp.json()
+        content = (data.get('choices') or [{}])[0].get('message', {}).get('content') or ''
+        content = _THINK_RE.sub('', content).strip()
+        if content.startswith('```'):
+            content = content.strip('`').split('\n', 1)[-1].rsplit('```', 1)[0]
+        parsed = output_format.model_validate_json(content)
+        usage = data.get('usage') or {}
+        return _LocalResp(parsed, int(usage.get('prompt_tokens') or 0),
+                          int(usage.get('completion_tokens') or 0), data.get('model') or self.model)
+
+
+class LocalClient:
+    """Same surface as the SDK client for what read_one uses: `.messages.parse`."""
+
+    def __init__(self, base_url, model, ctx_tokens=LOCAL_CTX_TOKENS, max_tokens=LOCAL_MAX_TOKENS,
+                 timeout_sec=LOCAL_TIMEOUT_SEC, post=None):
+        self.messages = _LocalMessages(base_url, model, ctx_tokens, max_tokens, timeout_sec, post=post)
+
+
+def local_doc_char_budget(ctx_tokens: int = None, max_tokens: int = None) -> int:
+    """How many document characters fit beside the prompt and the reply."""
+    ctx = LOCAL_CTX_TOKENS if ctx_tokens is None else ctx_tokens
+    reply = LOCAL_MAX_TOKENS if max_tokens is None else max_tokens
+    return max(int((ctx - reply - LOCAL_PROMPT_RESERVE_TOKENS) * CHARS_PER_TOKEN), 2000)
+
+
 # ── the document ─────────────────────────────────────────────────────────
 
 class DocumentText:
-    __slots__ = ('text', 'page_count', 'pages_read', 'chars_per_page', 'needs_pdf')
+    __slots__ = ('text', 'page_count', 'pages_read', 'chars_per_page', 'needs_pdf', 'pages', 'source')
 
-    def __init__(self, text, page_count, pages_read, chars_per_page, needs_pdf):
+    def __init__(self, text, page_count, pages_read, chars_per_page, needs_pdf, pages=None, source='text'):
         self.text, self.page_count, self.pages_read = text, page_count, pages_read
         self.chars_per_page, self.needs_pdf = chars_per_page, needs_pdf
+        self.pages = list(pages) if pages is not None else ([text] if text else [])
+        self.source = source            # 'text' (pypdf layer) | 'ocr' (Tesseract)
+
+
+def _from_pages(parts: list, page_count: int, source: str) -> DocumentText:
+    pages_read = len(parts)
+    text = '\n\n'.join(p.strip() for p in parts).strip()
+    cpp = (len(text) / pages_read) if pages_read else 0.0
+    return DocumentText(text, page_count, pages_read, cpp, cpp < CHARS_PER_PAGE_FLOOR, pages=parts, source=source)
+
+
+def fit_to_chars(doc: DocumentText, max_chars: int) -> DocumentText:
+    """The document trimmed to WHOLE pages that fit a character budget (the
+    local backend's context window). Never fewer than one page; a first page
+    alone over the budget is cut hard. pages_read records the trim, so a
+    partial read is visible on the row the same way the page cap is."""
+    if len(doc.text or '') <= max_chars:
+        return doc
+    kept, total = [], 0
+    for p in doc.pages:
+        if kept and total + len(p) + 2 > max_chars:
+            break
+        kept.append(p)
+        total += len(p) + 2
+    if not kept:
+        return doc
+    if len(kept) == 1 and len(kept[0]) > max_chars:
+        kept = [kept[0][:max_chars]]
+        log.warning('local backend: first page alone exceeds the context budget; cut hard')
+    out = _from_pages(kept, doc.page_count, doc.source)
+    out.needs_pdf = doc.needs_pdf
+    return out
+
+
+def unwrap_document(data: bytes) -> bytes:
+    """NSE ships some filings (KMP resignations, SAST) as a .zip holding the
+    PDF beside its XBRL — 30 of the first 31 "unreadable" rows, and 279 of
+    the pending MGMT_EXIT queue. Open it and take the PDF; anything else
+    passes through untouched for the %PDF check."""
+    if data[:4] != b'PK\x03\x04':
+        return data
+    with zipfile.ZipFile(io.BytesIO(data)) as z:
+        pdfs = [i for i in z.infolist()
+                if i.filename.lower().endswith('.pdf') and not i.filename.startswith('__MACOSX')]
+        if not pdfs:
+            raise ValueError('zip with no PDF inside')
+        pdfs.sort(key=lambda i: -i.file_size)          # the document, not a cover letter
+        return z.read(pdfs[0])
 
 
 def extract_text(pdf_bytes: bytes, max_pages: Optional[int] = None) -> DocumentText:
@@ -251,9 +466,54 @@ def extract_text(pdf_bytes: bytes, max_pages: Optional[int] = None) -> DocumentT
         except Exception as e:                       # one bad page is not a bad document
             log.warning(f'page {i + 1}: extract failed: {e}')
             parts.append('')
-    text = '\n\n'.join(parts).strip()
-    cpp = (len(text) / pages_read) if pages_read else 0.0
-    return DocumentText(text, page_count, pages_read, cpp, cpp < CHARS_PER_PAGE_FLOOR)
+    return _from_pages(parts, page_count, 'text')
+
+
+# ── OCR — a Python library, not a vision model ───────────────────────────
+
+_OCR_STATE: Optional[bool] = None
+
+
+def ocr_available() -> bool:
+    """Tesseract + pypdfium2 present. Checked once; the answer does not change
+    inside a process. Tests patch this."""
+    global _OCR_STATE
+    if _OCR_STATE is None:
+        try:
+            import pypdfium2
+            import pytesseract
+            if not hasattr(pypdfium2, 'PdfDocument'):
+                raise ImportError('pypdfium2 without PdfDocument')
+            pytesseract.get_tesseract_version()
+            _OCR_STATE = True
+        except Exception as e:
+            log.info(f'OCR unavailable ({e}); scanned documents go to the model as PDF or are unreadable')
+            _OCR_STATE = False
+    return _OCR_STATE
+
+
+OCR_DPI = int(os.getenv('FILING_READ_OCR_DPI', '200'))
+
+
+def ocr_text(pdf_bytes: bytes, max_pages: Optional[int] = None) -> DocumentText:
+    """The scanned pages rendered by pypdfium2 and read by Tesseract. Same
+    shape and the same chars-per-page gate as the text layer, so a blank
+    scan still reports needs_pdf."""
+    import pypdfium2 as pdfium
+    import pytesseract
+    if max_pages is None:
+        max_pages = MAX_PAGES
+    pdf = pdfium.PdfDocument(pdf_bytes)
+    page_count = len(pdf)
+    parts = []
+    for i in range(min(page_count, max_pages)):
+        try:
+            img = pdf[i].render(scale=OCR_DPI / 72).to_pil()
+            parts.append(pytesseract.image_to_string(img) or '')
+        except Exception as e:
+            log.warning(f'ocr page {i + 1}: {e}')
+            parts.append('')
+    return _from_pages(parts, page_count, 'ocr')
 
 
 def _pdf_first_pages(pdf_bytes: bytes, max_pages: int) -> bytes:
@@ -404,11 +664,20 @@ def _claim_next(conn, retry_failed: bool = True, pass_started=None) -> Optional[
     if not row:
         return None
     read_id, event_id, attempts = row
+    d = load_event_row(conn, event_id)
+    d['read_id'], d['attempts'] = read_id, attempts
+    return d
+
+
+def load_event_row(conn, event_id: int) -> dict:
+    """The context a read is built from: the event, its primary raw filing
+    (url, exchange summary, stored text) and the NSE listing."""
     with conn.cursor() as cur:
         cur.execute("""
             SELECT e.id AS event_id, e.company_name, e.desc_raw, e.family, e.event_type,
                    e.disseminated_at, e.isin,
                    r.id AS raw_id, r.doc_url, r.summary_text, r.raw_text, r.extract_status,
+                   r.page_count AS raw_page_count,
                    s.symbol, s.industry, s.mcap_cr
               FROM km_corporate_events e
               JOIN km_filings_raw r ON r.id = e.primary_raw_id
@@ -421,9 +690,7 @@ def _claim_next(conn, retry_failed: bool = True, pass_started=None) -> Optional[
         cols = [d[0] for d in cur.description]
         vals = cur.fetchone()
     conn.rollback()
-    d = dict(zip(cols, vals))
-    d['read_id'], d['attempts'] = read_id, attempts
-    return d
+    return dict(zip(cols, vals))
 
 
 def _finish(conn, read_id: int, status: str, error: Optional[str] = None, **fields) -> None:
@@ -451,8 +718,10 @@ def _store_text(conn, raw_id: int, doc: DocumentText) -> None:
     conn.commit()
 
 
-def read_one(conn, row: dict, client, session, model: str = MODEL) -> str:
+def read_one(conn, row: dict, client, session, model: str = MODEL, backend: str = None) -> str:
     """Fetch, extract, read, write. Returns the final status."""
+    if backend is None:
+        backend = 'local' if isinstance(client, LocalClient) else BACKEND
     read_id = row['read_id']
     url = (row.get('doc_url') or '').strip()
     if not url:
@@ -468,6 +737,11 @@ def read_one(conn, row: dict, client, session, model: str = MODEL) -> str:
         _finish(conn, read_id, 'unreadable' if terminal else 'failed', f'fetch: {e}')
         return 'unreadable' if terminal else 'failed'
 
+    try:
+        pdf_bytes = unwrap_document(pdf_bytes)
+    except Exception as e:
+        _finish(conn, read_id, 'unreadable', f'document is a zip: {e}')
+        return 'unreadable'
     if not pdf_bytes[:5].startswith(b'%PDF'):
         _finish(conn, read_id, 'unreadable', 'document is not a PDF')
         return 'unreadable'
@@ -477,15 +751,33 @@ def read_one(conn, row: dict, client, session, model: str = MODEL) -> str:
     except Exception as e:
         _finish(conn, read_id, 'failed', f'extract: {e}')
         return 'failed'
+    if doc.needs_pdf and ocr_available():
+        try:
+            ocr = ocr_text(pdf_bytes)
+        except Exception as e:
+            log.warning(f'ocr failed on read {read_id}: {e}')
+        else:
+            if not ocr.needs_pdf:           # a blank scan stays a scan
+                doc = ocr
     _store_text(conn, row['raw_id'], doc)
 
     # Gate 1: the text is free, the model is not.
     reason = triage(row, doc)
+    read_source = 'pdf' if doc.needs_pdf else doc.source
     if reason:
-        _finish(conn, read_id, 'skipped', None, triage_reason=reason,
-                read_source='pdf' if doc.needs_pdf else 'text',
+        _finish(conn, read_id, 'skipped', None, triage_reason=reason, read_source=read_source,
                 page_count=doc.page_count, pages_read=doc.pages_read)
         return 'skipped'
+
+    if doc.needs_pdf and backend != 'anthropic':
+        # Text only. A scan with no OCR text is not a read this backend can
+        # make, and saying so beats a verdict on an empty page.
+        _finish(conn, read_id, 'unreadable', 'scanned document: no OCR text (install tesseract-ocr) '
+                'and the local backend reads text only', read_source=read_source,
+                page_count=doc.page_count, pages_read=doc.pages_read)
+        return 'unreadable'
+    if backend == 'local':
+        doc = fit_to_chars(doc, local_doc_char_budget())
 
     pdf_for_model = _pdf_first_pages(pdf_bytes, MAX_PAGES) if doc.needs_pdf else None
     messages = build_messages(row, doc, pdf_for_model)
@@ -520,7 +812,7 @@ def read_one(conn, row: dict, client, session, model: str = MODEL) -> str:
         relative_to=relative_to, relative_pct=verdict.relative_pct,
         role=verdict.role,
         model=model, reader_version=READER_VERSION,
-        read_source='pdf' if doc.needs_pdf else 'text',
+        read_source=read_source,
         page_count=doc.page_count, pages_read=doc.pages_read,
         input_tokens=inp, output_tokens=out, cost_usd=_cost(model, inp, out),
     )
@@ -531,16 +823,18 @@ def read_pending(conn, session=None, client=None, limit: int = MAX_PER_PASS,
                  budget_usd: Optional[float] = None, model: str = MODEL,
                  retry_failed: bool = True, on_progress=None) -> dict:
     """Read up to `limit` rows, newest first, one request in flight. Returns
-    counts. With no API key nothing is claimed — rows stay `pending`, which
-    is the honest state, and the ingest pass still completes."""
+    counts. With no API key (or no local server configured) nothing is
+    claimed — rows stay `pending`, which is the honest state, and the ingest
+    pass still completes."""
     # `skipped` (str) is why the PASS stopped early; `triaged` (int) counts
     # rows gate 1 refused to pay for — different things, kept apart on purpose.
     stats = {'read': 0, 'done': 0, 'failed': 0, 'unreadable': 0, 'triaged': 0,
              'cost_usd': 0.0, 'skipped': None}
     if client is None:
-        if not has_api_key():
-            stats['skipped'] = 'ANTHROPIC_API_KEY not set'
-            log.warning('[filing_reader] ANTHROPIC_API_KEY not set — rows stay pending')
+        missing = backend_missing()
+        if missing:
+            stats['skipped'] = missing
+            log.warning(f'[filing_reader] {missing} — rows stay pending')
             return stats
         client = _client()
     missing = schema_missing(conn)
