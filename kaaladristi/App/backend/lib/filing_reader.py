@@ -94,6 +94,24 @@ def _resolve_backend(value: Optional[str]) -> str:
 
 BACKEND = _resolve_backend(os.getenv('FILING_READ_BACKEND'))
 LOCAL_URL = (os.getenv('FILING_READ_LOCAL_URL') or os.getenv('LLM_BASE_URL') or '').strip().rstrip('/')
+
+
+def _local_key() -> str:
+    """The bearer for the local server. The Qwen server lives on the LLM VPS
+    behind Traefik (Vikuna-Infrastructure-Documentation-v3, §3.2) and llama.cpp
+    is started with --api-key, so a call without the header is a 401 — which
+    is the likeliest reason `_fallback_complete` (no header) fails on the
+    companion path. FILING_READ_LOCAL_KEY, else LLM_API_KEY, else AI_API_KEY
+    when that is not an Anthropic key."""
+    key = (os.getenv('FILING_READ_LOCAL_KEY') or os.getenv('LLM_API_KEY') or '').strip()
+    if not key:
+        alt = (os.getenv('AI_API_KEY') or '').strip()
+        if alt and not alt.startswith('sk-ant'):
+            key = alt
+    return key
+
+
+LOCAL_KEY = _local_key()
 LOCAL_MODEL = (os.getenv('FILING_READ_LOCAL_MODEL') or os.getenv('AI_MODEL') or 'qwen3-4b').strip()
 LOCAL_CTX_TOKENS = int(os.getenv('FILING_READ_LOCAL_CTX', '16384'))
 LOCAL_MAX_TOKENS = int(os.getenv('FILING_READ_LOCAL_MAX_TOKENS', '1200'))   # the verdict measures ~330
@@ -271,7 +289,8 @@ def _client():
     honouring ANTHROPIC_BASE_URL from the environment (the SDK reads it
     itself). local: LocalClient over the OpenAI-compatible server."""
     if BACKEND == 'local':
-        return LocalClient(LOCAL_URL, LOCAL_MODEL, LOCAL_CTX_TOKENS, LOCAL_MAX_TOKENS, LOCAL_TIMEOUT_SEC)
+        return LocalClient(LOCAL_URL, LOCAL_MODEL, LOCAL_CTX_TOKENS, LOCAL_MAX_TOKENS, LOCAL_TIMEOUT_SEC,
+                           api_key=LOCAL_KEY)
     import anthropic
     return anthropic.Anthropic(api_key=_api_key())
 
@@ -336,8 +355,8 @@ class _Usage:
 
 
 class _LocalMessages:
-    def __init__(self, base_url, model, ctx_tokens, max_tokens, timeout_sec, post=None):
-        self.base_url, self.model = base_url, model
+    def __init__(self, base_url, model, ctx_tokens, max_tokens, timeout_sec, post=None, api_key=''):
+        self.base_url, self.model, self.api_key = base_url, model, api_key or ''
         self.ctx_tokens, self.max_tokens, self.timeout_sec = ctx_tokens, max_tokens, timeout_sec
         if post is None:
             import requests
@@ -364,7 +383,10 @@ class _LocalMessages:
                                 'json_schema': {'name': output_format.__name__, 'schema': schema, 'strict': True}},
             'chat_template_kwargs': {'enable_thinking': False},
         }
-        resp = self._post(f'{self.base_url}/chat/completions', json=body, timeout=self.timeout_sec)
+        headers = {'Content-Type': 'application/json'}
+        if self.api_key:
+            headers['Authorization'] = f'Bearer {self.api_key}'
+        resp = self._post(f'{self.base_url}/chat/completions', json=body, headers=headers, timeout=self.timeout_sec)
         resp.raise_for_status()
         data = resp.json()
         content = (data.get('choices') or [{}])[0].get('message', {}).get('content') or ''
@@ -381,8 +403,9 @@ class LocalClient:
     """Same surface as the SDK client for what read_one uses: `.messages.parse`."""
 
     def __init__(self, base_url, model, ctx_tokens=LOCAL_CTX_TOKENS, max_tokens=LOCAL_MAX_TOKENS,
-                 timeout_sec=LOCAL_TIMEOUT_SEC, post=None):
-        self.messages = _LocalMessages(base_url, model, ctx_tokens, max_tokens, timeout_sec, post=post)
+                 timeout_sec=LOCAL_TIMEOUT_SEC, post=None, api_key=''):
+        self.messages = _LocalMessages(base_url, model, ctx_tokens, max_tokens, timeout_sec,
+                                       post=post, api_key=api_key)
 
 
 def local_doc_char_budget(ctx_tokens: int = None, max_tokens: int = None) -> int:

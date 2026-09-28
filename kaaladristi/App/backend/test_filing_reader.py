@@ -253,8 +253,8 @@ class _Post:
         self.calls, self.content, self.status = [], content, status
         self.usage = usage or {'prompt_tokens': 3100, 'completion_tokens': 290}
 
-    def __call__(self, url, json=None, timeout=None):
-        self.calls.append({'url': url, 'body': json, 'timeout': timeout})
+    def __call__(self, url, json=None, headers=None, timeout=None):
+        self.calls.append({'url': url, 'body': json, 'headers': headers or {}, 'timeout': timeout})
         m = mock.Mock(status_code=self.status)
         m.raise_for_status = (lambda: None) if self.status < 400 else mock.Mock(side_effect=RuntimeError('HTTP 500'))
         m.json = lambda: {'model': 'Qwen3-4B-Q4_K_M.gguf', 'usage': self.usage,
@@ -273,7 +273,7 @@ class LocalBackend(unittest.TestCase):
     def test_the_wire_shape_is_openai_compatible_with_a_json_schema_grammar(self):
         post = _Post(VERDICT_JSON)
         client = fr.LocalClient('http://llm:8080/v1', 'qwen3-4b', ctx_tokens=16384, max_tokens=1200,
-                                timeout_sec=900, post=post)
+                                timeout_sec=900, post=post, api_key='vk-llm-test')
         doc = fr.DocumentText(ORDER_TEXT, 1, 1, len(ORDER_TEXT), False)
         resp = client.messages.parse(model='ignored', max_tokens=4000, system=fr.SYSTEM_PROMPT,
                                      messages=fr.build_messages({'company_name': 'HEC'}, doc, None),
@@ -284,6 +284,8 @@ class LocalBackend(unittest.TestCase):
         call = post.calls[0]
         self.assertEqual(call['url'], 'http://llm:8080/v1/chat/completions')
         self.assertEqual(call['timeout'], 900)
+        self.assertEqual(call['headers'].get('Authorization'), 'Bearer vk-llm-test',
+                         'the LLM VPS server is started with --api-key; no header is a 401')
         b = call['body']
         self.assertEqual(b['model'], 'qwen3-4b')
         self.assertEqual(b['max_tokens'], 1200, 'the local reply budget, not the SDK one')
@@ -323,6 +325,21 @@ class LocalBackend(unittest.TestCase):
             self.assertEqual(fr._resolve_model('local'), 'local:Qwen3-4B')
         with mock.patch.dict(os.environ, {'FILING_READ_MODEL': '', 'CLAUDE_MODEL': 'claude-haiku-4-5'}):
             self.assertEqual(fr._resolve_model('anthropic'), 'claude-haiku-4-5')
+
+    def test_local_key_resolves_and_never_takes_an_anthropic_key(self):
+        with mock.patch.dict(os.environ, {'FILING_READ_LOCAL_KEY': 'vk-1', 'LLM_API_KEY': 'vk-2', 'AI_API_KEY': 'vk-3'}):
+            self.assertEqual(fr._local_key(), 'vk-1')
+        with mock.patch.dict(os.environ, {'FILING_READ_LOCAL_KEY': '', 'LLM_API_KEY': 'vk-2', 'AI_API_KEY': 'vk-3'}):
+            self.assertEqual(fr._local_key(), 'vk-2')
+        with mock.patch.dict(os.environ, {'FILING_READ_LOCAL_KEY': '', 'LLM_API_KEY': '', 'AI_API_KEY': 'vk-3'}):
+            self.assertEqual(fr._local_key(), 'vk-3')
+        with mock.patch.dict(os.environ, {'FILING_READ_LOCAL_KEY': '', 'LLM_API_KEY': '', 'AI_API_KEY': 'sk-ant-x'}):
+            self.assertEqual(fr._local_key(), '', 'an Anthropic key is never sent to the local server')
+        post = _Post(VERDICT_JSON)
+        client = fr.LocalClient('http://llm:8080/v1', 'q', post=post)     # no key configured
+        client.messages.parse(system='s', messages=fr.build_messages({}, fr.DocumentText('x', 1, 1, 1, False), None),
+                              output_format=fr.FilingVerdict)
+        self.assertNotIn('Authorization', post.calls[0]['headers'])
 
     def test_backend_missing_names_what_is_unset(self):
         with mock.patch.object(fr, 'BACKEND', 'anthropic'), \
