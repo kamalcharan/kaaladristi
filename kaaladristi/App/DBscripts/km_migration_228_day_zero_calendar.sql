@@ -49,6 +49,13 @@
 -- one row set, never a permanent error — and the seed below is exactly what
 -- makes that window short.
 --
+-- ⚠ CORRECTED 2026-09-28 after the first live run of sync_nse_holidays.py:
+-- the seed originally carried Balipratipada on 9 Nov; NSE's holiday master
+-- says 10 Nov (its spelling, 'Diwali-Balipratipada'). If this file was
+-- applied before the correction, remove the stray row:
+--   DELETE FROM km_trading_calendar WHERE trade_date = DATE '2026-11-09'
+--     AND status = 'holiday';
+-- The sync script is the authority; the seed only covers the gap until it runs.
 -- ⚠ The seeded rows are NSE's published 2026 trading holidays for the rest of
 -- the year (the eleven already past — 15 Jan, 26 Jan, 3 Mar, 26 Mar, 31 Mar,
 -- 3 Apr, 14 Apr, 1 May, 28 May, 26 Jun, 14 Sep — all match rows the pipeline
@@ -124,7 +131,7 @@ SELECT d, ex, TRUE, n, 'holiday'
 FROM (VALUES
         (DATE '2026-10-02', 'Mahatma Gandhi Jayanti'),
         (DATE '2026-10-20', 'Dussehra'),
-        (DATE '2026-11-09', 'Diwali Balipratipada'),
+        (DATE '2026-11-10', 'Diwali-Balipratipada'),
         (DATE '2026-11-24', 'Prakash Gurpurb Sri Guru Nanak Dev'),
         (DATE '2026-12-25', 'Christmas')
      ) AS h(d, n)
