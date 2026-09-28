@@ -807,14 +807,25 @@ No OCR stack. Text is never truncated; a document over the page cap
 (`FILING_READ_MAX_PAGES`, 40) is read up to the cap and the row records
 `pages_read < page_count`, so a partial read is never presented as a full one.
 
-**Model.** `claude-opus-5` through the official `anthropic` SDK
+**Model.** `claude-haiku-4-5` (owner, 2026-09-28: *"with sonnet it will be
+very expensive — we will have haiku"*) through the official `anthropic` SDK
 (`client.messages.parse` with a schema, so the verdict is validated JSON, never
-prose to re-parse), adaptive thinking, effort `medium`. Sonnet 5 is the
-owner's cost option, same code, one constant. Local Qwen is **no longer the
-primary**: the original Sprint 3 chose it on cost, and 85 documents a day at a
-few thousand tokens each is a few dollars a day on Opus — the cost argument
-collapsed, and D42's Qwen weakness (recalling midcap facts) is beside the
-point, but a wrong read on an order-win letter is a wrong verdict on a screen.
+prose to re-parse). `FILING_READ_MODEL` in `.env` overrides it — it is the
+reader's OWN setting, deliberately not `AI_MODEL`, which is the VaNi layer's
+and on the VPS names the local Qwen server. Cost at Haiku's $1 / $5 per
+million tokens: ~85 documents a day at ~5–8k input tokens each is roughly
+$0.5–0.7 a day; the 5,252-document backfill is roughly $40. Sonnet 5 doubles
+that, Opus 5 five times.
+
+Local Qwen **cannot be the reader**, on three measured limits, not on quality:
+its context is 4,096 tokens (CLAUDE.md), and a material filing's text layer is
+usually 3–15k tokens before the prompt; it has no vision, and the scanned PDFs
+(the chars-per-page gate exists because they are common) are sent as the
+document itself; and `_fallback_complete` already fails on the far smaller
+companion prompts (Known Issues, 2026-09-14). What Qwen CAN do is triage —
+"is this the routine kind of filing" from the ~150-char `summary_text` — and
+that is the one place it could cut spend; it is not built because the
+taxonomy already routes GENERAL/UNCLASSIFIED away from the read for free.
 Never `claude_complete`'s raw-`requests` path for this; that helper predates
 the SDK being in the image.
 

@@ -175,9 +175,22 @@ class Extraction(unittest.TestCase):
             self.assertIn(word, p)          # named only to be forbidden
 
     def test_cost_table_covers_the_default_model(self):
+        self.assertEqual(fr.DEFAULT_MODEL, 'claude-haiku-4-5')   # owner, 2026-09-28
+        self.assertIn(fr.DEFAULT_MODEL, fr.PRICES)
         self.assertIn(fr.MODEL, fr.PRICES)
+        self.assertAlmostEqual(fr._cost('claude-haiku-4-5', 1_000_000, 0), 1.0)
         self.assertAlmostEqual(fr._cost('claude-opus-5', 1_000_000, 0), 5.0)
         self.assertIsNone(fr._cost('some-other-model', 10, 10))
+
+    def test_api_key_accepts_the_ai_client_pair(self):
+        with mock.patch.dict(os.environ, {'ANTHROPIC_API_KEY': 'sk-ant-a', 'AI_API_KEY': 'sk-ant-b'}):
+            self.assertEqual(fr._api_key(), 'sk-ant-a')
+        with mock.patch.dict(os.environ, {'ANTHROPIC_API_KEY': '', 'AI_API_KEY': 'sk-ant-b'}):
+            self.assertEqual(fr._api_key(), 'sk-ant-b')
+        # a local-LLM key in AI_API_KEY is never mistaken for an Anthropic key
+        with mock.patch.dict(os.environ, {'ANTHROPIC_API_KEY': '', 'AI_API_KEY': 'local-qwen'}):
+            self.assertEqual(fr._api_key(), '')
+            self.assertFalse(fr.has_api_key())
 
 
 class Wiring(unittest.TestCase):
@@ -301,7 +314,8 @@ class Reads(unittest.TestCase):
         self.assertEqual((r['status'], r['impact'], r['magnitude'], r['source']), ('done', 'positive', 'major', 'text'))
         self.assertIn('133.98 crore', r['quote'])
         self.assertEqual(r['input_tokens'], 1200)
-        self.assertAlmostEqual(float(r['cost']), 1200 * 5 / 1e6 + 180 * 25 / 1e6, places=5)
+        p_in, p_out = fr.PRICES[fr.MODEL]          # priced at the model that ran, not a remembered rate
+        self.assertAlmostEqual(float(r['cost']), 1200 * p_in / 1e6 + 180 * p_out / 1e6, places=5)
         self.assertEqual(r['model'], fr.MODEL)
         raw_text, ext, pc, cc = self._raw('hec')
         self.assertIn('133.98', raw_text); self.assertEqual(ext, 'ok'); self.assertEqual(pc, 1)
@@ -386,7 +400,7 @@ class Reads(unittest.TestCase):
     def test_no_api_key_leaves_rows_pending(self):
         self._event('hec', '2026-09-28 10:00+05:30')
         fr.enqueue_pending(self.conn)
-        with mock.patch.dict(os.environ, {'ANTHROPIC_API_KEY': ''}):
+        with mock.patch.dict(os.environ, {'ANTHROPIC_API_KEY': '', 'AI_API_KEY': ''}):
             stats = fr.read_pending(self.conn, session=_Session({}))
         self.assertEqual(stats['read'], 0)
         self.assertIn('ANTHROPIC_API_KEY', stats['skipped'])
@@ -413,8 +427,10 @@ class Reads(unittest.TestCase):
         for i in range(3):
             self._event(f'e{i}', f'2026-09-2{6 + i} 10:00+05:30')
         fr.enqueue_pending(self.conn)
+        # the first document alone overspends the budget — whatever the model's price
+        one = fr._cost(fr.MODEL, 1200, 180)
         stats = fr.read_pending(self.conn, session=_Session({'http://x/a.pdf': _pdf([ORDER_TEXT])}),
-                                client=_Client(), budget_usd=0.005)
+                                client=_Client(), budget_usd=one * 0.5)
         self.assertEqual(stats['read'], 1)
         self.assertIn('budget', stats['skipped'])
         self.assertEqual(fr.status_counts(self.conn)['pending'], 2)

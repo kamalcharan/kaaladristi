@@ -50,7 +50,11 @@ log = logging.getLogger('filing_reader')
 READER_VERSION = 'v1'
 MATERIAL_FAMILIES = ('SPARK', 'NEGATIVE_SPARK', 'OWNERSHIP', 'CORPORATE_ACTION')
 
-MODEL = os.getenv('FILING_READ_MODEL', 'claude-opus-5')
+# The reader's model is ITS OWN setting, not AI_MODEL: AI_MODEL is the VaNi
+# layer's model and on the VPS it names the local Qwen server, which cannot
+# take a 20-page PDF (4k context, no vision). Owner, 2026-09-28: Haiku.
+DEFAULT_MODEL = 'claude-haiku-4-5'
+MODEL = os.getenv('FILING_READ_MODEL') or DEFAULT_MODEL
 MAX_PER_PASS = int(os.getenv('FILING_READ_MAX_PER_PASS', '300'))
 MAX_ATTEMPTS = int(os.getenv('FILING_READ_MAX_ATTEMPTS', '5'))
 MAX_PAGES = int(os.getenv('FILING_READ_MAX_PAGES', '40'))
@@ -61,9 +65,10 @@ REQUEST_DELAY_SEC = float(os.getenv('FILING_READ_DELAY_SEC', '0.5'))
 # USD per million tokens (input, output) — for the per-row cost column and the
 # backfill budget cap. Update when the price list moves.
 PRICES = {
-    'claude-opus-5':   (5.00, 25.00),
-    'claude-sonnet-5': (2.00, 10.00),
-    'claude-haiku-4-5': (1.00, 5.00),
+    'claude-haiku-4-5':  (1.00, 5.00),
+    'claude-sonnet-5':   (2.00, 10.00),
+    'claude-sonnet-4-6': (3.00, 15.00),
+    'claude-opus-5':     (5.00, 25.00),
 }
 
 
@@ -103,14 +108,26 @@ Rules:
 8. Be specific and short. The headline is one line a reader scans."""
 
 
+def _api_key() -> str:
+    """ANTHROPIC_API_KEY, else AI_API_KEY when it is an Anthropic key — the
+    same pair lib/ai_client.py accepts, so one .env line serves both."""
+    key = os.getenv('ANTHROPIC_API_KEY') or ''
+    if not key:
+        alt = os.getenv('AI_API_KEY') or ''
+        if alt.startswith('sk-ant'):
+            key = alt
+    return key
+
+
 def _client():
-    """The official SDK client. Reads ANTHROPIC_API_KEY from the environment."""
+    """The official SDK client. Honours ANTHROPIC_BASE_URL from the environment
+    (the SDK reads it itself) for a proxy or gateway."""
     import anthropic
-    return anthropic.Anthropic()
+    return anthropic.Anthropic(api_key=_api_key())
 
 
 def has_api_key() -> bool:
-    return bool(os.getenv('ANTHROPIC_API_KEY'))
+    return bool(_api_key())
 
 
 def _cost(model: str, inp: int, out: int) -> Optional[float]:
