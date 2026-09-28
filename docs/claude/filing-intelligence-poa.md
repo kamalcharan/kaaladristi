@@ -763,7 +763,126 @@ handling, silently changing numbers a researcher is reading.
 
 ---
 
-## Sprint 3 — Extraction + classification (Tier B)
+## Sprint 3 — REVISED 2026-09-28: the read (supersedes the section below)
+
+Owner, 2026-09-28, on the Post-Result Drift scanner: *"it is not about 5%
+gate... it is about intelligence. What it should do: read the content of the
+filings, check if it will have +ve or -ve impact over the company, report.
+There is a chance that some technical things might get confirmation like
+MagicRS, high RVOL etc. but what is needed is the intelligence."*
+
+What shipped under "Filing Intelligence" is the price-reaction half only. This
+section is the intelligence half. The original Sprint 3 text below is kept for
+its measurements; where the two disagree, this section wins.
+
+### What the layer knows today, and why that is not intelligence
+
+Polarity comes from NSE's category label alone (`lib/filing_taxonomy.py`).
+"Acquisition" is positive whether the company is the acquirer or the target.
+"Bagging of orders" is positive whether the order is 50 crore or 5,000 crore.
+"Change in Management" is neutral whether a founder left or a CFO joined. The
+stored summary is ~150 characters of boilerplate ("X has informed the Exchange
+about Acquisition"). The substance is in the PDF, which every event links to
+and nothing has ever read: `raw_text` is NULL on every row.
+
+### Decisions taken (owner, 2026-09-28)
+
+| # | Decision | Owner's words / basis |
+|---|---|---|
+| 1 | **The read runs after EVERY data pull**, as the last step of each `filings_ingest` pass (06:10 / 09:10 / 12:10 / 20:10 / 23:10), never as a separate same-day job. | *"there are multiple triggers to get filings... extraction + analysis should happen after every data pull from exchanges."* Selecting on "no read yet" makes it correct across triggers: a filing fetched at 12:10 is read at 12:10; one whose read failed is picked up by the next pass three hours later. No separate retry scheduler. |
+| 2 | **Scope: every material family** — SPARK, NEGATIVE_SPARK, OWNERSHIP, CORPORATE_ACTION. GENERAL and UNCLASSIFIED are never read. | The verdict *is* the classification, and the sign of a rights issue or a promoter SAST disclosure depends on reading it. Measured 21–28 Sep: 348 + 97 + 149 + 12 material a week (~85 a day) against 4,519 skipped. |
+| 3 | **History: six months back**, so verdicts can be cross-checked against what the stocks then did. | *"history — we will take 6 months — else there wont be any data to cross check."* Measured: **5,252** material events since 2026-03-28 (SPARK 3,035 · OWNERSHIP 968 · NEGATIVE_SPARK 637 · CORPORATE_ACTION 612), **4,182** with a full 20-session forward window, average document 1.5 MB. |
+| 4 | **The scanner shows +ve / −ve / neutral, and the DRIFT is what is shown beside it.** | *"filing intelligence -> +ve, -ve, neutral — drift is what is shown."* Membership is "has a verdict in the window"; the price move since Day 0 is the evidence column, never the gate. MagicRS / RVOL / Day 0 reaction are confirmation chips. |
+| 5 | **A workspace block, "Latest filings"**, sibling of "Your stocks today" (`WorkspaceToday.tsx`): the latest pull's material filings with per-row read status. | *"data pulled should be shown in the dashboard... latest filings — and also the polling status if its analysis is done or in progress, or yet to start."* |
+| 6 | **A status row exists from the moment a material filing is fetched**, not only once a verdict exists. States: `pending` → `reading` → `done` / `failed` / `unreadable`. | "Yet to start" must be a real row (the base-rate / stir-window rule: a gap must be sayable). |
+
+### The read — contract
+
+**Input.** The filing text. `pypdf` (pure Python, no system packages) extracts
+the text layer; the chars-per-page gate from the section below (250) decides
+whether it is real. A document that fails the gate is a scanned image, and it
+is sent to the model **as the PDF itself** — the Messages API reads PDFs
+natively, scanned pages included (base64 `document` block, 32 MB / 600 pages).
+No OCR stack. Text is never truncated; a document over the page cap
+(`FILING_READ_MAX_PAGES`, 40) is read up to the cap and the row records
+`pages_read < page_count`, so a partial read is never presented as a full one.
+
+**Model.** `claude-opus-5` through the official `anthropic` SDK
+(`client.messages.parse` with a schema, so the verdict is validated JSON, never
+prose to re-parse), adaptive thinking, effort `medium`. Sonnet 5 is the
+owner's cost option, same code, one constant. Local Qwen is **no longer the
+primary**: the original Sprint 3 chose it on cost, and 85 documents a day at a
+few thousand tokens each is a few dollars a day on Opus — the cost argument
+collapsed, and D42's Qwen weakness (recalling midcap facts) is beside the
+point, but a wrong read on an order-win letter is a wrong verdict on a screen.
+Never `claude_complete`'s raw-`requests` path for this; that helper predates
+the SDK being in the image.
+
+**Output — one row per event in `km_filing_reads`** (migration 229):
+
+| column | meaning |
+|---|---|
+| `event_id` | FK `km_corporate_events.id`, UNIQUE — one read per event |
+| `status` | `pending` / `reading` / `done` / `failed` / `unreadable` |
+| `impact` | `positive` / `negative` / `neutral` / `unclear` — impact on the COMPANY as stated in the filing |
+| `magnitude` | `major` / `notable` / `minor` / `unknown` |
+| `amount_value`, `amount_unit`, `amount_basis` | the stated number, when there is one (order value, deal value, stake %), reusing 212's vocabulary |
+| `relative_to` | `mcap` / `revenue` / NULL — what the amount was sized against, with `relative_pct` |
+| `role` | `acquirer` / `target` / `promoter` / `non_promoter` / `new_client` / `repeat_client` / NULL |
+| `headline` | one line: what happened |
+| `reasoning` | two or three sentences |
+| `evidence_quote` | the sentence(s) from the document the verdict rests on — **what makes it auditable** |
+| `confidence` | 0–1 |
+| `model`, `reader_version`, `input_tokens`, `output_tokens`, `pages_read`, `page_count`, `read_source` (`text` / `pdf`) | audit |
+| `fetched_at`, `started_at`, `finished_at`, `attempts`, `last_error` | the status row's clock |
+
+`reader_version` keys the result: a prompt change is a re-queue that never
+loses the previous verdict (the `classifier_version` rule below, unchanged).
+
+**Compliance framing, which the schema enforces.** `impact` is the impact on
+the company's business *as the filing states it*, with the quote beside it.
+It is not a price forecast and the prompt says so. Directional market words
+(bull/bear) never appear in a label (D39). The drift shown beside the verdict
+is a measurement of what happened, and that separation — verdict from the
+document, drift from the tape — is the whole reason the two columns exist.
+
+### Where it surfaces (all four read ONE table)
+
+1. **Workspace block "Latest filings"** — header states the pull: *"Pulled
+   12:10 · 62 material filings · 41 read · 21 reading · next pull 20:10"*.
+   Rows are the latest pull's material filings, bookmarked stocks pinned first,
+   each with company, what was filed, the verdict when it exists, the status
+   when it does not, and the quote on expand. "View all" → Filings page.
+2. **Sparks scanner** — replaces Post-Result Drift as the default tab under
+   Filing Intelligence (PEAD stays as a sibling tab). Rows: verdicts in the last
+   N sessions, ranked by magnitude then recency; a Caution side for negative.
+   Columns: verdict, magnitude, **drift since Day 0**, then the confirmation
+   chips.
+3. **Filings page row** — verdict + magnitude chip, quote on expand.
+4. **Stock Thesis tab** — the read as a story event on Day 0.
+
+### The cross-check (why six months)
+
+Verdict × forward excess return, the `signal-research` procedure: for each
+`impact` × `magnitude` cell, median 5- and 20-session excess vs the same-date
+universe median, `suspect_corporate_action` filtered, dates counted (not
+stocks), split-sample. The question is not "does a positive verdict predict a
+rise" — the +15% × filing finding below already says a filing tells a big move
+apart from one that reverts — it is whether the READ separates outcomes better
+than the category label does. If it does not, the read is still the product
+(it is what the user asked for), but no chip may imply it is more.
+
+### Build order
+
+| phase | what | done when |
+|---|---|---|
+| A | migration 229; `lib/filing_reader.py` (extract → read → row); the step wired into `ingest_filings_for_pipeline` and the CLI; `scripts/backfill_filing_reads.py --from 2026-03-28` (resumable, serialized, budget-capped); tests on synthetic PDFs with a stub client | 5,252 rows read on the VPS; status counts on `/internal/health` |
+| B | Sparks scanner (preset row, fetcher reading `km_filing_reads` + drift from `kd_result_returns`-style calendar), default tab | `check-sparks-scanner.mjs` green |
+| C | Workspace block, Filings page chip, Thesis event | QA harness on the block's three states |
+| D | the cross-check, written into this document | numbers, not adjectives |
+
+
+## Sprint 3 — Extraction + classification (Tier B) — ORIGINAL, superseded above where they differ
 
 ### The extraction contract
 

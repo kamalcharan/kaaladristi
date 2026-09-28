@@ -143,6 +143,15 @@ the operation change something first.
 
 ## What needs your decision
 
+> **Decided 2026-09-28** — the UI layer, the vocabulary in use (verdict:
+> positive / negative / neutral, with the drift beside it), the read after
+> every pull, the six-month history, the workspace "Latest filings" block with
+> per-row read status, and Sprint 3 as the read (Opus through the SDK, not
+> Qwen). Recorded in the POA under *Sprint 3 — REVISED 2026-09-28*. The items
+> below stay for the record; bulk-deal history, the 205 NULL outcomes,
+> Sprint 3b and BSE remain open.
+
+
 ### 1. UI — the whole layer (the reason this file exists)
 
 Everything above is queryable and nothing is visible. Your own framing was that
