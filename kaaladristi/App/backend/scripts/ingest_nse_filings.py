@@ -149,18 +149,16 @@ def derive_events(conn) -> tuple[int, int, int]:
     """Classify every raw row that has no event yet, using NSE's own `desc`.
     Returns (events_written, deferred_rows, unresolvable_rows).
 
-    ⚠ DEFERRED IS NOT AN ERROR, AND MUST NOT BE COUNTED AS ONE. Measured on the
-    first two live runs: 287 of 582 rows produced no event, every one of them
-    disseminated between 15:30:11 and 22:55 on the latest bar in km_equity_eod.
-    kd_day_zero_trade_date returns NULL for those because the NEXT session does
-    not exist yet — you cannot assign a Day 0 that has not happened. That is the
-    lookahead guard working, not a failure, and those rows classify themselves
-    on the next pass once tomorrow's bar lands.
-
-    Roughly half of every evening run will be deferred, because filings cluster
-    after the close. A report that does not distinguish deferred from broken
-    makes a healthy run look like a half-failed one — and would train whoever
-    reads it to ignore the number.
+    ⚠ DEFERRED IS NOT AN ERROR, AND MUST NOT BE COUNTED AS ONE — but since
+    migration 228 it should also be RARE. Under migration 212 the Day 0 rule
+    read sessions out of km_equity_eod, so everything filed after 15:30 (the
+    larger half of the stream) had no Day 0 until the next bar landed: 287 of
+    582 rows on the first live run, and from Friday 15:30 to Monday ~20:10 the
+    Filings page went dark for ~53 hours (2026-09-28). Day 0 is now PLANNED
+    from km_trading_calendar when the session has not happened yet and
+    RECONCILED by reconcile_day_zero() once the bar lands, so a deferral only
+    remains for a gap inside recorded history or a span longer than 15 days —
+    a number worth reading, no longer a number to expect.
 
     ⚠ ISIN IS RESOLVED, NOT REQUIRED. The first live run ingested 571 rows and
     produced only 295 events: 276 carried an empty `sm_isin` and were skipped
@@ -244,6 +242,57 @@ def derive_events(conn) -> tuple[int, int, int]:
     return written, deferred, unresolvable
 
 
+# Sessions back from the latest bar inside which a stored Day 0 may still be
+# provisional. A planned date can sit at most a long weekend plus a holiday
+# past the bar that existed when it was planned; ten sessions is several times
+# that and still a few thousand rows.
+RECONCILE_SESSIONS = 10
+
+
+def reconcile_day_zero(conn) -> int:
+    """Re-derive Day 0 on recent events and rewrite the ones that moved.
+
+    Migration 228 lets kd_day_zero_trade_date PLAN a Day 0 from the trading
+    calendar before the session's bar exists — that is what puts a Friday-
+    evening filing on the page as "actionable Monday" on Friday night. A plan
+    can be wrong in exactly one way: the calendar did not know a holiday, so
+    no bar lands on the planned day and the market's first chance to act was
+    the day after. Once the bar exists the function's traded-bar rule takes
+    over and gives the right answer; this pass copies that answer back onto
+    the stored rows.
+
+    Bounded to Day 0s inside the last RECONCILE_SESSIONS bars: a Day 0 older
+    than that was confirmed by a bar long ago and re-deriving 31,000 rows on
+    every pass buys nothing. Rows whose re-derivation is NULL are left alone —
+    a filing dated once is never un-dated.
+
+    Runs on every ingest pass, like reclassify_events, so it needs no operator.
+    """
+    with conn.cursor() as cur:
+        cur.execute("""
+            WITH recent AS (
+                SELECT trade_date FROM public.km_equity_eod
+                 WHERE trade_date IS NOT NULL
+                 GROUP BY trade_date ORDER BY trade_date DESC
+                 LIMIT %s
+            ), floor_d AS (
+                SELECT COALESCE(min(trade_date), DATE '1900-01-01') AS d FROM recent
+            ), moved AS (
+                SELECT e.id, kd_day_zero_trade_date(e.disseminated_at) AS new_d0
+                  FROM public.km_corporate_events e
+                 WHERE e.day_0_trade_date >= (SELECT d FROM floor_d)
+            )
+            UPDATE public.km_corporate_events e
+               SET day_0_trade_date = m.new_d0,
+                   updated_at = now()
+              FROM moved m
+             WHERE m.id = e.id
+               AND m.new_d0 IS NOT NULL
+               AND m.new_d0 <> e.day_0_trade_date
+        """, (RECONCILE_SESSIONS,))
+        return cur.rowcount
+
+
 def reclassify_events(conn) -> int:
     """Re-label stored events that DESC_MAP can now place but could not before.
 
@@ -303,7 +352,8 @@ def reclassify_events(conn) -> int:
 
 def run(conn, session, start: date, end: date, dry_run=False) -> dict:
     stats = {'fetched': 0, 'inserted': 0, 'revisions': 0, 'events': 0,
-             'calls': 0, 'deferred': 0, 'unresolvable': 0, 'reclassified': 0}
+             'calls': 0, 'deferred': 0, 'unresolvable': 0, 'reclassified': 0,
+             'reconciled': 0}
     cur = start
     while cur <= end:
         win_end = min(cur + timedelta(days=BACKFILL_WINDOW_DAYS - 1), end)
@@ -331,12 +381,19 @@ def run(conn, session, start: date, end: date, dry_run=False) -> dict:
         if stats['reclassified']:
             log.info(f'  {stats["reclassified"]:,} stored events re-labelled '
                      f'from UNCLASSIFIED by taxonomy {TAXONOMY_VERSION}')
+        # A PLANNED Day 0 (migration 228) is provisional until its bar lands;
+        # this is the pass that makes it right when the calendar was wrong.
+        stats['reconciled'] = reconcile_day_zero(conn)
+        conn.commit()
+        if stats['reconciled']:
+            log.info(f'  {stats["reconciled"]:,} event(s) re-dated: the planned '
+                     f'Day 0 did not trade, the first bar after it did')
         if stats['deferred']:
             # Normal, and expected to be large on an evening run. Stated plainly
             # so nobody reads a healthy result as a half-failure.
-            log.info(f'  {stats["deferred"]:,} deferred — disseminated after '
-                     f'the close, waiting on the next session to exist. They '
-                     f'classify on the next run; nothing is lost.')
+            log.info(f'  {stats["deferred"]:,} deferred — no session could be '
+                     f'assigned (a gap inside recorded history, or >15 days '
+                     f'without a bar). They are retried on every run.')
         if stats['unresolvable']:
             # Loud on purpose. A silent skip here is how half a stream goes
             # missing without anyone noticing.
@@ -367,15 +424,18 @@ def ingest_filings_for_pipeline(conn, trade_date, force: bool = False) -> tuple[
     the cost of a too-narrow window is a filing lost for good.
 
     Status is 'completed' when anything moved and 'partial' on a quiet sweep, so
-    a run that fetched and found nothing new does not read as a failure. Rows
-    that could not be dated yet (disseminated after the close, next session not
-    in km_equity_eod) are DEFERRED, not failed — they classify on a later pass.
+    a run that fetched and found nothing new does not read as a failure. A row
+    that cannot be dated (a gap inside recorded history) is DEFERRED, not
+    failed — it is retried on every pass. Since migration 228 a filing after
+    the close is dated to the next PLANNED session at once, and re-dated by
+    reconcile_day_zero() if that session turns out not to trade.
     """
     from datetime import date as _date, timedelta as _td
     end = _date.today()
     start = end - _td(days=PIPELINE_WINDOW_DAYS)
     stats = run(conn, NseSession(), start, end, dry_run=False)
-    moved = stats['inserted'] + stats['events'] + stats['reclassified']
+    moved = (stats['inserted'] + stats['events'] + stats['reclassified']
+             + stats['reconciled'])
     if stats['deferred']:
         log.info(f'[filings_ingest] {stats["deferred"]} deferred '
                  f'(after the close; awaiting the next session)')
@@ -392,6 +452,10 @@ def main():
     ap.add_argument('--to', dest='dto', default=None)
     ap.add_argument('--dry-run', action='store_true',
                     help='fetch and report, write nothing')
+    ap.add_argument('--reconcile-day0', action='store_true',
+                    help='re-derive Day 0 on recent events against the bars '
+                         'that now exist and exit — no NSE fetch. The '
+                         'scheduled ingest also does it on every pass.')
     ap.add_argument('--reclassify', action='store_true',
                     help='re-label stored UNCLASSIFIED events against the '
                          'current DESC_MAP and exit — no NSE fetch. Run this '
@@ -399,6 +463,16 @@ def main():
                          'does it on every pass.')
     args = ap.parse_args()
     logging.basicConfig(level=logging.INFO, format='%(message)s')
+
+    if args.reconcile_day0:
+        conn = get_conn()
+        try:
+            n = reconcile_day_zero(conn)
+            conn.commit()
+            print(f're-dated {n:,} recent event(s) whose planned Day 0 did not trade')
+        finally:
+            conn.close()
+        return
 
     if args.reclassify:
         conn = get_conn()
@@ -425,6 +499,7 @@ def main():
               f'events {stats["events"]:,}  '
               f'deferred {stats["deferred"]:,}  '
               f'reclassified {stats["reclassified"]:,}  '
+              f'reconciled {stats["reconciled"]:,}  '
               f'unresolvable {stats["unresolvable"]:,}')
     finally:
         if conn:

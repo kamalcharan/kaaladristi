@@ -31,13 +31,16 @@ from scripts.ingest_nse_board_meetings import (
 from scripts.ingest_nse_bulk_deals import (
     parse_rows, replace_day, backfill_day0, unresolved_count,
     paging_suspected, CAP_SUSPECT_RUN, CAP_SUSPECT_MIN)
+from scripts.ingest_nse_filings import reconcile_day_zero, RECONCILE_SESSIONS
+from scripts.sync_nse_holidays import parse_holidays, upsert_holidays
 
 DSN = os.environ.get('KD_TEST_DSN')
 MIGRATIONS = ('km_migration_212_filings_ingest.sql',
               'km_migration_214_board_meetings.sql',
               'km_migration_215_result_drift.sql',
               'km_migration_216_result_drift_dedup.sql',
-              'km_migration_217_bulk_deals.sql')
+              'km_migration_217_bulk_deals.sql',
+              'km_migration_228_day_zero_calendar.sql')
 DB_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                       '..', 'DBscripts')
 # Applied once per process. Two test classes share the fixture, and 215/216
@@ -135,6 +138,11 @@ class LinkSemantics(unittest.TestCase):
                 CREATE TABLE IF NOT EXISTS km_equity_symbols
                   (id serial primary key, symbol text, isin text,
                    exchange text, is_active bool);
+                CREATE TABLE IF NOT EXISTS km_trading_calendar
+                  (trade_date date, exchange text,
+                   is_holiday bool DEFAULT false, holiday_name text,
+                   status text, created_at timestamptz DEFAULT now(),
+                   PRIMARY KEY (trade_date, exchange));
             """)
             # Running the real migration files is itself the point: a schema
             # the tests invent cannot catch a migration that does not apply.
@@ -942,21 +950,57 @@ class BulkDeals(unittest.TestCase):
         self.assertEqual(str(r[7]), '2026-09-17')      # deal_date
         self.assertEqual(str(r[8]), '2026-09-18')      # day_0
 
-    def test_day_0_defers_when_the_next_session_does_not_exist(self):
+    def test_day_0_is_planned_before_the_next_session_trades(self):
+        """Migration 228: a Thursday deal is dated to Friday on Thursday night,
+        from the calendar, not deferred until Friday's bar lands (the shape
+        that left the Filings page dark from Friday 15:30 to Monday 20:10)."""
         with self.conn.cursor() as c:
             c.execute("DELETE FROM km_equity_eod WHERE trade_date='2026-09-18'")
         self.conn.commit()
         rows, _ = parse_rows(self._csv(
             '17-SEP-2026,ASTERDM,Aster DM,FUND A,BUY,1000,500.25,-'), 'BULK')
         replace_day(self.conn, 'BULK', date(2026, 9, 17), rows)
-        self.assertIsNone(self._rows()[0][8])
-        # ...and is filled once that bar lands, with no bookkeeping
+        self.assertEqual(str(self._rows()[0][8]), '2026-09-18')
+        # the bar landing on the planned day changes nothing
         with self.conn.cursor() as c:
             c.execute('INSERT INTO km_equity_eod (equity_id, trade_date, close)'
                       " VALUES (1,'2026-09-18',100)")
         self.conn.commit()
-        self.assertEqual(backfill_day0(self.conn), 1)
+        self.assertEqual(backfill_day0(self.conn), 0)
         self.assertEqual(str(self._rows()[0][8]), '2026-09-18')
+
+    def test_a_planned_day_0_that_did_not_trade_is_corrected(self):
+        """The one way a plan can be wrong: the calendar did not know a
+        holiday. No bar lands on the 18th, the first bar is the 21st — the
+        market's first chance to act — and backfill_day0 moves the row."""
+        with self.conn.cursor() as c:
+            c.execute("DELETE FROM km_equity_eod WHERE trade_date='2026-09-18'")
+        self.conn.commit()
+        rows, _ = parse_rows(self._csv(
+            '17-SEP-2026,ASTERDM,Aster DM,FUND A,BUY,1000,500.25,-'), 'BULK')
+        replace_day(self.conn, 'BULK', date(2026, 9, 17), rows)
+        self.assertEqual(str(self._rows()[0][8]), '2026-09-18')      # planned
+        with self.conn.cursor() as c:
+            c.execute('INSERT INTO km_equity_eod (equity_id, trade_date, close)'
+                      " VALUES (1,'2026-09-21',100)")
+        self.conn.commit()
+        self.assertEqual(backfill_day0(self.conn), 1)
+        self.assertEqual(str(self._rows()[0][8]), '2026-09-21')
+        self.assertEqual(backfill_day0(self.conn), 0, 'idempotent')
+
+    def test_a_known_holiday_is_planned_around_up_front(self):
+        with self.conn.cursor() as c:
+            c.execute("DELETE FROM km_equity_eod WHERE trade_date='2026-09-18'")
+            c.execute("INSERT INTO km_trading_calendar (trade_date, exchange, "
+                      "is_holiday, status) VALUES ('2026-09-18','NSE',true,'holiday')")
+        self.conn.commit()
+        rows, _ = parse_rows(self._csv(
+            '17-SEP-2026,ASTERDM,Aster DM,FUND A,BUY,1000,500.25,-'), 'BULK')
+        replace_day(self.conn, 'BULK', date(2026, 9, 17), rows)
+        self.assertEqual(str(self._rows()[0][8]), '2026-09-21')
+        with self.conn.cursor() as c:
+            c.execute("DELETE FROM km_trading_calendar WHERE trade_date='2026-09-18'")
+        self.conn.commit()
 
     def test_isin_resolves_from_the_symbol_and_an_unknown_stays_null(self):
         rows, _ = parse_rows(self._csv(
@@ -1205,3 +1249,209 @@ class ReclassifyGuards(unittest.TestCase):
                       "derive_events hardcoded 'v1'; a new row and a relabelled "
                       'row must be traceable to the same map')
         self.assertNotIn("'v1'", src, 'the version must not be hardcoded')
+
+
+class DayZeroCalendar(unittest.TestCase):
+    """kd_day_zero_trade_date after migration 228.
+
+    The 212 rule read sessions out of km_equity_eod, so a filing after the
+    close had no Day 0 until the next bar landed: half of every day's stream
+    invisible until the next evening, and ~53 dark hours every weekend
+    (2026-09-28). Day 0 is a calendar question. These pin the three rules —
+    a traded bar is authoritative, a session that has not happened is PLANNED,
+    a gap inside history stays NULL — and the reconcile that makes a plan safe.
+    """
+
+    setUpClass = LinkSemantics.__dict__['setUpClass']
+    tearDownClass = LinkSemantics.__dict__['tearDownClass']
+
+    def setUp(self):
+        with self.conn.cursor() as c:
+            c.execute('TRUNCATE km_corporate_events, km_filings_raw, '
+                      'km_equity_symbols, km_equity_eod, km_trading_calendar '
+                      'RESTART IDENTITY CASCADE')
+        self.conn.commit()
+
+    def _bars(self, *dates):
+        with self.conn.cursor() as c:
+            for d in dates:
+                c.execute('INSERT INTO km_equity_eod (equity_id, trade_date, '
+                          'close) VALUES (1,%s,100)', (d,))
+        self.conn.commit()
+
+    def _holiday(self, d, status='holiday', exchange='NSE'):
+        with self.conn.cursor() as c:
+            c.execute("INSERT INTO km_trading_calendar (trade_date, exchange, "
+                      "is_holiday, status) VALUES (%s,%s,%s,%s)",
+                      (d, exchange, status == 'holiday', status))
+        self.conn.commit()
+
+    def _d0(self, ts):
+        with self.conn.cursor() as c:
+            c.execute('SELECT kd_day_zero_trade_date(%s::timestamptz)', (ts,))
+            v = c.fetchone()[0]
+        self.conn.commit()
+        return None if v is None else str(v)
+
+    # ── rule 2: the session that has not happened yet is planned ──────────
+    def test_friday_evening_is_dated_to_monday_before_mondays_bar_exists(self):
+        self._bars('2026-09-24', '2026-09-25')            # latest bar: Friday
+        self.assertEqual(self._d0('2026-09-25 16:00+05:30'), '2026-09-28')
+        self.assertEqual(self._d0('2026-09-26 11:00+05:30'), '2026-09-28')  # Saturday
+        self.assertEqual(self._d0('2026-09-27 23:59+05:30'), '2026-09-28')  # Sunday
+        # 15:30:00 is AT the close and still Friday; one second later is not
+        self.assertEqual(self._d0('2026-09-25 15:30:00+05:30'), '2026-09-25')
+        self.assertEqual(self._d0('2026-09-25 15:30:01+05:30'), '2026-09-28')
+
+    def test_mid_session_before_the_bar_lands_is_today(self):
+        """A 12:10 filing on Monday is actionable Monday, and the 12:10 ingest
+        slot must be able to say so six hours before Monday's bar exists."""
+        self._bars('2026-09-25')
+        self.assertEqual(self._d0('2026-09-28 12:10+05:30'), '2026-09-28')
+
+    def test_a_calendar_holiday_is_planned_around(self):
+        self._bars('2026-10-01')                          # Thursday
+        self._holiday('2026-10-02')                       # Friday: Gandhi Jayanti
+        self.assertEqual(self._d0('2026-10-01 16:00+05:30'), '2026-10-05')
+        # a no_data row counts the same way; a BSE-only row does not gate NSE
+        self._holiday('2026-10-05', status='no_data')
+        self.assertEqual(self._d0('2026-10-01 16:00+05:30'), '2026-10-06')
+        self._holiday('2026-10-06', exchange='BSE')
+        self.assertEqual(self._d0('2026-10-01 16:00+05:30'), '2026-10-06')
+
+    def test_the_plan_is_stable_once_the_bar_lands(self):
+        self._bars('2026-09-25')
+        self.assertEqual(self._d0('2026-09-25 16:00+05:30'), '2026-09-28')
+        self._bars('2026-09-28')
+        self.assertEqual(self._d0('2026-09-25 16:00+05:30'), '2026-09-28')
+
+    # ── rule 1 and rule 3: history is untouched ───────────────────────────
+    def test_historical_answers_are_the_212_answers(self):
+        self._bars('2026-09-21', '2026-09-22', '2026-09-24', '2026-09-25',
+                   '2026-09-28')
+        self.assertEqual(self._d0('2026-09-22 16:00+05:30'), '2026-09-24')  # 23rd untraded
+        self.assertEqual(self._d0('2026-09-24 10:00+05:30'), '2026-09-24')
+        self.assertEqual(self._d0('2026-09-25 16:00+05:30'), '2026-09-28')
+        # a traded bar beats the calendar: marking the 24th a holiday after the
+        # fact changes nothing, because the bar is the fact
+        self._holiday('2026-09-24')
+        self.assertEqual(self._d0('2026-09-22 16:00+05:30'), '2026-09-24')
+
+    def test_a_gap_inside_recorded_history_stays_null(self):
+        """Planning is only for sessions that have not happened. A month with
+        no bars in the middle of the record is a data gap, and inventing a
+        session there would date a filing to a day we hold nothing for."""
+        self._bars('2026-01-05', '2026-09-25')
+        self.assertIsNone(self._d0('2026-03-02 10:00+05:30'))
+
+    def test_more_than_fifteen_days_without_a_session_refuses_to_guess(self):
+        self._bars('2026-09-25')
+        d = date(2026, 9, 28)
+        while d <= date(2026, 10, 16):
+            if d.weekday() < 5:
+                self._holiday(str(d))
+            d = d.fromordinal(d.toordinal() + 1)
+        self.assertIsNone(self._d0('2026-09-25 16:00+05:30'))
+
+    def test_an_empty_bar_table_still_plans(self):
+        """A brand-new database has no bars at all; the calendar alone must
+        still be able to date a filing rather than NULL-ing every one."""
+        self.assertEqual(self._d0('2026-09-25 16:00+05:30'), '2026-09-28')
+
+    # ── reconcile: a plan is provisional until its bar lands ──────────────
+    def _event(self, name, diss, day0):
+        with self.conn.cursor() as c:
+            c.execute("INSERT INTO km_filings_raw (source, source_ann_id, isin,"
+                      " disseminated_at, content_hash, payload) VALUES "
+                      "('NSE',%s,'INE00A',%s,'h','{}') RETURNING id",
+                      (name, diss))
+            rid = c.fetchone()[0]
+            c.execute("INSERT INTO km_corporate_events (isin, company_name, "
+                      "disseminated_at, day_0_trade_date, family, desc_raw, "
+                      "primary_raw_id, raw_ids) VALUES ('INE00A',%s,%s,%s,"
+                      "'GENERAL','Press Release',%s,ARRAY[%s])",
+                      (name, diss, day0, rid, rid))
+        self.conn.commit()
+
+    def _day0s(self):
+        with self.conn.cursor() as c:
+            c.execute('SELECT company_name, day_0_trade_date FROM '
+                      'km_corporate_events ORDER BY id')
+            return {r[0]: str(r[1]) for r in c.fetchall()}
+
+    def test_a_surprise_holiday_is_corrected_once_the_next_bar_lands(self):
+        self._bars('2026-09-25')
+        self._event('fri', '2026-09-25 16:00+05:30', '2026-09-28')   # planned
+        self.assertEqual(reconcile_day_zero(self.conn), 0, 'nothing to correct yet')
+        self._bars('2026-09-29')                    # no bar on the 28th
+        self.assertEqual(reconcile_day_zero(self.conn), 1)
+        self.assertEqual(self._day0s()['fri'], '2026-09-29')
+        self.assertEqual(reconcile_day_zero(self.conn), 0, 'idempotent')
+
+    def test_reconcile_never_rewrites_history_outside_its_window(self):
+        """Only Day 0s inside the last RECONCILE_SESSIONS bars are re-derived.
+        A row older than that was confirmed by a bar long ago; re-deriving the
+        whole table on every pass buys nothing and this pins that it does not
+        happen (the stored value here is deliberately wrong and must stay)."""
+        bars = ['2026-09-01', '2026-09-02', '2026-09-03', '2026-09-04',
+                '2026-09-07', '2026-09-08', '2026-09-09', '2026-09-10',
+                '2026-09-11', '2026-09-14', '2026-09-15', '2026-09-16',
+                '2026-09-17', '2026-09-18', '2026-09-21', '2026-09-22']
+        self.assertGreater(len(bars), RECONCILE_SESSIONS)
+        self._bars(*bars)
+        self._event('old', '2026-09-01 10:00+05:30', '2026-09-02')  # wrong: should be 09-01
+        self._event('new', '2026-09-21 16:00+05:30', '2026-09-23')  # wrong: should be 09-22
+        self.assertEqual(reconcile_day_zero(self.conn), 1)
+        self.assertEqual(self._day0s(), {'old': '2026-09-02', 'new': '2026-09-22'})
+
+    def test_reconcile_never_undates_a_row(self):
+        """A re-derivation of NULL (a gap) leaves the stored date alone: a
+        filing dated once is never un-dated by a later pass."""
+        self._bars('2026-09-01', '2026-09-25')
+        self._event('gap', '2026-09-02 10:00+05:30', '2026-09-02')
+        self.assertIsNone(self._d0('2026-09-02 10:00+05:30'))
+        self.assertEqual(reconcile_day_zero(self.conn), 0)
+        self.assertEqual(self._day0s()['gap'], '2026-09-02')
+
+
+class HolidaySync(unittest.TestCase):
+    """scripts/sync_nse_holidays.py — the parser over NSE's holiday master and
+    the upsert guard it shares with migration 228's seed."""
+
+    setUpClass = LinkSemantics.__dict__['setUpClass']
+    tearDownClass = LinkSemantics.__dict__['tearDownClass']
+
+    def setUp(self):
+        with self.conn.cursor() as c:
+            c.execute('TRUNCATE km_trading_calendar')
+        self.conn.commit()
+
+    def test_parses_the_cm_segment_only(self):
+        payload = {'CM': [{'tradingDate': '02-Oct-2026', 'weekDay': 'Friday',
+                           'description': 'Mahatma Gandhi Jayanti'},
+                          {'tradingDate': '', 'description': 'junk'}],
+                   'CD': [{'tradingDate': '25-Dec-2026', 'description': 'Christmas'}]}
+        self.assertEqual(parse_holidays(payload),
+                         [(date(2026, 10, 2), 'Mahatma Gandhi Jayanti')])
+        self.assertEqual(parse_holidays({}), [])
+
+    def test_upsert_writes_both_exchanges_and_never_a_traded_date(self):
+        with self.conn.cursor() as c:
+            c.execute("INSERT INTO km_trading_calendar (trade_date, exchange, "
+                      "status) VALUES ('2026-10-20','NSE','completed')")
+        self.conn.commit()
+        n = upsert_holidays(self.conn, [(date(2026, 10, 2), 'Gandhi Jayanti'),
+                                        (date(2026, 10, 20), 'Dussehra')])
+        self.assertEqual(n, 3, 'two dates x two exchanges, minus the traded NSE row')
+        with self.conn.cursor() as c:
+            c.execute('SELECT trade_date, exchange, status, is_holiday, '
+                      'holiday_name FROM km_trading_calendar ORDER BY 1, 2')
+            rows = [(str(r[0]), r[1], r[2], r[3], r[4]) for r in c.fetchall()]
+        self.assertEqual(rows, [
+            ('2026-10-02', 'BSE', 'holiday', True, 'Gandhi Jayanti'),
+            ('2026-10-02', 'NSE', 'holiday', True, 'Gandhi Jayanti'),
+            ('2026-10-20', 'BSE', 'holiday', True, 'Dussehra'),
+            ('2026-10-20', 'NSE', 'completed', False, None),
+        ])
+        self.assertEqual(upsert_holidays(self.conn, [(date(2026, 10, 2), 'Gandhi Jayanti')]),
+                         2, 'a re-run rewrites the same rows and nothing else')

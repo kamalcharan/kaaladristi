@@ -324,6 +324,13 @@ export default function FilingsView() {
   const [search, setSearch] = useState('');
   const [fromDate, setFromDate] = useState(isoDaysAgo(30));
   const [toDate, setToDate] = useState(() => new Date().toISOString().slice(0, 10));
+  // ⚠ The "to" bound is applied only once the user sets it. Day 0 is the
+  // session the market can ACT on a filing, and since migration 228 a filing
+  // made after the close is dated to the NEXT session the moment it is
+  // fetched — so on Monday evening the newest rows carry Tuesday's date. A
+  // default bound of "today" hid exactly those rows, which are the reason to
+  // open the page after the close.
+  const [toTouched, setToTouched] = useState(false);
   // ⚠ EMPTY = "all categories" (minus Administrative), NOT "nothing".
   // It used to start as all 17 non-muted ids, which made every chip look ON
   // and made a click REMOVE a category — so narrowing to Capital Raise meant
@@ -338,10 +345,11 @@ export default function FilingsView() {
   const [page, setPage] = useState(0);
 
   const q = useMemo(() => ({
-    tab, search, fromDate, toDate, groupIds, sort, ascending, page,
+    tab, search, fromDate, groupIds, sort, ascending, page,
+    toDate: toTouched ? toDate : undefined,
     subjects: subject ? [subject] : undefined,
     pageSize: FILINGS_PAGE_SIZE,
-  }), [tab, search, fromDate, toDate, groupIds, subject, sort, ascending, page]);
+  }), [tab, search, fromDate, toDate, toTouched, groupIds, subject, sort, ascending, page]);
 
   const { data, isLoading } = useFilings(q);
 
@@ -411,7 +419,7 @@ export default function FilingsView() {
           <span className="text-[12px] text-muted">to</span>
           <input
             type="date" value={toDate}
-            onChange={(e) => { setToDate(e.target.value); setPage(0); }}
+            onChange={(e) => { setToDate(e.target.value); setToTouched(true); setPage(0); }}
             className="px-2 py-1.5 rounded-md text-[12px] bg-kd-elevated border border-kd-border text-primary"
           />
         </div>

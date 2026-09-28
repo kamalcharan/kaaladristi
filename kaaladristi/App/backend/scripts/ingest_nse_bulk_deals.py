@@ -190,21 +190,45 @@ def replace_day(conn, deal_type: str, deal_date: date, rows: list[dict]) -> int:
     return len(rows)
 
 
-def backfill_day0(conn) -> int:
-    """Fill day_0 for rows ingested before their next session existed.
+# Same bound as ingest_nse_filings.RECONCILE_SESSIONS, for the same reason.
+RECONCILE_SESSIONS = 10
 
-    Same deferral as the filings ingest: a deal published after Friday's close
-    has no Day 0 until Monday's bar lands. Selecting on 'still NULL' means a
-    later run picks them up with no bookkeeping.
+
+def backfill_day0(conn) -> int:
+    """Fill or correct Day 0 on recent deals; returns rows changed.
+
+    Two cases, one statement. A NULL Day 0 (a deal ingested before migration
+    228, or one whose session could not be planned) is filled once the bar
+    exists. A PLANNED Day 0 (migration 228 dates a Friday deal to Monday on
+    Friday night) is re-derived while it sits inside the last
+    RECONCILE_SESSIONS bars and rewritten if the calendar was wrong — the
+    planned day did not trade, the day after did. Same pass the filings ingest
+    runs as reconcile_day_zero(); one implementation of the Day 0 rule
+    (kd_day_zero_trade_date) is still the only thing that decides a date.
+    A NULL re-derivation never overwrites a stored date.
     """
     with conn.cursor() as cur:
         cur.execute("""
-            UPDATE km_bulk_deals
-               SET day_0_trade_date =
-                   kd_day_zero_trade_date((deal_date + TIME '18:00')
-                                           AT TIME ZONE 'Asia/Kolkata')
-             WHERE day_0_trade_date IS NULL
-        """)
+            WITH recent AS (
+                SELECT trade_date FROM km_equity_eod
+                 GROUP BY trade_date ORDER BY trade_date DESC LIMIT %s
+            ), floor_d AS (
+                SELECT COALESCE(min(trade_date), DATE '1900-01-01') AS d FROM recent
+            ), moved AS (
+                SELECT b.id,
+                       kd_day_zero_trade_date((b.deal_date + TIME '18:00')
+                                              AT TIME ZONE 'Asia/Kolkata') AS new_d0
+                  FROM km_bulk_deals b
+                 WHERE b.day_0_trade_date IS NULL
+                    OR b.day_0_trade_date >= (SELECT d FROM floor_d)
+            )
+            UPDATE km_bulk_deals b
+               SET day_0_trade_date = m.new_d0
+              FROM moved m
+             WHERE m.id = b.id
+               AND m.new_d0 IS NOT NULL
+               AND m.new_d0 IS DISTINCT FROM b.day_0_trade_date
+        """, (RECONCILE_SESSIONS,))
         n = cur.rowcount
     conn.commit()
     return n
@@ -299,7 +323,8 @@ def main():
     ap.add_argument('--dry-run', action='store_true',
                     help='fetch and report, write nothing')
     ap.add_argument('--backfill-day0', action='store_true',
-                    help='fill Day 0 on rows whose next session now exists; '
+                    help='fill Day 0 where it is NULL and re-derive recent '
+                         'planned ones against the bars that now exist; '
                          'no fetch')
     args = ap.parse_args()
     logging.basicConfig(level=logging.INFO, format='%(message)s')
