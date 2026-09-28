@@ -350,10 +350,36 @@ def reclassify_events(conn) -> int:
         return cur.rowcount
 
 
+def read_material_filings(conn, session) -> dict | None:
+    """Queue a read row for every new material event, then read newest-first
+    up to the per-pass cap. Returns the reader's counts, or None when the
+    reader could not run at all (its rows stay pending — the honest state)."""
+    try:
+        from lib import filing_reader
+        queued = filing_reader.enqueue_pending(conn)
+        filing_reader.release_stale_reading(conn)
+        stats = filing_reader.read_pending(conn, session=session)
+        stats['queued'] = queued
+        if stats.get('skipped'):
+            log.warning(f'  read: {stats["skipped"]} — {queued} queued, none read')
+        else:
+            log.info(f'  read: {queued} queued, {stats["read"]} read '
+                     f'({stats["done"]} done, {stats["failed"]} failed, '
+                     f'{stats["unreadable"]} unreadable, ${stats["cost_usd"]:.2f})')
+        return stats
+    except Exception as e:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        log.error(f'  read step failed (rows stay pending): {e}')
+        return None
+
+
 def run(conn, session, start: date, end: date, dry_run=False) -> dict:
     stats = {'fetched': 0, 'inserted': 0, 'revisions': 0, 'events': 0,
              'calls': 0, 'deferred': 0, 'unresolvable': 0, 'reclassified': 0,
-             'reconciled': 0}
+             'reconciled': 0, 'read': None}
     cur = start
     while cur <= end:
         win_end = min(cur + timedelta(days=BACKFILL_WINDOW_DAYS - 1), end)
@@ -388,6 +414,11 @@ def run(conn, session, start: date, end: date, dry_run=False) -> dict:
         if stats['reconciled']:
             log.info(f'  {stats["reconciled"]:,} event(s) re-dated: the planned '
                      f'Day 0 did not trade, the first bar after it did')
+        # THE READ — last step of every pass (owner, 2026-09-28: "extraction +
+        # analysis should happen after every data pull"). Newest first, capped
+        # per pass, one request in flight; a failure here never fails the
+        # ingest, and with no API key the rows simply stay `pending`.
+        stats['read'] = read_material_filings(conn, session)
         if stats['deferred']:
             # Normal, and expected to be large on an evening run. Stated plainly
             # so nobody reads a healthy result as a half-failure.
@@ -435,7 +466,7 @@ def ingest_filings_for_pipeline(conn, trade_date, force: bool = False) -> tuple[
     start = end - _td(days=PIPELINE_WINDOW_DAYS)
     stats = run(conn, NseSession(), start, end, dry_run=False)
     moved = (stats['inserted'] + stats['events'] + stats['reclassified']
-             + stats['reconciled'])
+             + stats['reconciled'] + ((stats.get('read') or {}).get('done', 0)))
     if stats['deferred']:
         log.info(f'[filings_ingest] {stats["deferred"]} deferred '
                  f'(after the close; awaiting the next session)')
@@ -500,6 +531,7 @@ def main():
               f'deferred {stats["deferred"]:,}  '
               f'reclassified {stats["reclassified"]:,}  '
               f'reconciled {stats["reconciled"]:,}  '
+              f'read {(stats.get("read") or {}).get("done", "-")}  '
               f'unresolvable {stats["unresolvable"]:,}')
     finally:
         if conn:

@@ -3575,6 +3575,7 @@ def _health_body() -> dict:
     script; no nginx location, so reachable only on the docker network)."""
     db_ok = False
     leases = {'worker': None, 'scheduler': None}
+    filing_reads = None
     try:
         c = _conn()
         try:
@@ -3583,6 +3584,11 @@ def _health_body() -> dict:
                 cur.fetchone()
             db_ok = True
             leases = _lease.holders(c)
+            try:
+                from lib.filing_reader import status_counts
+                filing_reads = status_counts(c)      # pending / reading / done / failed / unreadable
+            except Exception:
+                c.rollback()
         finally:
             c.close()
     except Exception:
@@ -3597,6 +3603,7 @@ def _health_body() -> dict:
         'worker_lease': leases['worker'],
         'scheduler_lease': leases['scheduler'],
         'auth_mode': _AUTH_MODE,
+        'filing_reads': filing_reads,
     }
 
 

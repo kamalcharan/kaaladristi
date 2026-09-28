@@ -40,6 +40,8 @@ services:
       AI_MODEL: "${AI_MODEL:-claude-haiku-4-5}"
       AI_API_KEY: "${AI_API_KEY:-}"
       ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-}"
+      FILING_READ_MODEL: "${FILING_READ_MODEL:-claude-opus-5}"
+      FILING_READ_MAX_PER_PASS: "${FILING_READ_MAX_PER_PASS:-300}"
       RAZORPAY_KEY_ID: "${RAZORPAY_KEY_ID:-}"
       RAZORPAY_KEY_SECRET: "${RAZORPAY_KEY_SECRET:-}"
       # Auth for JWT-secured endpoints (/api/framework, /api/correlation, …).
