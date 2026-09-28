@@ -40,7 +40,7 @@ function clearSession(): void {
  *  bounced them to /setup, and the wizard's framework save could never
  *  succeed ("stuck at Your framework", 2026-07-25). An unparseable token is
  *  treated as expired — it can never authenticate a request anyway. */
-function tokenExpired(token: string): boolean {
+export function tokenExpired(token: string): boolean {
   try {
     const part = token.split('.')[1];
     if (!part) return true;

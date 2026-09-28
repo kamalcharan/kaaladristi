@@ -6,7 +6,9 @@
  *
  *   api       — the app. Attaches the session token from authStore
  *               (`kd_session.access_token`, `role: authenticated`). On 401 it
- *               drops the session and redirects to /login. Never retries.
+ *               drops the session and redirects to /login — unless PostgREST
+ *               still accepts the same token, which is a JWT_SECRET mismatch
+ *               on the API, not a dead session (see onAppUnauthorized). Never retries.
  *   guestApi  — the logged-out landing page. Holds a short-lived guest token
  *               (`role: guest`, 15 min) in MEMORY ONLY, mints it on demand from
  *               POST /api/guest/token, refreshes it 30 s before expiry, and on a
@@ -29,7 +31,8 @@
  */
 
 import { useAuthStore } from '@/stores/authStore';
-import { signOut } from '@/services/auth';
+import { signOut, tokenExpired, isTokenRejection } from '@/services/auth';
+import { from as pgFrom } from '@/services/postgrest';
 
 const API_BASE = (import.meta.env.VITE_PIPELINE_API_URL?.trim() || '');
 
@@ -86,10 +89,52 @@ function sessionToken(): string | null {
 
 let redirecting = false;
 
-/** A 401 from the app: the session is dead. Drop it and go to /login once. */
+/** Shown (App.tsx authError screen) instead of signing out when the pipeline
+ *  API rejects a token the database still accepts — see onAppUnauthorized. */
+export const VERIFIER_MISMATCH_MESSAGE =
+  'The pipeline API rejected your session token, but the database accepted the same token a moment ago. ' +
+  'That is a server configuration fault, not an expired login: JWT_SECRET in the pipeline API\'s .env does not ' +
+  'match the database\'s app.jwt_secret (rotated 2026-09-26). You have NOT been signed out. ' +
+  'Fix the .env the API was started with and restart it.';
+
+/** Does PostgREST accept the token we hold? A permission denial (42501) is a
+ *  "yes" — the token was verified before the grant was checked. Only PGRST301/
+ *  302/303 (or a JWS message) is a "no". Unreachable is a "no" too: we cannot
+ *  prove the token is good, so the caller keeps the old sign-out behaviour. */
+async function postgrestAcceptsToken(): Promise<boolean> {
+  try {
+    const { error } = await pgFrom('km_profiles').select('id').limit(1).execute();
+    if (!error) return true;
+    if (isTokenRejection(error)) return false;
+    return typeof error.status === 'number';
+  } catch {
+    return false;
+  }
+}
+
+/** A 401 from the app.
+ *
+ *  Two verifiers check every session token: PostgREST (`PGRST_JWT_SECRET`)
+ *  for `/db/*` and the pipeline API (`JWT_SECRET`) for `/api/*`. The token is
+ *  minted by the database with `app.jwt_secret`. When those three secrets
+ *  agree, a 401 here means the session is dead: drop it and go to /login once.
+ *
+ *  When they do NOT agree — a dev or VPS `.env` left on the pre-rotation
+ *  secret — the API 401s a token PostgREST accepts, and the old unconditional
+ *  sign-out turned that into login → profile loads → workspace fetch 401 →
+ *  /login?next=/, forever, with no message (2026-09-28). So: a token that is
+ *  not expired by its own `exp` AND still accepted by PostgREST is NOT dead;
+ *  surface the misconfiguration on the authError screen and keep the session. */
 async function onAppUnauthorized(): Promise<void> {
   if (redirecting) return;
   redirecting = true;
+  const token = sessionToken();
+  if (token && !tokenExpired(token) && await postgrestAcceptsToken()) {
+    redirecting = false;
+    console.error('[api] 401 from the pipeline API for a token PostgREST accepts — JWT_SECRET mismatch on the API. Not signing out.');
+    useAuthStore.setState({ authError: VERIFIER_MISMATCH_MESSAGE });
+    return;
+  }
   try { await signOut(); } catch { /* clearing local state cannot fail in a way we can act on */ }
   useAuthStore.getState().clear();
   if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login')) {
