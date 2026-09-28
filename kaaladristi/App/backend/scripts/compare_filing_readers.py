@@ -1,15 +1,22 @@
 """
 Does the local (Qwen) reader agree with the verdicts Haiku already gave?
 =========================================================================
-    python3 scripts/compare_filing_readers.py                      # every done row with stored text
+    python3 scripts/compare_filing_readers.py                      # a 120-document sample, ~2.5 h on CPU
     python3 scripts/compare_filing_readers.py --limit 40 --event-type MGMT_EXIT
+    python3 scripts/compare_filing_readers.py --limit 0            # every done row (hours)
     python3 scripts/compare_filing_readers.py --out /tmp/compare.json
 
-READ-ONLY. Writes nothing to the database. Re-reads the rows km_filing_reads
-already holds a paid verdict for — from the text stored on km_filings_raw,
-so no document is downloaded — through the local backend, and prints how
-often the two agree on impact and on magnitude, per event type, with every
-disagreement listed so it can be judged by eye.
+READ-ONLY. Writes nothing to the database. Re-reads a SAMPLE of the rows
+km_filing_reads already holds a paid verdict for — from the text stored on
+km_filings_raw, so no document is downloaded — through the local backend,
+and prints how often the two agree on impact and on magnitude, per event
+type, with every disagreement listed so it can be judged by eye.
+
+The sample is STRATIFIED: an equal share from every event type (random
+within the type), so the rare types that matter most — QIP, MGMT_EXIT,
+LITIGATION — are represented instead of being crowded out by whatever is
+newest. At ~80 s a document on the KVM2 the default 120 is about 2.5 hours;
+Ctrl+C at any point prints the summary for what was done.
 
 This is the measurement the owner asked for before the reader moves off
 Haiku (2026-09-28: "cant qwen manage it?"). The 145 verdicts cost $0.75 and
@@ -37,7 +44,7 @@ from lib import filing_reader as fr                      # noqa: E402
 
 def main():
     ap = argparse.ArgumentParser(description='Local reader vs the stored Haiku verdicts (read-only)')
-    ap.add_argument('--limit', type=int, default=10000)
+    ap.add_argument('--limit', type=int, default=120, help='sample size; 0 = every done row')
     ap.add_argument('--event-type', default=None)
     ap.add_argument('--out', default=None, help='write every pair as JSON here')
     ap.add_argument('--url', default=fr.LOCAL_URL, help='OpenAI-compatible base url (…/v1)')
@@ -51,19 +58,27 @@ def main():
     conn = psycopg2.connect(DATABASE_URL)
     with conn.cursor() as cur:
         cur.execute("""
-            SELECT r.event_id, r.impact, r.magnitude, r.headline, r.pages_read, r.page_count, r.input_tokens
-              FROM km_filing_reads r
-              JOIN km_corporate_events e ON e.id = r.event_id
-              JOIN km_filings_raw f ON f.id = e.primary_raw_id
-             WHERE r.status = 'done' AND r.read_source IN ('text', 'ocr')
-               AND f.raw_text IS NOT NULL AND length(f.raw_text) > 0
-               AND (%s::text IS NULL OR e.event_type = %s)
-             ORDER BY e.disseminated_at DESC
-             LIMIT %s
-        """, (args.event_type, args.event_type, args.limit))
+            WITH pool AS (
+                SELECT r.event_id, r.impact, r.magnitude, r.headline, r.pages_read, r.page_count,
+                       r.input_tokens, e.event_type,
+                       row_number() OVER (PARTITION BY e.event_type ORDER BY random()) AS rn
+                  FROM km_filing_reads r
+                  JOIN km_corporate_events e ON e.id = r.event_id
+                  JOIN km_filings_raw f ON f.id = e.primary_raw_id
+                 WHERE r.status = 'done' AND r.read_source IN ('text', 'ocr')
+                   AND f.raw_text IS NOT NULL AND length(f.raw_text) > 0
+                   AND (%s::text IS NULL OR e.event_type = %s)
+            ), types AS (SELECT count(DISTINCT event_type) AS n FROM pool)
+            SELECT event_id, impact, magnitude, headline, pages_read, page_count, input_tokens
+              FROM pool, types
+             WHERE %s = 0 OR rn <= ceil(%s::numeric / greatest(types.n, 1))
+             ORDER BY rn, event_type
+             LIMIT CASE WHEN %s = 0 THEN NULL ELSE %s END
+        """, (args.event_type, args.event_type, args.limit, args.limit, args.limit, args.limit))
         targets = cur.fetchall()
     conn.rollback()
-    print(f'{len(targets)} paid verdicts to compare · {args.url} · {args.model} · ctx {args.ctx}')
+    print(f'{len(targets)} paid verdicts to compare (equal share per event type, random within) · '
+          f'{args.url} · {args.model} · ctx {args.ctx} · ~{len(targets) * 80 // 60} min at 80 s each')
 
     client = fr.LocalClient(args.url, args.model, ctx_tokens=args.ctx, api_key=fr.LOCAL_KEY)
     budget = fr.local_doc_char_budget(args.ctx)
