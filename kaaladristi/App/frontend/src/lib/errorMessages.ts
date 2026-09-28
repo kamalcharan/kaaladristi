@@ -1,4 +1,5 @@
 import { isAuthError } from '@/stores/authStore'
+import { AppKeyRejectedError } from '@/services/auth'
 
 /** The two pieces of copy that genuinely depend on what the app was trying
  *  to do — everything else (auth-expired, HTTP-status, timeout) is the same
@@ -20,6 +21,14 @@ export interface ErrMessageContext {
  */
 export function errMessage(e: unknown, ctx: ErrMessageContext): string {
   const raw = e instanceof Error ? e.message : String(e)
+  // Must come BEFORE isAuthError: the same PGRST301 on the login call itself
+  // is the app's key being refused, and "your session has expired" is wrong
+  // for a user who has no session yet.
+  if (e instanceof AppKeyRejectedError) {
+    return `The server rejected this app build's API key (${e.code}). ` +
+      'This is a configuration problem, not your password — the app needs to be ' +
+      'rebuilt with the current VITE_ANON_KEY.'
+  }
   if (isAuthError(e)) {
     return 'Your session has expired — please log in again.'
   }

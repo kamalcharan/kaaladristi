@@ -111,15 +111,35 @@ export function getStoredSession(): KdSession | null {
 
 // ── Auth operations ──────────────────────────────────────────────────────────
 
+/** The login/register RPC itself was refused by PostgREST for the bearer it
+ *  carried. A logged-out browser sends the app's anon key (VITE_ANON_KEY),
+ *  so this means the BUILD's key no longer matches the server — a
+ *  configuration fault, not a dead user session. 2026-09-28: a dev machine
+ *  whose .env kept the pre-rotation key showed "Your session has expired" on
+ *  every login attempt, which sent the diagnosis the wrong way. */
+export class AppKeyRejectedError extends Error {
+  readonly code: string;
+  constructor(code: string, message: string) {
+    super(`${message} (${code})`);
+    this.name = 'AppKeyRejectedError';
+    this.code = code;
+  }
+}
+
+function throwIfAppKeyRejected(error: PostgRESTError): void {
+  if (isAuthRejection(error)) throw new AppKeyRejectedError(error.code, error.message);
+}
+
 /** Register a new account. */
 export async function signUp(email: string, password: string, fullName: string): Promise<KdSession> {
+  clearSession();   // never send a leftover token on a fresh credential exchange
   const { data, error } = await rpc('kd_auth_register', {
     p_email: email,
     p_password: password,
     p_full_name: fullName,
   });
 
-  if (error) throw new Error(error.message);
+  if (error) { throwIfAppKeyRejected(error); throw new Error(error.message); }
   if (data?.error) throw new Error(data.error);
 
   const session: KdSession = {
@@ -133,12 +153,13 @@ export async function signUp(email: string, password: string, fullName: string):
 
 /** Sign in with email + password. */
 export async function signIn(email: string, password: string): Promise<KdSession> {
+  clearSession();   // never send a leftover token on a fresh credential exchange
   const { data, error } = await rpc('kd_auth_login', {
     p_email: email,
     p_password: password,
   });
 
-  if (error) throw new Error(error.message);
+  if (error) { throwIfAppKeyRejected(error); throw new Error(error.message); }
   if (data?.error) throw new Error(data.error);
 
   const session: KdSession = {
