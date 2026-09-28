@@ -65,7 +65,7 @@ def main():
     conn.rollback()
     print(f'{len(targets)} paid verdicts to compare · {args.url} · {args.model} · ctx {args.ctx}')
 
-    client = fr.LocalClient(args.url, args.model, ctx_tokens=args.ctx)
+    client = fr.LocalClient(args.url, args.model, ctx_tokens=args.ctx, api_key=fr.LOCAL_KEY)
     budget = fr.local_doc_char_budget(args.ctx)
     pairs, agree_i, agree_m, trimmed, failed, done = [], 0, 0, 0, 0, 0
     by_type = defaultdict(lambda: Counter())
