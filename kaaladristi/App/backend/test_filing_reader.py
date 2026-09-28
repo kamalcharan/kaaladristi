@@ -10,7 +10,12 @@ SKIP without one (same rule as test_filing_intelligence: the DSN's database
 name must contain 'test', because the tables are TRUNCATED).
 
 What these pin, none of it visible in a type:
-  * a pending row exists for every material event and for nothing else
+  * a pending row exists for every IN-SCOPE material event and nothing else
+    (gate 0: never RECORD_DATE/ESOP/ALLOTMENT, an active NSE listing at or
+    above the mcap floor), and the prune removes only PENDING rows
+  * gate 1 (triage on the extracted text) refuses to pay for a routine
+    management change or an auditor's term completing, records why, and
+    never touches the model — and a CFO resigning still gets read
   * newest first, capped per pass — the backlog never delays today's read
   * a thin text layer goes the PDF route (scanned pages) and says so
   * failure is retried by the next pass, then terminal; no document is terminal
@@ -39,7 +44,8 @@ MIGRATIONS = ('km_migration_212_filings_ingest.sql',
               'km_migration_216_result_drift_dedup.sql',
               'km_migration_217_bulk_deals.sql',
               'km_migration_228_day_zero_calendar.sql',
-              'km_migration_229_filing_reads.sql')
+              'km_migration_229_filing_reads.sql',
+              'km_migration_230_filing_reads_triage.sql')
 
 
 # ── PDFs built by hand: pypdf reads them, no other library is needed ──────
@@ -193,6 +199,37 @@ class Extraction(unittest.TestCase):
         with mock.patch.dict(os.environ, {'FILING_READ_MODEL': '', 'CLAUDE_MODEL': '', 'AI_MODEL': 'Qwen3-4B'}):
             self.assertEqual(fr._resolve_model(), fr.DEFAULT_MODEL)
 
+    def test_triage_is_pure_and_reads_the_role_next_to_the_action(self):
+        def doc(text, scanned=False):
+            return fr.DocumentText(text, 1, 1, len(text), scanned)
+        mgmt = {'event_type': 'MGMT_EXIT'}
+        # an independent director going, signed off by the MD: routine
+        self.assertIsNotNone(fr.triage(mgmt, doc(Reads.ROUTINE_MGMT)))
+        # "Non-Executive Director" must not pass as "Executive Director"
+        self.assertIsNotNone(fr.triage(mgmt, doc('resignation of Mr X, Non-Executive Director, from the Board')))
+        # role and action in ADJACENT sentences is a signature block, not an event
+        self.assertIsNotNone(fr.triage(mgmt, doc('For ABC Limited, Managing Director. The resignation '
+                                                 'letter of Mr X, Independent Director, is enclosed.')))
+        # an honorific full stop must not end the sentence early
+        self.assertIsNone(fr.triage(mgmt, doc('the resignation of Dr. Suresh Iyer, Chief Financial Officer, was accepted')))
+        # the key roles, either order
+        self.assertIsNone(fr.triage(mgmt, doc(Reads.KEY_MGMT)))
+        self.assertIsNone(fr.triage(mgmt, doc('Mr Y, Whole-time Director, has resigned')))
+        self.assertIsNone(fr.triage(mgmt, doc('appointment of Ms Z as Managing Director and CEO')))
+        self.assertIsNone(fr.triage(mgmt, doc('the promoter, Mr P, steps down as Chairman')))
+        # a scanned document on a routine-by-default type is not worth the PDF route
+        self.assertIsNotNone(fr.triage(mgmt, doc('', scanned=True)))
+        aud = {'event_type': 'AUDITOR_CHANGE'}
+        self.assertIsNotNone(fr.triage(aud, doc(Reads.AUDITOR_TERM)))
+        self.assertIsNone(fr.triage(aud, doc(Reads.AUDITOR_RESIGN)))
+        self.assertIsNone(fr.triage(aud, doc('the auditors have issued a qualified opinion')))
+        # everything else is read as-is, scanned or not
+        for et in ('LARGE_ORDER', 'ACQUISITION', 'REGULATORY_ACTION', 'INSOLVENCY', 'SAST', 'QIP', None):
+            self.assertIsNone(fr.triage({'event_type': et}, doc('', scanned=True)), et)
+        # gate 0's never-list is exactly the procedural four
+        self.assertEqual(set(fr.NEVER_READ_TYPES), {'RECORD_DATE', 'ESOP', 'ALLOTMENT', 'AUTHORISED_CAPITAL'})
+        self.assertGreaterEqual(fr.MIN_MCAP_CR, 100)
+
     def test_api_key_accepts_the_ai_client_pair(self):
         with mock.patch.dict(os.environ, {'ANTHROPIC_API_KEY': 'sk-ant-a', 'AI_API_KEY': 'sk-ant-b'}):
             self.assertEqual(fr._api_key(), 'sk-ant-a')
@@ -267,15 +304,16 @@ class Reads(unittest.TestCase):
                       "VALUES ('HECINFRA','INE00H','NSE',true,'Construction',600)")
         self.conn.commit()
 
-    def _event(self, name, diss, family='SPARK', url='http://x/a.pdf', desc='Bagging/Receiving of orders/contracts'):
+    def _event(self, name, diss, family='SPARK', url='http://x/a.pdf', desc='Bagging/Receiving of orders/contracts',
+               event_type='LARGE_ORDER', isin='INE00H'):
         with self.conn.cursor() as c:
             c.execute("INSERT INTO km_filings_raw (source, source_ann_id, isin, disseminated_at, "
-                      "content_hash, payload, doc_url, summary_text) VALUES ('NSE',%s,'INE00H',%s,'h','{}',%s,%s) RETURNING id",
-                      (name, diss, url, f'{name} has informed the Exchange about {desc}'))
+                      "content_hash, payload, doc_url, summary_text) VALUES ('NSE',%s,%s,%s,'h','{}',%s,%s) RETURNING id",
+                      (name, isin, diss, url, f'{name} has informed the Exchange about {desc}'))
             rid = c.fetchone()[0]
             c.execute("INSERT INTO km_corporate_events (isin, company_name, disseminated_at, day_0_trade_date, "
-                      "family, desc_raw, primary_raw_id, raw_ids) VALUES ('INE00H',%s,%s,%s,%s,%s,%s,ARRAY[%s]) RETURNING id",
-                      (name, diss, diss[:10], family, desc, rid, rid))
+                      "family, event_type, desc_raw, primary_raw_id, raw_ids) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,ARRAY[%s]) RETURNING id",
+                      (isin, name, diss, diss[:10], family, event_type, desc, rid, rid))
             eid = c.fetchone()[0]
         self.conn.commit()
         return eid
@@ -295,18 +333,102 @@ class Reads(unittest.TestCase):
             return c.fetchone()
 
     # ── the queue ────────────────────────────────────────────────────────
-    def test_a_pending_row_for_every_material_event_and_nothing_else(self):
-        self._event('spark', '2026-09-28 10:00+05:30', 'SPARK')
-        self._event('neg', '2026-09-28 10:01+05:30', 'NEGATIVE_SPARK')
-        self._event('own', '2026-09-28 10:02+05:30', 'OWNERSHIP')
-        self._event('ca', '2026-09-28 10:03+05:30', 'CORPORATE_ACTION')
-        self._event('gen', '2026-09-28 10:04+05:30', 'GENERAL')
-        self._event('unc', '2026-09-28 10:05+05:30', 'UNCLASSIFIED')
+    def test_a_pending_row_for_every_in_scope_material_event_and_nothing_else(self):
+        self._event('spark', '2026-09-28 10:00+05:30', 'SPARK', event_type='LARGE_ORDER')
+        self._event('neg', '2026-09-28 10:01+05:30', 'NEGATIVE_SPARK', event_type='REGULATORY_ACTION')
+        self._event('own', '2026-09-28 10:02+05:30', 'OWNERSHIP', event_type='SAST')
+        self._event('mgmt', '2026-09-28 10:03+05:30', 'SPARK', event_type='MGMT_EXIT')   # gate 1 decides, not gate 0
+        self._event('gen', '2026-09-28 10:04+05:30', 'GENERAL', event_type='FUND_UTILISATION')
+        self._event('unc', '2026-09-28 10:05+05:30', 'UNCLASSIFIED', event_type=None)
         self.assertEqual(fr.enqueue_pending(self.conn), 4)
         self.assertEqual(fr.enqueue_pending(self.conn), 0, 'idempotent')
-        self.assertEqual(sorted(self._rows()), ['ca', 'neg', 'own', 'spark'])
+        self.assertEqual(sorted(self._rows()), ['mgmt', 'neg', 'own', 'spark'])
+
+    def test_gate0_never_queues_the_procedural_types_or_a_tiny_listing(self):
+        self._event('esop', '2026-09-28 10:00+05:30', 'OWNERSHIP', event_type='ESOP')
+        self._event('ncd', '2026-09-28 10:01+05:30', 'OWNERSHIP', event_type='ALLOTMENT')
+        self._event('rd', '2026-09-28 10:02+05:30', 'CORPORATE_ACTION', event_type='RECORD_DATE')
+        self._event('untyped', '2026-09-28 10:03+05:30', 'SPARK', event_type=None)
+        with self.conn.cursor() as c:
+            c.execute("INSERT INTO km_equity_symbols (symbol, isin, exchange, is_active, industry, mcap_cr) "
+                      "VALUES ('TINY','INE0TINY','NSE',true,'Misc',40), ('GONE','INE0GONE','NSE',false,'Misc',900)")
+        self.conn.commit()
+        self._event('tiny', '2026-09-28 10:04+05:30', 'SPARK', event_type='LARGE_ORDER', isin='INE0TINY')
+        self._event('gone', '2026-09-28 10:05+05:30', 'SPARK', event_type='LARGE_ORDER', isin='INE0GONE')
+        self._event('nolisting', '2026-09-28 10:06+05:30', 'SPARK', event_type='LARGE_ORDER', isin='INE0NONE')
+        self._event('ok', '2026-09-28 10:07+05:30', 'SPARK', event_type='LARGE_ORDER')
+        self.assertEqual(fr.enqueue_pending(self.conn), 1)
+        self.assertEqual(sorted(self._rows()), ['ok'])
+
+    def test_prune_removes_only_pending_rows_the_scope_no_longer_admits(self):
+        # the 229 seed queued EVERY material event; a read already paid for stays
+        esop = self._event('esop', '2026-09-28 10:00+05:30', 'OWNERSHIP', event_type='ESOP')
+        done = self._event('done', '2026-09-28 10:01+05:30', 'OWNERSHIP', event_type='ESOP')
+        keep = self._event('keep', '2026-09-28 10:02+05:30', 'SPARK', event_type='LARGE_ORDER')
+        with self.conn.cursor() as c:
+            c.execute("INSERT INTO km_filing_reads (event_id) VALUES (%s), (%s), (%s)", (esop, done, keep))
+            c.execute("UPDATE km_filing_reads SET status='done', impact='neutral', magnitude='minor' WHERE event_id=%s", (done,))
+        self.conn.commit()
+        self.assertEqual(fr.prune_pending(self.conn), 1)
+        self.assertEqual(fr.prune_pending(self.conn), 0, 'idempotent')
+        rows = self._rows()
+        self.assertEqual(sorted(rows), ['done', 'keep'])
+        self.assertEqual(rows['done']['status'], 'done')
+
+    # ── gate 1: the text decides, before the model ───────────────────────
+    ROUTINE_MGMT = ('Sub: Intimation under Regulation 30. We wish to inform that Mr. Ramesh Kumar, '
+                    'Independent Director, has tendered his resignation from the Board with effect from '
+                    'September 30, 2026 due to personal reasons. For ABC Limited, Managing Director. ') * 2
+    KEY_MGMT = ('Sub: Change in Key Managerial Personnel. The Board has accepted the resignation of '
+                'Mr. Suresh Iyer, Chief Financial Officer of the Company, with effect from the close of '
+                'business hours on September 30, 2026, to pursue opportunities outside the Company. ') * 2
+    AUDITOR_TERM = ('M/s Dinesh Jain & Associates have completed their term as Statutory Auditors of the '
+                    'Company as permissible under the Companies Act, 2013, at the conclusion of the AGM. ') * 2
+    AUDITOR_RESIGN = ('M/s XYZ & Co, Statutory Auditors, have tendered their resignation with immediate effect '
+                      'citing pre-occupation, resulting in a casual vacancy in the office of auditor. ') * 2
+
+    def test_gate1_skips_a_routine_management_change_without_a_model_call(self):
+        self._event('routine', '2026-09-28 10:00+05:30', 'SPARK', event_type='MGMT_EXIT')
+        fr.enqueue_pending(self.conn)
+        client = _Client()
+        stats = fr.read_pending(self.conn, session=_Session({'http://x/a.pdf': _pdf([self.ROUTINE_MGMT])}), client=client)
+        self.assertEqual((stats['read'], stats['triaged'], stats['done']), (1, 1, 0))
+        self.assertEqual(client.messages.calls, [], 'the model was never called')
+        r = self._rows()['routine']
+        self.assertEqual(r['status'], 'skipped')
+        self.assertIsNone(r['impact'])
+        with self.conn.cursor() as c:
+            c.execute("SELECT triage_reason FROM km_filing_reads")
+            self.assertIn('no key person', c.fetchone()[0])
+        self.assertEqual(self._raw('routine')[1], 'ok', 'the free extraction is still stored')
+        self.assertEqual(fr.status_counts(self.conn)['skipped'], 1)
+
+    def test_gate1_reads_a_key_person_change_and_an_auditor_resignation(self):
+        self._event('cfo', '2026-09-28 10:00+05:30', 'SPARK', event_type='MGMT_EXIT', url='http://x/cfo.pdf')
+        self._event('aud', '2026-09-28 10:01+05:30', 'NEGATIVE_SPARK', event_type='AUDITOR_CHANGE', url='http://x/aud.pdf')
+        self._event('term', '2026-09-28 10:02+05:30', 'NEGATIVE_SPARK', event_type='AUDITOR_CHANGE', url='http://x/term.pdf')
+        fr.enqueue_pending(self.conn)
+        client = _Client()
+        stats = fr.read_pending(self.conn, client=client, session=_Session({
+            'http://x/cfo.pdf': _pdf([self.KEY_MGMT]),
+            'http://x/aud.pdf': _pdf([self.AUDITOR_RESIGN]),
+            'http://x/term.pdf': _pdf([self.AUDITOR_TERM]),
+        }))
+        self.assertEqual((stats['read'], stats['done'], stats['triaged']), (3, 2, 1))
+        rows = self._rows()
+        self.assertEqual((rows['cfo']['status'], rows['aud']['status'], rows['term']['status']),
+                         ('done', 'done', 'skipped'))
+        self.assertEqual(len(client.messages.calls), 2)
+
+    def test_gate1_never_gates_an_order_or_an_acquisition(self):
+        self._event('order', '2026-09-28 10:00+05:30', 'SPARK', event_type='LARGE_ORDER')
+        fr.enqueue_pending(self.conn)
+        client = _Client()
+        fr.read_pending(self.conn, session=_Session({'http://x/a.pdf': _pdf([ORDER_TEXT])}), client=client)
+        self.assertEqual(self._rows()['order']['status'], 'done')
+        self.assertEqual(len(client.messages.calls), 1)
         self.assertEqual(fr.status_counts(self.conn),
-                         {'pending': 4, 'reading': 0, 'done': 0, 'failed': 0, 'unreadable': 0})
+                         {'pending': 0, 'reading': 0, 'done': 1, 'failed': 0, 'unreadable': 0, 'skipped': 0})
 
     def test_since_bounds_the_enqueue(self):
         self._event('old', '2026-01-05 10:00+05:30')

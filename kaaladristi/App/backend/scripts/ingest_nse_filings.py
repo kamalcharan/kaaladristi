@@ -357,15 +357,17 @@ def read_material_filings(conn, session) -> dict | None:
     try:
         from lib import filing_reader
         queued = filing_reader.enqueue_pending(conn)
+        pruned = filing_reader.prune_pending(conn)
         filing_reader.release_stale_reading(conn)
         stats = filing_reader.read_pending(conn, session=session)
-        stats['queued'] = queued
+        stats['queued'], stats['pruned'] = queued, pruned
         if stats.get('skipped'):
-            log.warning(f'  read: {stats["skipped"]} — {queued} queued, none read')
+            log.warning(f'  read: {stats["skipped"]} — {queued} queued, {pruned} pruned, none read')
         else:
-            log.info(f'  read: {queued} queued, {stats["read"]} read '
-                     f'({stats["done"]} done, {stats["failed"]} failed, '
-                     f'{stats["unreadable"]} unreadable, ${stats["cost_usd"]:.2f})')
+            log.info(f'  read: {queued} queued, {pruned} pruned, {stats["read"]} read '
+                     f'({stats["done"]} done, {stats["triaged"]} triaged out, '
+                     f'{stats["failed"]} failed, {stats["unreadable"]} unreadable, '
+                     f'${stats["cost_usd"]:.2f})')
         return stats
     except Exception as e:
         try:

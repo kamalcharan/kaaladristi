@@ -52,9 +52,10 @@ def main():
             return
         since = date.fromisoformat(args.dfrom)
         n = fr.enqueue_pending(conn, since=f'{since} 00:00+05:30')
+        pruned = fr.prune_pending(conn)
         released = fr.release_stale_reading(conn)
         counts = fr.status_counts(conn)
-        print(f'enqueued {n:,} new · released {released} stale · {counts}')
+        print(f'enqueued {n:,} new · pruned {pruned:,} out of scope · released {released} stale · {counts}')
         if not fr.has_api_key():
             print('ANTHROPIC_API_KEY not set — nothing read'); return
 
@@ -63,9 +64,9 @@ def main():
         def progress(s):
             done = s['read']
             rate = done / max(time.time() - t0, 1)
-            print(f"  {done:>5} read  done {s['done']:>5}  failed {s['failed']:>4}  "
-                  f"unreadable {s['unreadable']:>4}  ${s['cost_usd']:.2f}  "
-                  f"{rate * 60:.1f}/min", flush=True)
+            print(f"  {done:>5} read  done {s['done']:>5}  triaged {s['triaged']:>5}  "
+                  f"failed {s['failed']:>4}  unreadable {s['unreadable']:>4}  "
+                  f"${s['cost_usd']:.2f}  {rate * 60:.1f}/min", flush=True)
 
         stats = fr.read_pending(conn, limit=args.limit, budget_usd=args.budget,
                                 model=args.model, retry_failed=not args.no_retry,

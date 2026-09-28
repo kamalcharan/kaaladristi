@@ -818,6 +818,25 @@ million tokens: ~85 documents a day at ~5–8k input tokens each is roughly
 $0.5–0.7 a day; the 5,252-document backfill is roughly $40. Sonnet 5 doubles
 that, Opus 5 five times.
 
+**What is read at all — two gates before the model (2026-09-28, migration
+230).** Owner, on the first live reads: *"hitting everything for LLM is just
+waste of money."* The first 14 cost $0.07 and 12 were ESOP grants, NCD
+allotments and AGM housekeeping. Gate 0 (metadata, at enqueue, plus a prune of
+rows already queued): never RECORD_DATE / ESOP / ALLOTMENT / AUTHORISED_CAPITAL,
+and only an active NSE listing at or above the scanner's ₹100 crore floor.
+Gate 1 (the extracted text, after pypdf, before the model — `triage()`):
+MGMT_CHANGE / MGMT_EXIT only when a key role and a management action share a
+sentence; AUDITOR_CHANGE only on a resignation, casual vacancy, removal or
+qualified opinion; scanned PDFs on those types are skipped. A refusal is
+`status='skipped'` with `triage_reason`. Measured on the live 5,232-row queue:
+gate 0 keeps 2,808 (1,935 to triage, 873 read as-is), so roughly 1,100–1,200
+model reads — ~$6 for six months, ~25 a day after. The owner's pointer,
+Laya-MLX (a typed-decision encoder answering "is this worth it" in one forward
+pass), is the right shape but Apple-Silicon only; these gates are that idea on
+the VPS, and a local-Qwen yes/no on the first ~1,200 characters is the next
+rung if the rules prove too coarse. Measure the `skipped` rows before adding
+it.
+
 Local Qwen **cannot be the reader**, on three measured limits, not on quality:
 its context is 4,096 tokens (CLAUDE.md), and a material filing's text layer is
 usually 3–15k tokens before the prompt; it has no vision, and the scanned PDFs

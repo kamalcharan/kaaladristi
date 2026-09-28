@@ -39,6 +39,7 @@ import base64
 import io
 import logging
 import os
+import re
 import time
 from datetime import datetime, timezone
 from typing import Optional
@@ -78,6 +79,85 @@ PRICES = {
     'claude-sonnet-4-6': (3.00, 15.00),
     'claude-opus-5':     (5.00, 25.00),
 }
+
+# ── what gets read at all (owner, 2026-09-28: "hitting everything for LLM is
+# just waste of money") ──────────────────────────────────────────────────
+#
+# Two gates, both free, both BEFORE a model is paid for. Measured on the
+# 5,232-row six-month queue the day the reader went live: the first 14 reads
+# were 12 ESOP grants / debenture allotments / AGM housekeeping, every one
+# neutral+minor and every one knowable from the exchange's own type label.
+#
+# Gate 0 — metadata, at enqueue (and a prune for rows already queued):
+#   * never these types: 612 RECORD_DATE, 426 ESOP, 234 ALLOTMENT, 5
+#     AUTHORISED_CAPITAL — procedural by definition, the label IS the verdict;
+#   * an active NSE listing with mcap >= FILING_READ_MIN_MCAP_CR (100, the same
+#     floor DEFAULT_FILTERS applies on every scanner): a filing nothing can
+#     surface is not worth a read. Drops INSOLVENCY from 128 to 21 — the rest
+#     are delisted shells.
+# Gate 1 — the extracted text, after pypdf and before the model (triage()):
+#   * MGMT_CHANGE (1,600) / MGMT_EXIT (886) — the largest bucket by far, and
+#     routine unless a KEY person is the subject: an independent director
+#     retiring by rotation is not a read, a CFO resigning is. The exchange
+#     summary names the role on only ~14% of them, the document always does;
+#   * AUDITOR_CHANGE (196) — a term completing is routine, a resignation or a
+#     casual vacancy is the read.
+# Everything else (orders, acquisitions, regulatory, litigation, insolvency,
+# SAST, raises) is read as-is: ~1,500 rows over six months, ~30 a day.
+NEVER_READ_TYPES = ('RECORD_DATE', 'ESOP', 'ALLOTMENT', 'AUTHORISED_CAPITAL')
+MIN_MCAP_CR = float(os.getenv('FILING_READ_MIN_MCAP_CR', '100'))
+KEY_PERSON_TYPES = ('MGMT_CHANGE', 'MGMT_EXIT')
+
+_KEY_ROLE = (r'(?:chief\s+(?:executive|financial|operating)\s+officer|\bCEO\b|\bCFO\b|\bCOO\b|'
+             r'managing\s+director|\bMD\b|whole[-\s]time\s+director|'
+             r'(?<!non-)(?<!non\s)executive\s+director|chairman|chairperson|promoter)')
+_MGMT_ACTION = (r'(?:resign\w*|appoint\w*|cessation|ceas\w*|retire\w*|step\w*\s+down|elevat\w*|'
+                r're-?designat\w*|promot\w*|demise|pass\w*\s+away|vacat\w*)')
+# A key role and a management action in the SAME sentence ([^.] — never
+# across a full stop), in either order:
+#   "Mr Y, Whole-time Director, has resigned"        role … action
+#   "resignation of Mr X, Chief Financial Officer"   action of/as/to … role
+# Same-sentence is what keeps a signature block ("For ABC Ltd, Managing
+# Director.") and "resignation of Mr X, Independent Director" from passing.
+# Honorific full stops (Mr./Dr./Shri.) are stripped first so they do not end
+# the sentence early.
+KEY_PERSON_RE = re.compile(
+    rf'{_KEY_ROLE}[^.]{{0,80}}?\b{_MGMT_ACTION}'
+    rf'|{_MGMT_ACTION}\s+(?:of|as|to)\s+[^.]{{0,80}}?{_KEY_ROLE}',
+    re.IGNORECASE | re.DOTALL)
+_HONORIFIC_DOT = re.compile(r'\b(Mr|Mrs|Ms|Dr|Shri|Smt|Prof|Sri|Sh)\.', re.IGNORECASE)
+AUDITOR_EVENT_RE = re.compile(r'resign|casual\s+vacancy|withdr\w*|ceas\w*\s+to|remov\w*|qualif\w*\s+opinion|disclaim',
+                              re.IGNORECASE)
+
+_SCOPE_SQL = """
+        e.family = ANY(%(families)s)
+        AND e.event_type IS NOT NULL
+        AND NOT (e.event_type = ANY(%(never)s))
+        AND EXISTS (SELECT 1 FROM km_equity_symbols s
+                     WHERE s.isin = e.isin AND s.exchange = 'NSE' AND s.is_active
+                       AND s.mcap_cr >= %(min_mcap)s)
+"""
+
+
+def _scope_params() -> dict:
+    return {'families': list(MATERIAL_FAMILIES), 'never': list(NEVER_READ_TYPES), 'min_mcap': MIN_MCAP_CR}
+
+
+def triage(row: dict, doc: 'DocumentText') -> Optional[str]:
+    """Gate 1. The reason NOT to pay for a read of this document, or None.
+    Pure: no I/O, so it is testable on a dict and a DocumentText."""
+    et = row.get('event_type') or ''
+    if et in KEY_PERSON_TYPES:
+        if doc.needs_pdf:
+            return 'scanned document on a routine-by-default type'
+        if not KEY_PERSON_RE.search(_HONORIFIC_DOT.sub(r'\1', doc.text or '')):
+            return 'management change with no key person named'
+    elif et == 'AUDITOR_CHANGE':
+        if doc.needs_pdf:
+            return 'scanned document on a routine-by-default type'
+        if not AUDITOR_EVENT_RE.search(doc.text or ''):
+            return 'auditor change is a term completion or appointment, not a resignation'
+    return None
 
 
 # ── the verdict ──────────────────────────────────────────────────────────
@@ -233,18 +313,40 @@ def build_messages(row: dict, doc: DocumentText, pdf_bytes: Optional[bytes]) -> 
 # ── the queue ────────────────────────────────────────────────────────────
 
 def enqueue_pending(conn, since=None) -> int:
-    """A pending row for every material event with no read row yet. Idempotent."""
+    """A pending row for every IN-SCOPE material event (gate 0) with no read
+    row yet. Idempotent."""
+    params = dict(_scope_params(), since=since)
     with conn.cursor() as cur:
-        cur.execute("""
+        cur.execute(f"""
             INSERT INTO km_filing_reads (event_id)
             SELECT e.id FROM km_corporate_events e
-             WHERE e.family = ANY(%s)
-               AND (%s::timestamptz IS NULL OR e.disseminated_at >= %s::timestamptz)
+             WHERE {_SCOPE_SQL}
+               AND (%(since)s::timestamptz IS NULL OR e.disseminated_at >= %(since)s::timestamptz)
             ON CONFLICT (event_id) DO NOTHING
-        """, (list(MATERIAL_FAMILIES), since, since))
+        """, params)
         n = cur.rowcount
     conn.commit()
     return n
+
+
+def prune_pending(conn) -> int:
+    """Drop PENDING rows that gate 0 no longer admits — the 229 seed queued
+    every material event, and the scope can tighten later. Only `pending`:
+    a verdict already paid for, a failure, an unreadable or a skip is a
+    record and stays. Same predicate as enqueue_pending, one definition."""
+    with conn.cursor() as cur:
+        cur.execute(f"""
+            DELETE FROM km_filing_reads r
+             USING km_corporate_events e
+             WHERE e.id = r.event_id AND r.status = 'pending'
+               AND NOT ({_SCOPE_SQL})
+        """, _scope_params())
+        n = cur.rowcount
+    conn.commit()
+    return n
+
+
+STATUSES = ('pending', 'reading', 'done', 'failed', 'unreadable', 'skipped')
 
 
 def status_counts(conn) -> dict:
@@ -252,7 +354,7 @@ def status_counts(conn) -> dict:
         cur.execute('SELECT status, count(*) FROM km_filing_reads GROUP BY status')
         rows = dict(cur.fetchall())
     conn.rollback()
-    return {k: int(rows.get(k, 0)) for k in ('pending', 'reading', 'done', 'failed', 'unreadable')}
+    return {k: int(rows.get(k, 0)) for k in STATUSES}
 
 
 def _claim_next(conn, retry_failed: bool = True, pass_started=None) -> Optional[dict]:
@@ -358,6 +460,14 @@ def read_one(conn, row: dict, client, session, model: str = MODEL) -> str:
         return 'failed'
     _store_text(conn, row['raw_id'], doc)
 
+    # Gate 1: the text is free, the model is not.
+    reason = triage(row, doc)
+    if reason:
+        _finish(conn, read_id, 'skipped', None, triage_reason=reason,
+                read_source='pdf' if doc.needs_pdf else 'text',
+                page_count=doc.page_count, pages_read=doc.pages_read)
+        return 'skipped'
+
     pdf_for_model = _pdf_first_pages(pdf_bytes, MAX_PAGES) if doc.needs_pdf else None
     messages = build_messages(row, doc, pdf_for_model)
     try:
@@ -404,8 +514,10 @@ def read_pending(conn, session=None, client=None, limit: int = MAX_PER_PASS,
     """Read up to `limit` rows, newest first, one request in flight. Returns
     counts. With no API key nothing is claimed — rows stay `pending`, which
     is the honest state, and the ingest pass still completes."""
-    stats = {'read': 0, 'done': 0, 'failed': 0, 'unreadable': 0, 'cost_usd': 0.0,
-             'skipped': None}
+    # `skipped` (str) is why the PASS stopped early; `triaged` (int) counts
+    # rows gate 1 refused to pay for — different things, kept apart on purpose.
+    stats = {'read': 0, 'done': 0, 'failed': 0, 'unreadable': 0, 'triaged': 0,
+             'cost_usd': 0.0, 'skipped': None}
     if client is None:
         if not has_api_key():
             stats['skipped'] = 'ANTHROPIC_API_KEY not set'
@@ -430,7 +542,8 @@ def read_pending(conn, session=None, client=None, limit: int = MAX_PER_PASS,
             break
         status = read_one(conn, row, client, session, model=model)
         stats['read'] += 1
-        stats[status] = stats.get(status, 0) + 1
+        key = 'triaged' if status == 'skipped' else status
+        stats[key] = stats.get(key, 0) + 1
         if status == 'done':
             with conn.cursor() as cur:
                 cur.execute('SELECT cost_usd FROM km_filing_reads WHERE id = %s', (row['read_id'],))

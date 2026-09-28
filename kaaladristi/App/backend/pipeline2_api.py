@@ -3586,7 +3586,7 @@ def _health_body() -> dict:
             leases = _lease.holders(c)
             try:
                 from lib.filing_reader import status_counts
-                filing_reads = status_counts(c)      # pending / reading / done / failed / unreadable
+                filing_reads = status_counts(c)      # pending / reading / done / failed / unreadable / skipped
             except Exception:
                 c.rollback()
         finally:
