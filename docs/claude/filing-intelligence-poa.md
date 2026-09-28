@@ -810,9 +810,10 @@ No OCR stack. Text is never truncated; a document over the page cap
 **Model.** `claude-haiku-4-5` (owner, 2026-09-28: *"with sonnet it will be
 very expensive — we will have haiku"*) through the official `anthropic` SDK
 (`client.messages.parse` with a schema, so the verdict is validated JSON, never
-prose to re-parse). `FILING_READ_MODEL` in `.env` overrides it — it is the
-reader's OWN setting, deliberately not `AI_MODEL`, which is the VaNi layer's
-and on the VPS names the local Qwen server. Cost at Haiku's $1 / $5 per
+prose to re-parse). The model resolves `FILING_READ_MODEL` → `CLAUDE_MODEL`
+(the owner's `.env` convention) → the default — the reader's OWN setting,
+deliberately never `AI_MODEL`, which is the VaNi layer's and on the VPS names
+the local Qwen server. Cost at Haiku's $1 / $5 per
 million tokens: ~85 documents a day at ~5–8k input tokens each is roughly
 $0.5–0.7 a day; the 5,252-document backfill is roughly $40. Sonnet 5 doubles
 that, Opus 5 five times.

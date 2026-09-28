@@ -182,6 +182,17 @@ class Extraction(unittest.TestCase):
         self.assertAlmostEqual(fr._cost('claude-opus-5', 1_000_000, 0), 5.0)
         self.assertIsNone(fr._cost('some-other-model', 10, 10))
 
+    def test_model_resolves_from_env_in_order(self):
+        with mock.patch.dict(os.environ, {'FILING_READ_MODEL': 'claude-opus-5', 'CLAUDE_MODEL': 'claude-sonnet-5'}):
+            self.assertEqual(fr._resolve_model(), 'claude-opus-5')
+        with mock.patch.dict(os.environ, {'FILING_READ_MODEL': '', 'CLAUDE_MODEL': 'claude-sonnet-5'}):
+            self.assertEqual(fr._resolve_model(), 'claude-sonnet-5')
+        with mock.patch.dict(os.environ, {'FILING_READ_MODEL': '', 'CLAUDE_MODEL': ' '}):
+            self.assertEqual(fr._resolve_model(), fr.DEFAULT_MODEL)
+        # AI_MODEL is the VaNi layer's (local Qwen on the VPS) and must never leak in
+        with mock.patch.dict(os.environ, {'FILING_READ_MODEL': '', 'CLAUDE_MODEL': '', 'AI_MODEL': 'Qwen3-4B'}):
+            self.assertEqual(fr._resolve_model(), fr.DEFAULT_MODEL)
+
     def test_api_key_accepts_the_ai_client_pair(self):
         with mock.patch.dict(os.environ, {'ANTHROPIC_API_KEY': 'sk-ant-a', 'AI_API_KEY': 'sk-ant-b'}):
             self.assertEqual(fr._api_key(), 'sk-ant-a')

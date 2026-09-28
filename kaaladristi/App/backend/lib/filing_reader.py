@@ -54,7 +54,15 @@ MATERIAL_FAMILIES = ('SPARK', 'NEGATIVE_SPARK', 'OWNERSHIP', 'CORPORATE_ACTION')
 # layer's model and on the VPS it names the local Qwen server, which cannot
 # take a 20-page PDF (4k context, no vision). Owner, 2026-09-28: Haiku.
 DEFAULT_MODEL = 'claude-haiku-4-5'
-MODEL = os.getenv('FILING_READ_MODEL') or DEFAULT_MODEL
+
+
+def _resolve_model() -> str:
+    """FILING_READ_MODEL, else CLAUDE_MODEL (the owner's .env convention for
+    'the Claude model'), else the default. Never AI_MODEL — see above."""
+    return (os.getenv('FILING_READ_MODEL') or os.getenv('CLAUDE_MODEL') or '').strip() or DEFAULT_MODEL
+
+
+MODEL = _resolve_model()
 MAX_PER_PASS = int(os.getenv('FILING_READ_MAX_PER_PASS', '300'))
 MAX_ATTEMPTS = int(os.getenv('FILING_READ_MAX_ATTEMPTS', '5'))
 MAX_PAGES = int(os.getenv('FILING_READ_MAX_PAGES', '40'))
