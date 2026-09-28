@@ -112,7 +112,12 @@ def _local_key() -> str:
 
 
 LOCAL_KEY = _local_key()
-LOCAL_MODEL = (os.getenv('FILING_READ_LOCAL_MODEL') or os.getenv('AI_MODEL') or 'qwen3-4b').strip()
+# NOT AI_MODEL: that is the VaNi layer's setting and on the VPS it names a
+# Claude model, which would have stamped every Qwen verdict 'local:claude-…'.
+# llama.cpp ignores the request's model string anyway; the row records the
+# model the SERVER reports in its response (see read_one), this is the label
+# used only until that answer arrives.
+LOCAL_MODEL = (os.getenv('FILING_READ_LOCAL_MODEL') or 'qwen3-4b').strip()
 LOCAL_CTX_TOKENS = int(os.getenv('FILING_READ_LOCAL_CTX', '16384'))
 LOCAL_MAX_TOKENS = int(os.getenv('FILING_READ_LOCAL_MAX_TOKENS', '1200'))   # the verdict measures ~330
 LOCAL_TIMEOUT_SEC = int(os.getenv('FILING_READ_LOCAL_TIMEOUT_SEC', '900'))  # CPU inference; slow is fine
@@ -819,6 +824,12 @@ def read_one(conn, row: dict, client, session, model: str = MODEL, backend: str 
     except Exception as e:
         _finish(conn, read_id, 'failed', f'model: {e}')
         return 'failed'
+    if backend == 'local':
+        # What the server says it ran (llama.cpp answers with the gguf name),
+        # never the configured label — a free read must be auditable too.
+        served = getattr(resp, 'model', None)
+        if served:
+            model = 'local:' + os.path.basename(str(served))[:80]
 
     impact = verdict.impact if verdict.impact in IMPACTS else 'unclear'
     magnitude = verdict.magnitude if verdict.magnitude in MAGNITUDES else 'unknown'

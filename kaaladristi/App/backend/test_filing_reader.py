@@ -30,6 +30,7 @@ from __future__ import annotations
 import ast
 import io
 import os
+import pathlib
 import unittest
 import zipfile
 from unittest import mock
@@ -323,6 +324,10 @@ class LocalBackend(unittest.TestCase):
         self.assertEqual(fr._resolve_backend(None), 'anthropic')
         with mock.patch.object(fr, 'LOCAL_MODEL', 'Qwen3-4B'):
             self.assertEqual(fr._resolve_model('local'), 'local:Qwen3-4B')
+        with mock.patch.dict(os.environ, {'FILING_READ_LOCAL_MODEL': '', 'AI_MODEL': 'claude-haiku-4-5'}):
+            src = pathlib.Path(fr.__file__).read_text()
+            self.assertNotIn("os.getenv('AI_MODEL')", src.split('LOCAL_MODEL = ')[1].split('\n')[0],
+                             "the local label never falls back to AI_MODEL (a Claude name on the VPS)")
         with mock.patch.dict(os.environ, {'FILING_READ_MODEL': '', 'CLAUDE_MODEL': 'claude-haiku-4-5'}):
             self.assertEqual(fr._resolve_model('anthropic'), 'claude-haiku-4-5')
 
@@ -783,7 +788,8 @@ class Reads(unittest.TestCase):
         self.assertEqual((stats['done'], stats['unreadable'], stats['failed']), (1, 1, 0))
         rows = self._rows()
         self.assertEqual((rows['hec']['status'], rows['hec']['impact'], rows['hec']['model']),
-                         ('done', 'positive', 'local:qwen3-4b'))
+                         ('done', 'positive', 'local:Qwen3-4B-Q4_K_M.gguf'),
+                         'the model column records what the SERVER said it ran, not the configured label')
         self.assertEqual(float(rows['hec']['cost']), 0.0)
         self.assertEqual(rows['hec']['input_tokens'], 3100)
         self.assertEqual(rows['scan']['status'], 'unreadable')
