@@ -67,11 +67,13 @@ def main():
 
     client = fr.LocalClient(args.url, args.model, ctx_tokens=args.ctx)
     budget = fr.local_doc_char_budget(args.ctx)
-    pairs, agree_i, agree_m, trimmed, failed = [], 0, 0, 0, 0
+    pairs, agree_i, agree_m, trimmed, failed, done = [], 0, 0, 0, 0, 0
     by_type = defaultdict(lambda: Counter())
     t0 = time.time()
     for n, (event_id, h_impact, h_mag, h_head, pages_read, page_count, h_in) in enumerate(targets, 1):
         row = fr.load_event_row(conn, event_id)
+        sym = row.get('symbol') or (row.get('company_name') or '?')[:12]   # no NSE row for a delisted name
+        et = row.get('event_type') or '?'
         text = row['raw_text'] or ''
         # The stored text is one string; page breaks were joined with a blank
         # line, which is how extract_text/_from_pages wrote it.
@@ -87,26 +89,29 @@ def main():
             v = resp.parsed_output
         except Exception as e:
             failed += 1
-            print(f'  {n:>4} {row["symbol"]:<12} {row["event_type"]:<18} FAILED {e}')
+            print(f'  {n:>4} {sym:<12} {et:<18} FAILED {str(e)[:160]}')
+            if failed >= 5 and done == 0:
+                print('\nfive failures before a single success — the server is not reachable; stopping')
+                break
             continue
         q_impact = v.impact if v.impact in fr.IMPACTS else 'unclear'
         q_mag = v.magnitude if v.magnitude in fr.MAGNITUDES else 'unknown'
         same_i, same_m = q_impact == h_impact, q_mag == h_mag
         agree_i += same_i; agree_m += same_m
-        c = by_type[row['event_type']]
+        c = by_type[et]
         c['n'] += 1; c['impact'] += same_i; c['magnitude'] += same_m
-        pairs.append({'event_id': event_id, 'symbol': row['symbol'], 'event_type': row['event_type'],
+        pairs.append({'event_id': event_id, 'symbol': sym, 'event_type': et,
                       'haiku': {'impact': h_impact, 'magnitude': h_mag, 'headline': h_head},
                       'local': {'impact': q_impact, 'magnitude': q_mag, 'headline': v.headline,
                                 'evidence_quote': v.evidence_quote, 'confidence': v.confidence},
                       'seconds': round(time.time() - t1, 1),
                       'tokens_in': resp.usage.input_tokens, 'tokens_out': resp.usage.output_tokens,
                       'trimmed': len(doc.text) < len(text)})
+        done += 1
         mark = '' if same_i else '  <-- IMPACT DIFFERS'
-        print(f'  {n:>4} {row["symbol"]:<12} {row["event_type"]:<18} haiku {h_impact:<8}/{h_mag:<8} '
+        print(f'  {n:>4} {sym:<12} {et:<18} haiku {h_impact:<8}/{h_mag:<8} '
               f'local {q_impact:<8}/{q_mag:<8} {time.time() - t1:5.1f}s{mark}', flush=True)
 
-    done = len(pairs)
     print(f'\n{done} compared · {failed} failed · {trimmed} trimmed to the context · '
           f'{(time.time() - t0) / max(done, 1):.1f}s per document')
     if done:
