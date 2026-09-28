@@ -12,10 +12,13 @@ const postgrestUrl = import.meta.env.DEV
   : (import.meta.env.VITE_POSTGREST_URL?.trim() ||
      import.meta.env.VITE_SUPABASE_URL?.trim());
 
-const anonKey = (
-  import.meta.env.VITE_ANON_KEY?.trim() ||
-  import.meta.env.VITE_SUPABASE_ANON_KEY?.trim()  // legacy fallback
-);
+// VITE_ANON_KEY only. The old `|| VITE_SUPABASE_ANON_KEY` fallback is gone:
+// on 2026-09-28 a dev .env still carrying that Supabase-issued key sent it as
+// the bearer on every logged-out call the moment VITE_ANON_KEY was blanked,
+// and this PostgREST rejects it (PGRST301). Production runs with NO anon key
+// at all — an empty bearer is the anon role — so an empty value is the
+// correct default, never something to fall back from.
+const anonKey = import.meta.env.VITE_ANON_KEY?.trim();
 
 if (!postgrestUrl) {
   console.error(
