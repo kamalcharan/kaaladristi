@@ -9,7 +9,7 @@ Configuration (App/.env):
   AI_API_KEY=sk-ant-…            # generic key var (ANTHROPIC_API_KEY also accepted)
   AI_MODEL=claude-haiku-4-5      # any model ID the provider supports
   AI_BASE_URL=                   # optional override — e.g. a proxy or local server
-  LLM_BASE_URL=                  # fallback OpenAI-compat endpoint (e.g. llm.dristiq.io/v1)
+  LLM_BASE_URL=                  # fallback OpenAI-compat endpoint (e.g. llm.dristiq.com/v1)
 
 Usage:
   from lib.ai_client import complete, AI_ENABLED

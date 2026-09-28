@@ -32,7 +32,7 @@ Open questions:
 | VaNi DB | `vani_db` on VPS. Env var: `VANI_DB_URL=postgresql://...` |
 | API server | `uvicorn pipeline2_api:app --host 0.0.0.0 --port 8101` |
 | PostgREST | Port 3000, JWT-secured |
-| LLM (Qwen3) | `llm.dristiq.io` — Qwen3 4B, self-hosted. `/no_think` directive required on all calls. |
+| LLM (Qwen3) | `llm.dristiq.com` — Qwen3 4B, self-hosted. `/no_think` directive required on all calls. |
 | LLM (Claude) | Anthropic API via `lib/ai_client.py` — `claude_complete()`. Reads `AI_API_KEY` or `ANTHROPIC_API_KEY`. Used for Path 2 (D42). |
 | Dev branch | `claude/nifty-turing-jabolq` → merge to `main` → auto-deployed to VPS |
 | POA | `/docs/POA/POA.md` |

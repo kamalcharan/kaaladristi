@@ -18,7 +18,7 @@
 | Database | PostgreSQL 17 | |
 | API layer | PostgREST | Direct table/view queries from frontend |
 | Auth | JWT via `lib/auth.py` | `python-jose` |
-| LLM | Qwen3 4B | Self-hosted at `llm.dristiq.io` via `ai_client.py` |
+| LLM | Qwen3 4B | Self-hosted at `llm.dristiq.com` via `ai_client.py` |
 | Payments | Razorpay | Subscription model |
 | Hosting | Hostinger VPS | Two servers |
 

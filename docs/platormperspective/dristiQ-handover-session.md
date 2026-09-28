@@ -376,10 +376,10 @@ Two documents have been shared — Infrastructure v3.0 and LLM Strategy v1.0. Ev
 
 ### LLM Is Already Running — Use It
 
-Qwen3 4B Q4_K_M is live at `https://llm.dristiq.io`. VaNi does not call Claude API or any external LLM. VaNi calls Qwen3.
+Qwen3 4B Q4_K_M is live at `https://llm.dristiq.com`. VaNi does not call Claude API or any external LLM. VaNi calls Qwen3.
 
 ```
-Endpoint:  https://llm.dristiq.io/v1/chat/completions
+Endpoint:  https://llm.dristiq.com/v1/chat/completions
 API Key:   vk-llm-d0efccfd15c0b8fd72214d0b9182032f84106b43
 Format:    OpenAI-compatible
 ```

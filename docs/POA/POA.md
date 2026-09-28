@@ -342,7 +342,7 @@ DristiQ is a Vedic astro-market intelligence data platform for Indian equity tra
 | NSE clean symbol filter | `symbol ~ '^[A-Z]'` |
 | Weekly/Monthly tables | `km_equity_weekly`, `km_equity_monthly` |
 | VaNi interaction log | `vn_interaction_log` in `vani_db` |
-| LLM endpoint | `llm.dristiq.io` (Qwen3 4B, self-hosted) |
+| LLM endpoint | `llm.dristiq.com` (Qwen3 4B, self-hosted) |
 | LLM directive | `/no_think` must be in all Qwen3 calls |
 | Legacy columns (NEVER use) | `magicrs_value`, `sniper_banker`, `sniper_hotmoney`, `accum_dist`, `vacuum_status`, `flow_meaning` |
 
