@@ -200,6 +200,21 @@ async def lifespan(app: FastAPI):
         else:
             log.warning('DATABASE_URL not set — scheduler not started')
 
+        # Filing read checks left pending by a restart resume here, in this
+        # process, never in the worker (lib/filing_checks.py).
+        try:
+            from lib import filing_checks as _fc
+            _c = _conn()
+            try:
+                _n = _fc.pending_count(_c)
+            finally:
+                _c.close()
+            if _n:
+                _fc.ensure_runner(_conn)
+                log.info(f'filing checks: resuming {_n} pending')
+        except Exception as e:
+            log.warning(f'filing checks: could not resume pending rows: {e}')
+
     yield
 
     log.info('pipeline2 API shutting down')
@@ -7509,6 +7524,115 @@ def admin_delete_user(user_id: str, req: AdminDeleteRequest,
     except Exception as exc:
         conn.rollback()
         log.error(f'admin_delete_user error: {exc}')
+        raise HTTPException(500, str(exc))
+    finally:
+        conn.close()
+
+
+
+# ── Filing read checks — the admin's second opinion (migration 233) ───────────
+# Owner, 2026-09-29: "qwen comparison is separate task, only for admin ...
+# system will run for qwen ... for selected options, we will run haiku ...
+# and then compare." The runner is one thread in THIS process, never the
+# pipeline worker (lib/filing_checks.py explains why).
+from lib import filing_checks as _filing_checks  # noqa: E402
+
+
+class FilingCheckRequest(BaseModel):
+    event_ids: list[int]
+    backend: str = 'anthropic'          # 'anthropic' (paid, capped) | 'local' (free)
+
+
+@app.post('/api/admin/filing-checks')
+def admin_request_filing_checks(req: FilingCheckRequest,
+                                caller_id: str = Depends(_get_current_user_id)):
+    if req.backend not in _filing_checks.BACKENDS:
+        raise HTTPException(400, f'backend must be one of {_filing_checks.BACKENDS}')
+    if len(req.event_ids) > 5000:
+        raise HTTPException(400, 'too many event ids in one request')
+    conn = _conn()
+    try:
+        _require_admin(conn, caller_id)
+        missing = _filing_checks.backend_missing(req.backend)
+        if missing:
+            raise HTTPException(409, f'{req.backend} backend cannot run here: {missing}')
+        result = _filing_checks.request_checks(conn, req.event_ids, req.backend, caller_id)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        log.error(f'admin_request_filing_checks error: {exc}')
+        raise HTTPException(500, str(exc))
+    finally:
+        conn.close()
+    result['runner_started'] = _filing_checks.ensure_runner(_conn) if result['queued'] else False
+    return result
+
+
+@app.post('/api/admin/filing-checks/queue-local')
+def admin_queue_local_filing_checks(caller_id: str = Depends(_get_current_user_id)):
+    """The free half: a local check on every paid primary read that has none."""
+    conn = _conn()
+    try:
+        _require_admin(conn, caller_id)
+        missing = _filing_checks.backend_missing('local')
+        if missing:
+            raise HTTPException(409, f'local backend cannot run here: {missing}')
+        n = _filing_checks.queue_local_checks_for_paid_reads(conn, caller_id)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        log.error(f'admin_queue_local_filing_checks error: {exc}')
+        raise HTTPException(500, str(exc))
+    finally:
+        conn.close()
+    return {'queued': n, 'runner_started': _filing_checks.ensure_runner(_conn) if n else False}
+
+
+@app.post('/api/admin/filing-checks/run')
+def admin_run_filing_checks(caller_id: str = Depends(_get_current_user_id)):
+    """Drain whatever is pending (after a restart, or a batch that stopped
+    on a dead backend)."""
+    conn = _conn()
+    try:
+        _require_admin(conn, caller_id)
+        pending = _filing_checks.pending_count(conn)
+    finally:
+        conn.close()
+    return {'pending': pending,
+            'runner_started': _filing_checks.ensure_runner(_conn) if pending else False,
+            'runner': _filing_checks.runner_state()}
+
+
+@app.get('/api/admin/filing-checks/summary')
+def admin_filing_checks_summary(caller_id: str = Depends(_get_current_user_id)):
+    conn = _conn()
+    try:
+        _require_admin(conn, caller_id)
+        return _filing_checks.summary(conn)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        log.error(f'admin_filing_checks_summary error: {exc}')
+        raise HTTPException(500, str(exc))
+    finally:
+        conn.close()
+
+
+@app.post('/api/admin/filing-reads/{event_id}/restart')
+def admin_restart_filing_read(event_id: int, caller_id: str = Depends(_get_current_user_id)):
+    """Owner's point 4 (2026-09-29): a failed read gets a Restart. The row
+    goes back to pending and the next ingest slot reads it."""
+    conn = _conn()
+    try:
+        _require_admin(conn, caller_id)
+        ok = _filing_checks.restart_read(conn, event_id)
+        if not ok:
+            raise HTTPException(409, 'only a failed, unreadable or skipped read can be restarted')
+        return {'event_id': event_id, 'status': 'pending'}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        log.error(f'admin_restart_filing_read error: {exc}')
         raise HTTPException(500, str(exc))
     finally:
         conn.close()

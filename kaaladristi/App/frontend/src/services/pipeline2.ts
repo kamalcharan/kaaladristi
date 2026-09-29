@@ -178,3 +178,43 @@ export interface LastRun {
 
 export const fetchLastRun = () =>
   api.get<LastRun>('/api/pipeline2/last-run');
+
+// ── Filing read checks — the admin's second opinion (migration 233) ─────────
+// Owner, 2026-09-29: Qwen reads every filing; Haiku is asked for on chosen rows.
+
+export interface FilingCheckRequestResult {
+  queued: number;
+  already: number;
+  same_backend: number;
+  no_read: number;
+  capped: number;
+  runner_started: boolean;
+}
+
+export interface FilingCheckSummary {
+  compared: number;
+  agree_impact: number;
+  agree_magnitude: number;
+  by_type: { event_type: string; n: number; impact: number; magnitude: number }[];
+  queue: Record<string, Record<string, number>>;
+  cost_usd: number;
+  paid_reads_without_local_check: number;
+  paid_per_request: number;
+  runner: { running: boolean; started_at: string | null; finished_at: string | null;
+            last: Record<string, number | string> | null; error: string | null };
+}
+
+export const requestFilingChecks = (body: { event_ids: number[]; backend: 'anthropic' | 'local' }) =>
+  api.post<FilingCheckRequestResult>('/api/admin/filing-checks', body);
+
+export const queueLocalFilingChecks = () =>
+  api.post<{ queued: number; runner_started: boolean }>('/api/admin/filing-checks/queue-local');
+
+export const runFilingChecks = () =>
+  api.post<{ pending: number; runner_started: boolean }>('/api/admin/filing-checks/run');
+
+export const fetchFilingCheckSummary = () =>
+  api.get<FilingCheckSummary>('/api/admin/filing-checks/summary');
+
+export const restartFilingRead = (eventId: number) =>
+  api.post<{ event_id: number; status: string }>(`/api/admin/filing-reads/${eventId}/restart`);

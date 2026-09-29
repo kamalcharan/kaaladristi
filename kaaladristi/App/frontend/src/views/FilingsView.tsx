@@ -10,11 +10,13 @@
  * inside the panel. Navigating away on click made the filing's own content
  * unreachable from the one page built to show it.
  *
- * ⚠ The panel never claims to hold the document. `km_filings_raw.raw_text` is
- * NULL on all 31,803 rows (`extract_status = 'pending'` — Sprint 3 has never
- * run), so what it shows is the exchange's own prose (`summary_text`, present
- * on every row) plus a link OUT to the PDF. When that prose adds nothing over
- * the subject line the panel says so rather than rendering an empty box.
+ * ⚠ The panel never claims to hold the document. What it shows is the
+ * exchange's own prose (`summary_text`, present on every row) plus a link OUT
+ * to the PDF — and, for the material families the reader covers (migration
+ * 229), the READ: the reader's verdict with its quoted evidence, the row's
+ * status while it is not yet a verdict, and the admin's second opinion beside
+ * it (migration 233). The Read column is blank, not "planned", for an event
+ * the reader does not cover.
  *
  * ⚠ The "High Priority" tab is MEASURED, not asserted. It carries results and
  * the three legal/distress classes that showed real forward drift, and
@@ -31,6 +33,10 @@ import {
 import { Card, PageHeader, Tabs, EmptyState } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import { useFilings } from '@/hooks/useFilings';
+import { useFilingReads } from '@/hooks/useFilingReads';
+import { useAuthStore } from '@/stores/authStore';
+import type { FilingRead, FilingReadCheck } from '@/services/filingReads';
+import { ReadCell, ReadDetail, CheckActionBar } from '@/components/domain/Filings/ReadVerdict';
 import { FILINGS_PAGE_SIZE, type FilingTab, type FilingSortKey, type FilingRow } from '@/services/filings';
 import {
   FILING_GROUPS, MUTED_GROUP_IDS, DEFAULT_GROUP_IDS,
@@ -43,6 +49,9 @@ const TABS = [
   { id: 'call', label: 'Conference Call' },
   { id: 'results', label: 'Results' },
 ];
+
+const EMPTY_READS = new Map<number, FilingRead>();
+const EMPTY_CHECKS = new Map<number, FilingReadCheck[]>();
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -109,15 +118,23 @@ function SortHeader({
 
 /** One grid template, shared by the header and every row, so they stay aligned. */
 const GRID =
-  'grid grid-cols-[92px_minmax(0,1fr)_16px] ' +
-  'sm:grid-cols-[104px_minmax(0,1.3fr)_minmax(0,1fr)_16px] gap-x-3';
+  'grid grid-cols-[92px_minmax(0,1fr)_88px_16px] ' +
+  'sm:grid-cols-[104px_minmax(0,1.3fr)_minmax(0,1fr)_120px_16px] gap-x-3';
+const GRID_ADMIN =
+  'grid grid-cols-[20px_92px_minmax(0,1fr)_88px_16px] ' +
+  'sm:grid-cols-[20px_104px_minmax(0,1.3fr)_minmax(0,1fr)_120px_16px] gap-x-3';
 
 function FilingRowItem({
-  row, onPickSubject, activeSubject,
+  row, onPickSubject, activeSubject, read, checks, isAdmin, checked, onCheck,
 }: {
   row: FilingRow;
   onPickSubject: (desc: string) => void;
   activeSubject: string | null;
+  read: FilingRead | undefined;
+  checks: FilingReadCheck[];
+  isAdmin: boolean;
+  checked: boolean;
+  onCheck: (id: number, on: boolean) => void;
 }) {
   const [open, setOpen] = useState(false);
   const gid = groupForDesc(row.descRaw);
@@ -138,11 +155,24 @@ function FilingRowItem({
           if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpen((v) => !v); }
         }}
         className={cn(
-          GRID,
+          isAdmin ? GRID_ADMIN : GRID,
           'w-full text-left gap-y-1 px-3 py-2.5 items-start',
           'cursor-pointer hover:bg-kd-elevated transition-colors',
         )}
       >
+        {/* Admin: tick rows for a second opinion. Only a DONE read can be checked. */}
+        {isAdmin && (
+          <input
+            type="checkbox"
+            aria-label="Select for a second opinion"
+            checked={checked}
+            disabled={read?.status !== 'done'}
+            onClick={(e) => e.stopPropagation()}
+            onChange={(e) => onCheck(row.id, e.target.checked)}
+            className="mt-1 rounded disabled:opacity-30"
+          />
+        )}
+
         {/* Day 0 + dissemination time */}
         <div className="min-w-0">
           <div className="text-[12px] font-mono text-[var(--text-secondary)]">{fmtDay(row.day0)}</div>
@@ -167,6 +197,11 @@ function FilingRowItem({
               active={activeSubject === row.descRaw} />
         </div>
 
+        {/* The read — the reader's verdict, or where the read stands */}
+        <div className="min-w-0">
+          <ReadCell read={read} />
+        </div>
+
         <ChevronDown
           className={cn(
             'w-4 h-4 mt-0.5 shrink-0 text-muted transition-transform',
@@ -175,7 +210,7 @@ function FilingRowItem({
         />
       </div>
 
-      {open && <FilingDetail row={row} />}
+      {open && <FilingDetail row={row} read={read} checks={checks} isAdmin={isAdmin} />}
     </div>
   );
 }
@@ -184,11 +219,22 @@ function FilingRowItem({
  * What the exchange actually filed. Three facts and two exits — deliberately
  * not a summary of the document, which we do not have.
  */
-function FilingDetail({ row }: { row: FilingRow }) {
+function FilingDetail({
+  row, read, checks, isAdmin,
+}: {
+  row: FilingRow; read: FilingRead | undefined; checks: FilingReadCheck[]; isAdmin: boolean;
+}) {
   const navigate = useNavigate();
 
   return (
     <div className="px-3 pb-3 pt-1 sm:pl-[116px] space-y-2.5 bg-kd-elevated/40">
+      {/* The read comes first: it is the reason the reader exists */}
+      {read && (
+        <div className="rounded-md border border-kd-border/60 bg-kd-card/60 px-3 py-2.5">
+          <ReadDetail eventId={row.id} read={read} checks={checks} isAdmin={isAdmin} />
+        </div>
+      )}
+
       {/* The exchange's own subject line, in full and unabbreviated */}
       <div>
         <div className="text-[10px] font-semibold uppercase tracking-wider text-muted mb-0.5">
@@ -352,6 +398,16 @@ export default function FilingsView() {
   }), [tab, search, fromDate, toDate, toTouched, groupIds, subject, sort, ascending, page]);
 
   const { data, isLoading } = useFilings(q);
+  const isAdmin = useAuthStore((s) => s.isAdmin);
+  const pageIds = useMemo(() => (data?.rows ?? []).map((r) => r.id), [data]);
+  const readsQ = useFilingReads(pageIds);
+  const reads = readsQ.data?.reads ?? EMPTY_READS;
+  const checks = readsQ.data?.checks ?? EMPTY_CHECKS;
+  // Admin selection for a second opinion — cleared on any page/filter change.
+  const [picked, setPicked] = useState<number[]>([]);
+  const onCheck = (id: number, on: boolean) =>
+    setPicked((cur) => (on ? (cur.includes(id) ? cur : [...cur, id]) : cur.filter((x) => x !== id)));
+  const pickedOnPage = useMemo(() => picked.filter((id) => pageIds.includes(id)), [picked, pageIds]);
 
   const onSort = (col: FilingSortKey) => {
     if (col === sort) setAscending((a) => !a);
@@ -519,13 +575,24 @@ export default function FilingsView() {
 
       <Card rounded="xxl" className="overflow-hidden">
         {/* Column headers double as the sort control */}
-        <div className={cn(GRID, 'px-3 py-2 border-b border-kd-border bg-kd-elevated')}>
+        <div className={cn(isAdmin ? GRID_ADMIN : GRID, 'px-3 py-2 border-b border-kd-border bg-kd-elevated')}>
+          {isAdmin && <span aria-hidden="true" />}
           <SortHeader label="Day 0" col="date" sort={sort} ascending={ascending} onSort={onSort} />
           <SortHeader label="Company" col="company" sort={sort} ascending={ascending} onSort={onSort} />
           <SortHeader label="Category" col="category" sort={sort} ascending={ascending} onSort={onSort}
             className="hidden sm:flex" />
+          <span className="text-[11px] font-semibold uppercase tracking-wider text-muted">Read</span>
           <span aria-hidden="true" />
         </div>
+
+        {isAdmin && (
+          <CheckActionBar
+            selected={pickedOnPage}
+            reads={reads}
+            onDone={() => setPicked([])}
+            onClear={() => setPicked([])}
+          />
+        )}
 
         {isLoading && !data ? (
           <div className="px-3 py-8 text-[12px] text-muted">Loading filings…</div>
@@ -553,7 +620,9 @@ export default function FilingsView() {
         ) : (
           data.rows.map((r) => (
             <FilingRowItem key={r.id} row={r} onPickSubject={pickSubject}
-              activeSubject={subject} />
+              activeSubject={subject}
+              read={reads.get(r.id)} checks={checks.get(r.id) ?? []}
+              isAdmin={isAdmin} checked={picked.includes(r.id)} onCheck={onCheck} />
           ))
         )}
       </Card>

@@ -3,6 +3,7 @@ import HealthGrid from './HealthGrid';
 import JobQueue from './JobQueue';
 import RunPanel from './RunPanel';
 import LastRunBanner from './LastRunBanner';
+import FilingChecksPanel from './FilingChecksPanel';
 
 export interface CellSelection {
   dimension: string;
@@ -44,6 +45,11 @@ export default function DataPipelinePage() {
           <h2 className="text-sm font-medium text-secondary mb-2">Run / Fix</h2>
           <RunPanel selection={selection} onEnqueued={onJobEnqueued} />
         </div>
+      </section>
+
+      <section>
+        <h2 className="text-sm font-medium text-secondary mb-2">Filing reads · second opinion</h2>
+        <FilingChecksPanel />
       </section>
     </div>
   );

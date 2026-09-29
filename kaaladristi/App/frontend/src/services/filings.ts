@@ -13,9 +13,10 @@
  * which is why the detail is embedded in the LIST query rather than fetched
  * per-row on expand: it is ~135 chars a row and always there.
  *
- * ⚠ `raw_text` is NULL on every row and `extract_status` is `'pending'` on all
- * 31,803 — document extraction is Sprint 3 and has never run. Nothing may
- * offer "the document text"; the honest affordance is a link to the PDF.
+ * ⚠ `raw_text` is stored only where the reader (migration 229) has read the
+ * document — a minority of rows, and never the whole corpus. Nothing here
+ * offers "the document text"; the honest affordance is a link to the PDF. The
+ * read itself (verdict + quoted evidence) comes from `services/filingReads.ts`.
  *
  * ⚠ `day_0_trade_date` is the session the market could ACT on the filing, and
  * it is what the page sorts and filters by. `disseminated_at` is the exchange
