@@ -201,6 +201,7 @@ export interface FilingCheckSummary {
   paid_reads_without_local_check: number;
   paid_per_request: number;
   runner: { running: boolean; started_at: string | null; finished_at: string | null;
+            waiting_until: string | null;
             last: Record<string, number | string> | null; error: string | null };
 }
 

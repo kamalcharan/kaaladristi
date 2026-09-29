@@ -39,7 +39,7 @@ import logging
 import os
 import threading
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Callable, Optional
 
 from lib import filing_reader as fr
@@ -51,6 +51,13 @@ PAID_PER_REQUEST = int(os.getenv('FILING_CHECK_PAID_PER_REQUEST', '25'))
 LOCAL_PER_REQUEST = int(os.getenv('FILING_CHECK_LOCAL_PER_REQUEST', '2000'))
 MAX_ATTEMPTS = int(os.getenv('FILING_CHECK_MAX_ATTEMPTS', '3'))
 FAIL_STREAK_STOP = 5
+# When the backend stops answering, the runner does not give up: it puts the
+# streak's rows back, waits, and tries again — owner, 2026-09-29: "it will run
+# 3-4 and then stop, needs physical run again". 24 rounds of 5 minutes is two
+# hours of patience before it stops for good and says so.
+BACKOFF_SEC = int(os.getenv('FILING_CHECK_BACKOFF_SEC', '300'))
+BACKOFF_ROUNDS = int(os.getenv('FILING_CHECK_BACKOFF_ROUNDS', '24'))
+_sleep = time.sleep          # swapped by tests
 STALE_RUNNING_MIN = 30
 
 
@@ -236,7 +243,7 @@ def run_one(conn, check: dict, client) -> str:
         out = int(getattr(usage, 'output_tokens', 0) or 0)
     except Exception as e:
         _finish(conn, check['check_id'], 'failed', f'model: {e}')
-        return 'failed'
+        return 'model_error'          # the server, not the document — counts toward the streak
     if backend == 'local':
         served = getattr(resp, 'model', None)
         if served:
@@ -260,20 +267,50 @@ def run_one(conn, check: dict, client) -> str:
     return 'done'
 
 
+def requeue(conn, check_ids: list) -> int:
+    """Rows that failed because the SERVER was away go back to pending, and
+    the attempt is not held against them — the document was never read."""
+    if not check_ids:
+        return 0
+    with conn.cursor() as cur:
+        cur.execute("""
+            UPDATE km_filing_read_checks
+               SET status = 'pending', attempts = GREATEST(attempts - 1, 0),
+                   started_at = NULL, finished_at = NULL
+             WHERE id = ANY(%s) AND status = 'failed'
+        """, (list(check_ids),))
+        n = cur.rowcount
+    conn.commit()
+    return n
+
+
 def run_pending(conn, clients: Optional[dict] = None, max_seconds: float = 0) -> dict:
     """Work the queue until it is empty (or the time budget is spent).
     `clients` maps backend → client, built lazily. A backend that cannot run
     (no key, no URL) fails its rows with that reason instead of retrying
-    forever."""
-    stats = {'done': 0, 'failed': 0, 'skipped_backend': 0}
+    forever. A backend that stops ANSWERING mid-run (5 model errors in a
+    row) is waited for: the streak's rows are requeued, the runner sleeps
+    BACKOFF_SEC and carries on, up to BACKOFF_ROUNDS times."""
+    stats = {'done': 0, 'failed': 0, 'skipped_backend': 0, 'backoffs': 0}
     clients = clients if clients is not None else {}
     release_stale_running(conn)
     t0 = time.monotonic()
-    streak = 0      # consecutive failures — a dead server answers 404 to everything after
+    streak, streak_ids = 0, []   # consecutive MODEL failures — a dead server answers 404 to everything after
     while True:
         if streak >= FAIL_STREAK_STOP:
-            stats['stopped'] = f'{streak} consecutive failures — the backend is not answering'
-            break
+            requeue(conn, streak_ids)
+            streak, streak_ids = 0, []
+            stats['backoffs'] += 1
+            if stats['backoffs'] > BACKOFF_ROUNDS:
+                stats['stopped'] = (f'the backend did not answer for {BACKOFF_ROUNDS} rounds of '
+                                    f'{BACKOFF_SEC}s — stopped; rows stay pending')
+                break
+            log.warning('filing checks: backend not answering, waiting %ss (round %s of %s)',
+                        BACKOFF_SEC, stats['backoffs'], BACKOFF_ROUNDS)
+            _state['waiting_until'] = (datetime.utcnow() + timedelta(seconds=BACKOFF_SEC)).isoformat() + 'Z'
+            _sleep(BACKOFF_SEC)
+            _state['waiting_until'] = None
+            continue
         if max_seconds and time.monotonic() - t0 >= max_seconds:
             stats['stopped'] = f'time budget {int(max_seconds)}s reached'
             break
@@ -296,8 +333,12 @@ def run_pending(conn, clients: Optional[dict] = None, max_seconds: float = 0) ->
             log.exception('filing check %s crashed', check['check_id'])
             _finish(conn, check['check_id'], 'failed', f'crash: {e}')
             r = 'failed'
-        stats[r if r in stats else 'failed'] += 1
-        streak = 0 if r == 'done' else streak + 1
+        stats['done' if r == 'done' else 'failed'] += 1
+        if r == 'model_error':
+            streak += 1
+            streak_ids.append(check['check_id'])
+        elif r == 'done':
+            streak, streak_ids = 0, []
         if fr.REQUEST_DELAY_SEC:
             time.sleep(fr.REQUEST_DELAY_SEC)
     return stats
@@ -306,7 +347,8 @@ def run_pending(conn, clients: Optional[dict] = None, max_seconds: float = 0) ->
 # ── one thread in the API process ────────────────────────────────────────
 
 _lock = threading.Lock()
-_state = {'running': False, 'started_at': None, 'finished_at': None, 'last': None, 'error': None}
+_state = {'running': False, 'started_at': None, 'finished_at': None, 'last': None, 'error': None,
+          'waiting_until': None}
 
 
 def runner_state() -> dict:
@@ -338,7 +380,8 @@ def ensure_runner(conn_factory: Callable[[], object]) -> bool:
             except Exception:
                 pass
             with _lock:
-                _state.update(running=False, finished_at=datetime.utcnow().isoformat() + 'Z')
+                _state.update(running=False, waiting_until=None,
+                              finished_at=datetime.utcnow().isoformat() + 'Z')
 
     threading.Thread(target=_work, name='filing-checks', daemon=True).start()
     return True

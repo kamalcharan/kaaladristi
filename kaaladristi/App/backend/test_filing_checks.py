@@ -200,13 +200,63 @@ class Checks(unittest.TestCase):
         first = fc.claim_next(self.conn)
         self.assertEqual(first['backend'], 'anthropic')
 
-    def test_a_dead_backend_stops_the_run_after_five_failures(self):
+    def test_a_dead_backend_is_waited_for_and_the_run_resumes_on_its_own(self):
+        # Owner, 2026-09-29: "it will run 3-4 and then stop, needs physical run
+        # again". Five model errors in a row → the rows go back to pending,
+        # the runner sleeps, and when the server answers again it finishes.
         ids = [self._read(f'H{i}', model='claude-haiku-4-5') for i in range(8)]
         fc.request_checks(self.conn, ids, 'local', None)
-        stats = fc.run_pending(self.conn, clients={'local': StubClient(fail=True)})
-        self.assertEqual(stats['failed'], 5)
-        self.assertIn('consecutive failures', stats['stopped'])
-        self.assertEqual(sum(1 for r in self._checks() if r[2] == 'pending'), 3)
+        stub = StubClient(fail=True)
+        slept = []
+
+        def fake_sleep(sec):
+            slept.append(sec)
+            stub.fail = False            # the server comes back while we wait
+        fc._sleep = fake_sleep
+        try:
+            stats = fc.run_pending(self.conn, clients={'local': stub})
+        finally:
+            fc._sleep = __import__('time').sleep
+        self.assertEqual(slept, [fc.BACKOFF_SEC])
+        self.assertEqual((stats['done'], stats['backoffs']), (8, 1))
+        self.assertNotIn('stopped', stats)
+        rows = self._checks()
+        self.assertTrue(all(r[2] == 'done' for r in rows))
+        with self.conn.cursor() as c:
+            c.execute("SELECT max(attempts) FROM km_filing_read_checks")
+            self.assertEqual(c.fetchone()[0], 1)      # the dead-server attempt was not held against them
+
+    def test_a_backend_that_never_returns_stops_after_the_rounds_with_rows_pending(self):
+        ids = [self._read(f'H{i}', model='claude-haiku-4-5') for i in range(6)]
+        fc.request_checks(self.conn, ids, 'local', None)
+        slept = []
+        fc._sleep = slept.append
+        old_rounds, fc.BACKOFF_ROUNDS = fc.BACKOFF_ROUNDS, 2
+        try:
+            stats = fc.run_pending(self.conn, clients={'local': StubClient(fail=True)})
+        finally:
+            fc._sleep = __import__('time').sleep
+            fc.BACKOFF_ROUNDS = old_rounds
+        self.assertEqual(len(slept), 2)
+        self.assertIn('did not answer', stats['stopped'])
+        # nothing is lost: every row is pending, and no attempt was consumed
+        self.assertTrue(all(r[2] == 'pending' for r in self._checks()))
+
+    def test_a_document_failure_does_not_count_toward_the_streak(self):
+        # six rows with no stored text fail one after another — that is the
+        # documents, not the server, so no backoff and no requeue
+        ids = [self._read(f'H{i}', model='claude-haiku-4-5', text='') for i in range(6)]
+        with self.conn.cursor() as c:
+            for eid in ids:
+                c.execute("INSERT INTO km_filing_read_checks (event_id, backend) VALUES (%s, 'local')", (eid,))
+        self.conn.commit()
+        slept = []
+        fc._sleep = slept.append
+        try:
+            stats = fc.run_pending(self.conn, clients={'local': StubClient()})
+        finally:
+            fc._sleep = __import__('time').sleep
+        self.assertEqual((stats['failed'], stats['backoffs'], slept), (6, 0, []))
 
     def test_a_row_without_stored_text_fails_with_a_reason_and_never_fetches(self):
         h = self._read('H1', model='claude-haiku-4-5', text='')

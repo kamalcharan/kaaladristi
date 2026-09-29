@@ -105,6 +105,13 @@ export default function FilingChecksPanel() {
         </div>
       </div>
 
+      {data.runner.waiting_until && (
+        <div className="text-risk-amber">
+          Qwen is not answering. Waiting, then retrying on its own at{' '}
+          {new Date(data.runner.waiting_until).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' })} IST.
+          Nothing is lost; the rows stay pending.
+        </div>
+      )}
       {data.runner.error && (
         <div className="text-risk-red">Runner stopped: {data.runner.error}</div>
       )}
