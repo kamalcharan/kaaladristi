@@ -647,6 +647,16 @@ was correctly reported, on 09-17. ⚠ `lib/alerting.py` still no-ops unless
 `ALERT_WEBHOOK_URL` or `ALERT_EMAIL_TO`+`SMTP_*` are set, so a critical finding
 is still PULL-only until that is configured.
 
+### ⚠ Three things that kept the pipeline banner red — all found on the live DB 2026-09-29
+
+The Workspace banner reads the LATEST `daily_run` row (`/api/pipeline2/last-run`), so it shows a date until a newer run replaces it; on 2026-09-29 morning that was still Fri 25 Sep, because Monday 28 Sep never got a `daily_run`. Three separate causes, each fixed in code, none of them a data fault:
+
+1. **The 25 Sep failure was the two-executor deadlock** (`nse_magic_rs`, `rolling_metrics` — "deadlock detected"), the last night before `PIPELINE2_ROLE=api-only` + leases shipped. Real then, gone now.
+2. **`check_scanner_contract` reported Standouts as missing matview arms every night since migration 223** (`contract_arm_missing_standouts` / `_caution`, critical). `routing()` classified any fetcher that reads `km_scan_results` as matview-SERVED; `fetchStandouts` reads it ABOUT OTHER presets (`.in('preset_id', …)`) and never asks for its own id. A reader without `.eq('preset_id', …)` is now kind `'derived'` and owns no arm. `test_scan_contract_routing.py`.
+3. **The scheduler fired nothing on Mon 28 Sep between 12:10 and 21:30 IST** — no 18:00 `daily_run`, no 19:00 transit, no 19:30 sweep, no 20:10 filings slot — across a day of redeploys. The lease is a SESSION advisory lock; a recreated container's idle lease connection lingers on the server until TCP keepalive gives up (kernel default > 2 h), so each new scheduler found the lease held and stood down, as designed. The 21:30 sweep (from a later recreate) filled Monday with `fix` jobs. `lease.KEEPALIVES` now goes on the worker and scheduler connections (dead peer reaped in ~1 min) and a refused lease logs the holder's pid / state / start. ⚠ The very next recreate can still hit one zombie from the pre-fix process.
+
+And the sweep's repair of 28 Sep exposed a fourth: **`_claim_job` ordered by `created_at` only**, and a cascade enqueues its closure in one pass with one `created_at`, so siblings ran in arbitrary order — `big_money` 22 min BEFORE `rolling_metrics`, `supertrend` before `nse_equity_indicators`, both `failed` at 0% with no message (`_classify` on an input that did not exist yet). Now `ORDER BY created_at, id`; the closure is inserted in DAILY_STEPS order, so the id IS the dependency order. `test_worker_claim_order.py`. Until the 28 Sep bar's `supertrend_dir` / `bm_ratio` are recomputed (queue `fix` for those two on 2026-09-28, in that order, from the Pipeline Dashboard, or let the 19:30 sweep do it), `check_step_failures` (36-hour window) keeps them critical.
+
 ### ⚠ Repairing `stage` does NOT repair `stage_since` — the carry is a chain (2026-09-23)
 
 The sequel to the outage above, and a worse bug than it: Stage 2 came back and

@@ -337,7 +337,7 @@ def start_scheduler(dsn: str) -> BackgroundScheduler | None:
     """
     global _lease_conn
     from . import lease
-    _lease_conn = psycopg2.connect(dsn)
+    _lease_conn = psycopg2.connect(dsn, **lease.KEEPALIVES)
     if not lease.try_acquire(_lease_conn, lease.SCHEDULER_LEASE):
         log.warning('Scheduler not started: another scheduler holds the lease')
         _lease_conn.close()

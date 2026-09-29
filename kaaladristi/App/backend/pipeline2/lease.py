@@ -34,6 +34,21 @@ SCHEDULER_LEASE = 2
 
 _NAMES = {WORKER_LEASE: 'worker', SCHEDULER_LEASE: 'scheduler'}
 
+# The lease is a SESSION lock, so it dies with the connection — and a
+# connection whose container was recreated does not die on the server until
+# TCP notices, which with the kernel defaults is over two hours. On
+# 2026-09-28 the scheduler fired nothing between 12:10 and 21:30 IST (no
+# 18:00 daily_run, no 19:30 sweep, no 20:10 filings slot) across a day of
+# redeploys: the new process found the lease held by its predecessor's
+# lingering idle session and stood down, as designed. Keepalives on the
+# lease connections make the server reap that session in about a minute.
+KEEPALIVES = {
+    'keepalives': 1,
+    'keepalives_idle': 30,
+    'keepalives_interval': 10,
+    'keepalives_count': 3,
+}
+
 
 def try_acquire(conn, key: int) -> bool:
     """Take the session lease for `key` on `conn`. Returns False when another
@@ -46,8 +61,35 @@ def try_acquire(conn, key: int) -> bool:
         log.info(f'{_NAMES.get(key, key)} lease acquired')
     else:
         log.warning(f'{_NAMES.get(key, key)} lease is held by another session — '
-                    f'this instance will not run it (PIPELINE2_ROLE=api-only silences this)')
+                    f'this instance will not run it (PIPELINE2_ROLE=api-only silences this)'
+                    f'{holder_note(conn, key)}')
     return got
+
+
+def holder_note(conn, key: int) -> str:
+    """' — held by pid N (state, since T, from ADDR)' for the log, or '' when
+    pg_stat_activity hides the session (another database user). Best effort:
+    a failure here must never turn a refused lease into a crash."""
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT a.pid, a.state, a.backend_start, a.client_addr "
+                "  FROM pg_locks l JOIN pg_stat_activity a ON a.pid = l.pid "
+                " WHERE l.locktype = 'advisory' AND l.granted "
+                "   AND l.classid = %s AND l.objid = %s LIMIT 1",
+                (LEASE_NAMESPACE, key))
+            row = cur.fetchone()
+        conn.rollback()
+        if not row:
+            return ''
+        pid, state, since, addr = row
+        return f' — held by pid {pid} ({state or "?"}, since {since}, from {addr})'
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        return ''
 
 
 def holders(conn) -> dict[str, bool]:

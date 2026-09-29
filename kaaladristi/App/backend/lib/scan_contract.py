@@ -142,7 +142,11 @@ def _fetcher_body(src: str, name: str) -> str:
 
 
 def routing(src: str | None = None) -> dict[str, str]:
-    """preset -> 'matview' | 'journeys' | 'live'.
+    """preset -> 'matview' | 'journeys' | 'live' | 'derived'.
+
+    'derived' = the fetcher reads km_scan_results about OTHER presets (no
+    `.eq('preset_id', …)` of its own) and builds its membership on read; it
+    owns no arm and must not be reported as missing one.
 
     Resolved the way executeScan() resolves it: the FIRST branch that matches
     wins, then the chosen fetcher's body decides the table. This is the check
@@ -174,6 +178,15 @@ def routing(src: str | None = None) -> dict[str, str]:
         fb = _fetcher_body(src, fetcher)
         for table, kind in _TABLE_OF.items():
             if f"from('{table}')" in fb:
+                # A fetcher that reads km_scan_results ABOUT OTHER PRESETS —
+                # fetchStandouts counts same-side flags across the arms and
+                # never asks for a row of its own id — is derived on read.
+                # Only a `.eq('preset_id', …)` on the fetcher's own id makes
+                # a preset matview-SERVED; without this rule the contract
+                # check reported standouts / standouts_caution as arms the
+                # matview "fails to produce", every night from 2026-09-25.
+                if kind == 'matview' and ".eq('preset_id'" not in fb:
+                    kind = 'derived'
                 out[pid] = kind
                 return
         out[pid] = 'unknown'

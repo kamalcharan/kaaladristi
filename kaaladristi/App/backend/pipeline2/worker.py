@@ -53,11 +53,18 @@ log = logging.getLogger('pipeline2.worker')
 def _connect() -> 'psycopg2.extensions.connection':
     if not DATABASE_URL:
         raise RuntimeError('DATABASE_URL not set')
-    return psycopg2.connect(DATABASE_URL)
+    return psycopg2.connect(DATABASE_URL, **lease.KEEPALIVES)
 
 
 def _claim_job(conn) -> Optional[dict]:
-    """Atomically claim the oldest queued job. Returns the row or None."""
+    """Atomically claim the oldest queued job. Returns the row or None.
+
+    `id` breaks the tie: a cascade enqueues its whole closure in ONE pass
+    with one created_at, inserted in DAILY_STEPS order, so without the
+    tie-break siblings ran in arbitrary order — on 2026-09-28 big_money ran
+    22 minutes BEFORE rolling_metrics (its input) and supertrend before
+    nse_equity_indicators, and both ended 'failed' at 0% on a bar that was
+    fine. The closure's insert order IS the dependency order; honour it."""
     with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
         cur.execute(
             """
@@ -66,7 +73,7 @@ def _claim_job(conn) -> Optional[dict]:
              WHERE id = (
                  SELECT id FROM km_jobs
                   WHERE status = 'queued'
-                  ORDER BY created_at
+                  ORDER BY created_at, id
                   LIMIT 1
                   FOR UPDATE SKIP LOCKED
              )
