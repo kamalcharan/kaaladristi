@@ -646,6 +646,33 @@ class Reads(unittest.TestCase):
         self.assertIn('unexpected shape', rows['boom']['error'])
         self.assertEqual(rows['fine']['status'], 'done')
 
+    def test_a_pass_yields_the_worker_when_its_time_budget_is_spent(self):
+        # 2026-09-29: a 300-document pass on the local backend held the single
+        # pipeline worker for hours; every job behind it queued. The pass now
+        # stops at FILING_READ_MAX_SECONDS and leaves the rest pending — a
+        # countable, honest state, never a failure.
+        self._event('first', '2026-09-28 10:00+05:30', url='http://x/1.pdf')
+        self._event('second', '2026-09-28 09:00+05:30', url='http://x/2.pdf')
+        fr.enqueue_pending(self.conn)
+        clock = iter([0.0, 0.0, 1000.0, 1000.0, 1000.0])
+        with mock.patch.object(fr.time, 'monotonic', side_effect=lambda: next(clock)):
+            stats = fr.read_pending(self.conn, client=_Client(), max_seconds=600, session=_Session({
+                'http://x/1.pdf': _pdf([ORDER_TEXT]), 'http://x/2.pdf': _pdf([ORDER_TEXT])}))
+        self.assertEqual(stats['read'], 1)
+        self.assertIn('time budget', stats['skipped'])
+        counts = fr.status_counts(self.conn)
+        self.assertEqual((counts['done'], counts['pending'], counts['failed']), (1, 1, 0))
+
+    def test_max_seconds_zero_never_stops_a_pass(self):
+        self._event('first', '2026-09-28 10:00+05:30', url='http://x/1.pdf')
+        self._event('second', '2026-09-28 09:00+05:30', url='http://x/2.pdf')
+        fr.enqueue_pending(self.conn)
+        with mock.patch.object(fr.time, 'monotonic', side_effect=[0.0, 1e9, 1e9, 1e9, 1e9, 1e9]):
+            stats = fr.read_pending(self.conn, client=_Client(), max_seconds=0, session=_Session({
+                'http://x/1.pdf': _pdf([ORDER_TEXT]), 'http://x/2.pdf': _pdf([ORDER_TEXT])}))
+        self.assertEqual(stats['read'], 2)
+        self.assertIsNone(stats['skipped'])
+
     def test_gate1_never_gates_an_order_or_an_acquisition(self):
         self._event('order', '2026-09-28 10:00+05:30', 'SPARK', event_type='LARGE_ORDER')
         fr.enqueue_pending(self.conn)

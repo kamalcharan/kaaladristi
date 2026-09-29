@@ -71,9 +71,11 @@ def main():
                   f"failed {s['failed']:>4}  unreadable {s['unreadable']:>4}  "
                   f"${s['cost_usd']:.2f}  {rate * 60:.1f}/min", flush=True)
 
+        # max_seconds=0: the backfill is the deliberate long run; the wall-clock
+        # cap exists for the scheduled pass that shares the pipeline worker.
         stats = fr.read_pending(conn, limit=args.limit, budget_usd=args.budget,
                                 model=args.model, retry_failed=not args.no_retry,
-                                on_progress=progress)
+                                on_progress=progress, max_seconds=0)
         print(f"\n{stats}\nremaining: {fr.status_counts(conn)}")
     finally:
         conn.close()

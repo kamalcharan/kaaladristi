@@ -155,6 +155,14 @@ def _resolve_model(backend: str = None) -> str:
 
 MODEL = _resolve_model()
 MAX_PER_PASS = int(os.getenv('FILING_READ_MAX_PER_PASS', '300'))
+# Wall-clock cap on one pass. The reader runs INSIDE the filings_ingest job on
+# the single pipeline worker: on 2026-09-29 a 300-document pass on the local
+# backend (80 s to 19 min a document behind a shared one-slot server) held
+# that worker for hours, and every job behind it — the two other ingests, any
+# repair the operator queued, and the 18:00 daily_run itself — sat queued.
+# A pass now yields after this many seconds; what it did not reach stays
+# pending for the next slot, which is the honest state, not a failure.
+MAX_SECONDS = int(os.getenv('FILING_READ_MAX_SECONDS', '900'))
 MAX_ATTEMPTS = int(os.getenv('FILING_READ_MAX_ATTEMPTS', '5'))
 MAX_PAGES = int(os.getenv('FILING_READ_MAX_PAGES', '40'))
 CHARS_PER_PAGE_FLOOR = 250          # below this the "text layer" is a scanned image
@@ -873,7 +881,8 @@ def read_one(conn, row: dict, client, session, model: str = MODEL, backend: str 
 
 def read_pending(conn, session=None, client=None, limit: int = MAX_PER_PASS,
                  budget_usd: Optional[float] = None, model: str = MODEL,
-                 retry_failed: bool = True, on_progress=None) -> dict:
+                 retry_failed: bool = True, on_progress=None,
+                 max_seconds: Optional[float] = None) -> dict:
     """Read up to `limit` rows, newest first, one request in flight. Returns
     counts. With no API key (or no local server configured) nothing is
     claimed — rows stay `pending`, which is the honest state, and the ingest
@@ -903,9 +912,16 @@ def read_pending(conn, session=None, client=None, limit: int = MAX_PER_PASS,
         pass_started = cur.fetchone()[0]
     conn.rollback()
 
+    if max_seconds is None:
+        max_seconds = MAX_SECONDS
+    t0 = time.monotonic()
     while stats['read'] < limit:
         if budget_usd is not None and stats['cost_usd'] >= budget_usd:
             stats['skipped'] = f'budget {budget_usd} USD reached'
+            break
+        if max_seconds and time.monotonic() - t0 >= max_seconds:
+            stats['skipped'] = f'time budget {int(max_seconds)}s reached — the rest stay pending'
+            log.info(f'[filing_reader] {stats["skipped"]}')
             break
         row = _claim_next(conn, retry_failed=retry_failed, pass_started=pass_started)
         if row is None:

@@ -657,6 +657,10 @@ The Workspace banner reads the LATEST `daily_run` row (`/api/pipeline2/last-run`
 
 And the sweep's repair of 28 Sep exposed a fourth: **`_claim_job` ordered by `created_at` only**, and a cascade enqueues its closure in one pass with one `created_at`, so siblings ran in arbitrary order — `big_money` 22 min BEFORE `rolling_metrics`, `supertrend` before `nse_equity_indicators`, both `failed` at 0% with no message (`_classify` on an input that did not exist yet). Now `ORDER BY created_at, id`; the closure is inserted in DAILY_STEPS order, so the id IS the dependency order. `test_worker_claim_order.py`. Until the 28 Sep bar's `supertrend_dir` / `bm_ratio` are recomputed (queue `fix` for those two on 2026-09-28, in that order, from the Pipeline Dashboard, or let the 19:30 sweep do it), `check_step_failures` (36-hour window) keeps them critical.
 
+### ⚠ The filing reader runs INSIDE the pipeline worker — a long pass blocks every job behind it (2026-09-29)
+
+`read_pending()` is the last step of every `filings_ingest` job, and the worker is single-threaded. On the local Qwen backend (one server slot, 80 s to 19 min a document when another reader shares it) a 300-document pass held the worker for hours: the 06:10 job was still running at 09:20, the board-meeting and bulk-deal ingests sat queued behind it, and so would any repair queued from the dashboard — and the 18:00 `daily_run`. `FILING_READ_MAX_SECONDS` (900) now caps one pass by wall clock; what it did not reach stays `pending` for the next slot (`stats['skipped']` names it). `backfill_filing_reads.py` passes `max_seconds=0` on purpose — it IS the deliberate long run. Set `FILING_READ_MAX_PER_PASS` to ~20–30 on the local backend as well, so a slot's pass is sized for the server it has. Tests: `test_filing_reader.py` (51, run with `KD_TEST_DSN` against a throwaway cluster or the two new ones are skipped).
+
 ### ⚠ Repairing `stage` does NOT repair `stage_since` — the carry is a chain (2026-09-23)
 
 The sequel to the outage above, and a worse bug than it: Stage 2 came back and
