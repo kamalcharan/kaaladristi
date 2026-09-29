@@ -85,6 +85,7 @@ def main():
     client = fr.LocalClient(args.url, args.model, ctx_tokens=args.ctx, api_key=fr.LOCAL_KEY)
     budget = fr.local_doc_char_budget(args.ctx)
     pairs, agree_i, agree_m, trimmed, failed, done = [], 0, 0, 0, 0, 0
+    streak = 0   # consecutive failures — a server that died mid-run answers 404 to everything after
     by_type = defaultdict(lambda: Counter())
     t0 = time.time()
     for n, (event_id, h_impact, h_mag, h_head, pages_read, page_count, h_in) in enumerate(targets, 1):
@@ -107,11 +108,17 @@ def main():
               v = resp.parsed_output
           except Exception as e:
               failed += 1
+              streak += 1
               print(f'  {n:>4} {sym:<12} {et:<18} FAILED {str(e)[:160]}')
-              if failed >= 5 and done == 0:
-                  print('\nfive failures before a single success — the server is not reachable; stopping')
+              if streak >= 5:
+                  # 2026-09-29: one document compared, then 71 straight 404s in a
+                  # few seconds — the llama.cpp container had gone away and the
+                  # old rule (five failures before ANY success) let the run burn
+                  # through the whole sample against a dead server.
+                  print('\nfive consecutive failures — the server is not answering; stopping')
                   break
               continue
+          streak = 0
           q_impact = v.impact if v.impact in fr.IMPACTS else 'unclear'
           q_mag = v.magnitude if v.magnitude in fr.MAGNITUDES else 'unknown'
           same_i, same_m = q_impact == h_impact, q_mag == h_mag
