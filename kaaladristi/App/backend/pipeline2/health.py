@@ -97,7 +97,10 @@ DIMENSION_HEALTH: dict[str, tuple[str, str | None, list[str] | None, float | Non
     # carries avg_amt_66d (measured 2026-09-05), so 0.90 leaves margin
     # without masking a regression to zero.
     'big_money':             ('km_equity_eod',    'equity_id', ['bm_ratio'],                                               0.90),
-    'vani_flags':            ('km_equity_eod',    'equity_id', ['is_vani_strength', 'is_vani_breakout'],                   1.0),
+    # 0.995, not 1.0: over the rows that have a magic_rs input, 6,722 of 6,723
+    # carried both flags on 2026-09-30. A 100% bar turns one stray row into a
+    # 'partial' daily run, and that alone withholds the leadership snapshot.
+    'vani_flags':            ('km_equity_eod',    'equity_id', ['is_vani_strength', 'is_vani_breakout'],                   0.995),
     # index_returns samples ret_5d only — ret_22d/ret_66d are legitimately
     # NULL for indices younger than their window, and indices with no EOD
     # rows on the date (e.g. inactive ones) never enter the denominator.
@@ -110,6 +113,47 @@ DIMENSION_HEALTH: dict[str, tuple[str, str | None, list[str] | None, float | Non
     # once any index has a row. INDEX_BREADTH_OK_FLOOR below sets the bar.
     'index_breadth':         ('km_index_breadth', None,        None,                                                       None),
 }
+
+# ── Eligibility — which rows CAN carry a dimension's columns ─────────────
+#
+# A column-fill rate counts every row on the date in its denominator. That was
+# right while the universe was ~1,400 mature index members. Since the universe
+# became every NSE + BSE listing (~3,800 NSE, ~4,100 BSE), hundreds of rows
+# each day belong to listings too young to carry the indicator AT ALL: sma_50
+# needs 50 bars, magic_rs_zone needs 144 + 60 (magic_ma is a 60-bar mean of
+# magic_rs). Those rows are NULL by definition, not by fault.
+#
+# Measured on the 2026-09-30 bar: nse_magic_rs read 83.6% against a 95% bar,
+# nse_equity_indicators 90.9%, bse_magic_rs 88.4%, rs_percentile 89.0% — so
+# every daily_run since the universe expansion ended 'partial', the nightly
+# leadership publication (gated on a clean run) never happened, and the 19:30
+# sweep queued fix jobs that recomputed 0 rows night after night. Over the
+# rows old enough to qualify the same bar reads 97.8 / 96.2 / 95.4 / 98.8%.
+#
+# Two kinds of rule, both evaluated per row in SQL:
+#   ('history', N)      — the listing has a bar on or before the session N-1
+#                         back (it has existed for N sessions). Sessions come
+#                         from km_index_eod's dates, never calendar arithmetic.
+#   ('predicate', sql)  — a row-level condition on alias `e`: a derived column
+#                         can only exist where its input does (vani_flags on
+#                         magic_rs), and a volume-based column cannot exist on
+#                         an index that publishes no volume (India VIX).
+#
+# ⚠ An INPUT-based predicate is only safe because the input has its own
+# dimension: a wholesale magic_rs failure still shows red on nse/bse_magic_rs,
+# so vani_flags reading 100% over the rows that had an input hides nothing.
+# ⚠ Zero eligible rows is 0%, never 100% — see _column_fill_counts.
+DIMENSION_ELIGIBILITY: dict[str, tuple[str, object]] = {
+    'nse_equity_indicators': ('history', 50),     # sma_50
+    'bse_equity_indicators': ('history', 50),
+    'nse_magic_rs':          ('history', 204),    # 144-bar RS mean + 60-bar magic_ma
+    'bse_magic_rs':          ('history', 204),
+    'rs_percentile':         ('history', 145),    # ranks magic_rs, not the zone
+    'vani_flags':            ('predicate', 'e.magic_rs IS NOT NULL'),
+    'index_indicators':      ('predicate', 'e.volume IS NOT NULL'),   # rvol
+    'index_flow':            ('predicate', 'e.volume IS NOT NULL'),
+}
+
 
 # Indices with constituents measured 2026-09-07: 131. A run that wrote rows
 # for fewer than this many indices is partial, not ok.
@@ -391,31 +435,14 @@ def fill_rate(conn, dimension: str, trade_date: date) -> float:
                 return 100.0
             return round(min(100.0, (n / INDEX_BREADTH_OK_FLOOR) * 100.0), 2) if n > 0 else 0.0
 
-        # Column-fill dimensions
-        conds = ' AND '.join(f'e.{c} IS NOT NULL' for c in cols)
-        if exchange and table == 'km_equity_eod':
-            cur.execute(
-                f"SELECT COUNT(*) AS total, "
-                f"       COUNT(*) FILTER (WHERE {conds}) AS populated "
-                f"FROM km_equity_eod e JOIN km_equity_symbols s ON s.id = e.equity_id "
-                f"WHERE s.exchange = %s AND e.trade_date = %s",
-                [exchange, str(trade_date)],
-            )
-        else:
-            # Index table or no exchange filter
-            conds_t = ' AND '.join(f'{c} IS NOT NULL' for c in cols)
-            cur.execute(
-                f"SELECT COUNT(*) AS total, "
-                f"       COUNT(*) FILTER (WHERE {conds_t}) AS populated "
-                f"FROM {table} WHERE trade_date = %s",
-                [str(trade_date)],
-            )
-        row = cur.fetchone()
-        total = row[0] or 0
-        populated = row[1] or 0
-        if total <= 0:
-            return 0.0
-        return round(populated / total * 100.0, 2)
+    # Column-fill dimensions — over the rows that CAN carry the columns
+    # (DIMENSION_ELIGIBILITY). Zero eligible rows reads 0%, never 100%: an
+    # empty denominator is not a healthy day.
+    total, populated = _column_fill_counts(conn, dimension, trade_date, trade_date).get(
+        str(trade_date), (0, 0))
+    if total <= 0:
+        return 0.0
+    return round(populated / total * 100.0, 2)
 
 
 # ── Multi-day health grid ────────────────────────────────────────────────
@@ -436,36 +463,57 @@ def _classify(frac: float, ok_threshold: float) -> str:
     return 'missing'
 
 
-def _coverage_by_date_column_fill(
-    conn, table: str, cols: list[str], exchange: str | None,
-    from_dt: date, to_dt: date,
-) -> dict[str, tuple[int, int]]:
-    """Return {date_str: (total, populated)} across the window."""
+def column_fill_sql(dimension: str) -> tuple[str, list, bool]:
+    """(sql, exchange params, has_calendar) for {trade_date: (total, populated)}
+    of a column-fill dimension, eligibility applied. See _column_fill_counts
+    for the argument order.
+
+    ONE implementation for fill_rate() (a single date: from = to) and the
+    health grid (a window). Two copies of the denominator is how the gap sweep
+    and a handler's own before/after reading would disagree about the same day.
+    """
+    table, _id_col, cols, _ok = DIMENSION_HEALTH[dimension]
+    exchange = _exchange_for(dimension)
+    conds = ' AND '.join(f'e.{c} IS NOT NULL' for c in cols)
+    rule = DIMENSION_ELIGIBILITY.get(dimension)
+    params: list = []
+    cte, join, where = '', '', []
+    if exchange and table == 'km_equity_eod':
+        join += ' JOIN km_equity_symbols s ON s.id = e.equity_id'
+        where.append('s.exchange = %s')
+        params.append(exchange)
+    if rule and rule[0] == 'history':
+        n = int(rule[1])
+        # The session n-1 back, from the dates indices actually traded. The
+        # window reaches 2n+30 calendar days back, comfortably more than n
+        # sessions; a date without that much calendar gets a NULL cutoff and
+        # its rows drop out of the denominator rather than counting as missing.
+        cte = (f"WITH cal AS (SELECT trade_date, lag(trade_date, {n - 1}) "
+               f"OVER (ORDER BY trade_date) AS cutoff FROM (SELECT DISTINCT trade_date "
+               f"FROM km_index_eod WHERE trade_date BETWEEN %s::date - {2 * n + 30} AND %s) d) ")
+        join += ' JOIN cal ON cal.trade_date = e.trade_date'
+        where.append(f'EXISTS (SELECT 1 FROM {table} p WHERE p.equity_id = e.equity_id '
+                     f'AND p.trade_date <= cal.cutoff)')
+    elif rule and rule[0] == 'predicate':
+        where.append(str(rule[1]))
+    where.append('e.trade_date BETWEEN %s AND %s')
+    sql = (f"{cte}SELECT e.trade_date, COUNT(*) AS total, "
+           f"COUNT(*) FILTER (WHERE {conds}) AS populated "
+           f"FROM {table} e{join} WHERE {' AND '.join(where)} GROUP BY e.trade_date")
+    return sql, params, bool(cte)
+
+
+def _column_fill_counts(conn, dimension: str, from_dt: date,
+                        to_dt: date) -> dict[str, tuple[int, int]]:
+    """Return {date_str: (eligible_total, populated)} across the window."""
+    sql, params, has_cal = column_fill_sql(dimension)
+    # The calendar CTE's bounds come first in the statement.
+    args = ([str(from_dt), str(to_dt)] if has_cal else []) + params + [str(from_dt), str(to_dt)]
     out: dict[str, tuple[int, int]] = {}
-    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-        if exchange and table == 'km_equity_eod':
-            conds = ' AND '.join(f'e.{c} IS NOT NULL' for c in cols)
-            cur.execute(
-                f"SELECT e.trade_date, COUNT(*) AS total, "
-                f"       COUNT(*) FILTER (WHERE {conds}) AS populated "
-                f"FROM km_equity_eod e JOIN km_equity_symbols s ON s.id = e.equity_id "
-                f"WHERE s.exchange = %s AND e.trade_date BETWEEN %s AND %s "
-                f"GROUP BY e.trade_date",
-                [exchange, str(from_dt), str(to_dt)],
-            )
-        else:
-            conds = ' AND '.join(f'{c} IS NOT NULL' for c in cols)
-            cur.execute(
-                f"SELECT trade_date, COUNT(*) AS total, "
-                f"       COUNT(*) FILTER (WHERE {conds}) AS populated "
-                f"FROM {table} "
-                f"WHERE trade_date BETWEEN %s AND %s "
-                f"GROUP BY trade_date",
-                [str(from_dt), str(to_dt)],
-            )
+    with conn.cursor() as cur:
+        cur.execute(sql, args)
         for r in cur.fetchall():
-            ds = str(r['trade_date'])
-            out[ds] = (int(r['total'] or 0), int(r['populated'] or 0))
+            out[str(r[0])] = (int(r[1] or 0), int(r[2] or 0))
     return out
 
 
@@ -662,8 +710,7 @@ def _health_row(
                 latest_ok = ds
 
     else:
-        exchange = _exchange_for(dimension)
-        coverage = _coverage_by_date_column_fill(conn, table, cols, exchange, from_dt, to_dt)
+        coverage = _column_fill_counts(conn, dimension, from_dt, to_dt)
         for d in trading_days:
             ds = str(d)
             if d > today:

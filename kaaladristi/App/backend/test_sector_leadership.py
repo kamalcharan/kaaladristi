@@ -81,6 +81,27 @@ class LeadershipTests(unittest.TestCase):
         self.assertEqual(len(db.calls),2)
         self.assertFalse(any('km_equity_eod' in sql or 'WITH benchmark' in sql for sql in db.calls))
 
+    def test_unpublished_session_serves_last_published_snapshot(self):
+        # 30 Sep never published (the run was partial): the page must get the
+        # 29 Sep reading, labelled as such, not "being prepared".
+        source=window_snapshot(self.classification(),6)
+        class DB:
+            def __init__(self):self.args=None
+            def execute(self,sql,args=None):
+                if 'SELECT s.payload' in sql:
+                    self.args=args
+                    self.sql=sql
+                    return [{'payload':source,'trade_date':'2026-09-29'}]
+                return []
+        db=DB()
+        result=load_context(SimpleNamespace(date='2026-09-30',sector_category='custom',leadership_months=6),db)
+        self.assertIn('s.trade_date<=%s::date',db.sql)
+        self.assertNotIn('s.trade_date=%s::date',db.sql)
+        self.assertEqual(result['requested_date'],'2026-09-30')
+        self.assertEqual(result['published_date'],'2026-09-29')
+        self.assertEqual(result['snapshot'],source['snapshot'])
+        self.assertNotIn('requested_date',source)  # the stored payload is not mutated
+
     def test_unpublished_or_changed_membership_never_falls_back_to_compute(self):
         class DB:
             def execute(self,sql,args=None):return []

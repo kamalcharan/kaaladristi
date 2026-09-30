@@ -657,6 +657,27 @@ The Workspace banner reads the LATEST `daily_run` row (`/api/pipeline2/last-run`
 
 And the sweep's repair of 28 Sep exposed a fourth: **`_claim_job` ordered by `created_at` only**, and a cascade enqueues its closure in one pass with one `created_at`, so siblings ran in arbitrary order — `big_money` 22 min BEFORE `rolling_metrics`, `supertrend` before `nse_equity_indicators`, both `failed` at 0% with no message (`_classify` on an input that did not exist yet). Now `ORDER BY created_at, id`; the closure is inserted in DAILY_STEPS order, so the id IS the dependency order. `test_worker_claim_order.py`. Until the 28 Sep bar's `supertrend_dir` / `bm_ratio` are recomputed (queue `fix` for those two on 2026-09-28, in that order, from the Pipeline Dashboard, or let the 19:30 sweep do it), `check_step_failures` (36-hour window) keeps them critical.
 
+### ⚠ Every nightly run was `partial` — the pass marks predated the full universe (2026-09-30)
+
+25, 29 and 30 Sep all ended `partial` with zero critical findings, so the
+leadership snapshot (published only on a clean run) never refreshed and
+Longer-Term Leadership showed "being prepared" for any unpublished session. No
+step was broken: fill rates counted EVERY row, and since the universe became
+every NSE + BSE listing, ~750 rows a day belong to listings too young to carry
+sma_50 (50 bars) or magic_rs_zone (144 + 60 bars). nse_magic_rs read 83.6% vs a
+95% bar; the 19:30 sweep re-queued fixes that recomputed 0 rows every night.
+`health.DIMENSION_ELIGIBILITY` now counts only rows that CAN carry the columns
+(history rules from km_index_eod sessions; `vani_flags` over rows with a
+magic_rs input; index volume-based columns skip India VIX, which has no
+volume). One implementation, `column_fill_sql`, serves `fill_rate()`, the grid
+and the sweep. On 24–30 Sep every step clears its bar; `vani_flags` moved
+1.0 → 0.995 (one stray row in 6,723 was enough to block publication). 28 Sep
+BSE still reads ~86% — 4,719 BSE rows that day vs ~3,990 usual, a real anomaly.
+**Do not raise a threshold back without re-measuring over eligible rows.**
+Read side: `sector_leadership.load_context` serves the newest snapshot ON OR
+BEFORE the selected session and returns `requested_date` / `published_date`;
+the page says which session it shows. Guarded by `test_health_eligibility.py`.
+
 ### ⚠ The filing reader runs INSIDE the pipeline worker — a long pass blocks every job behind it (2026-09-29)
 
 `read_pending()` is the last step of every `filings_ingest` job, and the worker is single-threaded. On the local Qwen backend (one server slot, 80 s to 19 min a document when another reader shares it) a 300-document pass held the worker for hours: the 06:10 job was still running at 09:20, the board-meeting and bulk-deal ingests sat queued behind it, and so would any repair queued from the dashboard — and the 18:00 `daily_run`. `FILING_READ_MAX_SECONDS` (900) now caps one pass by wall clock; what it did not reach stays `pending` for the next slot (`stats['skipped']` names it). `backfill_filing_reads.py` passes `max_seconds=0` on purpose — it IS the deliberate long run. Set `FILING_READ_MAX_PER_PASS` to ~20–30 on the local backend as well, so a slot's pass is sized for the server it has. Tests: `test_filing_reader.py` (51, run with `KD_TEST_DSN` against a throwaway cluster or the two new ones are skipped).

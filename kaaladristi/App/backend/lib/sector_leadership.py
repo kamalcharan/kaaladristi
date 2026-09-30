@@ -241,14 +241,24 @@ def load_context(req, db):
         raise ValueError('Invalid leadership selection')
     target = getattr(req,'date',None)
     if target: date.fromisoformat(target)
-    rows = db.execute("""SELECT s.payload FROM km_sector_leadership_snapshots s
+    # The newest snapshot ON OR BEFORE the selected session — the last one a
+    # fully clean run (or an explicit refresh) published. Snapshots are only
+    # ever written from complete evidence, so an older one is a finished
+    # reading with an honest date, never partial data. Asking for the exact
+    # date turned every unpublished session into "being prepared", with a
+    # perfectly good reading one session back. `requested_date` and
+    # `published_date` let the page say which session it is showing.
+    # Snapshots from a superseded membership generation stay invisible.
+    rows = db.execute("""SELECT s.payload, s.trade_date FROM km_sector_leadership_snapshots s
       JOIN km_leadership_generation g ON g.id=1 AND g.generation=s.generation
       WHERE s.category=%s AND s.months=%s AND s.version=%s
-        AND (%s::date IS NULL OR s.trade_date=%s::date)
+        AND (%s::date IS NULL OR s.trade_date<=%s::date)
       ORDER BY s.trade_date DESC LIMIT 1""", (category,months,VERSION,target,target))
     if not rows: raise ValueError(NOT_READY)
     payload = rows[0]['payload']
     if isinstance(payload,str): payload=json.loads(payload)
+    published = str(rows[0].get('trade_date') or payload.get('date'))[:10]
+    payload = {**payload, 'requested_date': target or published, 'published_date': published}
     ids = [r['index_id'] for r in payload['rows']]
     revisions = db.execute('SELECT index_id,revision,computed_revision FROM km_custom_index_revisions WHERE index_id=ANY(%s) ORDER BY index_id',(ids,))
     if revisions != payload.get('revisions',[]) or any(r['revision'] != r['computed_revision'] for r in revisions):

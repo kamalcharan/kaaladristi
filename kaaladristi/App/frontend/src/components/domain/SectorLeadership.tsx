@@ -1,12 +1,20 @@
 import { Fragment, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { useLeadership, type LeadershipRow } from '@/services/sectorLeadership';
+import { useLeadership, type LeadershipRow, type LeadershipSnapshot } from '@/services/sectorLeadership';
 import type { SectorTab } from '@/services/sectorRotation';
 import { sectorSessionDate, SECTOR_FLOW_STYLE } from '@/lib/sectorFlow';
 import type { FlowSignal } from '@/components/domain/FlowIntensityMap';
 import MagicRsSubchart from './VisualPulse/MagicRsSubchart';
 import '@/styles/sectorResearch.css';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
+import { DristiQLoader } from '@/components/ui';
+
+/** Says which session is on screen when it is not the one selected. */
+function PublishedNote({data}:{data?:LeadershipSnapshot}) {
+ const asked=data?.requested_date, shown=data?.published_date;
+ if(!asked||!shown||asked===shown) return null;
+ return <p role="status" className="text-xs text-muted">Showing the last complete reading, {sectorSessionDate(shown)}. The {sectorSessionDate(asked)} reading has not been published yet.</p>;
+}
 
 const groups = ['Running broadly', 'Building', 'Cooling', 'Limited coverage', 'Not aligned', 'Unavailable'] as const;
 const tone = (s:string) => s==='Running broadly'?'var(--risk-green)':s==='Building'||s==='Cooling'?'var(--risk-amber)':'var(--text-muted)';
@@ -45,12 +53,13 @@ export function SectorLeadershipEvidence({row,months,showLink=true}:{row:Leaders
 export function SelectedSectorLeadership({indexId,category,date,months}:{indexId:number;category:SectorTab;date:string;months:number}) {
  const {data,isFetching,error,refetch}=useLeadership(category,date,months);
  const row=data?.rows.find(r=>r.index_id===indexId);
- if(isFetching) return <p role="status" className="p-4">Loading published longer-term readings…</p>;
+ if(isFetching) return <DristiQLoader message="Loading longer-term readings…" />;
  if(error) return <div role="alert" className="p-4"><p>{error.message}</p><button className="sector-question" onClick={()=>refetch()}>Retry longer-term readings</button></div>;
  if(!row) return <p className="p-4">No longer-term reading is available for this index and session.</p>;
  return <section className="leadership-view p-4" aria-label="Selected index longer-term strength">
   <h2>Longer-term strength · {row.status}</h2>
   <p className="text-sm text-muted">Completed weekly and monthly readings · selected session {sectorSessionDate(date)}. Current flow is a separate observation.</p>
+  <PublishedNote data={data}/>
   <div className="leadership-mobile-grid" style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(140px, 1fr))",gap:16,margin:"12px 0"}}><div><small>MagicRS agreement</small><Alignment label="Weekly" value={row.current.weekly}/><Alignment label="Monthly" value={row.current.monthly}/></div><Support row={row}/><History row={row}/><Flow row={row}/></div>
   <SectorLeadershipEvidence row={row} months={months} showLink={false}/>
  </section>;
@@ -60,7 +69,7 @@ export default function SectorLeadership({category,date,months}:{category:Sector
  const {data,isFetching,error,refetch}=useLeadership(category,date,months);
  const mobile=useMediaQuery('(max-width: 1100px)');
  const [filter,setFilter]=useState('All'); const [expanded,setExpanded]=useState<number|null>(null);
- if(isFetching) return <p role="status" className="p-4">Loading published longer-term readings…</p>;
+ if(isFetching) return <DristiQLoader message="Loading longer-term readings…" />;
  if(error) return <div role="alert" className="p-4"><p>{error.message}</p><button className="sector-question" onClick={()=>refetch()}>Retry longer-term readings</button></div>;
  const all=data?.rows??[];
  const rows=all.filter(r=>filter==='All'||r.status===filter).sort((a,b)=>groups.indexOf(a.status)-groups.indexOf(b.status)||b.aligned_streak-a.aligned_streak||a.name.localeCompare(b.name));
@@ -70,6 +79,7 @@ export default function SectorLeadership({category,date,months}:{category:Sector
   <div><h2>Which baskets are holding their strength?</h2><p className="text-sm text-muted">Compare longer-term agreement, constituent support and today’s flow.</p></div>
   <div className="leadership-filters" aria-label="Filter longer-term groups">{['All',...groups].map(g=><button key={g} className="sector-question" aria-pressed={filter===g} onClick={()=>setFilter(g)}>{g} <strong>{g==='All'?all.length:all.filter(r=>r.status===g).length}</strong></button>)}</div>
   <p className="text-xs text-muted">Closing data: {data?.date?sectorSessionDate(data.date):'unavailable'} · History: {months} months · Window changes history, not the current group.</p>
+  <PublishedNote data={data}/>
   {!rows.length&&<p>No baskets in this group for the selected session.</p>}
   {!!rows.length&&<>
    {!mobile&&<div className="leadership-desktop"><table className="leadership-table"><thead><tr><th>Basket</th><th>Longer-term story</th><th>MagicRS</th><th>Stage 2 support</th><th>Agreement history</th><th>Current flow</th></tr></thead><tbody>{rows.map(r=><Fragment key={r.index_id}><tr><td>{name(r)}</td><td><strong style={{color:tone(r.status)}}>{r.status}</strong></td><td><div className="leadership-alignments"><Alignment label="W" value={r.current.weekly}/><Alignment label="M" value={r.current.monthly}/></div>{toggle(r)}</td><td><Support row={r}/></td><td><History row={r}/></td><td><Flow row={r}/></td></tr>{expanded===r.index_id&&<tr><td colSpan={6}><SectorLeadershipEvidence row={r} months={months}/></td></tr>}</Fragment>)}</tbody></table></div>}

@@ -14,7 +14,10 @@ export interface LeadershipRow {
  flow?:{state:string;score_5d:number|null;score_22d:number|null};
  aligned_samples:number; known_samples:number; aligned_streak:number;
 }
-export interface LeadershipSnapshot { membership?:Record<string,number[]>; snapshot:string; date:string; start:string; months:number; rows:LeadershipRow[]; counts:Record<string,number> }
+// requested_date / published_date: the read path serves the newest snapshot ON
+// OR BEFORE the selected session (the last one a clean run published), so the
+// two differ whenever the selected session has not been published yet.
+export interface LeadershipSnapshot { membership?:Record<string,number[]>; snapshot:string; date:string; start:string; months:number; rows:LeadershipRow[]; counts:Record<string,number>; requested_date?:string; published_date?:string }
 export async function askLeadership(body:object) {
  const res=await api.fetch('/api/vani/ask',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
  if(!res.ok) throw new Error('Longer-term readings could not be loaded. Please retry.');
