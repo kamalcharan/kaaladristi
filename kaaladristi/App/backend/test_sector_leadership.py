@@ -70,6 +70,7 @@ class LeadershipTests(unittest.TestCase):
 
     def test_read_path_only_loads_published_snapshot(self):
         source=window_snapshot(self.classification(),6)
+        for r in source['rows']: r['flow']={'state':'Quiet','score_5d':0,'score_22d':1,'ret_5d':-2.26,'ret_22d':1.03}
         class DB:
             def __init__(self):self.calls=[]
             def execute(self,sql,args=None):
@@ -101,6 +102,31 @@ class LeadershipTests(unittest.TestCase):
         self.assertEqual(result['published_date'],'2026-09-29')
         self.assertEqual(result['snapshot'],source['snapshot'])
         self.assertNotIn('requested_date',source)  # the stored payload is not mutated
+
+    def test_legacy_snapshot_gets_returns_from_the_published_bar(self):
+        # A 0 flow score hides a fall; snapshots published before ret_* were
+        # stored are filled from the SAME bar with one point read, not recomputed.
+        source=window_snapshot(self.classification(),6)
+        for r in source['rows']: r['flow']={'state':'Outflow','score_5d':0,'score_22d':1.03}
+        idx=source['rows'][0]['index_id']
+        class DB:
+            def __init__(self):self.calls=[]
+            def execute(self,sql,args=None):
+                self.calls.append((sql,args))
+                if 'SELECT s.payload' in sql: return [{'payload':source,'trade_date':'2026-09-29'}]
+                if 'ret_5d' in sql: return [{'index_id':idx,'ret_5d':-2.2574,'ret_22d':1.0322}]
+                return []
+        db=DB()
+        result=load_context(SimpleNamespace(date='2026-09-30',sector_category='custom',leadership_months=6),db)
+        flow=result['rows'][0]['flow']
+        self.assertAlmostEqual(flow['ret_5d'],-2.2574)
+        self.assertEqual(flow['score_5d'],0)
+        fill=[c for c in db.calls if 'ret_5d' in c[0]]
+        self.assertEqual(len(fill),1)
+        self.assertIn('km_index_eod',fill[0][0])
+        self.assertEqual(fill[0][1][1],'2026-09-29')          # the PUBLISHED bar, not the requested date
+        self.assertNotIn('ret_5d',source['rows'][0]['flow'])  # stored payload untouched
+        self.assertFalse(any('km_equity_eod' in c[0] for c in db.calls))
 
     def test_legacy_building_snapshots_read_as_forming(self):
         # Published before the 2026-09-30 rename; renamed on read so no date

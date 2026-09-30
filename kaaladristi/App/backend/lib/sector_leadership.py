@@ -192,11 +192,15 @@ def compute_context(req, db):
         # Do not publish an old index against newly changed constituent support.
         raise ValueError('One or more curated baskets need recalculation')
     from .sector_vani import flow_state
-    flows = db.execute('SELECT index_id,score_5d,score_22d,avg_amt_5d,avg_amt_22d,ret_5d FROM km_index_eod WHERE index_id=ANY(%s) AND trade_date=%s', (ids,target))
+    flows = db.execute('SELECT index_id,score_5d,score_22d,avg_amt_5d,avg_amt_22d,ret_5d,ret_22d FROM km_index_eod WHERE index_id=ANY(%s) AND trade_date=%s', (ids,target))
     flow_by_id = {r['index_id']:r for r in flows}
     for row in result['rows']:
         flow = flow_by_id.get(row['index_id'], {})
-        row['flow'] = {'state':flow_state(flow), 'score_5d':number(flow.get('score_5d')), 'score_22d':number(flow.get('score_22d'))}
+        # ret_* ride along because a flow score is 0 whenever the price FELL
+        # over its window (migration 207: score = 0 when ret <= 0). A bare 0.0
+        # reads as "nothing happened"; the page shows the fall instead.
+        row['flow'] = {'state':flow_state(flow), 'score_5d':number(flow.get('score_5d')), 'score_22d':number(flow.get('score_22d')),
+                       'ret_5d':number(flow.get('ret_5d')), 'ret_22d':number(flow.get('ret_22d'))}
     result['revisions'] = revisions
     result['snapshot'] = hashlib.sha256(json.dumps(result,sort_keys=True,default=str).encode()).hexdigest()
     return result
@@ -212,6 +216,25 @@ NOT_READY = 'Longer-term snapshot is being prepared. Please retry after the data
 # re-published and every consumer (page, companion, VaNi facts) sees one word.
 # Current-flow 'Building' is a different vocabulary and is never touched.
 LEGACY_STATUS = {'Building': 'Forming'}
+
+
+def with_flow_returns(payload, ids, published, db):
+    """Snapshots published before 2026-09-30 carry no ret_5d/ret_22d in `flow`.
+    Fill them from the SAME published bar (one indexed read of ~150 rows), so
+    no historical date has to be re-published. New snapshots skip the query."""
+    rows = payload.get('rows', [])
+    if not ids or all('ret_5d' in (r.get('flow') or {}) for r in rows):
+        return payload
+    rets = {r['index_id']: r for r in db.execute(
+        'SELECT index_id,ret_5d,ret_22d FROM km_index_eod WHERE index_id=ANY(%s) AND trade_date=%s', (ids, published))}
+    filled = []
+    for r in rows:
+        flow = dict(r.get('flow') or {})
+        src = rets.get(r['index_id'], {})
+        flow.setdefault('ret_5d', number(src.get('ret_5d')))
+        flow.setdefault('ret_22d', number(src.get('ret_22d')))
+        filled.append({**r, 'flow': flow})
+    return {**payload, 'rows': filled}
 
 
 def normalize_statuses(payload):
@@ -280,6 +303,7 @@ def load_context(req, db):
     published = str(rows[0].get('trade_date') or payload.get('date'))[:10]
     payload = {**normalize_statuses(payload), 'requested_date': target or published, 'published_date': published}
     ids = [r['index_id'] for r in payload['rows']]
+    payload = with_flow_returns(payload, ids, published, db)
     revisions = db.execute('SELECT index_id,revision,computed_revision FROM km_custom_index_revisions WHERE index_id=ANY(%s) ORDER BY index_id',(ids,))
     if revisions != payload.get('revisions',[]) or any(r['revision'] != r['computed_revision'] for r in revisions):
         raise ValueError(NOT_READY)

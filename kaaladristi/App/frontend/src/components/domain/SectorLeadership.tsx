@@ -32,9 +32,19 @@ function History({row}:{row:LeadershipRow}) {
  return <div><strong>{row.aligned_streak} completed weeks</strong><div className="leadership-strip" role="img" aria-label={`${row.name}: weekly and monthly alignment history, oldest to latest`}>
   {row.alignment_history.map(s=><span key={s.date} title={`${sectorSessionDate(s.date)}: W ${state(s.weekly)}, M ${state(s.monthly)}`} style={{background:s.weekly==null||s.monthly==null?'var(--text-muted)':s.weekly&&s.monthly?'var(--risk-green)':s.weekly||s.monthly?'var(--risk-amber)':'var(--risk-red)'}}/>)}</div><small>Current W/M agreement run</small></div>;
 }
+// A flow score is 0 whenever the price FELL over its window (migration 207),
+// so "5D 0.0" reads as "nothing happened" when the basket actually fell. On a
+// zero score show the window's price change instead, marked with % so it is
+// never read as a score. A positive score keeps the score.
+function flowFigure(score:number|null|undefined, ret:number|null|undefined) {
+ if(score==null) return '—';
+ if(score===0 && ret!=null) return `${ret>0?'+':''}${ret.toFixed(1)}%`;
+ return score.toFixed(1);
+}
 function Flow({row}:{row:LeadershipRow}) {
  const f=row.flow; const style=SECTOR_FLOW_STYLE[f?.state.toUpperCase() as FlowSignal];
- return <div><strong className="leadership-flow-badge" style={{color:style?.color??'var(--text-secondary)',background:style?.bg??'var(--border)'}}>{f?.state??'Unavailable'}</strong><small>5D {f?.score_5d?.toFixed(1)??'—'} · 22D {f?.score_22d?.toFixed(1)??'—'}</small></div>;
+ const showsReturn=(f?.score_5d===0&&f?.ret_5d!=null)||(f?.score_22d===0&&f?.ret_22d!=null);
+ return <div><strong className="leadership-flow-badge" style={{color:style?.color??'var(--text-secondary)',background:style?.bg??'var(--border)'}}>{f?.state??'Unavailable'}</strong><small title={showsReturn?'A flow score is 0 when the price fell over that window, so the price change (%) is shown instead. Plain numbers are flow scores.':undefined}>5D {flowFigure(f?.score_5d,f?.ret_5d)} · 22D {flowFigure(f?.score_22d,f?.ret_22d)}</small></div>;
 }
 export function SectorLeadershipEvidence({row,months,showLink=true}:{row:LeadershipRow;months:number;showLink?:boolean}) {
  const [tf,setTf]=useState<'weekly'|'monthly'>('weekly');
@@ -85,7 +95,7 @@ export default function SectorLeadership({category,date,months}:{category:Sector
    {!mobile&&<div className="leadership-desktop"><table className="leadership-table"><thead><tr><th>Basket</th><th>Longer-term story</th><th>MagicRS</th><th>Stage 2 support</th><th>Agreement history</th><th>This week’s flow <small className="text-muted">5D vs 22D</small></th></tr></thead><tbody>{rows.map(r=><Fragment key={r.index_id}><tr><td>{name(r)}</td><td><strong style={{color:tone(r.status)}}>{r.status}</strong></td><td><div className="leadership-alignments"><Alignment label="W" value={r.current.weekly}/><Alignment label="M" value={r.current.monthly}/></div>{toggle(r)}</td><td><Support row={r}/></td><td><History row={r}/></td><td><Flow row={r}/></td></tr>{expanded===r.index_id&&<tr><td colSpan={6}><SectorLeadershipEvidence row={r} months={months}/></td></tr>}</Fragment>)}</tbody></table></div>}
    {mobile&&<div className="leadership-mobile">{rows.map(r=><article key={r.index_id}><div className="space-y-2">{name(r)}<p style={{color:tone(r.status)}}>{r.status}</p></div><div className="leadership-mobile-grid"><div><small>MagicRS agreement</small><Alignment label="W" value={r.current.weekly}/><Alignment label="M" value={r.current.monthly}/></div><div><small>This week’s flow · 5D vs 22D</small><Flow row={r}/></div><Support row={r}/><History row={r}/></div>{toggle(r)}{expanded===r.index_id&&<SectorLeadershipEvidence row={r} months={months}/>}</article>)}</div>}
   </>}
-  <p className="text-xs text-muted">History: oldest → latest · Green: W/M agree · Amber: one agrees · Red: neither · Grey: missing. W = weekly, M = monthly. Leaders and Watch are observed stage classifications.</p>
+  <p className="text-xs text-muted">History: oldest → latest · Green: W/M agree · Amber: one agrees · Red: neither · Grey: missing. W = weekly, M = monthly. Leaders and Watch are observed stage classifications. Flow: plain numbers are flow scores; a figure with % is the price change, shown when the score is 0 because the price fell.</p>
   <details className="leadership-rules"><summary>How are these groups decided?</summary><p>Running broadly: W/M agreement for at least 8 completed weeks, at least 60% Leaders among classified constituents, at least 5 classified and 80% membership coverage.</p><p>Forming: W/M agree, but those persistence or support requirements are not met. Cooling: agreement was lost after agreement within the previous 26 weekly observations.</p><p>Limited coverage: fewer than 5 classified or less than 80% coverage. Unavailable: insufficient W/M readings. Not aligned: no current agreement and no recent agreement to classify as Cooling.</p><p>This week’s flow (Strong, Building, Fading, Outflow, Quiet) is a separate short-term reading: a Forming basket can show Outflow this week. Changing current flow does not automatically change the longer-term story. These groups describe evidence; they do not predict continuation. Reconstructed history uses current membership.</p></details>
  </section>;
 }

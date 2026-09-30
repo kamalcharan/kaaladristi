@@ -11,7 +11,7 @@ export interface LeadershipRow {
  status:'Running broadly'|'Forming'|'Cooling'|'Limited coverage'|'Not aligned'|'Unavailable';
  alignment_history:{date:string;weekly:boolean|null;monthly:boolean|null}[];
  charts:{weekly:MagicRsDataPoint[];monthly:MagicRsDataPoint[];weekly_method:'long'|'short'};
- flow?:{state:string;score_5d:number|null;score_22d:number|null};
+ flow?:{state:string;score_5d:number|null;score_22d:number|null;ret_5d?:number|null;ret_22d?:number|null};
  aligned_samples:number; known_samples:number; aligned_streak:number;
 }
 // requested_date / published_date: the read path serves the newest snapshot ON
