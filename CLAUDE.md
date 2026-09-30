@@ -923,7 +923,20 @@ table above is in the migration 219 header.
 ## Current Plan
 
 
-### ▶ START HERE — session handover, 2026-09-25
+### ▶ START HERE — session handover, 2026-09-30
+
+**`docs/claude/handover-2026-09-30-filing-reads-pipeline.md`.** Filing reads
+are ON SCREEN (Read column, expand for verdict + evidence, admin second opinion
+Qwen↔Haiku with an agreement panel — migration 233), the reader's wall-clock
+cap, the 28 Sep bar repaired by one cascading fix, and the Qwen server on the
+LLM VPS being OOM-killed five times a day (8 GB, no swap). Two owner asks are
+NOT built: the Workspace "Filing Intelligence" block and the Sparks / Negative
+Sparks scanners — §3 of the handover has the spec and the two one-line choices
+to confirm first. §4 is the blocker: nothing on Qwen is reliable until that box
+gets swap or loses browserless. Whether `27595dd` (auto-resume backoff) is
+deployed is UNVERIFIED — check the VPS checkout first.
+
+### Prior handover, 2026-09-25
 
 **`docs/claude/handover-2026-09-25-scanners-pipeline.md`.** Scanner default
 ordering per the owner's spec, VaNi Weakness Watch retired (migration 224), the
