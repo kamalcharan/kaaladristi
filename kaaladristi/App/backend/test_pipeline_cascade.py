@@ -313,3 +313,30 @@ class OutageWiringTest(unittest.TestCase):
         self.assertGreaterEqual(
             src.count('_record_failure_finding'), 3,
             'a failure path still reports nothing')
+
+
+class NoOpFixDoesNotCascadeTest(unittest.TestCase):
+    """An unforced repair that wrote nothing must not start ~20 forced
+    recomputes (measured: ~3.5 h a night on 2026-09-29/30)."""
+
+    def _r(self, before, after, rows):
+        from pipeline2.handlers import HandlerResult
+        return HandlerResult('partial', before, after, rows)
+
+    def test_unforced_noop_does_not_cascade(self):
+        self.assertFalse(worker.fix_changed_anything(False, self._r(99.33, 99.33, 0)))
+
+    def test_unforced_fill_gain_cascades(self):
+        self.assertTrue(worker.fix_changed_anything(False, self._r(90.0, 97.8, 0)))
+
+    def test_unforced_rows_written_cascades(self):
+        self.assertTrue(worker.fix_changed_anything(False, self._r(100.0, 100.0, 7500)))
+
+    def test_forced_always_cascades(self):
+        # A forced rewrite of corrected values reports a 0 fill DELTA.
+        self.assertTrue(worker.fix_changed_anything(True, self._r(100.0, 100.0, 0)))
+
+    def test_run_fix_consults_the_guard(self):
+        import inspect
+        src = inspect.getsource(worker._run_fix)
+        self.assertIn('fix_changed_anything(force, result)', src)

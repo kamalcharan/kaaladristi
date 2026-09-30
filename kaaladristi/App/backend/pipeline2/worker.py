@@ -298,6 +298,29 @@ def _parent_failed_recently(conn, dim: str, trade_date_obj: date) -> str | None:
     return row[0] if row else None
 
 
+def fix_changed_anything(force: bool, result) -> bool:
+    """False only for an UNFORCED fix that wrote nothing: 0 rows and no gain in
+    fill rate. Such a repair changed no input, so nothing downstream is stale
+    and a cascade would only recompute identical values.
+
+    Measured 2026-09-29/30: the 19:30 gap sweep re-queued unforced fixes for
+    steps whose fill rate could not rise (young listings — see
+    health.DIMENSION_ELIGIBILITY). Every one reported "99.3% -> 99.3%, 0 rows"
+    and still cascaded ~20 FORCED dependents per date: nse_flow 9 min,
+    rolling_metrics 11, gl_events 10, big_money 15 — about 3.5 hours a night of
+    identical recomputation (orchestrator.py open item 3).
+
+    ⚠ A FORCED fix always cascades. Its rows_affected is a fill-rate DELTA for
+    the column-fill handlers, so a forced rewrite of corrected values reports 0
+    while every value may have changed — exactly the case the cascade exists
+    for. Unforced, the same handlers fill only NULL rows (and the script
+    handlers return rows written), so 0 there really does mean nothing written.
+    """
+    if force:
+        return True
+    return bool(result.rows_affected) or result.fill_rate_after > result.fill_rate_before
+
+
 def _cascade_dependents(conn, dim: str, trade_date_obj: date, parent_job: dict) -> None:
     """Enqueue a forced fix for every dimension derived from `dim`.
 
@@ -514,8 +537,13 @@ def _run_fix(conn, job: dict) -> None:
         # 'partial' cascades too: a partially repaired input still changed the
         # rows it did repair, and the dimensions reading them are stale either
         # way. Only an outright failure (handled above, we never reach here)
-        # leaves the downstream set alone.
-        _cascade_dependents(conn, dim, trade_date_obj, job)
+        # leaves the downstream set alone — and so does a repair that WROTE
+        # NOTHING (see fix_changed_anything).
+        if fix_changed_anything(force, result):
+            _cascade_dependents(conn, dim, trade_date_obj, job)
+        else:
+            log.info(f'cascade skipped: unforced {dim} {trade_date_obj} fix wrote nothing '
+                     f'({result.fill_rate_before:.1f}% -> {result.fill_rate_after:.1f}%, 0 rows)')
 
 
 def _run_daily(conn, job: dict) -> None:

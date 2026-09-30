@@ -203,8 +203,15 @@ def check_period_bars(conn, run_date: date) -> list[Finding]:
                 metric=age, expected=MONTHLY_MAX_AGE_DAYS,
                 detail={'newest_bar': str(mo_max)}))
         # A monthly bar inside the CURRENT month means a month-to-date bar
-        # is masquerading as complete (the 2026-08-05 bug).
-        if mo_max >= run_date.replace(day=1):
+        # is masquerading as complete (the 2026-08-05 bug) — EXCEPT on the
+        # month-end run, when the writer builds that bar ON PURPOSE. The writer
+        # (handle_equity_monthly) runs only when daily_pipeline.is_month_end is
+        # true; this check asks the SAME function, so the two cannot disagree.
+        # Without it every month-end read critical: on 2026-09-30 the correct
+        # September bar (3,532 rows) failed integrity_checks and made the run
+        # 'partial'.
+        from daily_pipeline import is_month_end
+        if mo_max >= run_date.replace(day=1) and not is_month_end(run_date):
             month_start = run_date.replace(day=1)
             n_rows, n_dates = _rows(conn, '''
                 SELECT COUNT(*), COUNT(DISTINCT trade_date)
