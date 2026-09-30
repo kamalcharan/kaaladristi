@@ -108,7 +108,7 @@ assert.equal(personal.personalConnections(recorded,personalSectors)[0].stock.sym
 console.log('PASS: personal stock deduplication, position labels, multiple memberships, empty account, membership errors and published membership');
 
 const {leadershipStory}=load('src/services/leadershipStory.ts');
-const storyRow={index_id:97,name:'Example',status:'Building',aligned_streak:10,current:{eligible:5,total:5,leaders:2,leaders_pct:40,weekly:true,monthly:true},alignment_history:[{weekly:true,monthly:true}],flow:{state:'Fading'}};
+const storyRow={index_id:97,name:'Example',status:'Forming',aligned_streak:10,current:{eligible:5,total:5,leaders:2,leaders_pct:40,weekly:true,monthly:true},alignment_history:[{weekly:true,monthly:true}],flow:{state:'Fading'}};
 assert.match(leadershipStory([storyRow],'sector.leadership').title,/broad leadership is not yet established/);
 assert.match(leadershipStory([storyRow],'sector.leadership.building').meaning,/broader share of Stage 2 Leaders/);
 assert.match(leadershipStory([storyRow],'sector.leadership.support').meaning,/not missing data/);

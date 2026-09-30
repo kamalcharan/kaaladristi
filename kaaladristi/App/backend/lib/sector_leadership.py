@@ -111,7 +111,7 @@ def build_snapshot(symbols, periods, support, target, months, membership):
         status = ('Limited coverage' if limited else
                   'Unavailable' if current['weekly'] is None or current['monthly'] is None else
                   'Running broadly' if both and streak >= 8 and current['leaders_pct'] >= 60 else
-                  'Building' if both else 'Cooling' if previous else 'Not aligned')
+                  'Forming' if both else 'Cooling' if previous else 'Not aligned')
         # Chart zones follow migration 169; monthly alignment still uses RS sign.
         method = next((r['method'] for r in reversed(weekly) if r['available'] <= target), 'short')
         def chart(points, variant):
@@ -204,6 +204,26 @@ def compute_context(req, db):
 
 NOT_READY = 'Longer-term snapshot is being prepared. Please retry after the data refresh.'
 
+# Longer-term 'Building' was renamed 'Forming' on 2026-09-30: current flow has a
+# 'Building' state too (Flow 5D positive and at or above Flow 22D), so one row
+# could read "Building" twice with two different meanings and the table looked
+# self-contradictory. Snapshots published before the rename still carry the old
+# word; they are renamed HERE, on read, so no historical date has to be
+# re-published and every consumer (page, companion, VaNi facts) sees one word.
+# Current-flow 'Building' is a different vocabulary and is never touched.
+LEGACY_STATUS = {'Building': 'Forming'}
+
+
+def normalize_statuses(payload):
+    """Rename legacy longer-term statuses in rows and counts. Returns a copy."""
+    rows = [{**r, 'status': LEGACY_STATUS.get(r.get('status'), r.get('status'))}
+            for r in payload.get('rows', [])]
+    counts = {}
+    for key, n in (payload.get('counts') or {}).items():
+        key = LEGACY_STATUS.get(key, key)
+        counts[key] = counts.get(key, 0) + n
+    return {**payload, 'rows': rows, 'counts': counts}
+
 
 def window_snapshot(source, months):
     from copy import deepcopy
@@ -223,7 +243,7 @@ def window_snapshot(source, months):
     result['counts'] = counts
     result['facts'] = [f"Closing-data session {result['date']}. Longer-term groups: {counts}.",
         'Running broadly requires W/M alignment for at least 8 completed weeks, at least 60% Stage 2 Leaders, at least 5 classified constituents and 80% coverage. These are descriptive research rules, not predictions.',
-        'Building means W/M agree but the running-broadly requirements are not met. Cooling means agreement was lost after agreement within the preceding 26 weekly observations. Limited coverage overrides a broad-support conclusion.',
+        'Forming means W/M agree but the running-broadly requirements are not met. Cooling means agreement was lost after agreement within the preceding 26 weekly observations. Limited coverage overrides a broad-support conclusion.',
         'History uses current recorded membership. Display window does not change current status. Flow scores are not measured investor inflows.']
     for row in sorted(result['rows'],key=lambda r:-r['aligned_streak'])[:8]:
         c=row['current']
@@ -258,7 +278,7 @@ def load_context(req, db):
     payload = rows[0]['payload']
     if isinstance(payload,str): payload=json.loads(payload)
     published = str(rows[0].get('trade_date') or payload.get('date'))[:10]
-    payload = {**payload, 'requested_date': target or published, 'published_date': published}
+    payload = {**normalize_statuses(payload), 'requested_date': target or published, 'published_date': published}
     ids = [r['index_id'] for r in payload['rows']]
     revisions = db.execute('SELECT index_id,revision,computed_revision FROM km_custom_index_revisions WHERE index_id=ANY(%s) ORDER BY index_id',(ids,))
     if revisions != payload.get('revisions',[]) or any(r['revision'] != r['computed_revision'] for r in revisions):

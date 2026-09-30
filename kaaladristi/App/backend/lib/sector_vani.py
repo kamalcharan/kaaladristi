@@ -6,13 +6,13 @@ from datetime import date, timedelta
 from .market_structure_vani import number, single_flight, ReadingInProgress
 from .vani_cache import make_cache_key, get_cached, set_cached
 
-VERSION = 8
+VERSION = 9  # 9: longer-term 'Building' renamed 'Forming' (2026-09-30)
 CATEGORIES = {
     'broad': ['index', 'broad market index'], 'sectoral': ['sectoral index'],
     'thematic': ['thematic market index'], 'custom': ['custom'], 'overall': ['sectoral index', 'custom'],
 }
 QUESTIONS = {
-    'sector.leadership.building': 'Explain which baskets have W/M agreement but have not met the running-broadly requirements. Use the supplied missing requirements; do not call these newly emerging without transition evidence.',
+    'sector.leadership.building': 'Explain which baskets are Forming: W/M agreement, but the running-broadly requirements are not met. Call the group Forming, never Building (Building is a current-flow state). Use the supplied missing requirements; do not call these newly emerging without transition evidence.',
     'sector.leadership.cooling': 'Explain baskets whose weekly/monthly agreement has weakened. Do not equate this with investor selling or predict decline.',
     'sector.leadership.persistence': 'Explain the completed-week agreement runs and interruptions in the displayed history. Distinguish current run from total aligned observations.',
     'sector.leadership.support': 'Explain Stage 2 Leaders and Watch counts, classified coverage and limited samples. Do not infer concentration from these counts.',

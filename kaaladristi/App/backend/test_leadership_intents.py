@@ -11,7 +11,7 @@ def snapshot():
         return dict(name=name,status=status,aligned_streak=4,alignment_history=[],
                     current=dict(weekly=True,monthly=True,eligible=4,total=5,leaders=2,watch=1,leaders_pct=None),flow={'state':flow})
     return dict(snapshot='published',date='2026-09-11',months=6,
-                rows=[row('Building example','Building','Building'),row('Cooling example','Cooling','Strong'),
+                rows=[row('Forming example','Forming','Building'),row('Cooling example','Cooling','Strong'),
                       row('Running example','Running broadly','Fading')])
 
 
@@ -25,14 +25,14 @@ class LeadershipIntents(unittest.TestCase):
 
     def test_questions_select_relevant_examples_and_missing_requirements(self):
         facts=' '.join(intent_facts(snapshot(),'sector.leadership.building'))
-        self.assertIn('Building example',facts)
+        self.assertIn('Forming example',facts)
         self.assertNotIn('Cooling example',facts)
         self.assertIn('fewer than 8 completed aligned weeks',facts)
         self.assertIn('fewer than 5 classified stocks',facts)
         flow=' '.join(intent_facts(snapshot(),'sector.leadership.flow'))
         self.assertIn('Cooling example',flow)
         self.assertIn('Running example',flow)
-        self.assertNotIn('Building example',flow)
+        self.assertNotIn('Forming example',flow)
 
     def test_all_intents_use_snapshot_and_separate_cache_keys(self):
         saved={};calls=[];logs=[]

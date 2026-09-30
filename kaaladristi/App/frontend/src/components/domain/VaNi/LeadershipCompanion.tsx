@@ -16,7 +16,7 @@ import '@/styles/vaniStories.css';
 
 const questions = {
  'sector.leadership':'Which baskets are holding strength?',
- 'sector.leadership.building':'Which baskets are building strength?',
+ 'sector.leadership.building':'Which baskets are forming strength?',
  'sector.leadership.cooling':'Where is strength weakening?',
  'sector.leadership.persistence':'How long has the strength lasted?',
  'sector.leadership.support':'Is strength supported across stocks?',
@@ -28,7 +28,7 @@ const questions = {
 const ACTIVE_INTENTS = new Set(['sector.leadership','sector.leadership.building','sector.leadership.cooling','sector.leadership.flow']);
 type Intent=keyof typeof questions;
 function examples(rows:LeadershipRow[],intent:Intent) {
- const selected=rows.filter(r=>intent.endsWith('.building')?r.status==='Building':intent.endsWith('.cooling')?r.status==='Cooling':intent.endsWith('.flow')?
+ const selected=rows.filter(r=>intent.endsWith('.building')?r.status==='Forming':intent.endsWith('.cooling')?r.status==='Cooling':intent.endsWith('.flow')?
   (r.status==='Running broadly'&&['Fading','Outflow'].includes(r.flow?.state??''))||(r.status==='Cooling'&&['Strong','Building'].includes(r.flow?.state??'')):true);
  return [...selected].sort((a,b)=>b.aligned_streak-a.aligned_streak||a.name.localeCompare(b.name));
 }

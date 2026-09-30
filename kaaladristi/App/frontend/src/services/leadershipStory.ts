@@ -4,7 +4,7 @@ import type {LeadershipRow} from './sectorLeadership';
 export function leadershipStory(rows:LeadershipRow[],intent:string) {
  const ordered=[...rows].sort((a,b)=>b.aligned_streak-a.aligned_streak||a.name.localeCompare(b.name));
  const running=ordered.filter(r=>r.status==='Running broadly');
- const building=ordered.filter(r=>r.status==='Building');
+ const building=ordered.filter(r=>r.status==='Forming');
  const cooling=ordered.filter(r=>r.status==='Cooling');
  let focus:LeadershipRow|undefined;
  let title='There is not enough evidence for this reading.';
@@ -36,7 +36,7 @@ export function leadershipStory(rows:LeadershipRow[],intent:string) {
    title='Agreement is present; the supporting evidence is still incomplete.';
    meaning=`${focus.name} has weekly/monthly agreement, but still needs ${gaps.join(' and ')||'the remaining persistence and support requirements'} to meet Running broadly criteria. This does not establish when its strength first appeared.`;
    next='Inspect what is holding the classification back: agreement history or constituent support.';
-  } else {title='No baskets are currently classified as Building.';meaning='Other groups describe the evidence in this selection; an empty Building group is not a forecast.';next='Compare the other longer-term groups in the table.';}
+  } else {title='No baskets are currently classified as Forming.';meaning='Other groups describe the evidence in this selection; an empty Forming group is not a forecast.';next='Compare the other longer-term groups in the table.';}
  } else if(kind==='cooling') {
   focus=cooling[0];tone='amber';
   if(focus) {title='Longer-term agreement is no longer intact.';meaning=`${focus.name} has lost weekly/monthly agreement after recent agreement. This identifies a change in structure, not the cause or a prediction of decline.`;next='Inspect the weekly and monthly readings to see which part is no longer aligned.';}
@@ -67,7 +67,7 @@ export function leadershipStory(rows:LeadershipRow[],intent:string) {
   next=`Start with ${focus.name} and inspect the condition it has not met.`;
  } else if(cooling.length) {
   focus=cooling[0];tone='amber';title='Recent agreement has weakened in part of this selection.';
-  meaning='Cooling baskets have lost weekly/monthly agreement. No basket here currently meets the Running broadly or Building criteria.';
+  meaning='Cooling baskets have lost weekly/monthly agreement. No basket here currently meets the Running broadly or Forming criteria.';
   next='Inspect which horizon has lost agreement and compare constituent participation.';
  }
  if(kind==='leadership'&&!running.length&&!building.length&&!cooling.length&&ordered.some(r=>r.status==='Not aligned')) {

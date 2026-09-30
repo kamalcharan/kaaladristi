@@ -4,14 +4,16 @@
 def intent_facts(ctx, intent):
     rows = ctx.get('rows', [])
     counts = {s: sum(r['status'] == s for r in rows) for s in
-              ('Running broadly', 'Building', 'Cooling', 'Limited coverage', 'Not aligned', 'Unavailable')}
+              ('Running broadly', 'Forming', 'Cooling', 'Limited coverage', 'Not aligned', 'Unavailable')}
     facts = [f"Closing session {ctx['date']}; display window {ctx['months']} months; {len(rows)} baskets. Groups: {counts}.",
              'W=weekly, M=monthly. Completed periods against NIFTY 500. Missing readings are not negative readings.',
              'Stage counts use current recorded membership. Daily MagicRS is not included. Current flow scores do not measure net cash inflows.',
-             'Running broadly requires both W/M aligned for 8 completed weeks, 60% Leaders among classified stocks, 5 classified and 80% coverage. Building has agreement but fails at least one of these requirements. Cooling lost agreement after recent agreement.']
+             'Running broadly requires both W/M aligned for 8 completed weeks, 60% Leaders among classified stocks, 5 classified and 80% coverage. Forming has agreement but fails at least one of these requirements. Forming is a longer-term group; current-flow Building is a separate short-term state. Cooling lost agreement after recent agreement.']
     suffix = intent.removeprefix('sector.leadership').lstrip('.')
-    if suffix in ('building', 'cooling'):
-        rows = [r for r in rows if r['status'] == suffix.title()]
+    # The intent id keeps 'building' (ids are addresses); the group is 'Forming'.
+    group = {'building': 'Forming', 'cooling': 'Cooling'}.get(suffix)
+    if group:
+        rows = [r for r in rows if r['status'] == group]
     elif suffix == 'flow':
         rows = [r for r in rows if
                 (r['status'] == 'Running broadly' and r.get('flow', {}).get('state') in ('Fading', 'Outflow')) or

@@ -51,8 +51,8 @@ class LeadershipTests(unittest.TestCase):
 
     def test_classification_boundaries_and_distinct_current_flow(self):
         self.assertEqual(self.classification()['rows'][0]['status'],'Running broadly')
-        self.assertEqual(self.classification(weeks=7)['rows'][0]['status'],'Building')
-        self.assertEqual(self.classification(leaders=2)['rows'][0]['status'],'Building')
+        self.assertEqual(self.classification(weeks=7)['rows'][0]['status'],'Forming')
+        self.assertEqual(self.classification(leaders=2)['rows'][0]['status'],'Forming')
         self.assertEqual(self.classification(total=7)['rows'][0]['status'],'Limited coverage')
         cooling=self.classification(current=False)['rows'][0]
         self.assertEqual(cooling['status'],'Cooling')
@@ -101,6 +101,22 @@ class LeadershipTests(unittest.TestCase):
         self.assertEqual(result['published_date'],'2026-09-29')
         self.assertEqual(result['snapshot'],source['snapshot'])
         self.assertNotIn('requested_date',source)  # the stored payload is not mutated
+
+    def test_legacy_building_snapshots_read_as_forming(self):
+        # Published before the 2026-09-30 rename; renamed on read so no date
+        # has to be re-published. Current-flow 'Building' must survive.
+        source=window_snapshot(self.classification(weeks=7),6)
+        self.assertEqual(source['rows'][0]['status'],'Forming')
+        legacy={**source,'rows':[{**source['rows'][0],'status':'Building','flow':{'state':'Building'}}],
+                'counts':{'Building':1}}
+        class DB:
+            def execute(self,sql,args=None):
+                return [{'payload':legacy,'trade_date':'2026-09-29'}] if 'SELECT s.payload' in sql else []
+        result=load_context(SimpleNamespace(date='2026-09-29',sector_category='custom',leadership_months=6),DB())
+        self.assertEqual(result['rows'][0]['status'],'Forming')
+        self.assertEqual(result['counts'],{'Forming':1})
+        self.assertEqual(result['rows'][0]['flow']['state'],'Building')
+        self.assertEqual(legacy['rows'][0]['status'],'Building')  # stored payload untouched
 
     def test_unpublished_or_changed_membership_never_falls_back_to_compute(self):
         class DB:

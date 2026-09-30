@@ -1528,7 +1528,11 @@ one score** — several prompts say so explicitly, and the tests assert it.
 Longer-Term groups are explicit research rules, not a ranking:
 *Running broadly* (W/M agreement ≥ 8 completed weekly observations, ≥ 60%
 Stage 2 Leaders among classified constituents, ≥ 5 classified, ≥ 80% membership
-coverage) · *Building* (agreement, requirements unmet) · *Cooling* (agreement
+coverage) · *Forming* (agreement, requirements unmet — **renamed from
+"Building" 2026-09-30** because current flow has its own `Building` state and
+one row read "Building" twice with two meanings; older snapshots are renamed
+on read by `sector_leadership.normalize_statuses`, the intent id
+`sector.leadership.building` is kept as an address, `sector_vani.VERSION` 8→9) · *Cooling* (agreement
 lost within the preceding 26 weekly observations) · *Limited coverage* ·
 *Unavailable* · *Not aligned*. A measured Leader share below 60% is a
 **shortfall, not missing data**.
