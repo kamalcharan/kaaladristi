@@ -722,6 +722,18 @@ OpenRouter free pools are shared and 429 upstream; that is why it is the
 backup, not the primary. A 429 parks the provider for the provider's own
 `retry-after` / `x-ratelimit-reset-*`, floored at `_COOLDOWN`.
 
+**The filing reader does NO arithmetic (owner, 2026-10-01).** A Groq read
+turned "USD 1.2 billion" into "INR 100,000 crore" (10× too much) and called
+the order "over twice the market cap", at confidence 100%. The model now
+returns only impact (positive/negative/neutral/unclear), headline, reasoning,
+the verbatim quote, confidence and role. `magnitude`, `amount_*` and
+`relative_*` are no longer asked for (written NULL), the market cap is no
+longer in the prompt context, and the prompt's rule 3 forbids conversions,
+percentages, ratios and comparisons — numbers appear exactly as the filing
+writes them. Size agreement in the checks panel counts only reads that still
+carry a size (`compared_magnitude`). ⚠ Never add a computed number back into
+the model's output: if a size is wanted, compute it in code from stored data.
+
 Filing reads go first: the checks runner (API thread) reads one pending
 filing each turn before taking a Qwen history check, because both share one
 Qwen slot and an 800-row check queue starved the current stream for days.

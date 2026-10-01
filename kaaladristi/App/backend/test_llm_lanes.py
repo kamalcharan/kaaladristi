@@ -22,8 +22,7 @@ ENV = {
     'LLM_OPENROUTER_MODEL': 'meta/other-70b:free',
     'LLM_ROUTE_HIGH': 'groq,openrouter,qwen',
 }
-VERDICT = ('{"impact":"positive","magnitude":"notable","headline":"h","reasoning":"r",'
-           '"evidence_quote":"q","confidence":0.7}')
+VERDICT = '{"impact":"positive","headline":"h","reasoning":"r","evidence_quote":"q","confidence":0.7}'
 
 
 class Resp:
@@ -156,12 +155,11 @@ class LaneTests(unittest.TestCase):
         self.assertEqual(ll._retry_after(type('R', (), {'headers': {'x-ratelimit-reset-tokens': '2m3.5s'}})()), 124)
 
     def test_a_near_miss_verdict_is_repaired_not_refused(self):
-        sloppy = ('{"impact":"positive","magnitude":"notable","headline":"h","reasoning":"r",'
-                  '"confidence":"0.8","amount_value":"Rs 1,200.5 crore","relative_pct":"n/a"}')
+        sloppy = '{"impact":"positive","headline":"h","reasoning":"r","confidence":"0.8"}'
         post = FakePost({'groq.example': Resp(content=sloppy)})
         r = parse(ll.RoutedClient(['groq'], LocalStub, 500, 16384, post=post))
         v = r.parsed_output
-        self.assertEqual((v.confidence, v.amount_value, v.relative_pct, v.evidence_quote), (0.8, 1200.5, None, ''))
+        self.assertEqual((v.confidence, v.evidence_quote, v.role), (0.8, '', None))
 
     def test_a_non_answer_still_fails(self):
         post = FakePost({'groq.example': Resp(content='{"impact": ["positive"]}')})

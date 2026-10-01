@@ -273,18 +273,18 @@ def triage(row: dict, doc: 'DocumentText') -> Optional[str]:
 # ── the verdict ──────────────────────────────────────────────────────────
 
 class FilingVerdict(BaseModel):
-    """What the model returns. Validated by the SDK before it reaches the DB."""
+    """What the model returns. Validated before it reaches the DB.
+
+    Owner, 2026-10-01: the model gives the DIRECTION and an explanation —
+    nothing it would have to calculate. A Groq read turned "USD 1.2 billion"
+    into "INR 100,000 crore" (ten times too much) and then called the order
+    "over twice the market cap". So there is no magnitude, no amount field, no
+    ratio: numbers appear only as the filing wrote them, in the quote."""
     impact: str = Field(description="positive | negative | neutral | unclear — impact on the COMPANY as the filing states it")
-    magnitude: str = Field(description="major | notable | minor | unknown — relative to the company's size when it can be judged")
-    headline: str = Field(description="One line: what happened, in plain words")
-    reasoning: str = Field(description="Two or three sentences: why this impact and magnitude")
+    headline: str = Field(description="One line: what happened, in plain words. Numbers exactly as written in the filing")
+    reasoning: str = Field(description="Two or three sentences: why this impact. Numbers exactly as written; no conversions, no percentages, no comparisons")
     evidence_quote: str = Field(description="The sentence or sentences from the document, verbatim, that the verdict rests on")
     confidence: float = Field(description="0 to 1")
-    amount_value: Optional[float] = Field(default=None, description="The stated number, if there is one")
-    amount_unit: Optional[str] = Field(default=None, description="INR_CR | PCT | SHARES")
-    amount_basis: Optional[str] = Field(default=None, description="What the number is: order_value, deal_value, stake_pct, issue_size, dividend_per_share, ...")
-    relative_to: Optional[str] = Field(default=None, description="mcap | revenue — when the amount was sized against a figure given in the context")
-    relative_pct: Optional[float] = Field(default=None, description="amount as a percentage of that figure")
     role: Optional[str] = Field(default=None, description="acquirer | target | promoter | non_promoter | new_client | repeat_client")
 
 
@@ -298,11 +298,11 @@ Your verdict is the impact on the COMPANY — its business, finances, ownership 
 Rules:
 1. Read the whole document before deciding. Filings are often formal letters; the substance may sit in an annexure or a table.
 2. impact: positive if the filing states something that strengthens the company (an order won, an acquisition that adds capacity or revenue, a credit-rating upgrade, a promoter buying); negative if it weakens it (an order cancelled, a regulatory action, a rating downgrade, insolvency, an auditor resigning over concerns, a key person leaving under a cloud); neutral for routine and procedural filings (ESOP allotments, record dates, scheduled appointments, formal compliance); unclear when the document genuinely does not say.
-3. magnitude: judge against the company's size using the market capitalisation and any revenue figure given in the context. A 50 crore order is major for a 300 crore company and minor for a 30,000 crore one. If no figure lets you judge, say unknown. When you can compute it, fill relative_to and relative_pct.
+3. NO ARITHMETIC. Write every number exactly as the filing writes it, in its own currency and unit ("USD 1.2 billion" stays "USD 1.2 billion", "Rs 45.6 crore" stays "Rs 45.6 crore"). Never convert currencies or units, never compute a percentage, a ratio or a total, and never compare an amount with the company's size, revenue or market value.
 4. role: say which side the company is on. "Acquisition" can mean the company is buying or being bought. An order can be from a new client or a repeat client. A stake change can be by a promoter or an outsider.
 5. evidence_quote must be VERBATIM from the document — the sentence(s) the verdict rests on. Never paraphrase inside the quote.
-6. Amounts in INR crore unless the document only gives another unit. Convert lakh to crore (100 lakh = 1 crore).
-7. If the document is unreadable, empty, or is not the filing the context describes, say impact unclear, magnitude unknown, confidence 0, and explain in reasoning.
+6. Do not judge how big the impact is. Say whether it is positive or negative and why, in the filing's own terms.
+7. If the document is unreadable, empty, or is not the filing the context describes, say impact unclear, confidence 0, and explain in reasoning.
 8. Be specific and short. The headline is one line a reader scans."""
 
 
@@ -645,8 +645,6 @@ def build_context(row: dict) -> str:
     ]
     if row.get('industry'):
         lines.append(f"Industry: {row['industry']}")
-    if row.get('mcap_cr'):
-        lines.append(f"Market capitalisation: INR {float(row['mcap_cr']):,.0f} crore")
     if row.get('summary_text'):
         lines.append(f"Exchange summary: {row['summary_text']}")
     return '\n'.join(lines)
@@ -907,18 +905,15 @@ def read_one(conn, row: dict, client, session, model: str = MODEL, backend: str 
             model = 'local:' + os.path.basename(str(served))[:80]
 
     impact = verdict.impact if verdict.impact in IMPACTS else 'unclear'
-    magnitude = verdict.magnitude if verdict.magnitude in MAGNITUDES else 'unknown'
-    relative_to = verdict.relative_to if verdict.relative_to in ('mcap', 'revenue') else None
     _finish(
         conn, read_id, 'done', None,
-        impact=impact, magnitude=magnitude,
+        impact=impact, magnitude=None,          # no size judgement: owner, 2026-10-01
         headline=(verdict.headline or '')[:300],
         reasoning=verdict.reasoning,
         evidence_quote=verdict.evidence_quote,
         confidence=max(0.0, min(1.0, float(verdict.confidence or 0))),
-        amount_value=verdict.amount_value, amount_unit=verdict.amount_unit,
-        amount_basis=verdict.amount_basis,
-        relative_to=relative_to, relative_pct=verdict.relative_pct,
+        amount_value=None, amount_unit=None, amount_basis=None,
+        relative_to=None, relative_pct=None,
         role=verdict.role,
         model=model, reader_version=READER_VERSION,
         read_source=read_source,

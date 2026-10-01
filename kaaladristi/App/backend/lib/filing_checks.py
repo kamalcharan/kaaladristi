@@ -252,17 +252,14 @@ def run_one(conn, check: dict, client) -> str:
         if served:
             model = 'local:' + os.path.basename(str(served))[:80]
     impact = verdict.impact if verdict.impact in fr.IMPACTS else 'unclear'
-    magnitude = verdict.magnitude if verdict.magnitude in fr.MAGNITUDES else 'unknown'
-    relative_to = verdict.relative_to if verdict.relative_to in ('mcap', 'revenue') else None
     _finish(
         conn, check['check_id'], 'done', None,
-        impact=impact, magnitude=magnitude,
+        impact=impact, magnitude=None,          # no size judgement: owner, 2026-10-01
         headline=(verdict.headline or '')[:300], reasoning=verdict.reasoning,
         evidence_quote=verdict.evidence_quote,
         confidence=max(0.0, min(1.0, float(verdict.confidence or 0))),
-        amount_value=verdict.amount_value, amount_unit=verdict.amount_unit,
-        amount_basis=verdict.amount_basis, relative_to=relative_to,
-        relative_pct=verdict.relative_pct, role=verdict.role,
+        amount_value=None, amount_unit=None, amount_basis=None, relative_to=None,
+        relative_pct=None, role=verdict.role,
         model=model, reader_version=fr.READER_VERSION,
         page_count=doc.page_count, pages_read=doc.pages_read,
         input_tokens=inp, output_tokens=out, cost_usd=fr._cost(model, inp, out),
@@ -519,17 +516,20 @@ def summary(conn) -> dict:
             cost += float(usd or 0)
         cur.execute("""
             SELECT event_type, count(*),
-                   sum(agree_impact::int), sum(agree_magnitude::int)
+                   sum(agree_impact::int), sum(agree_magnitude::int), count(agree_magnitude)
               FROM v_filing_read_agreement
              GROUP BY 1 ORDER BY 2 DESC, 1
         """)
-        by_type = [{'event_type': et or '?', 'n': int(n), 'impact': int(ai or 0), 'magnitude': int(am or 0)}
-                   for et, n, ai, am in cur.fetchall()]
+        # Size is compared only where BOTH reads judged one (reads before
+        # 2026-10-01); a newer read carries no magnitude, by design.
+        by_type = [{'event_type': et or '?', 'n': int(n), 'impact': int(ai or 0), 'magnitude': int(am or 0),
+                    'magnitude_n': int(mn or 0)}
+                   for et, n, ai, am, mn in cur.fetchall()]
         cur.execute("""
-            SELECT count(*), sum(agree_impact::int), sum(agree_magnitude::int)
+            SELECT count(*), sum(agree_impact::int), sum(agree_magnitude::int), count(agree_magnitude)
               FROM v_filing_read_agreement
         """)
-        n, ai, am = cur.fetchone()
+        n, ai, am, mn = cur.fetchone()
         cur.execute("""
             SELECT count(*) FROM km_filing_reads r
              WHERE r.status = 'done' AND r.model LIKE 'claude%%'   -- Haiku only: groq:/openrouter: reads are free lanes, not paid reads
@@ -542,6 +542,7 @@ def summary(conn) -> dict:
     conn.rollback()
     return {
         'compared': int(n or 0), 'agree_impact': int(ai or 0), 'agree_magnitude': int(am or 0),
+        'compared_magnitude': int(mn or 0),
         'by_type': by_type, 'queue': queue, 'cost_usd': round(cost, 4),
         'paid_reads_without_local_check': paid_unchecked,
         'paid_per_request': PAID_PER_REQUEST,

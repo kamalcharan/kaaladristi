@@ -195,7 +195,9 @@ export interface FilingCheckSummary {
   compared: number;
   agree_impact: number;
   agree_magnitude: number;
-  by_type: { event_type: string; n: number; impact: number; magnitude: number }[];
+  /** Reads compared on size — only those made before 2026-10-01 carry one. */
+  compared_magnitude?: number;
+  by_type: { event_type: string; n: number; impact: number; magnitude: number; magnitude_n?: number }[];
   queue: Record<string, Record<string, number>>;
   cost_usd: number;
   paid_reads_without_local_check: number;

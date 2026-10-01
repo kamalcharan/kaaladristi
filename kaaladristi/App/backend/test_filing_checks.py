@@ -356,10 +356,11 @@ class Checks(unittest.TestCase):
                       "FROM v_filing_read_agreement ORDER BY event_id")
             rows = c.fetchall()
         self.conn.rollback()
-        self.assertEqual(rows, [(h, 'positive', 'positive', True, False),
-                                (q, 'negative', 'negative', True, True)])
+        # A check made after 2026-10-01 judges no size, so size is not compared (NULL), never "agrees".
+        self.assertEqual(rows, [(h, 'positive', 'positive', True, None),
+                                (q, 'negative', 'negative', True, None)])
         s = fc.summary(self.conn)
-        self.assertEqual((s['compared'], s['agree_impact'], s['agree_magnitude']), (2, 2, 1))
+        self.assertEqual((s['compared'], s['agree_impact'], s['compared_magnitude']), (2, 2, 0))
         self.assertEqual(s['by_type'][0]['event_type'], 'LARGE_ORDER')
 
     def test_restart_resets_a_failed_read_but_never_a_done_one(self):

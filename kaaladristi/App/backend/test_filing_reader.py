@@ -107,13 +107,11 @@ class _Messages:
     def __init__(self, verdict=None, fail=None):
         self.calls = []
         self.verdict = verdict or fr.FilingVerdict(
-            impact='positive', magnitude='major',
-            headline='Rs 134 crore transmission-tower order from BHEL, the largest to date',
-            reasoning='A new-client order equal to a large share of annual revenue.',
+            impact='positive',
+            headline='Rs. 133.98 crore transmission-tower order from BHEL, the largest to date',
+            reasoning='A new-client order, the largest the company has received.',
             evidence_quote='the Company has received a purchase order worth Rs. 133.98 crore',
-            confidence=0.86, amount_value=133.98, amount_unit='INR_CR',
-            amount_basis='order_value', relative_to='mcap', relative_pct=22.3,
-            role='new_client')
+            confidence=0.86, role='new_client')
         self.fail = fail
 
     def parse(self, **kw):
@@ -165,7 +163,8 @@ class Extraction(unittest.TestCase):
         msgs = fr.build_messages({'company_name': 'X', 'family': 'SPARK', 'mcap_cr': 600}, doc, None)
         body = msgs[0]['content'][0]['text']
         self.assertIn('133.98 crore', body)
-        self.assertIn('Market capitalisation: INR 600 crore', body)
+        # The market cap is NOT given to the model: it invites a comparison (a ratio) we refuse.
+        self.assertNotIn('Market capitalisation', body)
         self.assertEqual(len(msgs[0]['content']), 1)
 
     def test_messages_pdf_route_attaches_the_document(self):
@@ -263,11 +262,10 @@ class _Post:
         return m
 
 
-VERDICT_JSON = ('{"impact":"positive","magnitude":"major","headline":"Rs 134 crore order from BHEL",'
-                '"reasoning":"A new-client order that is large against the market cap.",'
+VERDICT_JSON = ('{"impact":"positive","headline":"Rs. 133.98 crore order from BHEL",'
+                '"reasoning":"A new-client order, the largest the company has received.",'
                 '"evidence_quote":"the Company has received a purchase order worth Rs. 133.98 crore",'
-                '"confidence":0.8,"amount_value":133.98,"amount_unit":"INR_CR","amount_basis":"order_value",'
-                '"relative_to":"mcap","relative_pct":22.3,"role":"new_client"}')
+                '"confidence":0.8,"role":"new_client"}')
 
 
 class LocalBackend(unittest.TestCase):
@@ -280,7 +278,13 @@ class LocalBackend(unittest.TestCase):
                                      messages=fr.build_messages({'company_name': 'HEC'}, doc, None),
                                      output_format=fr.FilingVerdict)
         self.assertEqual(resp.parsed_output.impact, 'positive')
-        self.assertEqual(resp.parsed_output.amount_value, 133.98)
+        self.assertEqual(resp.parsed_output.role, 'new_client')
+        self.assertIn('NO ARITHMETIC', fr.SYSTEM_PROMPT)
+        self.assertIn('Never convert', fr.SYSTEM_PROMPT)
+        # No arithmetic fields at all (owner, 2026-10-01): the model cannot convert what it is not asked for.
+        schema_props = fr.FilingVerdict.model_json_schema()['properties']
+        for gone in ('magnitude', 'amount_value', 'amount_unit', 'relative_to', 'relative_pct'):
+            self.assertNotIn(gone, schema_props)
         self.assertEqual((resp.usage.input_tokens, resp.usage.output_tokens), (3100, 290))
         call = post.calls[0]
         self.assertEqual(call['url'], 'http://llm:8080/v1/chat/completions')
@@ -308,7 +312,7 @@ class LocalBackend(unittest.TestCase):
             doc = fr.DocumentText('x', 1, 1, 1, False)
             resp = client.messages.parse(system='s', messages=fr.build_messages({}, doc, None),
                                          output_format=fr.FilingVerdict)
-            self.assertEqual(resp.parsed_output.magnitude, 'major')
+            self.assertEqual(resp.parsed_output.impact, 'positive')
 
     def test_the_local_backend_refuses_a_pdf_as_images(self):
         client = fr.LocalClient('http://llm:8080/v1', 'q', post=_Post(VERDICT_JSON))
@@ -697,7 +701,7 @@ class Reads(unittest.TestCase):
         stats = fr.read_pending(self.conn, session=session, client=client)
         self.assertEqual((stats['read'], stats['done']), (1, 1))
         r = self._rows()['hec']
-        self.assertEqual((r['status'], r['impact'], r['magnitude'], r['source']), ('done', 'positive', 'major', 'text'))
+        self.assertEqual((r['status'], r['impact'], r['magnitude'], r['source']), ('done', 'positive', None, 'text'))
         self.assertIn('133.98 crore', r['quote'])
         self.assertEqual(r['input_tokens'], 1200)
         p_in, p_out = fr.PRICES[fr.MODEL]          # priced at the model that ran, not a remembered rate
@@ -709,7 +713,7 @@ class Reads(unittest.TestCase):
         self.assertEqual(call['model'], fr.MODEL)
         self.assertIs(call['output_format'], fr.FilingVerdict)
         self.assertEqual(call['system'], fr.SYSTEM_PROMPT)
-        self.assertIn('Market capitalisation: INR 600 crore', call['messages'][0]['content'][0]['text'])
+        self.assertNotIn('Market capitalisation', call['messages'][0]['content'][0]['text'])   # no size to compare against
         self.assertEqual(fr.status_counts(self.conn)['done'], 1)
 
     def test_a_scanned_pdf_goes_the_pdf_route_and_says_so(self):
@@ -886,11 +890,11 @@ class Reads(unittest.TestCase):
     def test_an_off_vocabulary_verdict_never_reaches_the_check_constraint(self):
         self._event('hec', '2026-09-28 10:00+05:30')
         fr.enqueue_pending(self.conn)
-        bad = fr.FilingVerdict(impact='bullish', magnitude='huge', headline='h', reasoning='r',
-                               evidence_quote='q', confidence=1.7, relative_to='sales')
+        bad = fr.FilingVerdict(impact='bullish', headline='h', reasoning='r',
+                               evidence_quote='q', confidence=1.7)
         fr.read_pending(self.conn, session=_Session({'http://x/a.pdf': _pdf([ORDER_TEXT])}), client=_Client(verdict=bad))
         r = self._rows()['hec']
-        self.assertEqual((r['status'], r['impact'], r['magnitude']), ('done', 'unclear', 'unknown'))
+        self.assertEqual((r['status'], r['impact'], r['magnitude']), ('done', 'unclear', None))
 
     def test_budget_stops_the_run(self):
         for i in range(3):

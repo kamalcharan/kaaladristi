@@ -120,7 +120,8 @@ export default function FilingChecksPanel() {
             impact {data.agree_impact} of {data.compared} ({pct(data.agree_impact, data.compared)})
           </div>
           <div className="font-mono text-muted">
-            size {data.agree_magnitude} of {data.compared} ({pct(data.agree_magnitude, data.compared)})
+            size {data.agree_magnitude} of {data.compared_magnitude ?? data.compared} ({pct(data.agree_magnitude, data.compared_magnitude ?? data.compared)})
+            {' '}· older reads only
           </div>
         </div>
       </div>
@@ -163,7 +164,7 @@ export default function FilingChecksPanel() {
                 <td className={cn('py-1 text-right font-mono', t.impact === t.n ? 'text-risk-green' : t.impact * 2 < t.n ? 'text-risk-red' : 'text-primary')}>
                   {t.impact} of {t.n} · {pct(t.impact, t.n)}
                 </td>
-                <td className="py-1 text-right font-mono text-secondary">{t.magnitude} of {t.n} · {pct(t.magnitude, t.n)}</td>
+                <td className="py-1 text-right font-mono text-secondary">{t.magnitude} of {t.magnitude_n ?? t.n} · {pct(t.magnitude, t.magnitude_n ?? t.n)}</td>
               </tr>
             ))}
           </tbody>
