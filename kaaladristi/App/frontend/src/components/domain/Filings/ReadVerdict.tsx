@@ -22,7 +22,7 @@ import type { FilingRead, FilingReadCheck } from '@/services/filingReads';
 import { requestFilingChecks, restartFilingRead } from '@/services/pipeline2';
 import {
   BACKEND_LABELS, IMPACT_LABELS, MAGNITUDE_LABELS, READ_STATUS_LABELS,
-  backendOfModel, otherBackend, type CheckBackend,
+  backendOfModel, otherBackend, readerLabel, type CheckBackend,
 } from '@/constants/filingReads';
 
 const READS_KEY = ['filing-reads'];
@@ -85,7 +85,7 @@ function VerdictBlock({
         </blockquote>
       )}
       <div className="text-[10px] font-mono text-muted">
-        {model ? `${BACKEND_LABELS[backendOfModel(model)]} · ${model.replace(/^local:/, '')}` : ''}
+        {readerLabel(model)}
         {foot ? ` · ${foot}` : ''}
       </div>
     </div>

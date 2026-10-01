@@ -51,6 +51,27 @@ export function backendOfModel(model: string | null | undefined): CheckBackend {
   return (model ?? '').startsWith('local:') ? 'local' : 'anthropic';
 }
 
+/**
+ * Who actually read a filing, from the stored `model` label: 'local:…' is
+ * Qwen, 'claude-…' is Haiku, and a free hosted lane stores '<provider>:<model>'
+ * (lib/llm_lanes.py) — 'groq:gpt-oss-120b', 'openrouter:…'. Never reduce a
+ * lane read to "Haiku": that is the paid reader, and these cost nothing.
+ */
+const READER_NAMES: Record<string, string> = { local: 'Qwen', groq: 'Groq', openrouter: 'OpenRouter', gemini: 'Gemini' };
+
+export function readerLabel(model: string | null | undefined): string {
+  const m = model ?? '';
+  if (!m) return '';
+  if (m.startsWith('claude')) return `Haiku · ${m}`;
+  const i = m.indexOf(':');
+  if (i > 0) {
+    const p = m.slice(0, i);
+    const name = READER_NAMES[p] ?? p.charAt(0).toUpperCase() + p.slice(1);
+    return `${name} · ${m.slice(i + 1)}`;
+  }
+  return m;
+}
+
 /** The backend that would give a SECOND opinion on a read by `model`. */
 export function otherBackend(model: string | null | undefined): CheckBackend {
   return backendOfModel(model) === 'local' ? 'anthropic' : 'local';
