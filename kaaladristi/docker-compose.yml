@@ -51,6 +51,7 @@ services:
       FILING_READ_LOCAL_CTX: "${FILING_READ_LOCAL_CTX:-}"
       FILING_READ_MAX_PER_PASS: "${FILING_READ_MAX_PER_PASS:-300}"
       FILING_READ_HIGH_DAYS: "${FILING_READ_HIGH_DAYS:-}"
+      FILING_READ_BACKLOG_IN_API: "${FILING_READ_BACKLOG_IN_API:-}"
       # LLM lanes (lib/llm_lanes.py): which model serves which priority.
       # Every route left empty means Qwen. Groq / OpenRouter are passed here
       # by name; a third provider needs its four LLM_<NAME>_* lines added too.

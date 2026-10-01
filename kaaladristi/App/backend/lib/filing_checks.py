@@ -304,9 +304,14 @@ def current_reader(conn):
     ctx = {}
 
     def _read(c):
-        # CURRENT filings only. The old backlog stays with the worker's
-        # ingest passes; owner, 2026-10-01: Qwen was "in a loop" on it here.
+        # Current filings first, always. Then — owner, 2026-10-01 ("lets do A
+        # and B") — the older backlog, when nothing current is waiting. It goes
+        # down the MEDIUM route (LLM_ROUTE_MEDIUM), so where it is read is an
+        # .env decision, not this thread's. FILING_READ_BACKLOG_IN_API=0 puts
+        # the backlog back on the worker's ingest passes only.
         row = fr._claim_next(c, retry_failed=True, pass_started=started, newer_than_days=fr.HIGH_DAYS)
+        if row is None and BACKLOG_IN_API:
+            row = fr._claim_next(c, retry_failed=True, pass_started=started)
         if row is None:
             return None
         if 'session' not in ctx:
@@ -490,10 +495,14 @@ def pending_count(conn) -> int:
         return int(cur.fetchone()[0])
 
 
+BACKLOG_IN_API = (os.getenv('FILING_READ_BACKLOG_IN_API') or '1').strip().lower() not in ('0', 'false', 'off', 'no')
+
+
 def pending_reads(conn, current_only: bool = False) -> int:
     """Filing reads waiting. current_only: just the ones the API runner takes
-    (disseminated within FILING_READ_HIGH_DAYS); the older backlog is the
-    worker's, during its scheduled passes."""
+    (disseminated within FILING_READ_HIGH_DAYS). Without it, every read the
+    runner can take — the backlog too, unless FILING_READ_BACKLOG_IN_API=0.
+    Failed rows under the attempt cap count: they are retried."""
     with conn.cursor() as cur:
         if current_only:
             cur.execute("""
@@ -502,7 +511,9 @@ def pending_reads(conn, current_only: bool = False) -> int:
                    AND e.disseminated_at >= now() - make_interval(secs => %s)
             """, (fr.MAX_ATTEMPTS, fr.HIGH_DAYS * 86400))
         else:
-            cur.execute("SELECT count(*) FROM km_filing_reads WHERE status = 'pending'")
+            cur.execute("SELECT count(*) FROM km_filing_reads "
+                        "WHERE status = 'pending' OR (status = 'failed' AND attempts < %s)",
+                        (fr.MAX_ATTEMPTS,))
         n = int(cur.fetchone()[0])
     conn.rollback()
     return n

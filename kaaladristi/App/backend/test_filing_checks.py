@@ -257,6 +257,41 @@ class Checks(unittest.TestCase):
         self.assertEqual(order, ['read', 'read', 'check'])
         self.assertEqual((stats['reads'], stats['done']), (2, 1))
 
+    def test_the_runner_reads_current_first_then_the_backlog(self):
+        # Owner 2026-10-01, "lets do A and B": the backlog drains in the API
+        # thread too — but only after every current filing is read.
+        from unittest import mock
+        old = self._read('OLDFILING')
+        new = self._read('NEWFILING')
+        with self.conn.cursor() as c:
+            c.execute("UPDATE km_filing_reads SET status='pending', finished_at=NULL")
+            c.execute("UPDATE km_corporate_events SET disseminated_at = now() - interval '2 hours' WHERE id=%s", (new,))
+        self.conn.commit()
+        order = []
+
+        def read_one(c, row, client, session):
+            order.append(row['event_id'])
+            fr._finish(c, row['read_id'], 'skipped', None)
+            return 'done'
+        with mock.patch.object(fr, 'read_one', read_one), \
+             mock.patch.object(fr, 'client_for', lambda row: None), \
+             mock.patch.object(fr, 'backend_missing', lambda *a: None), \
+             mock.patch('pipeline.utils.nse_session.NseSession', lambda: None):
+            reader = fc.current_reader(self.conn)
+            for _ in range(3):
+                reader(self.conn)
+            self.assertEqual(order, [new, old])
+            # switched off, the backlog is left to the worker
+            with self.conn.cursor() as c:
+                c.execute("UPDATE km_filing_reads SET status='pending', attempts=0")
+            self.conn.commit()
+            order.clear()
+            with mock.patch.object(fc, 'BACKLOG_IN_API', False):
+                reader = fc.current_reader(self.conn)
+                while reader(self.conn):
+                    pass
+            self.assertEqual(order, [new])
+
     def test_a_paid_check_is_priced(self):
         q = self._read('Q1')
         fc.request_checks(self.conn, [q], 'anthropic', None)

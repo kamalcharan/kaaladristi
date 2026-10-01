@@ -764,6 +764,12 @@ the model's output: if a size is wanted, compute it in code from stored data.
 Filing reads go first: the checks runner (API thread) reads one pending
 filing each turn before taking a Qwen history check, because both share one
 Qwen slot and an 800-row check queue starved the current stream for days.
+**Backlog in the API thread (owner, 2026-10-01, "lets do A and B").** When no
+current filing is waiting, the same runner now reads the OLD backlog too
+(`FILING_READ_BACKLOG_IN_API`, default on; 0 = worker passes only), and
+`LLM_ROUTE_MEDIUM=groq,openrouter,qwen` sends it down the free lanes. 627 rows
+were waiting (444 pending + 183 failed on 29 Sep's Qwen outage) at ~25 a day on
+Qwen alone. Set medium back to `qwen` once the backlog is read.
 
 ### ⚠ The filing reader runs INSIDE the pipeline worker — a long pass blocks every job behind it (2026-09-29)
 

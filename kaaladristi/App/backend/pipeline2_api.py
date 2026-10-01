@@ -7612,7 +7612,7 @@ def admin_run_filing_checks(caller_id: str = Depends(_get_current_user_id)):
         from lib import filing_reader as _fr
         released = _fr.release_stale_reading(conn)
         pending = _filing_checks.pending_count(conn)
-        reads = _filing_checks.pending_reads(conn, current_only=True)
+        reads = _filing_checks.pending_reads(conn, current_only=not _filing_checks.BACKLOG_IN_API)
     finally:
         conn.close()
     work = pending or reads
