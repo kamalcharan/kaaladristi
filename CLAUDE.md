@@ -711,7 +711,16 @@ was refused on purpose (the deploy `.env` also carries frontend/PostgREST
 keys that would change how the backend connects). ⚠ Only public text
 (filings, news) may go down a lane: free tiers may log it.
 `/internal/health` shows `llm_lanes` (routes and parked providers, never a
-URL or key). `test_llm_lanes.py`.
+URL or key). `test_llm_lanes.py`. **Live 2026-10-01:** Groq
+`openai/gpt-oss-120b` (free tier 8,000 tokens/MINUTE, 1,000 requests/day) and
+OpenRouter `nvidia/nemotron-3-super-120b-a12b:free` both return valid verdicts.
+⚠ gpt-oss is a reasoning model: without `LLM_GROQ_REASONING=low` it spent the
+whole reply on reasoning and answered `""` — keep `_REASONING=low` and
+`_MAX_TOKENS=2000`. ⚠ Free model lists change (llama-3.3-70b was gone from both
+providers): a 404 naming the URL is a retired MODEL — list `/models` first.
+OpenRouter free pools are shared and 429 upstream; that is why it is the
+backup, not the primary. A 429 parks the provider for the provider's own
+`retry-after` / `x-ratelimit-reset-*`, floored at `_COOLDOWN`.
 
 Filing reads go first: the checks runner (API thread) reads one pending
 filing each turn before taking a Qwen history check, because both share one
