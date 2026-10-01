@@ -207,11 +207,12 @@ async def lifespan(app: FastAPI):
             _c = _conn()
             try:
                 _n = _fc.pending_count(_c)
+                _r = _fc.pending_reads(_c)
             finally:
                 _c.close()
-            if _n:
+            if _n or _r:
                 _fc.ensure_runner(_conn)
-                log.info(f'filing checks: resuming {_n} pending')
+                log.info(f'filing checks: resuming {_n} checks, {_r} filing reads first')
         except Exception as e:
             log.warning(f'filing checks: could not resume pending rows: {e}')
 

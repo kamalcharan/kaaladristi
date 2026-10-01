@@ -183,6 +183,29 @@ class Checks(unittest.TestCase):
         self.assertIn('Page two: value INR 120 crore.', sent)
         self.assertEqual(stub.calls[0]['model'], f'local:{fr.LOCAL_MODEL}')
 
+    def test_current_filings_are_read_before_history_checks(self):
+        # Owner 2026-10-01: "history is getting done, current is not analysed".
+        h = self._read('H1', model='claude-haiku-4-5')
+        fc.request_checks(self.conn, [h], 'local', None)
+        order, waiting = [], ['done', 'done']
+
+        def read_current(c):
+            if not waiting:
+                return None
+            order.append('read')
+            return waiting.pop(0)
+
+        stub = StubClient()
+        orig = stub.messages.parse
+
+        def parse(**kw):
+            order.append('check')
+            return orig(**kw)
+        stub.messages.parse = parse
+        stats = fc.run_pending(self.conn, clients={'local': stub}, read_current=read_current)
+        self.assertEqual(order, ['read', 'read', 'check'])
+        self.assertEqual((stats['reads'], stats['done']), (2, 1))
+
     def test_a_paid_check_is_priced(self):
         q = self._read('Q1')
         fc.request_checks(self.conn, [q], 'anthropic', None)

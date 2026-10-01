@@ -284,14 +284,50 @@ def requeue(conn, check_ids: list) -> int:
     return n
 
 
-def run_pending(conn, clients: Optional[dict] = None, max_seconds: float = 0) -> dict:
+def current_reader(conn):
+    """A callable that reads ONE pending filing (newest first) and returns its
+    status, or None when nothing is waiting. None when the reader cannot run.
+
+    Owner, 2026-10-01: "because history is getting done, current is not
+    analysed". The checks and the reader share one Qwen slot, and an 800-row
+    check backlog is two days of it. So the runner reads today's filings
+    first and fills the gaps with checks."""
+    if fr.backend_missing() or fr.schema_missing(conn):
+        return None
+    with conn.cursor() as cur:
+        cur.execute('SELECT now()')
+        started = cur.fetchone()[0]
+    conn.rollback()
+    ctx = {}
+
+    def _read(c):
+        row = fr._claim_next(c, retry_failed=True, pass_started=started)
+        if row is None:
+            return None
+        if 'client' not in ctx:
+            from pipeline.utils.nse_session import NseSession
+            ctx['client'], ctx['session'] = fr._client(), NseSession()
+        try:
+            return fr.read_one(c, row, ctx['client'], ctx['session'])
+        except Exception as e:
+            c.rollback()
+            log.exception('filing read %s crashed', row['read_id'])
+            fr._finish(c, row['read_id'], 'failed', f'reader: {e}')
+            return 'failed'
+    return _read
+
+
+def run_pending(conn, clients: Optional[dict] = None, max_seconds: float = 0,
+                read_current=None) -> dict:
     """Work the queue until it is empty (or the time budget is spent).
+    With `read_current`, every turn first reads one pending FILING (the
+    current stream) and only takes a check when no filing is waiting.
     `clients` maps backend → client, built lazily. A backend that cannot run
     (no key, no URL) fails its rows with that reason instead of retrying
     forever. A backend that stops ANSWERING mid-run (5 model errors in a
     row) is waited for: the streak's rows are requeued, the runner sleeps
     BACKOFF_SEC and carries on, up to BACKOFF_ROUNDS times."""
-    stats = {'done': 0, 'failed': 0, 'skipped_backend': 0, 'backoffs': 0}
+    stats = {'done': 0, 'failed': 0, 'skipped_backend': 0, 'backoffs': 0, 'reads': 0}
     clients = clients if clients is not None else {}
     release_stale_running(conn)
     t0 = time.monotonic()
@@ -314,6 +350,17 @@ def run_pending(conn, clients: Optional[dict] = None, max_seconds: float = 0) ->
         if max_seconds and time.monotonic() - t0 >= max_seconds:
             stats['stopped'] = f'time budget {int(max_seconds)}s reached'
             break
+        if read_current is not None:
+            r = read_current(conn)
+            if r is not None:
+                stats['reads'] += 1
+                if r == 'failed':                    # a dead server fails reads too
+                    streak += 1
+                elif r == 'done':
+                    streak, streak_ids = 0, []
+                if fr.REQUEST_DELAY_SEC:
+                    time.sleep(fr.REQUEST_DELAY_SEC)
+                continue
         check = claim_next(conn)
         if not check:
             break
@@ -369,7 +416,12 @@ def ensure_runner(conn_factory: Callable[[], object]) -> bool:
         conn = None
         try:
             conn = conn_factory()
-            _state['last'] = run_pending(conn)
+            try:
+                reader = current_reader(conn)
+            except Exception as e:                   # the checks still run without it
+                log.warning('filing checks: current reads not available: %s', e)
+                reader = None
+            _state['last'] = run_pending(conn, read_current=reader)
         except Exception as e:
             log.exception('filing check runner died')
             _state['error'] = str(e)[:300]
@@ -391,6 +443,14 @@ def pending_count(conn) -> int:
     with conn.cursor() as cur:
         cur.execute("SELECT count(*) FROM km_filing_read_checks WHERE status = 'pending'")
         return int(cur.fetchone()[0])
+
+
+def pending_reads(conn) -> int:
+    with conn.cursor() as cur:
+        cur.execute("SELECT count(*) FROM km_filing_reads WHERE status = 'pending'")
+        n = int(cur.fetchone()[0])
+    conn.rollback()
+    return n
 
 
 # ── the admin panel ──────────────────────────────────────────────────────
