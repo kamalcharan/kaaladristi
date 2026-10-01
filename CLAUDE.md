@@ -704,6 +704,9 @@ use the same calendar. The health grid shows an open week/month as `future`,
 not `missing`: before, the 19:30 and 21:30 sweeps queued a no-op weekly/monthly
 fix every night, and each stamp made `wg_journeys` read stale in the
 derivation check. `test_trading_period_bounds.py`.
+The scheduler also no longer queues a `daily_run` on an exchange holiday
+(`_is_holiday`, same calendar predicate): on 14 Sep 2026 it ran for a closed
+market, every step failed and the banner went red for a holiday.
 
 ### Nightly speed: job time limit + one-day rolling_metrics (2026-10-01)
 

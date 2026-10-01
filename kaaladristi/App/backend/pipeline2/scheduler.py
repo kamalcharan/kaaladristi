@@ -28,6 +28,17 @@ def _last_trading_day(today: date | None = None) -> date:
     return d
 
 
+def _is_holiday(cur, d: date) -> bool:
+    """An NSE weekday closure — the predicate of migration 228 and
+    trading_calendar.load_holidays."""
+    cur.execute(
+        "SELECT 1 FROM km_trading_calendar WHERE exchange = 'NSE' AND trade_date = %s "
+        "  AND (is_holiday OR status IN ('holiday', 'no_data', 'weekend')) LIMIT 1",
+        [str(d)],
+    )
+    return cur.fetchone() is not None
+
+
 def _enqueue_daily_run(dsn: str) -> None:
     """Insert a daily_run job for the last trading day."""
     target = _last_trading_day()
@@ -35,6 +46,13 @@ def _enqueue_daily_run(dsn: str) -> None:
     conn = psycopg2.connect(dsn)
     try:
         with conn.cursor() as cur:
+            # An exchange holiday has no bhavcopy. On 14 Sep 2026 the run went
+            # ahead anyway and every step failed, turning the banner red for a
+            # day the market was shut. km_trading_calendar knows (migration 228
+            # seeds the year; sync_nse_holidays.py keeps it current).
+            if _is_holiday(cur, target):
+                log.info(f'{target} is an exchange holiday — no daily_run')
+                return
             # Skip if an identical job is already queued or running.
             cur.execute(
                 "SELECT id FROM km_jobs "

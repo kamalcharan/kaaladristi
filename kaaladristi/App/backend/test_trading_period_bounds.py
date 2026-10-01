@@ -181,5 +181,39 @@ class HandlerCatchUpTests(unittest.TestCase):
         self.assertEqual((r.status, r.rows_affected), ('completed', 0))
 
 
+class SchedulerHolidayTests(unittest.TestCase):
+    """14 Sep 2026 (holiday): the 18:00 daily_run ran anyway and every step
+    failed. A holiday in km_trading_calendar now enqueues nothing."""
+
+    def _enqueue(self, holiday):
+        from pipeline2 import scheduler as s
+        sql = []
+
+        class Cur:
+            r = None
+            def __enter__(self): return self
+            def __exit__(self, *a): return False
+            def execute(self, q, p=None):
+                sql.append(q)
+                self.r = (1,) if ('km_trading_calendar' in q and holiday) else None
+            def fetchone(self): return self.r
+
+        class Conn:
+            c = Cur()
+            def cursor(self): return self.c
+            def commit(self): pass
+            def close(self): pass
+        with mock.patch.object(s.psycopg2, 'connect', lambda dsn: Conn()), \
+             mock.patch.object(s, '_last_trading_day', lambda: GANDHI):
+            s._enqueue_daily_run('dsn')
+        return any('INSERT INTO km_jobs' in q for q in sql)
+
+    def test_holiday_enqueues_nothing(self):
+        self.assertFalse(self._enqueue(True))
+
+    def test_trading_day_still_enqueues(self):
+        self.assertTrue(self._enqueue(False))
+
+
 if __name__ == '__main__':
     unittest.main()
