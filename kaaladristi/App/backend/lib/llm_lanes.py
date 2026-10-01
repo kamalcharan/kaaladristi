@@ -121,7 +121,34 @@ def park(name: str, seconds: int) -> None:
 # ── the hosted client: OpenAI-compatible, same surface as filing_reader's ─
 
 class RateLimited(Exception):
-    pass
+    def __init__(self, msg: str, retry_after: Optional[int] = None):
+        super().__init__(msg)
+        self.retry_after = retry_after
+
+
+def _retry_after(resp) -> Optional[int]:
+    """Seconds the provider asks us to wait, from its own headers."""
+    h = getattr(resp, 'headers', None) or {}
+    for key in ('retry-after', 'Retry-After', 'x-ratelimit-reset-tokens', 'x-ratelimit-reset-requests'):
+        v = h.get(key)
+        if not v:
+            continue
+        v = str(v).strip()
+        try:                                   # '7.66s', '2m59.56s', '12'
+            total, num = 0.0, ''
+            for ch in v:
+                if ch.isdigit() or ch == '.':
+                    num += ch
+                elif ch in 'hms' and num:
+                    total += float(num) * {'h': 3600, 'm': 60, 's': 1}[ch]
+                    num = ''
+            if num:
+                total += float(num)
+            if total > 0:
+                return int(total) + 1
+        except ValueError:
+            continue
+    return None
 
 
 class _Usage:
@@ -197,7 +224,11 @@ class HostedMessages:
                                    'Authorization': f"Bearer {cfg['key']}"})
         status = getattr(resp, 'status_code', 200)
         if status == 429:
-            raise RateLimited(f"{cfg['name']}: 429 rate limited")
+            try:
+                detail = resp.text[:200]
+            except Exception:
+                detail = ''
+            raise RateLimited(f"{cfg['name']}: 429 rate limited — {detail}", _retry_after(resp))
         if status >= 400:
             # The provider's own message ("model not found", "context too long")
             # is the diagnosis; a bare status code is not.
@@ -241,7 +272,9 @@ class _RoutedMessages:
             try:
                 resp = self._client(name).messages.parse(**kw)
             except RateLimited as e:
-                park(name, provider_config(name)['cooldown'])
+                # The provider's own wait wins when it says one; the configured
+                # cooldown is the floor for a 429 that names none.
+                park(name, max(provider_config(name)['cooldown'], e.retry_after or 0))
                 log.info('%s — parked, trying the next provider', e)
                 errors.append(str(e))
                 continue

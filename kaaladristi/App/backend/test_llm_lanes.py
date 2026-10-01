@@ -138,6 +138,16 @@ class LaneTests(unittest.TestCase):
             parse(ll.RoutedClient(ll.route('high'), LocalStub, 500, 16384, post=post))
         self.assertEqual(post.calls[0][1]['max_tokens'], 4000)
 
+    def test_a_429_waits_as_long_as_the_provider_asks(self):
+        r = Resp(429)
+        r.headers = {'retry-after': '600'}
+        post = FakePost({'groq.example': r, 'or.example': Resp(model='m:free')})
+        t0 = 1000.0
+        with mock.patch.object(ll, '_now', lambda: t0):
+            parse(ll.RoutedClient(ll.route('high'), LocalStub, 500, 16384, post=post))
+            self.assertEqual(ll._cooldown_until['groq'], t0 + 601)   # not the 60 s configured
+        self.assertEqual(ll._retry_after(type('R', (), {'headers': {'x-ratelimit-reset-tokens': '2m3.5s'}})()), 124)
+
     def test_describe_never_shows_a_key(self):
         self.assertNotIn('gk', repr(ll.describe()))
 
