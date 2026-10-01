@@ -30,6 +30,10 @@ class Resp:
     def __init__(self, status=200, model='big-70b', content=VERDICT):
         self.status_code, self._model, self._content = status, model, content
 
+    @property
+    def text(self):
+        return '{"error":{"message":"The model does not exist"}}' if self.status_code >= 400 else ''
+
     def raise_for_status(self):
         if self.status_code >= 400:
             raise RuntimeError(f'{self.status_code} error')
@@ -120,6 +124,7 @@ class LaneTests(unittest.TestCase):
                 parse(ll.RoutedClient(ll.route('high'), LocalStub, 500, 16384, post=post))
         self.assertIn('groq', str(e.exception))
         self.assertIn('openrouter', str(e.exception))
+        self.assertIn('does not exist', str(e.exception))     # the provider's message, not just a code
 
     def test_free_lanes_cost_nothing(self):
         self.assertEqual(fr._cost('groq:big-70b', 1000, 100), 0.0)

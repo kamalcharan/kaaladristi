@@ -191,8 +191,17 @@ class HostedMessages:
         resp = self._post(f"{cfg['url']}/chat/completions", json=body, timeout=cfg['timeout'],
                           headers={'Content-Type': 'application/json',
                                    'Authorization': f"Bearer {cfg['key']}"})
-        if getattr(resp, 'status_code', 200) == 429:
+        status = getattr(resp, 'status_code', 200)
+        if status == 429:
             raise RateLimited(f"{cfg['name']}: 429 rate limited")
+        if status >= 400:
+            # The provider's own message ("model not found", "context too long")
+            # is the diagnosis; a bare status code is not.
+            try:
+                detail = resp.text[:300]
+            except Exception:
+                detail = ''
+            raise RuntimeError(f"HTTP {status} from {cfg['name']} (model {cfg['model']}): {detail}")
         resp.raise_for_status()
         data = resp.json()
         content = (data.get('choices') or [{}])[0].get('message', {}).get('content') or ''
