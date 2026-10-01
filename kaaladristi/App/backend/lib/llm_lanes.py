@@ -22,7 +22,8 @@ the environment:
     LLM_GROQ_CTX=32000                       # optional, tokens (default 32000)
     LLM_GROQ_TIMEOUT=120                     # optional, seconds
     LLM_GROQ_COOLDOWN=120                    # optional, seconds skipped after a 429
-    LLM_GROQ_JSON=json_object                # optional: json_object (default) | json_schema
+    LLM_GROQ_JSON=json_object                # optional: json_object (default) | json_schema | none
+    LLM_GROQ_MAX_TOKENS=4000                 # optional: reply budget (reasoning models need more)
 
     LLM_ROUTE_HIGH=groq,openrouter,qwen      # today's work
     LLM_ROUTE_MEDIUM=qwen                    # backlog
@@ -78,6 +79,9 @@ def provider_config(name: str) -> Optional[dict]:
         'timeout': int(_env(f'LLM_{up}_TIMEOUT', '120')),
         'cooldown': int(_env(f'LLM_{up}_COOLDOWN', '120')),
         'json': _env(f'LLM_{up}_JSON', 'json_object').lower(),
+        # A reasoning model spends tokens thinking before it answers; the
+        # caller's budget (sized for Qwen with thinking off) can cut it off.
+        'max_tokens': int(_env(f'LLM_{up}_MAX_TOKENS', '0')),
     }
 
 
@@ -180,7 +184,7 @@ class HostedMessages:
                 {'role': 'system', 'content': system + '\n\n' + _schema_lines(schema)},
                 {'role': 'user', 'content': _user_text(messages)},
             ],
-            'max_tokens': self.max_tokens,
+            'max_tokens': cfg.get('max_tokens') or self.max_tokens,
             'temperature': 0,
         }
         if cfg['json'] == 'json_schema':

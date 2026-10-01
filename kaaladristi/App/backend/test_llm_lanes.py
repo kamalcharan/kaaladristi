@@ -100,6 +100,7 @@ class LaneTests(unittest.TestCase):
         self.assertEqual(body['model'], 'big-70b')
         self.assertNotIn('chat_template_kwargs', body)        # a Qwen-only flag; hosted APIs may reject it
         self.assertEqual(body['response_format'], {'type': 'json_object'})
+        self.assertEqual(body['max_tokens'], 500)                # the caller's budget when none is set
         self.assertEqual((r.label, local.called), ('groq:big-70b', 0))
         self.assertEqual(c.ctx_tokens, 16384)                  # smallest context in the route
 
@@ -130,6 +131,12 @@ class LaneTests(unittest.TestCase):
         self.assertEqual(fr._cost('groq:big-70b', 1000, 100), 0.0)
         self.assertEqual(fr._cost('local:Qwen3', 1000, 100), 0.0)
         self.assertIsNotNone(fr._cost('claude-haiku-4-5', 1000, 100))
+
+    def test_a_provider_can_raise_the_reply_budget(self):
+        post = FakePost({'groq.example': Resp()})
+        with mock.patch.dict(os.environ, {'LLM_GROQ_MAX_TOKENS': '4000'}):
+            parse(ll.RoutedClient(ll.route('high'), LocalStub, 500, 16384, post=post))
+        self.assertEqual(post.calls[0][1]['max_tokens'], 4000)
 
     def test_describe_never_shows_a_key(self):
         self.assertNotIn('gk', repr(ll.describe()))
