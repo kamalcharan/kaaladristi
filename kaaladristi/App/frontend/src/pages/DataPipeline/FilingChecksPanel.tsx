@@ -39,6 +39,11 @@ export default function FilingChecksPanel() {
   const count = (b: string, s: string) => q[b]?.[s] ?? 0;
   const pending = count('anthropic', 'pending') + count('local', 'pending');
   const running = data.runner.running;
+  // Current filings waiting, plus reads cut off mid-way (a restart). Run
+  // releases the stuck ones first, so either is work for the button.
+  const waitingReads = (data.current?.status.pending ?? 0)
+    + (data.running_now ?? []).filter((r) => r.where.startsWith('Interrupted')).length;
+  const work = pending + waitingReads;
 
   return (
     <div className="rounded-lg border border-kd-border/40 bg-kd-card p-3 space-y-3 text-xs">
@@ -68,16 +73,16 @@ export default function FilingChecksPanel() {
           <button
             type="button"
             onClick={() => run.mutate()}
-            disabled={run.isPending || running || pending === 0}
+            disabled={run.isPending || running || work === 0}
             className={cn(
               'inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded border text-[12px]',
               'bg-kd-elevated border-kd-border text-primary hover:border-[var(--accent)]/40',
               'disabled:opacity-50 disabled:cursor-not-allowed',
             )}
-            title="Drain the pending checks (after a restart, or a batch that stopped)"
+            title="Release stuck reads, then read waiting filings and drain pending checks"
           >
             <RefreshCw className={cn('w-3 h-3', running && 'animate-spin')} />
-            {data.runner.stopping ? 'Stopping…' : running ? 'Running…' : `Run ${pending} pending`}
+            {data.runner.stopping ? 'Stopping…' : running ? 'Running…' : `Run now (${work} waiting)`}
           </button>
           <button
             type="button"

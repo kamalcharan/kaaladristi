@@ -7607,11 +7607,17 @@ def admin_run_filing_checks(caller_id: str = Depends(_get_current_user_id)):
     conn = _conn()
     try:
         _require_admin(conn, caller_id)
+        # Reads cut off by a restart sit in `reading` until a reader starts;
+        # this button IS a reader starting, so release them first.
+        from lib import filing_reader as _fr
+        released = _fr.release_stale_reading(conn)
         pending = _filing_checks.pending_count(conn)
+        reads = _filing_checks.pending_reads(conn, current_only=True)
     finally:
         conn.close()
-    return {'pending': pending,
-            'runner_started': _filing_checks.ensure_runner(_conn) if pending else False,
+    work = pending or reads
+    return {'pending': pending, 'pending_reads': reads, 'released': released,
+            'runner_started': _filing_checks.ensure_runner(_conn) if work else False,
             'runner': _filing_checks.runner_state()}
 
 

@@ -213,6 +213,7 @@ class Checks(unittest.TestCase):
         # No filings_ingest job is running, so the other row cannot be the worker's.
         self.assertEqual(rows['RUNNER_CO'], 'API runner')
         self.assertTrue(rows['WORKER_CO'].startswith('Interrupted'))
+        self.assertIn('released when a reader next starts', rows['WORKER_CO'])
 
     def test_only_the_newest_read_since_the_ingest_job_is_the_workers(self):
         a, b = self._read('OLD_CUT_OFF'), self._read('WORKER_NOW')

@@ -490,9 +490,19 @@ def pending_count(conn) -> int:
         return int(cur.fetchone()[0])
 
 
-def pending_reads(conn) -> int:
+def pending_reads(conn, current_only: bool = False) -> int:
+    """Filing reads waiting. current_only: just the ones the API runner takes
+    (disseminated within FILING_READ_HIGH_DAYS); the older backlog is the
+    worker's, during its scheduled passes."""
     with conn.cursor() as cur:
-        cur.execute("SELECT count(*) FROM km_filing_reads WHERE status = 'pending'")
+        if current_only:
+            cur.execute("""
+                SELECT count(*) FROM km_filing_reads r JOIN km_corporate_events e ON e.id = r.event_id
+                 WHERE r.status IN ('pending', 'failed') AND r.attempts < %s
+                   AND e.disseminated_at >= now() - make_interval(secs => %s)
+            """, (fr.MAX_ATTEMPTS, fr.HIGH_DAYS * 86400))
+        else:
+            cur.execute("SELECT count(*) FROM km_filing_reads WHERE status = 'pending'")
         n = int(cur.fetchone()[0])
     conn.rollback()
     return n
@@ -583,7 +593,7 @@ def _running_now(cur) -> list:
         elif job_started and not worker_seen and started and started >= job_started:
             where, worker_seen = 'Pipeline worker', True
         else:
-            where = 'Interrupted — released automatically after 30 min'
+            where = 'Interrupted — released when a reader next starts (Run, or the next filing pass)'
         rows.append((rid, company, filed, started, mine, where))
     for rid, company, filed, started, mine, where in reversed(rows):
         out.append({'where': where, 'kind': 'read',
