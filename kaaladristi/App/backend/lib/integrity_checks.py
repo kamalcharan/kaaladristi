@@ -532,6 +532,28 @@ def matview_served_presets() -> frozenset:
 # rows as falling below.
 
 
+def arm_findings(served: set, produced: set, viewdef: str) -> list[Finding]:
+    """A served preset with no rows: critical only when the matview's
+    definition has no arm for it; a defined-but-empty arm is a warning."""
+    out: list[Finding] = []
+    for missing in sorted(served - produced):
+        if f"'{missing}'" in viewdef:
+            out.append(Finding(
+                f'contract_arm_empty_{missing}', 'invariant', 'warning',
+                f'{missing}: the matview defines this arm but nothing qualified on the latest '
+                f'bar — the scan is empty today (a market reading, not a missing arm)',
+                subject=missing, metric=0, expected=1,
+                detail={'preset': missing, 'defined': True}))
+            continue
+        out.append(Finding(
+            f'contract_arm_missing_{missing}', 'invariant', 'critical',
+            f'{missing}: the frontend reads this preset from km_scan_results but the '
+            f'matview definition has no arm for it — the scan can never return rows',
+            subject=missing, metric=0, expected=1,
+            detail={'preset': missing, 'defined': False}))
+    return out
+
+
 def check_scanner_contract(conn, run_date: date) -> list[Finding]:
     """Per matview preset: rendered columns exist and are populated, the
     declared universe holds, and a declared vani_rule actually produces
@@ -587,13 +609,15 @@ def check_scanner_contract(conn, run_date: date) -> list[Finding]:
             f'frontend path reads them — the arm is dead weight or the preset lost its UI',
             subject=orphan, metric=int(n), expected=0,
             detail={'preset': orphan, 'rows': int(n)}))
-    for missing in sorted(served - produced):
-        out.append(Finding(
-            f'contract_arm_missing_{missing}', 'invariant', 'critical',
-            f'{missing}: the frontend reads this preset from km_scan_results but the '
-            f'matview produces no rows for it — the scan returns empty',
-            subject=missing, metric=0, expected=1,
-            detail={'preset': missing}))
+    # "No rows today" has two causes and only one is a defect. An arm absent
+    # from the matview's DEFINITION can never return rows (critical). An arm
+    # that is defined but empty is a market reading: on 2026-10-01 a broad
+    # fall left 4 of 169 industries with rising accumulation, quiet_accumulation
+    # qualified nothing, and the night was reported critical — which blocks the
+    # leadership snapshot for a scanner that worked exactly as written.
+    viewdef = (_rows(conn, "SELECT pg_get_viewdef('public.km_scan_results'::regclass)")
+               or [('',)])[0][0] or ''
+    out.extend(arm_findings(served, produced, viewdef))
 
     # Assigned BEFORE its first use. It used to be read here at C1b and only
     # assigned ~15 lines further down, so every call raised NameError on its

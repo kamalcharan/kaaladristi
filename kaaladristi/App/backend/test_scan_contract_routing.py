@@ -59,5 +59,27 @@ class RoutingKinds(unittest.TestCase):
         self.assertEqual(routes['waking_giants'], 'journeys')
 
 
+class ArmFindingsTests(unittest.TestCase):
+    """2026-10-01: quiet_accumulation was empty after a broad fall and the
+    night went critical. Empty-but-defined is a warning; undefined is critical."""
+    VIEWDEF = "SELECT 'quiet_accumulation'::text AS preset_id ... UNION ALL SELECT 'smart_money'::text"
+
+    def test_defined_but_empty_is_a_warning(self):
+        from lib.integrity_checks import arm_findings
+        f = arm_findings({'quiet_accumulation', 'smart_money'}, {'smart_money'}, self.VIEWDEF)
+        self.assertEqual([(x.check_key, x.severity) for x in f],
+                         [('contract_arm_empty_quiet_accumulation', 'warning')])
+
+    def test_undefined_arm_stays_critical(self):
+        from lib.integrity_checks import arm_findings
+        f = arm_findings({'new_preset'}, set(), self.VIEWDEF)
+        self.assertEqual([(x.check_key, x.severity) for x in f],
+                         [('contract_arm_missing_new_preset', 'critical')])
+
+    def test_unreadable_definition_fails_loud(self):
+        from lib.integrity_checks import arm_findings
+        self.assertEqual(arm_findings({'quiet_accumulation'}, set(), '')[0].severity, 'critical')
+
+
 if __name__ == '__main__':
     unittest.main()

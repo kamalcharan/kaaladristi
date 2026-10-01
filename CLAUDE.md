@@ -678,6 +678,17 @@ Read side: `sector_leadership.load_context` serves the newest snapshot ON OR
 BEFORE the selected session and returns `requested_date` / `published_date`;
 the page says which session it shows. Guarded by `test_health_eligibility.py`.
 
+### An empty scanner is not a missing scanner (2026-10-01)
+
+`check_scanner_contract` reported `contract_arm_missing_quiet_accumulation`
+CRITICAL on 1 Oct, failing `integrity_checks` and so blocking the leadership
+snapshot. The arm was defined and correct: a broad fall (NSE avg −1.2%) took
+ACCUMULATION from 846 to 124 stocks and left 4 of 169 industries with rising
+accumulation, so nothing qualified. `arm_findings()` now reads the matview
+DEFINITION (`pg_get_viewdef`): an arm that exists but is empty is a WARNING
+(`contract_arm_empty_*`); only an arm absent from the definition is critical.
+Tested in `test_scan_contract_routing.py`.
+
 ### Nightly speed: job time limit + one-day rolling_metrics (2026-10-01)
 
 One `nse_flow` fix held the single worker from 00:00 to 09:58 IST and every
