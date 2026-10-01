@@ -312,6 +312,7 @@ def current_reader(conn):
         if 'session' not in ctx:
             from pipeline.utils.nse_session import NseSession
             ctx['session'] = NseSession()
+        _doing('read', row.get('read_id'), row.get('company_name'), fr.priority_of(row))
         try:
             return fr.read_one(c, row, fr.client_for(row), ctx['session'])
         except Exception as e:
@@ -319,6 +320,8 @@ def current_reader(conn):
             log.exception('filing read %s crashed', row['read_id'])
             fr._finish(c, row['read_id'], 'failed', f'reader: {e}')
             return 'failed'
+        finally:
+            _state['doing'] = None
     return _read
 
 
@@ -385,12 +388,15 @@ def run_pending(conn, clients: Optional[dict] = None, max_seconds: float = 0,
                 stats['skipped_backend'] += 1
                 continue
             clients[b] = make_client(b)
+        _doing('check', check['check_id'], None, 'low' if b == 'local' else 'paid')
         try:
             r = run_one(conn, check, clients[b])
         except Exception as e:                       # a crash on one row never stops the queue
             log.exception('filing check %s crashed', check['check_id'])
             _finish(conn, check['check_id'], 'failed', f'crash: {e}')
             r = 'failed'
+        finally:
+            _state['doing'] = None
         stats['done' if r == 'done' else 'failed'] += 1
         if r == 'model_error':
             streak += 1
@@ -406,7 +412,14 @@ def run_pending(conn, clients: Optional[dict] = None, max_seconds: float = 0,
 
 _lock = threading.Lock()
 _state = {'running': False, 'started_at': None, 'finished_at': None, 'last': None, 'error': None,
-          'waiting_until': None}
+          'waiting_until': None, 'doing': None, 'stopping': False}
+RUNNER_THREAD = 'filing-checks'
+
+
+def _doing(kind: str, row_id, company, priority) -> None:
+    """What the runner is on right now — the panel's 'Running now' line."""
+    _state['doing'] = {'kind': kind, 'id': row_id, 'company': company, 'priority': priority,
+                       'since': datetime.utcnow().isoformat() + 'Z'}
 
 
 def runner_state() -> dict:
@@ -421,6 +434,7 @@ def ensure_runner(conn_factory: Callable[[], object]) -> bool:
         if _state['running']:
             return False
         _stop.clear()
+        _state.update(stopping=False, doing=None)
         _state.update(running=True, started_at=datetime.utcnow().isoformat() + 'Z',
                       finished_at=None, error=None)
 
@@ -444,10 +458,10 @@ def ensure_runner(conn_factory: Callable[[], object]) -> bool:
             except Exception:
                 pass
             with _lock:
-                _state.update(running=False, waiting_until=None,
+                _state.update(running=False, waiting_until=None, doing=None, stopping=False,
                               finished_at=datetime.utcnow().isoformat() + 'Z')
 
-    threading.Thread(target=_work, name='filing-checks', daemon=True).start()
+    threading.Thread(target=_work, name=RUNNER_THREAD, daemon=True).start()
     return True
 
 
@@ -457,6 +471,8 @@ def stop_checks(conn) -> int:
     runs again only when someone asks for it again (request_checks resets
     failed rows), never on its own — not even at API start."""
     _stop.set()
+    if _state['running']:
+        _state['stopping'] = True          # the item in flight finishes first
     with conn.cursor() as cur:
         cur.execute("""
             UPDATE km_filing_read_checks
@@ -517,6 +533,7 @@ def summary(conn) -> dict:
         """)
         paid_unchecked = int(cur.fetchone()[0])
         current = current_reads(cur)
+        running_now = _running_now(cur)
     conn.rollback()
     return {
         'compared': int(n or 0), 'agree_impact': int(ai or 0), 'agree_magnitude': int(am or 0),
@@ -525,7 +542,41 @@ def summary(conn) -> dict:
         'paid_per_request': PAID_PER_REQUEST,
         'runner': runner_state(),
         'current': current,
+        'running_now': running_now,
     }
+
+
+def _running_now(cur) -> list:
+    """Every read and check in flight, and WHERE it runs. The API runner is
+    this process (we know its row and the provider it is waiting on); a read
+    in `reading` that is not the runner's belongs to the pipeline worker's
+    ingest pass, a separate process this one cannot see inside."""
+    doing = _state.get('doing') or {}
+    lane = fr.llm_lanes.inflight().get(RUNNER_THREAD) or {}
+    out = []
+    cur.execute("""
+        SELECT r.id, e.company_name, e.disseminated_at, r.started_at
+          FROM km_filing_reads r JOIN km_corporate_events e ON e.id = r.event_id
+         WHERE r.status = 'reading' ORDER BY r.started_at
+    """)
+    for rid, company, filed, started in cur.fetchall():
+        mine = doing.get('kind') == 'read' and doing.get('id') == rid
+        out.append({'where': 'API runner' if mine else 'Pipeline worker', 'kind': 'read',
+                    'company': company, 'filed_at': filed.isoformat() if filed else None,
+                    'since': started.isoformat() if started else None,
+                    'provider': lane.get('provider') if mine else None})
+    cur.execute("""
+        SELECT c.id, e.company_name, c.backend, c.started_at
+          FROM km_filing_read_checks c JOIN km_corporate_events e ON e.id = c.event_id
+         WHERE c.status = 'running' ORDER BY c.started_at
+    """)
+    for cid, company, backend, started in cur.fetchall():
+        mine = doing.get('kind') == 'check' and doing.get('id') == cid
+        out.append({'where': 'API runner' if mine else 'API runner (stale — released on next start)',
+                    'kind': 'check', 'company': company, 'filed_at': None,
+                    'since': started.isoformat() if started else None,
+                    'provider': (lane.get('provider') if mine else None) or ('haiku' if backend == 'anthropic' else 'qwen')})
+    return out
 
 
 def current_reads(cur) -> dict:

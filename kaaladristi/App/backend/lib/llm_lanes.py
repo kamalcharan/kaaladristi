@@ -122,6 +122,19 @@ def park(name: str, seconds: int) -> None:
         _cooldown_until[name] = _now() + max(1, seconds)
 
 
+# ── what is in flight, per thread, in THIS process ───────────────────────
+# The admin panel's "Running now" reads it: which provider a thread is
+# waiting on, and since when. Another process (the pipeline worker) keeps its
+# own; the panel says so rather than guessing.
+
+_inflight: dict = {}
+
+
+def inflight() -> dict:
+    with _cool_lock:
+        return {k: dict(v) for k, v in _inflight.items()}
+
+
 # ── the hosted client: OpenAI-compatible, same surface as filing_reader's ─
 
 class RateLimited(Exception):
@@ -275,6 +288,9 @@ class _RoutedMessages:
             if name != LOCAL and cooling(name):
                 errors.append(f'{name}: cooling down')
                 continue
+            tname = threading.current_thread().name
+            with _cool_lock:
+                _inflight[tname] = {'provider': name, 'since': time.time()}
             try:
                 resp = self._client(name).messages.parse(**kw)
             except RateLimited as e:
@@ -288,6 +304,9 @@ class _RoutedMessages:
                 errors.append(f'{name}: {e}'[:300])
                 log.warning('lane provider %s failed: %s', name, str(e)[:200])
                 continue
+            finally:
+                with _cool_lock:
+                    _inflight.pop(tname, None)
             if name == LOCAL:
                 served = str(getattr(resp, 'model', None) or 'qwen')
                 u = getattr(resp, 'usage', None)

@@ -77,12 +77,12 @@ export default function FilingChecksPanel() {
             title="Drain the pending checks (after a restart, or a batch that stopped)"
           >
             <RefreshCw className={cn('w-3 h-3', running && 'animate-spin')} />
-            {running ? 'Running…' : `Run ${pending} pending`}
+            {data.runner.stopping ? 'Stopping…' : running ? 'Running…' : `Run ${pending} pending`}
           </button>
           <button
             type="button"
             onClick={() => stop.mutate()}
-            disabled={stop.isPending || (!running && pending === 0)}
+            disabled={stop.isPending || !!data.runner.stopping || (!running && pending === 0)}
             className={cn(
               'inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded border text-[12px]',
               'bg-kd-elevated border-kd-border text-risk-red hover:border-risk-red/40',
@@ -97,6 +97,7 @@ export default function FilingChecksPanel() {
       </div>
 
       {data.current && <CurrentReads current={data.current} />}
+      <RunningNow items={data.running_now ?? []} stopping={!!data.runner.stopping} />
 
       {/* queue + cost */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
@@ -221,6 +222,52 @@ function CurrentReads({ current }: { current: NonNullable<FilingCheckSummary['cu
             Oldest waiting: filed {istTime(current.oldest_waiting_at)} IST
           </span>
         )}
+      </div>
+    </div>
+  );
+}
+
+const minutesSince = (iso: string | null) => {
+  if (!iso) return '';
+  const m = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
+  return m < 1 ? 'under a minute' : `${m} min`;
+};
+
+/**
+ * What is being read RIGHT NOW, and where. Two processes read filings: the
+ * API runner (today's filings first, then second-opinion checks — Stop
+ * controls it) and the pipeline worker's scheduled ingest passes (separate,
+ * capped at 15 minutes a pass, not touched by Stop). A Stop lets the item in
+ * flight finish, which on Qwen can take minutes — so it says so.
+ */
+function RunningNow({ items, stopping }: {
+  items: NonNullable<FilingCheckSummary['running_now']>; stopping: boolean;
+}) {
+  return (
+    <div className="rounded border border-kd-border/40 px-2.5 py-2 space-y-1">
+      <div className="text-[10px] uppercase tracking-wider text-muted">Running now</div>
+      {stopping && (
+        <div className="text-risk-amber text-[11px]">
+          Stopping — the item in flight finishes first (on Qwen this can take a few minutes). Nothing new starts.
+        </div>
+      )}
+      {items.length === 0 ? (
+        <div className="text-muted text-[11px]">Nothing is being read.</div>
+      ) : (
+        items.map((it, i) => (
+          <div key={i} className="flex flex-wrap gap-x-3 text-[11px]">
+            <span className="text-primary font-medium">{it.where}</span>
+            <span className="text-secondary">
+              {it.kind === 'check' ? 'second opinion' : 'reading'} · {it.company ?? '—'}
+            </span>
+            {it.provider && <span className="text-muted">via {READER_LABELS[it.provider] ?? it.provider}</span>}
+            <span className="text-muted">{minutesSince(it.since)}</span>
+          </div>
+        ))
+      )}
+      <div className="text-[10px] text-muted">
+        Stop controls the API runner only. The pipeline worker reads during its scheduled filing passes
+        (max 15 minutes each) and is not affected.
       </div>
     </div>
   );

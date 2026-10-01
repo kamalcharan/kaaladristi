@@ -194,6 +194,22 @@ class Checks(unittest.TestCase):
         self.assertEqual((stats['done'], stats.get('stopped')), (0, 'stopped by admin'))
         fc._stop.clear()
 
+    def test_running_now_says_where_each_item_runs(self):
+        a = self._read('WORKER_CO')
+        b = self._read('RUNNER_CO')
+        with self.conn.cursor() as c:
+            c.execute("UPDATE km_filing_reads SET status='reading', started_at=now() WHERE event_id IN (%s,%s) "
+                      "RETURNING id, event_id", (a, b))
+            ids = {eid: rid for rid, eid in c.fetchall()}
+        self.conn.commit()
+        fc._state['doing'] = {'kind': 'read', 'id': ids[b]}
+        try:
+            with self.conn.cursor() as cur:
+                rows = {r['company']: r['where'] for r in fc._running_now(cur)}
+        finally:
+            fc._state['doing'] = None
+        self.assertEqual(rows, {'WORKER_CO': 'Pipeline worker', 'RUNNER_CO': 'API runner'})
+
     def test_current_filings_are_read_before_history_checks(self):
         # Owner 2026-10-01: "history is getting done, current is not analysed".
         h = self._read('H1', model='claude-haiku-4-5')

@@ -202,7 +202,11 @@ export interface FilingCheckSummary {
   paid_per_request: number;
   runner: { running: boolean; started_at: string | null; finished_at: string | null;
             waiting_until: string | null;
-            last: Record<string, number | string> | null; error: string | null };
+            last: Record<string, number | string> | null; error: string | null;
+            stopping?: boolean };
+  /** Every read and check in flight, and which process runs it. */
+  running_now?: { where: string; kind: 'read' | 'check'; company: string | null;
+                  filed_at: string | null; since: string | null; provider: string | null }[];
   /** Filings disseminated in the last `days` days: are they being read, and by whom. */
   current?: {
     days: number;
