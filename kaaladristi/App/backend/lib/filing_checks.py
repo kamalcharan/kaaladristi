@@ -297,6 +297,9 @@ def current_reader(conn):
     first and fills the gaps with checks."""
     if fr.backend_missing() or fr.schema_missing(conn):
         return None
+    released = fr.release_stale_reading(conn)      # reads cut off by a restart
+    if released:
+        log.info('filing reads: released %s interrupted reads', released)
     with conn.cursor() as cur:
         cur.execute('SELECT now()')
         started = cur.fetchone()[0]
@@ -554,14 +557,33 @@ def _running_now(cur) -> list:
     doing = _state.get('doing') or {}
     lane = fr.llm_lanes.inflight().get(RUNNER_THREAD) or {}
     out = []
+    # The worker reads ONE filing at a time, and only inside a running
+    # filings_ingest job — so at most one non-runner row, started after that
+    # job did, is the worker's. Any other `reading` row was cut off (a
+    # container restart mid-read) and is released after 30 minutes.
+    cur.execute("""
+        SELECT max(started_at) FROM km_jobs
+         WHERE status = 'running' AND dimension = 'filings_ingest'
+    """)
+    job_started = cur.fetchone()[0]
     cur.execute("""
         SELECT r.id, e.company_name, e.disseminated_at, r.started_at
           FROM km_filing_reads r JOIN km_corporate_events e ON e.id = r.event_id
-         WHERE r.status = 'reading' ORDER BY r.started_at
+         WHERE r.status = 'reading' ORDER BY r.started_at DESC
     """)
+    worker_seen = False
+    rows = []
     for rid, company, filed, started in cur.fetchall():
         mine = doing.get('kind') == 'read' and doing.get('id') == rid
-        out.append({'where': 'API runner' if mine else 'Pipeline worker', 'kind': 'read',
+        if mine:
+            where = 'API runner'
+        elif job_started and not worker_seen and started and started >= job_started:
+            where, worker_seen = 'Pipeline worker', True
+        else:
+            where = 'Interrupted — released automatically after 30 min'
+        rows.append((rid, company, filed, started, mine, where))
+    for rid, company, filed, started, mine, where in reversed(rows):
+        out.append({'where': where, 'kind': 'read',
                     'company': company, 'filed_at': filed.isoformat() if filed else None,
                     'since': started.isoformat() if started else None,
                     'provider': lane.get('provider') if mine else None})

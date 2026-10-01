@@ -73,6 +73,8 @@ class Checks(unittest.TestCase):
                 CREATE TABLE IF NOT EXISTS km_equity_symbols (id serial primary key, symbol text, isin text, exchange text, is_active bool);
                 ALTER TABLE km_equity_symbols ADD COLUMN IF NOT EXISTS industry text;
                 ALTER TABLE km_equity_symbols ADD COLUMN IF NOT EXISTS mcap_cr numeric;
+                CREATE TABLE IF NOT EXISTS km_jobs (id serial primary key, job_type text, dimension text,
+                    status text, started_at timestamptz);
                 CREATE TABLE IF NOT EXISTS km_trading_calendar (trade_date date, exchange text, is_holiday bool DEFAULT false,
                     holiday_name text, status text, created_at timestamptz DEFAULT now(), PRIMARY KEY (trade_date, exchange));
                 DROP VIEW IF EXISTS v_filing_read_agreement;
@@ -208,7 +210,28 @@ class Checks(unittest.TestCase):
                 rows = {r['company']: r['where'] for r in fc._running_now(cur)}
         finally:
             fc._state['doing'] = None
-        self.assertEqual(rows, {'WORKER_CO': 'Pipeline worker', 'RUNNER_CO': 'API runner'})
+        # No filings_ingest job is running, so the other row cannot be the worker's.
+        self.assertEqual(rows['RUNNER_CO'], 'API runner')
+        self.assertTrue(rows['WORKER_CO'].startswith('Interrupted'))
+
+    def test_only_the_newest_read_since_the_ingest_job_is_the_workers(self):
+        a, b = self._read('OLD_CUT_OFF'), self._read('WORKER_NOW')
+        with self.conn.cursor() as c:
+            c.execute("TRUNCATE km_jobs")
+            c.execute("INSERT INTO km_jobs (job_type, dimension, status, started_at) "
+                      "VALUES ('fix','filings_ingest','running', now() - interval '5 minutes')")
+            c.execute("UPDATE km_filing_reads SET status='reading', started_at=now() - interval '50 minutes' "
+                      "WHERE event_id=%s", (a,))
+            c.execute("UPDATE km_filing_reads SET status='reading', started_at=now() - interval '2 minutes' "
+                      "WHERE event_id=%s", (b,))
+        self.conn.commit()
+        with self.conn.cursor() as cur:
+            rows = {r['company']: r['where'] for r in fc._running_now(cur)}
+        self.assertEqual(rows['WORKER_NOW'], 'Pipeline worker')
+        self.assertTrue(rows['OLD_CUT_OFF'].startswith('Interrupted'))
+        with self.conn.cursor() as c:
+            c.execute("TRUNCATE km_jobs")
+        self.conn.commit()
 
     def test_current_filings_are_read_before_history_checks(self):
         # Owner 2026-10-01: "history is getting done, current is not analysed".
