@@ -106,6 +106,7 @@ export default function FilingChecksPanel() {
             <div className="text-[10px] uppercase tracking-wider text-muted">{BACKEND_LABELS[b]} checks</div>
             <div className="font-mono text-primary">
               {count(b, 'done')} done · {count(b, 'pending') + count(b, 'running')} queued · {count(b, 'failed')} failed
+              {count(b, 'stopped') > 0 && ` · ${count(b, 'stopped')} stopped`}
             </div>
           </div>
         ))}

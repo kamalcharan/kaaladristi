@@ -138,7 +138,7 @@ def queue_local_checks_for_paid_reads(conn, requested_by: Optional[str]) -> int:
             SELECT r.event_id, 'local', %s
               FROM km_filing_reads r
               JOIN km_filings_raw f ON f.id = (SELECT primary_raw_id FROM km_corporate_events WHERE id = r.event_id)
-             WHERE r.status = 'done' AND r.model IS NOT NULL AND r.model NOT LIKE 'local:%%'
+             WHERE r.status = 'done' AND r.model LIKE 'claude%%'   -- Haiku only: groq:/openrouter: reads are free lanes, not paid reads
                AND f.raw_text IS NOT NULL AND length(f.raw_text) > 0
                AND NOT EXISTS (SELECT 1 FROM km_filing_read_checks c
                                 WHERE c.event_id = r.event_id AND c.backend = 'local')
@@ -507,7 +507,9 @@ def summary(conn) -> dict:
     """Queue counts by backend, cost, and agreement per event type."""
     with conn.cursor() as cur:
         cur.execute("""
-            SELECT backend, status, count(*), coalesce(sum(cost_usd), 0)
+            SELECT backend,
+                   CASE WHEN status = 'failed' AND last_error = 'stopped by admin' THEN 'stopped' ELSE status END,
+                   count(*), coalesce(sum(cost_usd), 0)
               FROM km_filing_read_checks GROUP BY 1, 2
         """)
         queue = {}
@@ -530,7 +532,7 @@ def summary(conn) -> dict:
         n, ai, am = cur.fetchone()
         cur.execute("""
             SELECT count(*) FROM km_filing_reads r
-             WHERE r.status = 'done' AND r.model IS NOT NULL AND r.model NOT LIKE 'local:%%'
+             WHERE r.status = 'done' AND r.model LIKE 'claude%%'   -- Haiku only: groq:/openrouter: reads are free lanes, not paid reads
                AND NOT EXISTS (SELECT 1 FROM km_filing_read_checks c
                                 WHERE c.event_id = r.event_id AND c.backend = 'local')
         """)
