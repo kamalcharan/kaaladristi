@@ -81,7 +81,7 @@ GATE = re.compile(
     r'repo|liquidity|lending|NBFC|bank|insurance|mutual fund|'
     r'sanction|war|conflict|ceasefire|reconstruction|blockade|strait|crude|oil|'
     r'gas|LNG|shipping|freight|steel|cement|power|solar|defen[cs]e|railway|'
-    r'fertili[sz]er|pharma|semiconductor|electronics|textile|auto|EV|mining|coal)\b',
+    r'fertili[sz]er|pharma|semiconductor|electronics|textile|auto|EV|mining|coal)',
     re.I)
 
 
@@ -152,6 +152,11 @@ def probe(key, kind, label, url, samples, now):
     d1 = [i for i in items if i['when'] and now - i['when'] <= dt.timedelta(days=1)]
     d7 = [i for i in items if i['when'] and now - i['when'] <= dt.timedelta(days=7)]
     gated = [i for i in d7 if GATE.search(i['text'])]
+    if items and not any(i['when'] for i in items):
+        root = ET.fromstring(resp.content)
+        first = next((e for e in root.iter() if e.tag.split('}')[-1] in ('item', 'entry')), None)
+        if first is not None:
+            r['raw_first_item'] = {c.tag.split('}')[-1]: (c.text or '').strip()[:80] for c in first}
     r.update(ok=True, items=len(items), undated=sum(1 for i in items if not i['when']),
              last_24h=len(d1), last_7d=len(d7), gate_pass_7d=len(gated),
              oldest=min((i['when'] for i in items if i['when']), default=None),
@@ -199,6 +204,8 @@ def main():
                       f"JS app {r['js_app']}")
                 continue
             print(f"   items {r['items']} (undated {r['undated']}, oldest {r['oldest']})")
+            if r.get('raw_first_item'):
+                print(f"   NO DATE PARSED — first item's tags: {r['raw_first_item']}")
             print(f"   last 24h {r['last_24h']}   last 7d {r['last_7d']}   pass the gate (7d) {r['gate_pass_7d']}")
             for t in r['sample_pass']:
                 print(f"     + {t}")
