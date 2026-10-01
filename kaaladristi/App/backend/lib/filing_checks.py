@@ -58,6 +58,7 @@ FAIL_STREAK_STOP = 5
 BACKOFF_SEC = int(os.getenv('FILING_CHECK_BACKOFF_SEC', '300'))
 BACKOFF_ROUNDS = int(os.getenv('FILING_CHECK_BACKOFF_ROUNDS', '24'))
 _sleep = time.sleep          # swapped by tests
+_stop = threading.Event()   # set by stop_checks(); cleared when a runner starts
 STALE_RUNNING_MIN = 30
 
 
@@ -303,7 +304,9 @@ def current_reader(conn):
     ctx = {}
 
     def _read(c):
-        row = fr._claim_next(c, retry_failed=True, pass_started=started)
+        # CURRENT filings only. The old backlog stays with the worker's
+        # ingest passes; owner, 2026-10-01: Qwen was "in a loop" on it here.
+        row = fr._claim_next(c, retry_failed=True, pass_started=started, newer_than_days=fr.HIGH_DAYS)
         if row is None:
             return None
         if 'session' not in ctx:
@@ -335,6 +338,9 @@ def run_pending(conn, clients: Optional[dict] = None, max_seconds: float = 0,
     t0 = time.monotonic()
     streak, streak_ids = 0, []   # consecutive MODEL failures — a dead server answers 404 to everything after
     while True:
+        if _stop.is_set():
+            stats['stopped'] = 'stopped by admin'
+            break
         if streak >= FAIL_STREAK_STOP:
             requeue(conn, streak_ids)
             streak, streak_ids = 0, []
@@ -346,7 +352,10 @@ def run_pending(conn, clients: Optional[dict] = None, max_seconds: float = 0,
             log.warning('filing checks: backend not answering, waiting %ss (round %s of %s)',
                         BACKOFF_SEC, stats['backoffs'], BACKOFF_ROUNDS)
             _state['waiting_until'] = (datetime.utcnow() + timedelta(seconds=BACKOFF_SEC)).isoformat() + 'Z'
-            _sleep(BACKOFF_SEC)
+            if _sleep is time.sleep:
+                _stop.wait(BACKOFF_SEC)            # a Stop ends the wait at once
+            else:
+                _sleep(BACKOFF_SEC)
             _state['waiting_until'] = None
             continue
         if max_seconds and time.monotonic() - t0 >= max_seconds:
@@ -411,6 +420,7 @@ def ensure_runner(conn_factory: Callable[[], object]) -> bool:
     with _lock:
         if _state['running']:
             return False
+        _stop.clear()
         _state.update(running=True, started_at=datetime.utcnow().isoformat() + 'Z',
                       finished_at=None, error=None)
 
@@ -439,6 +449,23 @@ def ensure_runner(conn_factory: Callable[[], object]) -> bool:
 
     threading.Thread(target=_work, name='filing-checks', daemon=True).start()
     return True
+
+
+def stop_checks(conn) -> int:
+    """Stop the runner and park every waiting check as failed('stopped by
+    admin'). The row in flight finishes; nothing is deleted. A parked check
+    runs again only when someone asks for it again (request_checks resets
+    failed rows), never on its own — not even at API start."""
+    _stop.set()
+    with conn.cursor() as cur:
+        cur.execute("""
+            UPDATE km_filing_read_checks
+               SET status = 'failed', last_error = 'stopped by admin', finished_at = now()
+             WHERE status = 'pending'
+        """)
+        n = cur.rowcount
+    conn.commit()
+    return n
 
 
 def pending_count(conn) -> int:
@@ -489,6 +516,7 @@ def summary(conn) -> dict:
                                 WHERE c.event_id = r.event_id AND c.backend = 'local')
         """)
         paid_unchecked = int(cur.fetchone()[0])
+        current = current_reads(cur)
     conn.rollback()
     return {
         'compared': int(n or 0), 'agree_impact': int(ai or 0), 'agree_magnitude': int(am or 0),
@@ -496,4 +524,43 @@ def summary(conn) -> dict:
         'paid_reads_without_local_check': paid_unchecked,
         'paid_per_request': PAID_PER_REQUEST,
         'runner': runner_state(),
+        'current': current,
+    }
+
+
+def current_reads(cur) -> dict:
+    """The CURRENT stream — filings disseminated within FILING_READ_HIGH_DAYS —
+    and who read them. The panel above it measures history; this says whether
+    today's filings are being read at all, and by which lane."""
+    days = fr.HIGH_DAYS
+    cur.execute("""
+        SELECT r.status, count(*)
+          FROM km_filing_reads r JOIN km_corporate_events e ON e.id = r.event_id
+         WHERE e.disseminated_at >= now() - make_interval(secs => %s)
+         GROUP BY 1
+    """, (days * 86400,))
+    status = {k: int(n) for k, n in cur.fetchall()}
+    cur.execute("""
+        SELECT CASE WHEN r.model LIKE '%%:%%' THEN split_part(r.model, ':', 1) ELSE 'haiku' END,
+               count(*), max(r.finished_at)
+          FROM km_filing_reads r JOIN km_corporate_events e ON e.id = r.event_id
+         WHERE e.disseminated_at >= now() - make_interval(secs => %s) AND r.status = 'done'
+         GROUP BY 1 ORDER BY 2 DESC
+    """, (days * 86400,))
+    by_reader, last_read = [], None
+    for reader, n, last in cur.fetchall():
+        by_reader.append({'reader': 'qwen' if reader == 'local' else reader, 'n': int(n)})
+        if last and (last_read is None or last > last_read):
+            last_read = last
+    cur.execute("""
+        SELECT min(e.disseminated_at)
+          FROM km_filing_reads r JOIN km_corporate_events e ON e.id = r.event_id
+         WHERE e.disseminated_at >= now() - make_interval(secs => %s) AND r.status = 'pending'
+    """, (days * 86400,))
+    oldest = cur.fetchone()[0]
+    return {
+        'days': days, 'status': status, 'by_reader': by_reader,
+        'last_read_at': last_read.isoformat() if last_read else None,
+        'oldest_waiting_at': oldest.isoformat() if oldest else None,
+        'route': fr.llm_lanes.route('high'),
     }

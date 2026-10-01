@@ -183,6 +183,17 @@ class Checks(unittest.TestCase):
         self.assertIn('Page two: value INR 120 crore.', sent)
         self.assertEqual(stub.calls[0]['model'], f'local:{fr.LOCAL_MODEL}')
 
+    def test_stop_parks_waiting_checks_and_ends_the_run(self):
+        h1 = self._read('H1', model='claude-haiku-4-5')
+        h2 = self._read('H2', model='claude-haiku-4-5')
+        fc.request_checks(self.conn, [h1, h2], 'local', None)
+        self.assertEqual(fc.stop_checks(self.conn), 2)
+        self.assertTrue(all(st == 'failed' for _, _, st, *_ in self._checks()))
+        self.assertEqual(fc.pending_count(self.conn), 0)       # nothing resumes at API start
+        stats = fc.run_pending(self.conn, clients={'local': StubClient()})
+        self.assertEqual((stats['done'], stats.get('stopped')), (0, 'stopped by admin'))
+        fc._stop.clear()
+
     def test_current_filings_are_read_before_history_checks(self):
         # Owner 2026-10-01: "history is getting done, current is not analysed".
         h = self._read('H1', model='claude-haiku-4-5')

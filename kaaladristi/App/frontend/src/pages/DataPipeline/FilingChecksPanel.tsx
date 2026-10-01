@@ -1,10 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Loader2, Play, RefreshCw } from 'lucide-react';
+import { Loader2, Play, RefreshCw, Square } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
-  fetchFilingCheckSummary, queueLocalFilingChecks, runFilingChecks,
+  fetchFilingCheckSummary, queueLocalFilingChecks, runFilingChecks, stopFilingChecks,
 } from '@/services/pipeline2';
 import { BACKEND_LABELS } from '@/constants/filingReads';
+import type { FilingCheckSummary } from '@/services/pipeline2';
 
 /**
  * Qwen vs Haiku on the filings both have read — the admin's measurement panel
@@ -24,6 +25,7 @@ export default function FilingChecksPanel() {
   const invalidate = () => qc.invalidateQueries({ queryKey: ['pipeline2', 'filing-checks'] });
   const queueLocal = useMutation({ mutationFn: queueLocalFilingChecks, onSuccess: invalidate });
   const run = useMutation({ mutationFn: runFilingChecks, onSuccess: invalidate });
+  const stop = useMutation({ mutationFn: stopFilingChecks, onSuccess: invalidate });
 
   if (isLoading) {
     return <div className="text-xs text-muted flex items-center gap-2"><Loader2 className="w-3.5 h-3.5 animate-spin" /> Loading…</div>;
@@ -77,8 +79,24 @@ export default function FilingChecksPanel() {
             <RefreshCw className={cn('w-3 h-3', running && 'animate-spin')} />
             {running ? 'Running…' : `Run ${pending} pending`}
           </button>
+          <button
+            type="button"
+            onClick={() => stop.mutate()}
+            disabled={stop.isPending || (!running && pending === 0)}
+            className={cn(
+              'inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded border text-[12px]',
+              'bg-kd-elevated border-kd-border text-risk-red hover:border-risk-red/40',
+              'disabled:opacity-50 disabled:cursor-not-allowed',
+            )}
+            title="Stop the runner. Waiting checks are parked as failed and never restart on their own."
+          >
+            <Square className="w-3 h-3" />
+            Stop
+          </button>
         </div>
       </div>
+
+      {data.current && <CurrentReads current={data.current} />}
 
       {/* queue + cost */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
@@ -149,6 +167,61 @@ export default function FilingChecksPanel() {
           </tbody>
         </table>
       )}
+    </div>
+  );
+}
+
+const READER_LABELS: Record<string, string> = {
+  groq: 'Groq', openrouter: 'OpenRouter', qwen: 'Qwen', haiku: 'Haiku',
+};
+
+const istTime = (iso: string | null) =>
+  iso
+    ? new Date(iso).toLocaleString('en-IN', {
+        day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata',
+      })
+    : '—';
+
+/**
+ * The CURRENT stream, above the history comparison: filings disseminated in
+ * the last few days — how many are read, how many wait, and which lane read
+ * them (lib/llm_lanes.py). The table below measures the past; this says
+ * whether today is being read at all.
+ */
+function CurrentReads({ current }: { current: NonNullable<FilingCheckSummary['current']> }) {
+  const st = current.status;
+  const n = (k: string) => st[k] ?? 0;
+  const total = Object.values(st).reduce((a, b) => a + b, 0);
+  const waiting = n('pending') + n('reading');
+  return (
+    <div className="rounded border border-[var(--accent)]/30 px-2.5 py-2 space-y-1">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <div className="text-[10px] uppercase tracking-wider text-muted">
+          Current filings · last {current.days} days
+        </div>
+        <div className="text-[10px] text-muted">
+          Route: {current.route.map((r) => READER_LABELS[r] ?? r).join(' → ')}
+        </div>
+      </div>
+      <div className="font-mono text-primary">
+        {n('done')} read · {waiting} waiting · {n('failed')} failed · {n('skipped')} skipped
+        {n('unreadable') > 0 && ` · ${n('unreadable')} unreadable`}
+        <span className="text-muted"> — of {total}</span>
+      </div>
+      <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px]">
+        <span className="text-muted">
+          Read by:{' '}
+          {current.by_reader.length === 0
+            ? 'none yet'
+            : current.by_reader.map((r) => `${READER_LABELS[r.reader] ?? r.reader} ${r.n}`).join(' · ')}
+        </span>
+        <span className="text-muted">Last read: {istTime(current.last_read_at)} IST</span>
+        {current.oldest_waiting_at && (
+          <span className={cn(waiting > 0 ? 'text-risk-amber' : 'text-muted')}>
+            Oldest waiting: filed {istTime(current.oldest_waiting_at)} IST
+          </span>
+        )}
+      </div>
     </div>
   );
 }

@@ -7615,6 +7615,19 @@ def admin_run_filing_checks(caller_id: str = Depends(_get_current_user_id)):
             'runner': _filing_checks.runner_state()}
 
 
+@app.post('/api/admin/filing-checks/stop')
+def admin_stop_filing_checks(caller_id: str = Depends(_get_current_user_id)):
+    """Stop the second-opinion runner. Waiting checks become failed('stopped
+    by admin') and never restart on their own."""
+    conn = _conn()
+    try:
+        _require_admin(conn, caller_id)
+        n = _filing_checks.stop_checks(conn)
+    finally:
+        conn.close()
+    return {'stopped': n, 'runner': _filing_checks.runner_state()}
+
+
 @app.get('/api/admin/filing-checks/summary')
 def admin_filing_checks_summary(caller_id: str = Depends(_get_current_user_id)):
     conn = _conn()

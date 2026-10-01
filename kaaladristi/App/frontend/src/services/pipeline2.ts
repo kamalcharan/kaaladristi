@@ -203,6 +203,15 @@ export interface FilingCheckSummary {
   runner: { running: boolean; started_at: string | null; finished_at: string | null;
             waiting_until: string | null;
             last: Record<string, number | string> | null; error: string | null };
+  /** Filings disseminated in the last `days` days: are they being read, and by whom. */
+  current?: {
+    days: number;
+    status: Record<string, number>;
+    by_reader: { reader: string; n: number }[];
+    last_read_at: string | null;
+    oldest_waiting_at: string | null;
+    route: string[];
+  };
 }
 
 export const requestFilingChecks = (body: { event_ids: number[]; backend: 'anthropic' | 'local' }) =>
@@ -213,6 +222,9 @@ export const queueLocalFilingChecks = () =>
 
 export const runFilingChecks = () =>
   api.post<{ pending: number; runner_started: boolean }>('/api/admin/filing-checks/run');
+
+export const stopFilingChecks = () =>
+  api.post<{ stopped: number }>('/api/admin/filing-checks/stop');
 
 export const fetchFilingCheckSummary = () =>
   api.get<FilingCheckSummary>('/api/admin/filing-checks/summary');

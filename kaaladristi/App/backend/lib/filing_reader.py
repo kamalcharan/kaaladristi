@@ -734,7 +734,8 @@ def status_counts(conn) -> dict:
     return {k: int(rows.get(k, 0)) for k in STATUSES}
 
 
-def _claim_next(conn, retry_failed: bool = True, pass_started=None) -> Optional[dict]:
+def _claim_next(conn, retry_failed: bool = True, pass_started=None,
+                newer_than_days: Optional[float] = None) -> Optional[dict]:
     """Newest material filing that is pending (or failed under the attempt
     cap BEFORE this pass began — a row that fails inside a pass is the NEXT
     pass's retry, never an in-pass loop), moved to `reading` atomically. One
@@ -744,9 +745,11 @@ def _claim_next(conn, retry_failed: bool = True, pass_started=None) -> Optional[
             WITH cand AS (
                 SELECT r.id FROM km_filing_reads r
                   JOIN km_corporate_events e ON e.id = r.event_id
-                 WHERE r.status = 'pending'
+                 WHERE (r.status = 'pending'
                     OR (%s AND r.status = 'failed' AND r.attempts < %s
-                        AND (%s::timestamptz IS NULL OR r.finished_at < %s::timestamptz))
+                        AND (%s::timestamptz IS NULL OR r.finished_at < %s::timestamptz)))
+                   AND (%s::float8 IS NULL
+                        OR e.disseminated_at >= now() - make_interval(secs => %s::float8 * 86400))
                  ORDER BY e.disseminated_at DESC, r.id DESC
                  LIMIT 1
                  FOR UPDATE OF r SKIP LOCKED
@@ -756,7 +759,7 @@ def _claim_next(conn, retry_failed: bool = True, pass_started=None) -> Optional[
               FROM cand
              WHERE r.id = cand.id
             RETURNING r.id, r.event_id, r.attempts
-        """, (retry_failed, MAX_ATTEMPTS, pass_started, pass_started))
+        """, (retry_failed, MAX_ATTEMPTS, pass_started, pass_started, newer_than_days, newer_than_days))
         row = cur.fetchone()
     conn.commit()
     if not row:
