@@ -50,6 +50,28 @@ log = logging.getLogger('pipeline2.worker')
 
 # ── DB helpers ────────────────────────────────────────────────────────────
 
+# A job may not hold the worker forever. On 2026-10-01 one nse_flow fix sat
+# from 00:00 to 09:58 IST and every job queued behind it waited. These
+# limits go into PGOPTIONS for the whole worker process, so they reach the
+# worker's own connection AND every script connection opened without its
+# own `options=` (a script that sets statement_timeout keeps its value).
+# A timed-out statement fails the job with a message, and a failed fix
+# writes its own critical finding — loud, never a silent hang.
+STATEMENT_TIMEOUT_MIN = int(os.getenv('PIPELINE2_STATEMENT_TIMEOUT_MIN', '45'))
+LOCK_TIMEOUT_MIN = int(os.getenv('PIPELINE2_LOCK_TIMEOUT_MIN', '10'))
+
+
+def job_time_limits(existing: str = '') -> str:
+    """PGOPTIONS with the worker's limits added. A limit already present
+    (set by the operator) wins; 0 turns a limit off."""
+    parts = [existing.strip()] if existing and existing.strip() else []
+    for name, minutes in (('statement_timeout', STATEMENT_TIMEOUT_MIN),
+                          ('lock_timeout', LOCK_TIMEOUT_MIN)):
+        if minutes > 0 and name not in existing:
+            parts.append(f'-c {name}={minutes * 60 * 1000}')
+    return ' '.join(parts)
+
+
 def _connect() -> 'psycopg2.extensions.connection':
     if not DATABASE_URL:
         raise RuntimeError('DATABASE_URL not set')
@@ -856,6 +878,8 @@ def main():
                         help='Poll continuously (default: every 3s)')
     args = parser.parse_args()
 
+    os.environ['PGOPTIONS'] = job_time_limits(os.environ.get('PGOPTIONS', ''))
+    log.info(f"Worker job limits: PGOPTIONS={os.environ['PGOPTIONS']!r}")
     conn = _connect()
     # One worker per database. The lease is a session advisory lock on THIS
     # connection; a second worker anywhere (another container, a dev machine

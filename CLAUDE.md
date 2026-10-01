@@ -678,6 +678,29 @@ Read side: `sector_leadership.load_context` serves the newest snapshot ON OR
 BEFORE the selected session and returns `requested_date` / `published_date`;
 the page says which session it shows. Guarded by `test_health_eligibility.py`.
 
+### Nightly speed: job time limit + one-day rolling_metrics (2026-10-01)
+
+One `nse_flow` fix held the single worker from 00:00 to 09:58 IST and every
+job waited behind it. The worker now sets `PGOPTIONS` before it connects:
+`statement_timeout` 45 min, `lock_timeout` 10 min
+(`PIPELINE2_STATEMENT_TIMEOUT_MIN` / `PIPELINE2_LOCK_TIMEOUT_MIN`, 0 = off). It
+reaches the worker connection and every script connection opened without its
+own `options=`; scripts that set their own timeout keep it. A timed-out job
+fails loudly instead of hanging. `test_worker_job_limits.py`.
+
+`rolling_metrics` scanned all ~13M bars to write one date (~11 min a night).
+The pipeline now runs one-day mode: the last `FAST_BARS` (260) bars per stock,
+`lifetime_high` carried as GREATEST(previous bar's stored value, window max).
+Proved identical on all 27 columns against the full scan, including a lifetime
+high 400 bars back (`test_rolling_metrics_fast.py`, `KD_TEST_DSN`). The CLI
+stays full by default (`--fast` to opt in). ⚠ The carry trusts the previous
+bar: after correcting OLD history (a price fix > 260 bars back), run the full
+mode over the range, not a pipeline fix.
+
+Filing reads go first: the checks runner (API thread) reads one pending
+filing each turn before taking a Qwen history check, because both share one
+Qwen slot and an 800-row check queue starved the current stream for days.
+
 ### ⚠ The filing reader runs INSIDE the pipeline worker — a long pass blocks every job behind it (2026-09-29)
 
 `read_pending()` is the last step of every `filings_ingest` job, and the worker is single-threaded. On the local Qwen backend (one server slot, 80 s to 19 min a document when another reader shares it) a 300-document pass held the worker for hours: the 06:10 job was still running at 09:20, the board-meeting and bulk-deal ingests sat queued behind it, and so would any repair queued from the dashboard — and the 18:00 `daily_run`. `FILING_READ_MAX_SECONDS` (900) now caps one pass by wall clock; what it did not reach stays `pending` for the next slot (`stats['skipped']` names it). `backfill_filing_reads.py` passes `max_seconds=0` on purpose — it IS the deliberate long run. Set `FILING_READ_MAX_PER_PASS` to ~20–30 on the local backend as well, so a slot's pass is sized for the server it has. Tests: `test_filing_reader.py` (51, run with `KD_TEST_DSN` against a throwaway cluster or the two new ones are skipped).

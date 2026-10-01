@@ -129,29 +129,70 @@ def verify(target_date: str):
         conn.close()
 
 
-def run_update(target_date: str):
-    """
-    UPDATE km_equity_eod for target_date using window functions over full history.
+# One-day mode reads this many bars per stock, ending at the target date.
+# The longest window in the UPDATE is 252 bars (w52_high/w52_low); every
+# other one (amt66, LAG 66, the 20-bar levels) fits inside. The only
+# unbounded column, lifetime_high, is carried: the previous bar's stored
+# value, or the window max, whichever is higher.
+FAST_BARS = 260
 
-    avg_amt formula: delivery value in Crores = value_cr * delivery_pct / 100
-    Matches the nightly pipeline in compute_engine.py (compute_rolling_range).
-
-    value_cr is true Crores on both exchanges — parser.py normalises NSE
-    (Rupees under UDiFF, Lakhs under the legacy bhavcopy) and BSE (Rupees) at
-    parse time. The exchange-aware CASE WHEN that used to live here compensated
-    for NSE value_cr being 1e5x inflated; that is fixed at source, so the join
-    to km_equity_symbols is no longer needed for scaling.
-
-    NOTE: run this only against data already rescaled by the value_cr backfill
-    migration — on un-migrated NSE rows it will read 1e5x high.
-
-    score_5d/22d logic mirrors migration 111 SQL exactly.
-    """
-    sql = """
+_EOD_FULL = """
 WITH eod AS (
     SELECT e.*
     FROM km_equity_eod e
-),
+),"""
+
+_EOD_FAST = """
+WITH tgt AS (
+    SELECT DISTINCT equity_id FROM km_equity_eod WHERE trade_date = %(target)s
+), eod AS (
+    SELECT x.*
+    FROM tgt t
+    CROSS JOIN LATERAL (
+        SELECT e.* FROM km_equity_eod e
+         WHERE e.equity_id = t.equity_id AND e.trade_date <= %(target)s
+         ORDER BY e.trade_date DESC
+         LIMIT """ + str(FAST_BARS) + """
+    ) x
+),"""
+
+_PREV_FULL = """
+, prev_wk AS (
+    -- Last close STRICTLY BEFORE the Monday of the target date's week, per
+    -- symbol. Gap-safe by construction: a symbol that did not trade last week
+    -- picks up its last available close rather than dropping out.
+    SELECT DISTINCT ON (equity_id) equity_id, close AS ref_close
+    FROM km_equity_eod
+    WHERE trade_date < date_trunc('week', DATE %(target)s)
+    ORDER BY equity_id, trade_date DESC
+), prev_mo AS (
+    -- Same, for the 1st of the target date's month.
+    SELECT DISTINCT ON (equity_id) equity_id, close AS ref_close
+    FROM km_equity_eod
+    WHERE trade_date < date_trunc('month', DATE %(target)s)
+    ORDER BY equity_id, trade_date DESC
+)"""
+
+_PREV_FAST = """
+, prev_wk AS (
+    -- Same answer as the full mode, one index probe per stock.
+    SELECT t.equity_id,
+           (SELECT p.close FROM km_equity_eod p
+             WHERE p.equity_id = t.equity_id
+               AND p.trade_date < date_trunc('week', DATE %(target)s)
+             ORDER BY p.trade_date DESC LIMIT 1) AS ref_close
+    FROM tgt t
+), prev_mo AS (
+    SELECT t.equity_id,
+           (SELECT p.close FROM km_equity_eod p
+             WHERE p.equity_id = t.equity_id
+               AND p.trade_date < date_trunc('month', DATE %(target)s)
+             ORDER BY p.trade_date DESC LIMIT 1) AS ref_close
+    FROM tgt t
+)"""
+
+
+_SQL_TEMPLATE = """/*EOD*/
 base AS (
     SELECT
         id,
@@ -173,6 +214,8 @@ base AS (
             PARTITION BY equity_id ORDER BY trade_date
             ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
         ) AS lth,
+        -- the previous bar's stored lifetime_high (one-day mode carries it)
+        LAG(lifetime_high) OVER (PARTITION BY equity_id ORDER BY trade_date) AS prev_lth,
         -- delivery value rolling averages in Crores
         -- value_cr (Rs) / 1e7 * delivery_pct / 100 = delivery Cr per bar
         ROUND(AVG(ROUND(
@@ -256,7 +299,7 @@ base AS (
         equity_id,
         trade_date,
         close,
-        w52h, w52l, lth,
+        w52h, w52l, lth, prev_lth,
         amt5, amt22, amt66,
         d30, p5d, p22d, p66d,
         ret5d, ret22d, ret66d,
@@ -297,27 +340,12 @@ base AS (
           ELSE NULL
         END AS pct_from_bd
     FROM base
-)
-, prev_wk AS (
-    -- Last close STRICTLY BEFORE the Monday of the target date's week, per
-    -- symbol. Gap-safe by construction: a symbol that did not trade last week
-    -- picks up its last available close rather than dropping out.
-    SELECT DISTINCT ON (equity_id) equity_id, close AS ref_close
-    FROM km_equity_eod
-    WHERE trade_date < date_trunc('week', DATE %(target)s)
-    ORDER BY equity_id, trade_date DESC
-), prev_mo AS (
-    -- Same, for the 1st of the target date's month.
-    SELECT DISTINCT ON (equity_id) equity_id, close AS ref_close
-    FROM km_equity_eod
-    WHERE trade_date < date_trunc('month', DATE %(target)s)
-    ORDER BY equity_id, trade_date DESC
-)
+)/*PREV*/
 UPDATE km_equity_eod e
 SET
     w52_high            = s.w52h,
     w52_low             = s.w52l,
-    lifetime_high       = s.lth,
+    lifetime_high       = /*LTH*/,
     avg_amt_5d          = s.amt5,
     avg_amt_22d         = s.amt22,
     avg_amt_66d         = s.amt66,
@@ -360,10 +388,39 @@ LEFT JOIN prev_mo m ON m.equity_id = s.equity_id
 WHERE e.id = s.id
   AND s.trade_date = %(target)s
 """
+
+
+def build_sql(fast: bool) -> str:
+    sql = _SQL_TEMPLATE
+    sql = sql.replace('/*EOD*/', _EOD_FAST if fast else _EOD_FULL)
+    sql = sql.replace('/*PREV*/', _PREV_FAST if fast else _PREV_FULL)
+    sql = sql.replace('/*LTH*/', 'GREATEST(s.lth, s.prev_lth)' if fast else 's.lth')
+    return sql
+
+
+def run_update(target_date: str, fast: bool = False):
+    """
+    UPDATE km_equity_eod for target_date using window functions over full history.
+
+    avg_amt formula: delivery value in Crores = value_cr * delivery_pct / 100
+    Matches the nightly pipeline in compute_engine.py (compute_rolling_range).
+
+    value_cr is true Crores on both exchanges — parser.py normalises NSE
+    (Rupees under UDiFF, Lakhs under the legacy bhavcopy) and BSE (Rupees) at
+    parse time. The exchange-aware CASE WHEN that used to live here compensated
+    for NSE value_cr being 1e5x inflated; that is fixed at source, so the join
+    to km_equity_symbols is no longer needed for scaling.
+
+    NOTE: run this only against data already rescaled by the value_cr backfill
+    migration — on un-migrated NSE rows it will read 1e5x high.
+
+    score_5d/22d logic mirrors migration 111 SQL exactly.
+    """
+    sql = build_sql(fast)
     # NAMED parameters throughout: the prev_wk / prev_mo CTEs each need the same
     # target date, and psycopg2 forbids mixing %s with %(name)s in one statement.
-    print(f"\n[update] Running window-function UPDATE for {target_date}...")
-    print("  (scans full history — may take 30-90 seconds)")
+    print(f"\n[update] Running window-function UPDATE for {target_date}"
+          f" ({'last ' + str(FAST_BARS) + ' bars per stock' if fast else 'full history'})...")
     conn = get_conn()
     try:
         with conn.cursor() as cur:
@@ -379,8 +436,10 @@ WHERE e.id = s.id
 def compute_rolling_metrics_for_date(db_conn, trade_date, verbose=False) -> int:
     """Pipeline entry point. Pure SQL — no indicators.calculators dependency.
     db_conn is accepted but unused (opens its own psycopg2 connection).
+    One-day mode: the full-history scan took ~11 minutes a night to write one
+    date. The CLI keeps the full mode (--full) for a rebuild.
     """
-    n = run_update(str(trade_date))
+    n = run_update(str(trade_date), fast=True)
     if verbose:
         print(f"  [rolling_metrics] {n} rows updated for {trade_date}")
     return n
@@ -421,6 +480,8 @@ def main():
     parser.add_argument('--to', dest='to_date', metavar='YYYY-MM-DD',
                         help='End of date range (use with --all or alone)')
     parser.add_argument('--verify', action='store_true', help='Only verify, no update')
+    parser.add_argument('--fast', action='store_true',
+                        help=f'Read only the last {FAST_BARS} bars per stock (what the pipeline runs)')
     args = parser.parse_args()
 
     # Decide mode: single date vs. range/all
@@ -437,7 +498,7 @@ def main():
             if args.verify:
                 verify(d)
             else:
-                n = run_update(d)
+                n = run_update(d, fast=args.fast)
                 total_updated += n
                 print(f'  cumulative rows updated: {total_updated}')
         if not args.verify:
@@ -448,7 +509,7 @@ def main():
             verify(target_date)
             return
         verify(target_date)   # before
-        run_update(target_date)
+        run_update(target_date, fast=args.fast)
         verify(target_date)   # after
 
 
