@@ -37,6 +37,7 @@ def aggregate_weekly_bars(
     run_indicators: bool = True,
     verbose: bool = False,
     include_partial: bool = False,
+    holidays: frozenset = frozenset(),
 ) -> int:
     """
     Aggregate km_equity_eod into km_equity_weekly for all ISO weeks
@@ -74,7 +75,11 @@ def aggregate_weekly_bars(
         # Skip a week still in progress — see the monthly note: a partial
         # week written by a mid-week force/fix job sits stale as the latest
         # weekly bar. Week end = the Friday of `week` (ISO week start Monday).
-        if not include_partial and (week + timedelta(days=4)) > today:
+        # The week ends on its LAST TRADING DAY, not on Friday: a week whose
+        # Friday is a holiday (2 Oct 2026) is complete on Thursday.
+        from pipeline.utils.trading_calendar import last_trading_day_of_period
+        week_end = last_trading_day_of_period(week, True, holidays) or (week + timedelta(days=4))
+        if not include_partial and week_end > today:
             skipped_partial += 1
             if verbose:
                 print(f'    week {week}: still in progress — skipped')

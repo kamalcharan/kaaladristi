@@ -171,6 +171,12 @@ def check_period_bars(conn, run_date: date) -> list[Finding]:
       - weekly bulk bars must land on Fridays
     """
     out: list[Finding] = []
+    from pipeline.utils.trading_calendar import load_holidays, is_period_end
+    try:
+        holidays = load_holidays(conn, run_date - timedelta(days=60), run_date + timedelta(days=45))
+    except Exception:
+        conn.rollback()
+        holidays = frozenset()
 
     # -- newest bars
     (wk_max,), = _rows(conn, 'SELECT MAX(trade_date) FROM km_equity_weekly')
@@ -185,11 +191,13 @@ def check_period_bars(conn, run_date: date) -> list[Finding]:
                 summary=f'Newest weekly bar is {age} days old ({wk_max}) — an aggregation run was missed',
                 metric=age, expected=WEEKLY_MAX_AGE_DAYS,
                 detail={'newest_bar': str(wk_max)}))
-        if wk_max.isoweekday() != 5:
+        # The week's LAST TRADING DAY, not Friday: a holiday Friday (2 Oct 2026)
+        # closes the week on Thursday, and that bar is correct.
+        if not is_period_end(wk_max, True, holidays):
             out.append(Finding(
                 check_key='weekly_not_friday', check_class='invariant', severity='warning',
                 subject='km_equity_weekly',
-                summary=f'Newest weekly bar {wk_max} is a {wk_max.strftime("%A")}, not a Friday — '
+                summary=f'Newest weekly bar {wk_max} is a {wk_max.strftime("%A")}, not the last trading day of its week — '
                         f'likely a partial week written by a forced run',
                 detail={'newest_bar': str(wk_max), 'weekday': wk_max.strftime('%A')}))
 
@@ -211,7 +219,7 @@ def check_period_bars(conn, run_date: date) -> list[Finding]:
         # September bar (3,532 rows) failed integrity_checks and made the run
         # 'partial'.
         from daily_pipeline import is_month_end
-        if mo_max >= run_date.replace(day=1) and not is_month_end(run_date):
+        if mo_max >= run_date.replace(day=1) and not is_month_end(run_date, holidays):
             month_start = run_date.replace(day=1)
             n_rows, n_dates = _rows(conn, '''
                 SELECT COUNT(*), COUNT(DISTINCT trade_date)

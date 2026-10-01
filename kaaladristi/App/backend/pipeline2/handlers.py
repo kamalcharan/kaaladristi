@@ -786,8 +786,8 @@ def _handle_period_aggregate(dim: str, conn, trade_date: date, force: bool,
     pipeline2: km_equity_weekly stale from 2026-05-18, km_equity_monthly from
     2026-05-01. Identical failure to rs_percentile and index_returns.
 
-    Boundary semantics are preserved from the legacy steps: weekly runs on
-    Fridays, monthly on the last calendar day. On any other date the step is a
+    Boundaries: weekly runs on the week's last TRADING day, monthly on the
+    month's last trading day (was Friday / last calendar day until 2026-10-01). On any other date the step is a
     no-op and reports 'completed' rather than 'failed' — a Tuesday genuinely has
     no weekly bar to write, and marking it failed would have the 19:30 gap sweep
     re-enqueue it every single day.
@@ -814,25 +814,53 @@ def _handle_period_aggregate(dim: str, conn, trade_date: date, force: bool,
     before = fill_rate(conn, dim, trade_date)
     on_progress(f'before fill_rate = {before:.1f}%', 5)
 
-    if not is_boundary(trade_date):
-        on_progress(f'{trade_date} is not a {label} boundary — nothing to aggregate', 100)
-        return HandlerResult('completed', before, before, 0)
+    # Boundaries are TRADING-calendar boundaries (2026-10-01): the week ends on
+    # its last trading day, the month on its last trading day. A Friday-only /
+    # last-calendar-day trigger never fired for a week whose Friday is a holiday
+    # or a month ending on a weekend, and those bars were simply never built.
+    from pipeline.utils.trading_calendar import (
+        load_holidays, period_start, last_trading_day_of_period)
+    weekly = label == 'weekly'
+    try:
+        holidays = load_holidays(conn, trade_date - timedelta(days=45),
+                                 trade_date + timedelta(days=45))
+    except Exception:
+        conn.rollback()
+        holidays = frozenset()
 
-    on_progress(f'aggregating {label} bars through {trade_date}', 30)
+    build_from = None
+    if is_boundary(trade_date, holidays):
+        build_from = period_start(trade_date, weekly)
+    else:
+        # Catch-up: the PREVIOUS period ended on a day the pipeline never ran
+        # (an unlisted holiday, a missed night). Build it now — the aggregate
+        # skips the period still in progress, so this never writes a partial bar.
+        prev_end = last_trading_day_of_period(
+            period_start(trade_date, weekly) - timedelta(days=1), weekly, holidays)
+        if prev_end is not None and fill_rate(conn, dim, prev_end) <= 0:
+            build_from = period_start(prev_end, weekly)
+            on_progress(f'previous {label} period ending {prev_end} has no bar — building it', 20)
+        else:
+            on_progress(f'{trade_date} is not a {label} boundary — nothing to aggregate', 100)
+            return HandlerResult('completed', before, before, 0)
+
+    on_progress(f'aggregating {label} bars from {build_from}', 30)
     try:
         # aggregate_*_bars takes the db_client (not a raw psycopg2 conn) and a
-        # from_date, and rebuilds every period from that date forward. Passing the
-        # period start keeps the run bounded to the current period.
+        # from_date, and rebuilds every COMPLETE period from that date forward.
         from lib.db_client import get_db
         db = get_db()
-        if label == 'weekly':
-            from_date = trade_date - timedelta(days=trade_date.isoweekday() - 1)
-        else:
-            from_date = trade_date.replace(day=1)
-        rows = int(aggregate_fn(db, from_date=from_date, run_indicators=True, verbose=False) or 0)
+        rows = int(aggregate_fn(db, from_date=build_from, run_indicators=True,
+                                verbose=False, holidays=holidays) or 0)
     except Exception as e:
         conn.rollback()
         return HandlerResult('failed', before, before, 0, error_msg=str(e)[:500])
+
+    if not is_boundary(trade_date, holidays):
+        # A catch-up: judge the period it built, not today's (still open).
+        after_prev = fill_rate(conn, dim, prev_end)
+        return HandlerResult('completed' if after_prev >= 100.0 else 'failed',
+                             before, before, rows)
 
     after = fill_rate(conn, dim, trade_date)
     status = 'completed' if after >= 100.0 else 'failed'

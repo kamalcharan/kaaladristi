@@ -32,7 +32,6 @@ Usage
 import os
 import sys
 import argparse
-import calendar
 from datetime import date, datetime, timedelta
 
 # Add backend dir to path
@@ -69,19 +68,27 @@ from scripts.backfill_vani_flags import compute_vani_flags_for_date
 from scripts.sync_nse_isin_master import sync_nse_isin_master
 
 
-def is_week_end(d: date) -> bool:
-    """True if d is a Friday (ISO weekday 5).
+def is_week_end(d: date, holidays=frozenset()) -> bool:
+    """True if d is the last trading day of its ISO week.
 
-    The weekly aggregate is triggered on Fridays regardless of whether
-    tomorrow is a trading day — the pipeline always runs on trading days,
-    and Friday is the natural ISO week boundary.
+    Was "is a Friday", which never fires in a week whose Friday is a holiday
+    (2 Oct 2026) — that week's bar was never built. `holidays` comes from
+    km_trading_calendar (pipeline.utils.trading_calendar.load_holidays); an
+    empty set means weekdays only.
     """
-    return d.isoweekday() == 5
+    from pipeline.utils.trading_calendar import is_period_end
+    return is_period_end(d, True, holidays)
 
 
-def is_month_end(d: date) -> bool:
-    """True if d is the last calendar day of its month."""
-    return d.day == calendar.monthrange(d.year, d.month)[1]
+def is_month_end(d: date, holidays=frozenset()) -> bool:
+    """True if d is the last trading day of its month.
+
+    Was "the last calendar day", which never fires in a month ending on a
+    weekend or a holiday (31 Oct 2026 is a Saturday) — that month's bar was
+    never built by the daily run.
+    """
+    from pipeline.utils.trading_calendar import is_period_end
+    return is_period_end(d, False, holidays)
 
 
 def run_nse_pipeline(db, trade_date: date, dry_run: bool = False,

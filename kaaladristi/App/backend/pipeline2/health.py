@@ -288,6 +288,14 @@ def weekday_range(days: int, today: date | None = None) -> list[date]:
     return out
 
 
+def _period_open(d: date, weekly: bool, holidays, today: date) -> bool:
+    """True while the week/month containing d has not reached its last
+    trading day — its aggregate bar is not due yet."""
+    from pipeline.utils.trading_calendar import last_trading_day_of_period
+    end = last_trading_day_of_period(d, weekly, holidays)
+    return end is not None and end > today
+
+
 def _skip_dates(conn, from_dt: date, to_dt: date) -> dict[str, str]:
     """Map of {date_str: 'holiday'|'no_data'} from km_trading_calendar."""
     result: dict[str, str] = {}
@@ -644,6 +652,12 @@ def _health_row(
                 [first_period, to_dt],
             )
             have = {r[0] for r in cur.fetchall()}
+        from pipeline.utils.trading_calendar import load_holidays
+        try:
+            holidays = load_holidays(conn, from_dt, to_dt + timedelta(days=45))
+        except Exception:
+            conn.rollback()
+            holidays = frozenset()
         for d in trading_days:
             ds = str(d)
             if d > today:
@@ -654,6 +668,13 @@ def _health_row(
                 continue
             period = (d - timedelta(days=d.weekday())) if weekly else d.replace(day=1)
             ok = period in have
+            if not ok and _period_open(d, weekly, holidays, today):
+                # The bar is built on the period's last trading day, so a
+                # Tuesday of this week has no bar YET. Reporting it 'missing'
+                # made the gap sweep queue a no-op fix every night, and each
+                # no-op stamp made wg_journeys read as stale (2026-10-01).
+                days.append(DayStatus(ds, 'future'))
+                continue
             days.append(DayStatus(ds, 'ok' if ok else 'missing',
                                   total=1, populated=1 if ok else 0,
                                   fill_rate=100.0 if ok else 0.0))

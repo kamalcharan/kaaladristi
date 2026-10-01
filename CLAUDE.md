@@ -689,6 +689,22 @@ DEFINITION (`pg_get_viewdef`): an arm that exists but is empty is a WARNING
 (`contract_arm_empty_*`); only an arm absent from the definition is critical.
 Tested in `test_scan_contract_routing.py`.
 
+### Weekly / monthly bars close on the last TRADING day (2026-10-01)
+
+`is_week_end` was "is a Friday" and `is_month_end` "the last calendar day".
+Friday 2 Oct 2026 is a holiday and 31 Oct a Saturday, so neither bar would
+ever have been built by the daily run. Both now ask
+`trading_calendar.is_period_end(d, weekly, holidays)` with holidays from
+`km_trading_calendar` (`load_holidays`, the migration-228 predicate); an empty
+set means weekdays only. The aggregators skip a period whose LAST TRADING DAY
+is after today (not Friday / calendar end), the handler builds the PREVIOUS
+period on its next run if it has no bar (an unlisted holiday or a missed
+night), and the integrity check's `weekly_not_friday` / `monthly_partial_bar`
+use the same calendar. The health grid shows an open week/month as `future`,
+not `missing`: before, the 19:30 and 21:30 sweeps queued a no-op weekly/monthly
+fix every night, and each stamp made `wg_journeys` read stale in the
+derivation check. `test_trading_period_bounds.py`.
+
 ### Nightly speed: job time limit + one-day rolling_metrics (2026-10-01)
 
 One `nse_flow` fix held the single worker from 00:00 to 09:58 IST and every

@@ -55,6 +55,7 @@ def aggregate_monthly_bars(
     run_indicators: bool = True,
     verbose: bool = False,
     include_partial: bool = False,
+    holidays: frozenset = frozenset(),
 ) -> int:
     """
     Aggregate km_equity_eod into km_equity_monthly for all calendar months
@@ -95,7 +96,11 @@ def aggregate_monthly_bars(
         # monthly consumer read a partial month as if complete. Reached via
         # any force/fix job on a mid-month date (the 19:30 gap sweep enqueues
         # those automatically).
-        if not include_partial and _month_end(month_start) > today:
+        # The month ends on its LAST TRADING DAY: October 2026 ends Friday the
+        # 30th (the 31st is a Saturday), and on the 30th it is complete.
+        from pipeline.utils.trading_calendar import last_trading_day_of_period
+        month_end = last_trading_day_of_period(month_start, False, holidays) or _month_end(month_start)
+        if not include_partial and month_end > today:
             skipped_partial += 1
             if verbose:
                 print(f'    month {month_start.strftime("%Y-%m")}: still in progress — skipped')

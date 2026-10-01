@@ -81,3 +81,58 @@ def last_trading_day(d: date = None) -> date:
     while is_weekend(d):
         d -= timedelta(days=1)
     return d
+
+
+# ── Period boundaries (weekly / monthly bars) ────────────────────────────────
+#
+# A weekly bar is complete after the week's LAST TRADING DAY, not after Friday;
+# a monthly bar after the month's last trading day, not its last calendar day.
+# Owner-visible failure that made this necessary (2026-10-01): Friday 2 Oct is
+# a holiday, so a Friday-only trigger never builds that week's bar; 31 Oct 2026
+# is a Saturday, so a calendar-day trigger never builds October's.
+#
+# `holidays` is a set of dates the exchange is closed on a weekday (from
+# km_trading_calendar). An empty set degrades to "weekdays only", which is
+# already right for every week and month that does not end on a holiday.
+
+def load_holidays(conn, from_date: date, to_date: date) -> frozenset:
+    """NSE weekday closures between two dates, from km_trading_calendar.
+    Same predicate as migration 228's planned Day 0 and health._skip_dates."""
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT trade_date FROM km_trading_calendar "
+            "WHERE exchange = 'NSE' AND trade_date BETWEEN %s AND %s "
+            "  AND (is_holiday OR status IN ('holiday', 'no_data', 'weekend'))",
+            [str(from_date), str(to_date)],
+        )
+        return frozenset(r[0] for r in cur.fetchall())
+
+
+def _trading(d: date, holidays) -> bool:
+    return not is_weekend(d) and d not in holidays
+
+
+def period_start(d: date, weekly: bool) -> date:
+    return d - timedelta(days=d.weekday()) if weekly else d.replace(day=1)
+
+
+def last_trading_day_of_period(d: date, weekly: bool, holidays=frozenset()) -> date | None:
+    """The last trading day of the week/month containing d (None if the whole
+    period is closed)."""
+    start = period_start(d, weekly)
+    if weekly:
+        end = start + timedelta(days=6)
+    else:
+        nxt = (start.replace(year=start.year + 1, month=1) if start.month == 12
+               else start.replace(month=start.month + 1))
+        end = nxt - timedelta(days=1)
+    while end >= start:
+        if _trading(end, holidays):
+            return end
+        end -= timedelta(days=1)
+    return None
+
+
+def is_period_end(d: date, weekly: bool, holidays=frozenset()) -> bool:
+    """True when d is the last trading day of its week (weekly) or month."""
+    return last_trading_day_of_period(d, weekly, holidays) == d
