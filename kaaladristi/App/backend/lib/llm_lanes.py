@@ -23,7 +23,8 @@ the environment:
     LLM_GROQ_TIMEOUT=120                     # optional, seconds
     LLM_GROQ_COOLDOWN=120                    # optional, seconds skipped after a 429
     LLM_GROQ_JSON=json_object                # optional: json_object (default) | json_schema | none
-    LLM_GROQ_MAX_TOKENS=4000                 # optional: reply budget (reasoning models need more)
+    LLM_GROQ_MAX_TOKENS=2000                 # optional: reply budget (reasoning models need more)
+    LLM_GROQ_REASONING=low                   # optional: reasoning_effort for reasoning models
 
     LLM_ROUTE_HIGH=groq,openrouter,qwen      # today's work
     LLM_ROUTE_MEDIUM=qwen                    # backlog
@@ -82,6 +83,9 @@ def provider_config(name: str) -> Optional[dict]:
         # A reasoning model spends tokens thinking before it answers; the
         # caller's budget (sized for Qwen with thinking off) can cut it off.
         'max_tokens': int(_env(f'LLM_{up}_MAX_TOKENS', '0')),
+        # low | medium | high, sent as `reasoning_effort` when set. gpt-oss on
+        # Groq spent a 20-token reply entirely on reasoning and answered "".
+        'reasoning': _env(f'LLM_{up}_REASONING').lower(),
     }
 
 
@@ -214,6 +218,8 @@ class HostedMessages:
             'max_tokens': cfg.get('max_tokens') or self.max_tokens,
             'temperature': 0,
         }
+        if cfg.get('reasoning'):
+            body['reasoning_effort'] = cfg['reasoning']
         if cfg['json'] == 'json_schema':
             body['response_format'] = {'type': 'json_schema', 'json_schema': {
                 'name': output_format.__name__, 'schema': schema, 'strict': True}}

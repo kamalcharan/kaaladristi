@@ -137,6 +137,13 @@ class LaneTests(unittest.TestCase):
         with mock.patch.dict(os.environ, {'LLM_GROQ_MAX_TOKENS': '4000'}):
             parse(ll.RoutedClient(ll.route('high'), LocalStub, 500, 16384, post=post))
         self.assertEqual(post.calls[0][1]['max_tokens'], 4000)
+        self.assertNotIn('reasoning_effort', post.calls[0][1])        # unset → not sent
+
+    def test_reasoning_effort_is_sent_when_set(self):
+        post = FakePost({'groq.example': Resp()})
+        with mock.patch.dict(os.environ, {'LLM_GROQ_REASONING': 'low'}):
+            parse(ll.RoutedClient(ll.route('high'), LocalStub, 500, 16384, post=post))
+        self.assertEqual(post.calls[0][1]['reasoning_effort'], 'low')
 
     def test_a_429_waits_as_long_as_the_provider_asks(self):
         r = Resp(429)
