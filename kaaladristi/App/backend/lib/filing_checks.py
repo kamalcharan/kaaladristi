@@ -209,8 +209,8 @@ def _finish(conn, check_id: int, status: str, error: Optional[str] = None, **fie
 
 def make_client(backend: str):
     if backend == 'local':
-        return fr.LocalClient(fr.LOCAL_URL, fr.LOCAL_MODEL, fr.LOCAL_CTX_TOKENS, fr.LOCAL_MAX_TOKENS,
-                              fr.LOCAL_TIMEOUT_SEC, api_key=fr.LOCAL_KEY)
+        # History checks are LOW priority: LLM_ROUTE_LOW, Qwen when unset.
+        return fr.lane_client('low')
     import anthropic
     return anthropic.Anthropic(api_key=fr._api_key())
 
@@ -229,7 +229,7 @@ def run_one(conn, check: dict, client) -> str:
     doc = fr._from_pages(parts, row.get('raw_page_count') or len(parts), 'text')
     doc.needs_pdf = False
     if backend == 'local':
-        doc = fr.fit_to_chars(doc, fr.local_doc_char_budget())
+        doc = fr.fit_to_chars(doc, fr.local_doc_char_budget(getattr(client, 'ctx_tokens', None)))
         doc.needs_pdf = False
     model = fr._resolve_model(backend)
     try:
@@ -244,7 +244,9 @@ def run_one(conn, check: dict, client) -> str:
     except Exception as e:
         _finish(conn, check['check_id'], 'failed', f'model: {e}')
         return 'model_error'          # the server, not the document — counts toward the streak
-    if backend == 'local':
+    if getattr(resp, 'label', None):
+        model = resp.label
+    elif backend == 'local':
         served = getattr(resp, 'model', None)
         if served:
             model = 'local:' + os.path.basename(str(served))[:80]
@@ -304,11 +306,11 @@ def current_reader(conn):
         row = fr._claim_next(c, retry_failed=True, pass_started=started)
         if row is None:
             return None
-        if 'client' not in ctx:
+        if 'session' not in ctx:
             from pipeline.utils.nse_session import NseSession
-            ctx['client'], ctx['session'] = fr._client(), NseSession()
+            ctx['session'] = NseSession()
         try:
-            return fr.read_one(c, row, ctx['client'], ctx['session'])
+            return fr.read_one(c, row, fr.client_for(row), ctx['session'])
         except Exception as e:
             c.rollback()
             log.exception('filing read %s crashed', row['read_id'])

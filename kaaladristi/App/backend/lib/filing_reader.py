@@ -61,6 +61,8 @@ from typing import Optional
 
 from pydantic import BaseModel, Field
 
+from lib import llm_lanes
+
 log = logging.getLogger('filing_reader')
 
 READER_VERSION = 'v1'
@@ -326,6 +328,46 @@ def _client():
     return anthropic.Anthropic(api_key=_api_key())
 
 
+# ── priority lanes (lib/llm_lanes.py) ────────────────────────────────────
+# On the local backend a filing disseminated in the last FILING_READ_HIGH_DAYS
+# days is HIGH priority and goes down LLM_ROUTE_HIGH (a free hosted model
+# first, when one is declared); older ones are MEDIUM and stay on Qwen. With
+# no LLM_* settings every route is Qwen — the behaviour before lanes.
+HIGH_DAYS = float(os.getenv('FILING_READ_HIGH_DAYS') or '2')   # compose passes '' when unset
+_lane_clients: dict = {}
+
+
+def priority_of(row: dict) -> str:
+    when = row.get('disseminated_at')
+    if when is None:
+        return 'medium'
+    if when.tzinfo is None:
+        when = when.replace(tzinfo=timezone.utc)
+    age_days = (datetime.now(timezone.utc) - when).total_seconds() / 86400
+    return 'high' if age_days <= HIGH_DAYS else 'medium'
+
+
+def local_client() -> 'LocalClient':
+    return LocalClient(LOCAL_URL, LOCAL_MODEL, LOCAL_CTX_TOKENS, LOCAL_MAX_TOKENS, LOCAL_TIMEOUT_SEC,
+                       api_key=LOCAL_KEY)
+
+
+def lane_client(priority: str):
+    names = tuple(llm_lanes.route(priority))
+    if names not in _lane_clients:
+        _lane_clients[names] = llm_lanes.RoutedClient(list(names), local_client, LOCAL_MAX_TOKENS,
+                                                      LOCAL_CTX_TOKENS)
+    return _lane_clients[names]
+
+
+def client_for(row: dict):
+    """The client this row should be read with: its priority lane on the
+    local backend, the configured client otherwise."""
+    if BACKEND == 'local':
+        return lane_client(priority_of(row))
+    return _client()
+
+
 def has_api_key() -> bool:
     return bool(_api_key())
 
@@ -343,6 +385,8 @@ def backend_missing() -> Optional[str]:
 def _cost(model: str, inp: int, out: int) -> Optional[float]:
     if model.startswith('local:'):
         return 0.0
+    if ':' in model and model.split(':', 1)[0] in llm_lanes.provider_names():
+        return 0.0                       # a free hosted lane (groq:…, openrouter:…)
     p = PRICES.get(model)
     if not p:
         return None
@@ -775,7 +819,7 @@ def _store_text(conn, raw_id: int, doc: DocumentText) -> None:
 def read_one(conn, row: dict, client, session, model: str = MODEL, backend: str = None) -> str:
     """Fetch, extract, read, write. Returns the final status."""
     if backend is None:
-        backend = 'local' if isinstance(client, LocalClient) else BACKEND
+        backend = 'local' if isinstance(client, (LocalClient, llm_lanes.RoutedClient)) else BACKEND
     read_id = row['read_id']
     url = (row.get('doc_url') or '').strip()
     if not url:
@@ -831,7 +875,7 @@ def read_one(conn, row: dict, client, session, model: str = MODEL, backend: str 
                 page_count=doc.page_count, pages_read=doc.pages_read)
         return 'unreadable'
     if backend == 'local':
-        doc = fit_to_chars(doc, local_doc_char_budget())
+        doc = fit_to_chars(doc, local_doc_char_budget(getattr(client, 'ctx_tokens', None)))
 
     pdf_for_model = _pdf_first_pages(pdf_bytes, MAX_PAGES) if doc.needs_pdf else None
     messages = build_messages(row, doc, pdf_for_model)
@@ -850,7 +894,9 @@ def read_one(conn, row: dict, client, session, model: str = MODEL, backend: str 
     except Exception as e:
         _finish(conn, read_id, 'failed', f'model: {e}')
         return 'failed'
-    if backend == 'local':
+    if getattr(resp, 'label', None):
+        model = resp.label               # a lane says which provider answered: 'groq:…', 'local:…'
+    elif backend == 'local':
         # What the server says it ran (llama.cpp answers with the gguf name),
         # never the configured label — a free read must be auditable too.
         served = getattr(resp, 'model', None)
@@ -897,7 +943,7 @@ def read_pending(conn, session=None, client=None, limit: int = MAX_PER_PASS,
             stats['skipped'] = missing
             log.warning(f'[filing_reader] {missing} — rows stay pending')
             return stats
-        client = _client()
+        client = None                    # chosen per row: its priority lane (client_for)
     missing = schema_missing(conn)
     if missing:
         stats['skipped'] = missing
@@ -927,7 +973,8 @@ def read_pending(conn, session=None, client=None, limit: int = MAX_PER_PASS,
         if row is None:
             break
         try:
-            status = read_one(conn, row, client, session, model=model)
+            status = read_one(conn, row, client if client is not None else client_for(row), session,
+                              model=model)
         except Exception as e:
             # A bug in the reader is this row's failure, not the pass's: mark
             # it (the next pass retries under the attempt cap) and go on. If

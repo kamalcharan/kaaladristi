@@ -697,6 +697,22 @@ stays full by default (`--fast` to opt in). ⚠ The carry trusts the previous
 bar: after correcting OLD history (a price fix > 260 bars back), run the full
 mode over the range, not a pipeline fix.
 
+**LLM lanes (2026-10-01, `lib/llm_lanes.py`).** Owner: low/medium stay on
+Qwen, the rest goes to free hosted APIs, all via `.env`, nothing hardcoded.
+Each priority has a route (`LLM_ROUTE_HIGH/MEDIUM/LOW`, providers tried left
+to right; a 429 parks a provider for `LLM_<NAME>_COOLDOWN`). Providers are
+declared as `LLM_<NAME>_URL/_KEY/_MODEL` (+ `_CTX`, `_TIMEOUT`, `_JSON`).
+Filing reads disseminated within `FILING_READ_HIGH_DAYS` (2) are HIGH, older
+ones MEDIUM, history checks LOW. Every route unset = Qwen = the behaviour
+before lanes. The row's `model` records who answered (`groq:…`, `local:…`);
+free lanes cost 0. ⚠ docker-compose passes env vars BY NAME — a third
+provider needs its lines added to `pipeline-api2.environment`, and `env_file`
+was refused on purpose (the deploy `.env` also carries frontend/PostgREST
+keys that would change how the backend connects). ⚠ Only public text
+(filings, news) may go down a lane: free tiers may log it.
+`/internal/health` shows `llm_lanes` (routes and parked providers, never a
+URL or key). `test_llm_lanes.py`.
+
 Filing reads go first: the checks runner (API thread) reads one pending
 filing each turn before taking a Qwen history check, because both share one
 Qwen slot and an 800-row check queue starved the current stream for days.

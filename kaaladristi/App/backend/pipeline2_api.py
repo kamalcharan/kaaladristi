@@ -3620,7 +3620,18 @@ def _health_body() -> dict:
         'scheduler_lease': leases['scheduler'],
         'auth_mode': _AUTH_MODE,
         'filing_reads': filing_reads,
+        'llm_lanes': _llm_lanes_summary(),
     }
+
+
+def _llm_lanes_summary():
+    # Route names and parked providers only — never a URL, a model or a key.
+    try:
+        from lib import llm_lanes
+        return {p: llm_lanes.route(p) for p in llm_lanes.PRIORITIES} | {
+            'cooling': [n for n in llm_lanes.provider_names() if llm_lanes.cooling(n)]}
+    except Exception as e:
+        return {'error': str(e)[:120]}
 
 
 @app.get('/internal/health')
