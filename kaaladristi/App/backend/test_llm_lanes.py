@@ -155,6 +155,19 @@ class LaneTests(unittest.TestCase):
             self.assertEqual(ll._cooldown_until['groq'], t0 + 601)   # not the 60 s configured
         self.assertEqual(ll._retry_after(type('R', (), {'headers': {'x-ratelimit-reset-tokens': '2m3.5s'}})()), 124)
 
+    def test_a_near_miss_verdict_is_repaired_not_refused(self):
+        sloppy = ('{"impact":"positive","magnitude":"notable","headline":"h","reasoning":"r",'
+                  '"confidence":"0.8","amount_value":"Rs 1,200.5 crore","relative_pct":"n/a"}')
+        post = FakePost({'groq.example': Resp(content=sloppy)})
+        r = parse(ll.RoutedClient(['groq'], LocalStub, 500, 16384, post=post))
+        v = r.parsed_output
+        self.assertEqual((v.confidence, v.amount_value, v.relative_pct, v.evidence_quote), (0.8, 1200.5, None, ''))
+
+    def test_a_non_answer_still_fails(self):
+        post = FakePost({'groq.example': Resp(content='{"impact": ["positive"]}')})
+        with self.assertRaises(RuntimeError):
+            parse(ll.RoutedClient(['groq'], LocalStub, 500, 16384, post=post))
+
     def test_describe_never_shows_a_key(self):
         self.assertNotIn('gk', repr(ll.describe()))
 

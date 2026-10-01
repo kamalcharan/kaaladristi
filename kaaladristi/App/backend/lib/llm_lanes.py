@@ -41,6 +41,7 @@ they receive; never route user data through a lane.
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import re
@@ -203,6 +204,50 @@ def _user_text(messages: list) -> str:
     return '\n'.join(b['text'] for b in blocks if b.get('type') == 'text')
 
 
+_NUM_RE = re.compile(r'-?\d[\d,]*\.?\d*')
+
+
+def _types(spec: dict) -> set:
+    if 'type' in spec:
+        return {spec['type']}
+    return {a.get('type') for a in spec.get('anyOf', []) if a.get('type')}
+
+
+def repair(data, schema: dict):
+    """Bend a hosted model's near-miss into the schema, never invent content.
+    A number written as text ("Rs 120 crore", "0.8") becomes the number; a
+    number field with no number in it, or a missing optional field, becomes
+    null; a missing text field becomes ''. Anything else is left for the
+    validator to refuse. Owner's OpenRouter reads failed on exactly this."""
+    if not isinstance(data, dict):
+        return data
+    required = set(schema.get('required', []))
+    props = schema.get('properties', {})
+    # More than one required field missing is a non-answer, not a near miss:
+    # leave it for the validator to refuse.
+    missing_required = [n for n in required if data.get(n) is None]
+    fill_required = len(missing_required) <= 1
+    for name, spec in props.items():
+        t = _types(spec)
+        v = data.get(name)
+        if v is None:
+            if name not in required:
+                data[name] = None
+            elif fill_required and 'string' in t:
+                data[name] = ''
+            continue
+        scalar = isinstance(v, (str, int, float, bool))
+        if t & {'number', 'integer'} and isinstance(v, str):
+            m = _NUM_RE.search(v)
+            if m:
+                data[name] = float(m.group(0).replace(',', ''))
+            elif 'null' in t:
+                data[name] = None
+        elif 'string' in t and scalar and not isinstance(v, str):
+            data[name] = str(v)
+    return data
+
+
 def _extract_json(content: str) -> str:
     content = _THINK_RE.sub('', content or '').strip()
     if content.startswith('```'):
@@ -259,7 +304,11 @@ class HostedMessages:
         resp.raise_for_status()
         data = resp.json()
         content = (data.get('choices') or [{}])[0].get('message', {}).get('content') or ''
-        parsed = output_format.model_validate_json(_extract_json(content))
+        raw = _extract_json(content)
+        try:
+            parsed = output_format.model_validate_json(raw)
+        except Exception:
+            parsed = output_format.model_validate(repair(json.loads(raw), schema))
         usage = data.get('usage') or {}
         served = str(data.get('model') or cfg['model'])
         return LaneResp(parsed, int(usage.get('prompt_tokens') or 0), int(usage.get('completion_tokens') or 0),
