@@ -152,20 +152,13 @@ def _retry_after(resp) -> Optional[int]:
         if not v:
             continue
         v = str(v).strip()
-        try:                                   # '7.66s', '2m59.56s', '12'
-            total, num = 0.0, ''
-            for ch in v:
-                if ch.isdigit() or ch == '.':
-                    num += ch
-                elif ch in 'hms' and num:
-                    total += float(num) * {'h': 3600, 'm': 60, 's': 1}[ch]
-                    num = ''
-            if num:
-                total += float(num)
-            if total > 0:
-                return int(total) + 1
-        except ValueError:
-            continue
+        # '7.66s', '2m59.56s', '12', '846ms' — 'ms' before 'm', or 846ms
+        # reads as 846 MINUTES and parks the provider for 14 hours.
+        parts = re.findall(r'(\d+(?:\.\d+)?)(ms|h|m|s)?', v)
+        total = sum(float(n) * {'ms': 0.001, 'h': 3600, 'm': 60, 's': 1, '': 1}[u]
+                    for n, u in parts)
+        if total > 0:
+            return int(total) + 1
     return None
 
 

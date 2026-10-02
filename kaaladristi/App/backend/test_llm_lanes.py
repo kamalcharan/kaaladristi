@@ -153,6 +153,8 @@ class LaneTests(unittest.TestCase):
             parse(ll.RoutedClient(ll.route('high'), LocalStub, 500, 16384, post=post))
             self.assertEqual(ll._cooldown_until['groq'], t0 + 601)   # not the 60 s configured
         self.assertEqual(ll._retry_after(type('R', (), {'headers': {'x-ratelimit-reset-tokens': '2m3.5s'}})()), 124)
+        # '846ms' is milliseconds, not 846 minutes (that parked Groq for 14 hours)
+        self.assertEqual(ll._retry_after(type('R', (), {'headers': {'x-ratelimit-reset-tokens': '846ms'}})()), 1)
 
     def test_a_near_miss_verdict_is_repaired_not_refused(self):
         sloppy = '{"impact":"positive","headline":"h","reasoning":"r","confidence":"0.8"}'
