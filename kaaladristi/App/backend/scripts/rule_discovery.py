@@ -185,8 +185,6 @@ NOT_IMPLEMENTED_RULE_CODES: frozenset = frozenset({
     'YOG-EIN-PNK-BUL',
     # Vedh with vedh_by condition (planet IS vedhed by another) — not handled
     'VDH-JUP-PUS-BUL', 'VDH-RAH-ABH-BUL',
-    # Mercury Manifestation (emergence from combust zone) — not built
-    'TRN-MER-MAN-TRN',
 })
 # Notes on other Phase 2 groups (already return [] from existing type handlers):
 #   D9 navamsa rules (TR-UFN-*, VOL-MRS-PD9-BEA, VOL-MOO-MER-D9-VOL)
@@ -1247,6 +1245,12 @@ def discover_rule(conn, rule, vedh_map, panchak_naks, vocab):
     rt = rule['rule_type']
     cond = rule['conditions'] or {}
     rc = rule['rule_code']
+
+    # These legacy codes have canonical identities in migration 234. Only the
+    # dedicated ephemeris generator owns their windows; generic daily discovery
+    # must not reinterpret their former names/conditions or repopulate signals.
+    if rc in {'TRN-MER-MAN-TRN', 'TRN-MER-RIS-W-BUL', 'TR-MER-CMB-E-BEA', 'TR-MER-RET'}:
+        return []
 
     # Phase 2 rules — not yet implemented, skip cleanly
     if rc in NOT_IMPLEMENTED_RULE_CODES:
