@@ -1,12 +1,12 @@
 """
 generate_venus_windows.py
 
-Generate Venus rule transit windows from km_planetary_positions
-and insert into km_rule_transits (ON CONFLICT DO NOTHING).
+Requires migration 235. Generate Venus rule transit windows from km_planetary_positions
+and reconcile the canonical identities in km_rule_transits.
 
 Rules generated:
-  1. TRN-VEN-RIS-W-BUL  — Venus station direct (retrograde → direct), single-day
-  2. TRN-VEN-RIS-E-BUL  — Venus station retrograde (direct → retrograde), single-day
+  Canonical motion, combustion and Mercury/Venus conjunction windows via
+  migration 235 refresh_venus_event_windows(); stations are NOT visibility rise.
   3. DN-MON-VEN-BEA     — Monday + Venus nakshatra
   4. DN-TUE-VEN-BUL     — Tuesday + Venus nakshatra
   5. DN-WED-VEN-VOL     — Wednesday + Venus nakshatra
@@ -15,7 +15,8 @@ Rules generated:
 
 Date range: 1990-01-01 to 2030-12-31
 UNIQUE constraint: uq_rule_transits_rule_start (rule_id, start_date)
-All inserts use ON CONFLICT (rule_id, start_date) DO NOTHING.
+Canonical events use the migration's transactional refresh. The separate
+weekday/nakshatra rules use ON CONFLICT (rule_id, start_date) DO NOTHING.
 
 Run:
   cd App/backend/scripts
@@ -32,6 +33,7 @@ from datetime import date
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from lib.config import DATABASE_URL
+from lib.venus_identity import refresh_venus_data
 
 
 # ── DB connection ──────────────────────────────────────────────────────────────
@@ -92,60 +94,6 @@ def bulk_insert(cur, rows: list[tuple]) -> tuple[int, int]:
     return inserted, skipped
 
 
-# ── Rule 1: Venus Station Direct (Rise in West) ────────────────────────────────
-
-def generate_station_direct(cur, rule_id: int) -> tuple[int, int]:
-    cur.execute("""
-        WITH ven AS (
-            SELECT date, retrograde,
-                   LAG(retrograde) OVER (ORDER BY date) AS prev_retro
-            FROM km_planetary_positions
-            WHERE planet = 'Venus'
-              AND date BETWEEN %s AND %s
-        )
-        SELECT date AS start_date
-        FROM ven
-        WHERE retrograde = false AND prev_retro = true
-        ORDER BY date
-    """, (BACKFILL_FROM, BACKFILL_TO))
-
-    rows = []
-    for (start_date,) in cur.fetchall():
-        snap = json.dumps({
-            "event": "venus_station_direct",
-            "rule_type": "manifestation",
-        })
-        rows.append((rule_id, start_date, start_date, snap))
-    return bulk_insert(cur, rows)
-
-
-# ── Rule 2: Venus Station Retrograde (Rise in East) ───────────────────────────
-
-def generate_station_retrograde(cur, rule_id: int) -> tuple[int, int]:
-    cur.execute("""
-        WITH ven AS (
-            SELECT date, retrograde,
-                   LAG(retrograde) OVER (ORDER BY date) AS prev_retro
-            FROM km_planetary_positions
-            WHERE planet = 'Venus'
-              AND date BETWEEN %s AND %s
-        )
-        SELECT date AS start_date
-        FROM ven
-        WHERE retrograde = true AND prev_retro = false
-        ORDER BY date
-    """, (BACKFILL_FROM, BACKFILL_TO))
-
-    rows = []
-    for (start_date,) in cur.fetchall():
-        snap = json.dumps({
-            "event": "venus_station_retrograde",
-            "rule_type": "manifestation",
-        })
-        rows.append((rule_id, start_date, start_date, snap))
-    return bulk_insert(cur, rows)
-
-
 # ── Rules 3–7: Venus Nakshatra-Vara ───────────────────────────────────────────
 
 def generate_nakshatra_vara(cur, rule_id: int, dow: int) -> tuple[int, int]:
@@ -175,8 +123,6 @@ def generate_nakshatra_vara(cur, rule_id: int, dow: int) -> tuple[int, int]:
 
 def main():
     all_rule_codes = [
-        "TRN-VEN-RIS-W-BUL",
-        "TRN-VEN-RIS-E-BUL",
         *NAKSHATRA_VARA_RULES.keys(),
     ]
 
@@ -202,15 +148,9 @@ def main():
 
                 summary: dict[str, tuple[int, int]] = {}
 
-                if "TRN-VEN-RIS-W-BUL" in rule_ids:
-                    summary["TRN-VEN-RIS-W-BUL"] = generate_station_direct(
-                        cur, rule_ids["TRN-VEN-RIS-W-BUL"]
-                    )
-
-                if "TRN-VEN-RIS-E-BUL" in rule_ids:
-                    summary["TRN-VEN-RIS-E-BUL"] = generate_station_retrograde(
-                        cur, rule_ids["TRN-VEN-RIS-E-BUL"]
-                    )
+                # One owner for all seven Venus/conjunction identities.
+                changed = refresh_venus_data(cur)
+                print(f"  Canonical Venus/conjunction rows changed: {changed}")
 
                 for code, dow in NAKSHATRA_VARA_RULES.items():
                     if code in rule_ids:

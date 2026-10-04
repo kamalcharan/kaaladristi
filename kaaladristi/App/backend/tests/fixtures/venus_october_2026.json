@@ -1,0 +1,1406 @@
+[
+  {
+    "date": "2026-09-20",
+    "planet": "Mercury",
+    "longitude": 171.089717,
+    "speed": 1.520762,
+    "retrograde": false,
+    "combust": false,
+    "sign_name": "Virgo"
+  },
+  {
+    "date": "2026-09-20",
+    "planet": "Sun",
+    "longitude": 153.055101,
+    "speed": 0.976824,
+    "retrograde": false,
+    "combust": false,
+    "sign_name": "Virgo"
+  },
+  {
+    "date": "2026-09-20",
+    "planet": "Venus",
+    "longitude": 191.238258,
+    "speed": 0.435571,
+    "retrograde": false,
+    "combust": false,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-09-21",
+    "planet": "Mercury",
+    "longitude": 172.601882,
+    "speed": 1.503574,
+    "retrograde": false,
+    "combust": false,
+    "sign_name": "Virgo"
+  },
+  {
+    "date": "2026-09-21",
+    "planet": "Sun",
+    "longitude": 154.032159,
+    "speed": 0.977292,
+    "retrograde": false,
+    "combust": false,
+    "sign_name": "Virgo"
+  },
+  {
+    "date": "2026-09-21",
+    "planet": "Venus",
+    "longitude": 191.6602,
+    "speed": 0.408144,
+    "retrograde": false,
+    "combust": false,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-09-22",
+    "planet": "Mercury",
+    "longitude": 174.096856,
+    "speed": 1.48637,
+    "retrograde": false,
+    "combust": false,
+    "sign_name": "Virgo"
+  },
+  {
+    "date": "2026-09-22",
+    "planet": "Sun",
+    "longitude": 155.009687,
+    "speed": 0.977767,
+    "retrograde": false,
+    "combust": false,
+    "sign_name": "Virgo"
+  },
+  {
+    "date": "2026-09-22",
+    "planet": "Venus",
+    "longitude": 192.054204,
+    "speed": 0.379693,
+    "retrograde": false,
+    "combust": false,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-09-23",
+    "planet": "Mercury",
+    "longitude": 175.574596,
+    "speed": 1.469096,
+    "retrograde": false,
+    "combust": false,
+    "sign_name": "Virgo"
+  },
+  {
+    "date": "2026-09-23",
+    "planet": "Sun",
+    "longitude": 155.987696,
+    "speed": 0.978252,
+    "retrograde": false,
+    "combust": false,
+    "sign_name": "Virgo"
+  },
+  {
+    "date": "2026-09-23",
+    "planet": "Venus",
+    "longitude": 192.419243,
+    "speed": 0.350212,
+    "retrograde": false,
+    "combust": false,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-09-24",
+    "planet": "Mercury",
+    "longitude": 177.035001,
+    "speed": 1.451691,
+    "retrograde": false,
+    "combust": false,
+    "sign_name": "Virgo"
+  },
+  {
+    "date": "2026-09-24",
+    "planet": "Sun",
+    "longitude": 156.966197,
+    "speed": 0.978751,
+    "retrograde": false,
+    "combust": false,
+    "sign_name": "Virgo"
+  },
+  {
+    "date": "2026-09-24",
+    "planet": "Venus",
+    "longitude": 192.754284,
+    "speed": 0.319698,
+    "retrograde": false,
+    "combust": false,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-09-25",
+    "planet": "Mercury",
+    "longitude": 178.47791,
+    "speed": 1.434092,
+    "retrograde": false,
+    "combust": false,
+    "sign_name": "Virgo"
+  },
+  {
+    "date": "2026-09-25",
+    "planet": "Sun",
+    "longitude": 157.945204,
+    "speed": 0.979265,
+    "retrograde": false,
+    "combust": false,
+    "sign_name": "Virgo"
+  },
+  {
+    "date": "2026-09-25",
+    "planet": "Venus",
+    "longitude": 193.058297,
+    "speed": 0.288159,
+    "retrograde": false,
+    "combust": false,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-09-26",
+    "planet": "Mercury",
+    "longitude": 179.903093,
+    "speed": 1.416226,
+    "retrograde": false,
+    "combust": false,
+    "sign_name": "Virgo"
+  },
+  {
+    "date": "2026-09-26",
+    "planet": "Sun",
+    "longitude": 158.924733,
+    "speed": 0.979796,
+    "retrograde": false,
+    "combust": false,
+    "sign_name": "Virgo"
+  },
+  {
+    "date": "2026-09-26",
+    "planet": "Venus",
+    "longitude": 193.330264,
+    "speed": 0.25561,
+    "retrograde": false,
+    "combust": false,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-09-27",
+    "planet": "Mercury",
+    "longitude": 181.310244,
+    "speed": 1.398015,
+    "retrograde": false,
+    "combust": false,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-09-27",
+    "planet": "Sun",
+    "longitude": 159.904803,
+    "speed": 0.980348,
+    "retrograde": false,
+    "combust": false,
+    "sign_name": "Virgo"
+  },
+  {
+    "date": "2026-09-27",
+    "planet": "Venus",
+    "longitude": 193.569188,
+    "speed": 0.222076,
+    "retrograde": false,
+    "combust": false,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-09-28",
+    "planet": "Mercury",
+    "longitude": 182.698977,
+    "speed": 1.379372,
+    "retrograde": false,
+    "combust": false,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-09-28",
+    "planet": "Sun",
+    "longitude": 160.885435,
+    "speed": 0.98092,
+    "retrograde": false,
+    "combust": false,
+    "sign_name": "Virgo"
+  },
+  {
+    "date": "2026-09-28",
+    "planet": "Venus",
+    "longitude": 193.774099,
+    "speed": 0.187592,
+    "retrograde": false,
+    "combust": false,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-09-29",
+    "planet": "Mercury",
+    "longitude": 184.06881,
+    "speed": 1.3602,
+    "retrograde": false,
+    "combust": false,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-09-29",
+    "planet": "Sun",
+    "longitude": 161.86665,
+    "speed": 0.981514,
+    "retrograde": false,
+    "combust": false,
+    "sign_name": "Virgo"
+  },
+  {
+    "date": "2026-09-29",
+    "planet": "Venus",
+    "longitude": 193.94407,
+    "speed": 0.152203,
+    "retrograde": false,
+    "combust": false,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-09-30",
+    "planet": "Mercury",
+    "longitude": 185.419161,
+    "speed": 1.340388,
+    "retrograde": false,
+    "combust": false,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-09-30",
+    "planet": "Sun",
+    "longitude": 162.848468,
+    "speed": 0.982126,
+    "retrograde": false,
+    "combust": false,
+    "sign_name": "Virgo"
+  },
+  {
+    "date": "2026-09-30",
+    "planet": "Venus",
+    "longitude": 194.07822,
+    "speed": 0.11596,
+    "retrograde": false,
+    "combust": false,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-10-01",
+    "planet": "Mercury",
+    "longitude": 186.749332,
+    "speed": 1.319817,
+    "retrograde": false,
+    "combust": false,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-10-01",
+    "planet": "Sun",
+    "longitude": 163.830907,
+    "speed": 0.982755,
+    "retrograde": false,
+    "combust": false,
+    "sign_name": "Virgo"
+  },
+  {
+    "date": "2026-10-01",
+    "planet": "Venus",
+    "longitude": 194.175726,
+    "speed": 0.078925,
+    "retrograde": false,
+    "combust": false,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-10-02",
+    "planet": "Mercury",
+    "longitude": 188.058495,
+    "speed": 1.298349,
+    "retrograde": false,
+    "combust": false,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-10-02",
+    "planet": "Sun",
+    "longitude": 164.813981,
+    "speed": 0.983396,
+    "retrograde": false,
+    "combust": false,
+    "sign_name": "Virgo"
+  },
+  {
+    "date": "2026-10-02",
+    "planet": "Venus",
+    "longitude": 194.23583,
+    "speed": 0.04117,
+    "retrograde": false,
+    "combust": false,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-10-03",
+    "planet": "Mercury",
+    "longitude": 189.345679,
+    "speed": 1.275832,
+    "retrograde": false,
+    "combust": false,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-10-03",
+    "planet": "Sun",
+    "longitude": 165.797699,
+    "speed": 0.984044,
+    "retrograde": false,
+    "combust": false,
+    "sign_name": "Virgo"
+  },
+  {
+    "date": "2026-10-03",
+    "planet": "Venus",
+    "longitude": 194.257853,
+    "speed": 0.002776,
+    "retrograde": false,
+    "combust": false,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-10-04",
+    "planet": "Mercury",
+    "longitude": 190.609752,
+    "speed": 1.252096,
+    "retrograde": false,
+    "combust": false,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-10-04",
+    "planet": "Sun",
+    "longitude": 166.782068,
+    "speed": 0.984695,
+    "retrograde": false,
+    "combust": false,
+    "sign_name": "Virgo"
+  },
+  {
+    "date": "2026-10-04",
+    "planet": "Venus",
+    "longitude": 194.241202,
+    "speed": -0.036158,
+    "retrograde": true,
+    "combust": false,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-10-05",
+    "planet": "Mercury",
+    "longitude": 191.849401,
+    "speed": 1.226951,
+    "retrograde": false,
+    "combust": false,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-10-05",
+    "planet": "Sun",
+    "longitude": 167.767087,
+    "speed": 0.985343,
+    "retrograde": false,
+    "combust": false,
+    "sign_name": "Virgo"
+  },
+  {
+    "date": "2026-10-05",
+    "planet": "Venus",
+    "longitude": 194.185392,
+    "speed": -0.075523,
+    "retrograde": true,
+    "combust": false,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-10-06",
+    "planet": "Mercury",
+    "longitude": 193.063111,
+    "speed": 1.200183,
+    "retrograde": false,
+    "combust": false,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-10-06",
+    "planet": "Sun",
+    "longitude": 168.75275,
+    "speed": 0.985984,
+    "retrograde": false,
+    "combust": false,
+    "sign_name": "Virgo"
+  },
+  {
+    "date": "2026-10-06",
+    "planet": "Venus",
+    "longitude": 194.090055,
+    "speed": -0.115188,
+    "retrograde": true,
+    "combust": false,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-10-07",
+    "planet": "Mercury",
+    "longitude": 194.249145,
+    "speed": 1.171556,
+    "retrograde": false,
+    "combust": false,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-10-07",
+    "planet": "Sun",
+    "longitude": 169.739049,
+    "speed": 0.986613,
+    "retrograde": false,
+    "combust": false,
+    "sign_name": "Virgo"
+  },
+  {
+    "date": "2026-10-07",
+    "planet": "Venus",
+    "longitude": 193.954965,
+    "speed": -0.155003,
+    "retrograde": true,
+    "combust": false,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-10-08",
+    "planet": "Mercury",
+    "longitude": 195.405514,
+    "speed": 1.140805,
+    "retrograde": false,
+    "combust": false,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-10-08",
+    "planet": "Sun",
+    "longitude": 170.725971,
+    "speed": 0.987228,
+    "retrograde": false,
+    "combust": false,
+    "sign_name": "Virgo"
+  },
+  {
+    "date": "2026-10-08",
+    "planet": "Venus",
+    "longitude": 193.780057,
+    "speed": -0.194794,
+    "retrograde": true,
+    "combust": false,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-10-09",
+    "planet": "Mercury",
+    "longitude": 196.529949,
+    "speed": 1.107636,
+    "retrograde": false,
+    "combust": false,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-10-09",
+    "planet": "Sun",
+    "longitude": 171.7135,
+    "speed": 0.987827,
+    "retrograde": false,
+    "combust": false,
+    "sign_name": "Virgo"
+  },
+  {
+    "date": "2026-10-09",
+    "planet": "Venus",
+    "longitude": 193.56545,
+    "speed": -0.234364,
+    "retrograde": true,
+    "combust": false,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-10-10",
+    "planet": "Mercury",
+    "longitude": 197.619871,
+    "speed": 1.071722,
+    "retrograde": false,
+    "combust": false,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-10-10",
+    "planet": "Sun",
+    "longitude": 172.701619,
+    "speed": 0.988408,
+    "retrograde": false,
+    "combust": false,
+    "sign_name": "Virgo"
+  },
+  {
+    "date": "2026-10-10",
+    "planet": "Venus",
+    "longitude": 193.311476,
+    "speed": -0.273491,
+    "retrograde": true,
+    "combust": false,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-10-11",
+    "planet": "Mercury",
+    "longitude": 198.672356,
+    "speed": 1.032697,
+    "retrograde": false,
+    "combust": false,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-10-11",
+    "planet": "Sun",
+    "longitude": 173.690311,
+    "speed": 0.988972,
+    "retrograde": false,
+    "combust": false,
+    "sign_name": "Virgo"
+  },
+  {
+    "date": "2026-10-11",
+    "planet": "Venus",
+    "longitude": 193.018699,
+    "speed": -0.311926,
+    "retrograde": true,
+    "combust": false,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-10-12",
+    "planet": "Mercury",
+    "longitude": 199.684095,
+    "speed": 0.990159,
+    "retrograde": false,
+    "combust": false,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-10-12",
+    "planet": "Sun",
+    "longitude": 174.679559,
+    "speed": 0.98952,
+    "retrograde": false,
+    "combust": false,
+    "sign_name": "Virgo"
+  },
+  {
+    "date": "2026-10-12",
+    "planet": "Venus",
+    "longitude": 192.687946,
+    "speed": -0.349396,
+    "retrograde": true,
+    "combust": false,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-10-13",
+    "planet": "Mercury",
+    "longitude": 200.651355,
+    "speed": 0.943662,
+    "retrograde": false,
+    "combust": false,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-10-13",
+    "planet": "Sun",
+    "longitude": 175.669347,
+    "speed": 0.990053,
+    "retrograde": false,
+    "combust": false,
+    "sign_name": "Virgo"
+  },
+  {
+    "date": "2026-10-13",
+    "planet": "Venus",
+    "longitude": 192.320326,
+    "speed": -0.38561,
+    "retrograde": true,
+    "combust": false,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-10-14",
+    "planet": "Mercury",
+    "longitude": 201.569935,
+    "speed": 0.892714,
+    "retrograde": false,
+    "combust": false,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-10-14",
+    "planet": "Sun",
+    "longitude": 176.659661,
+    "speed": 0.990573,
+    "retrograde": false,
+    "combust": false,
+    "sign_name": "Virgo"
+  },
+  {
+    "date": "2026-10-14",
+    "planet": "Venus",
+    "longitude": 191.917249,
+    "speed": -0.420257,
+    "retrograde": true,
+    "combust": false,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-10-15",
+    "planet": "Mercury",
+    "longitude": 202.435122,
+    "speed": 0.836781,
+    "retrograde": false,
+    "combust": false,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-10-15",
+    "planet": "Sun",
+    "longitude": 177.650491,
+    "speed": 0.991083,
+    "retrograde": false,
+    "combust": false,
+    "sign_name": "Virgo"
+  },
+  {
+    "date": "2026-10-15",
+    "planet": "Venus",
+    "longitude": 191.480442,
+    "speed": -0.453015,
+    "retrograde": true,
+    "combust": false,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-10-16",
+    "planet": "Mercury",
+    "longitude": 203.241643,
+    "speed": 0.775283,
+    "retrograde": false,
+    "combust": false,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-10-16",
+    "planet": "Sun",
+    "longitude": 178.641824,
+    "speed": 0.991583,
+    "retrograde": false,
+    "combust": false,
+    "sign_name": "Virgo"
+  },
+  {
+    "date": "2026-10-16",
+    "planet": "Venus",
+    "longitude": 191.011957,
+    "speed": -0.483559,
+    "retrograde": true,
+    "combust": false,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-10-17",
+    "planet": "Mercury",
+    "longitude": 203.983626,
+    "speed": 0.7076,
+    "retrograde": false,
+    "combust": false,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-10-17",
+    "planet": "Sun",
+    "longitude": 179.633655,
+    "speed": 0.992076,
+    "retrograde": false,
+    "combust": false,
+    "sign_name": "Virgo"
+  },
+  {
+    "date": "2026-10-17",
+    "planet": "Venus",
+    "longitude": 190.514171,
+    "speed": -0.511563,
+    "retrograde": true,
+    "combust": false,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-10-18",
+    "planet": "Mercury",
+    "longitude": 204.654567,
+    "speed": 0.633087,
+    "retrograde": false,
+    "combust": false,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-10-18",
+    "planet": "Sun",
+    "longitude": 180.625976,
+    "speed": 0.992564,
+    "retrograde": false,
+    "combust": false,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-10-18",
+    "planet": "Venus",
+    "longitude": 189.989784,
+    "speed": -0.536711,
+    "retrograde": true,
+    "combust": true,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-10-19",
+    "planet": "Mercury",
+    "longitude": 205.247304,
+    "speed": 0.551083,
+    "retrograde": false,
+    "combust": false,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-10-19",
+    "planet": "Sun",
+    "longitude": 181.618783,
+    "speed": 0.993049,
+    "retrograde": false,
+    "combust": false,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-10-19",
+    "planet": "Venus",
+    "longitude": 189.441803,
+    "speed": -0.558701,
+    "retrograde": true,
+    "combust": true,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-10-20",
+    "planet": "Mercury",
+    "longitude": 205.75402,
+    "speed": 0.460943,
+    "retrograde": false,
+    "combust": false,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-10-20",
+    "planet": "Sun",
+    "longitude": 182.612074,
+    "speed": 0.993532,
+    "retrograde": false,
+    "combust": false,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-10-20",
+    "planet": "Venus",
+    "longitude": 188.873527,
+    "speed": -0.577258,
+    "retrograde": true,
+    "combust": true,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-10-21",
+    "planet": "Mercury",
+    "longitude": 206.166279,
+    "speed": 0.362077,
+    "retrograde": false,
+    "combust": false,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-10-21",
+    "planet": "Sun",
+    "longitude": 183.605848,
+    "speed": 0.994016,
+    "retrograde": false,
+    "combust": false,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-10-21",
+    "planet": "Venus",
+    "longitude": 188.288515,
+    "speed": -0.592134,
+    "retrograde": true,
+    "combust": true,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-10-22",
+    "planet": "Mercury",
+    "longitude": 206.475104,
+    "speed": 0.254007,
+    "retrograde": false,
+    "combust": false,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-10-22",
+    "planet": "Sun",
+    "longitude": 184.600107,
+    "speed": 0.994503,
+    "retrograde": false,
+    "combust": false,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-10-22",
+    "planet": "Venus",
+    "longitude": 187.690557,
+    "speed": -0.603119,
+    "retrograde": true,
+    "combust": true,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-10-23",
+    "planet": "Mercury",
+    "longitude": 206.671128,
+    "speed": 0.136449,
+    "retrograde": false,
+    "combust": false,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-10-23",
+    "planet": "Sun",
+    "longitude": 185.594857,
+    "speed": 0.994997,
+    "retrograde": false,
+    "combust": false,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-10-23",
+    "planet": "Venus",
+    "longitude": 187.08363,
+    "speed": -0.610047,
+    "retrograde": true,
+    "combust": true,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-10-24",
+    "planet": "Mercury",
+    "longitude": 206.744837,
+    "speed": 0.009411,
+    "retrograde": false,
+    "combust": false,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-10-24",
+    "planet": "Sun",
+    "longitude": 186.590106,
+    "speed": 0.995501,
+    "retrograde": false,
+    "combust": false,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-10-24",
+    "planet": "Venus",
+    "longitude": 186.471856,
+    "speed": -0.612801,
+    "retrograde": true,
+    "combust": true,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-10-25",
+    "planet": "Mercury",
+    "longitude": 206.686931,
+    "speed": -0.126665,
+    "retrograde": true,
+    "combust": false,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-10-25",
+    "planet": "Sun",
+    "longitude": 187.585865,
+    "speed": 0.996019,
+    "retrograde": false,
+    "combust": false,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-10-25",
+    "planet": "Venus",
+    "longitude": 185.859443,
+    "speed": -0.611318,
+    "retrograde": true,
+    "combust": true,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-10-26",
+    "planet": "Mercury",
+    "longitude": 206.488828,
+    "speed": -0.270752,
+    "retrograde": true,
+    "combust": false,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-10-26",
+    "planet": "Sun",
+    "longitude": 188.582149,
+    "speed": 0.996553,
+    "retrograde": false,
+    "combust": false,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-10-26",
+    "planet": "Venus",
+    "longitude": 185.250635,
+    "speed": -0.605595,
+    "retrograde": true,
+    "combust": true,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-10-27",
+    "planet": "Mercury",
+    "longitude": 206.143343,
+    "speed": -0.421056,
+    "retrograde": true,
+    "combust": false,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-10-27",
+    "planet": "Sun",
+    "longitude": 189.578976,
+    "speed": 0.997105,
+    "retrograde": false,
+    "combust": false,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-10-27",
+    "planet": "Venus",
+    "longitude": 184.649647,
+    "speed": -0.595693,
+    "retrograde": true,
+    "combust": true,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-10-28",
+    "planet": "Mercury",
+    "longitude": 205.645545,
+    "speed": -0.574838,
+    "retrograde": true,
+    "combust": false,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-10-28",
+    "planet": "Sun",
+    "longitude": 190.576364,
+    "speed": 0.997675,
+    "retrograde": false,
+    "combust": false,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-10-28",
+    "planet": "Venus",
+    "longitude": 184.060602,
+    "speed": -0.581734,
+    "retrograde": true,
+    "combust": true,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-10-29",
+    "planet": "Mercury",
+    "longitude": 204.993773,
+    "speed": -0.728268,
+    "retrograde": true,
+    "combust": true,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-10-29",
+    "planet": "Sun",
+    "longitude": 191.574331,
+    "speed": 0.998262,
+    "retrograde": false,
+    "combust": false,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-10-29",
+    "planet": "Venus",
+    "longitude": 183.487471,
+    "speed": -0.5639,
+    "retrograde": true,
+    "combust": true,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-10-30",
+    "planet": "Mercury",
+    "longitude": 204.190775,
+    "speed": -0.876366,
+    "retrograde": true,
+    "combust": true,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-10-30",
+    "planet": "Sun",
+    "longitude": 192.572892,
+    "speed": 0.998862,
+    "retrograde": false,
+    "combust": false,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-10-30",
+    "planet": "Venus",
+    "longitude": 182.934017,
+    "speed": -0.542425,
+    "retrograde": true,
+    "combust": true,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-10-31",
+    "planet": "Mercury",
+    "longitude": 203.244833,
+    "speed": -1.013067,
+    "retrograde": true,
+    "combust": true,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-10-31",
+    "planet": "Sun",
+    "longitude": 193.572056,
+    "speed": 0.99947,
+    "retrograde": false,
+    "combust": false,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-10-31",
+    "planet": "Venus",
+    "longitude": 182.403744,
+    "speed": -0.517586,
+    "retrograde": true,
+    "combust": false,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-11-01",
+    "planet": "Mercury",
+    "longitude": 202.170728,
+    "speed": -1.131506,
+    "retrograde": true,
+    "combust": true,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-11-01",
+    "planet": "Sun",
+    "longitude": 194.571831,
+    "speed": 1.00008,
+    "retrograde": false,
+    "combust": false,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-11-01",
+    "planet": "Venus",
+    "longitude": 181.899865,
+    "speed": -0.48969,
+    "retrograde": true,
+    "combust": false,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-11-02",
+    "planet": "Mercury",
+    "longitude": 200.990303,
+    "speed": -1.224525,
+    "retrograde": true,
+    "combust": true,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-11-02",
+    "planet": "Sun",
+    "longitude": 195.572215,
+    "speed": 1.000689,
+    "retrograde": false,
+    "combust": false,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-11-02",
+    "planet": "Venus",
+    "longitude": 181.425274,
+    "speed": -0.459065,
+    "retrograde": true,
+    "combust": false,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-11-03",
+    "planet": "Mercury",
+    "longitude": 199.732411,
+    "speed": -1.285403,
+    "retrograde": true,
+    "combust": true,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-11-03",
+    "planet": "Sun",
+    "longitude": 196.573204,
+    "speed": 1.00129,
+    "retrograde": false,
+    "combust": false,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-11-03",
+    "planet": "Venus",
+    "longitude": 180.982533,
+    "speed": -0.426046,
+    "retrograde": true,
+    "combust": false,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-11-04",
+    "planet": "Mercury",
+    "longitude": 198.432049,
+    "speed": -1.308713,
+    "retrograde": true,
+    "combust": true,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-11-04",
+    "planet": "Sun",
+    "longitude": 197.574789,
+    "speed": 1.001879,
+    "retrograde": false,
+    "combust": false,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-11-04",
+    "planet": "Venus",
+    "longitude": 180.573868,
+    "speed": -0.39097,
+    "retrograde": true,
+    "combust": false,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-11-05",
+    "planet": "Mercury",
+    "longitude": 197.128649,
+    "speed": -1.291139,
+    "retrograde": true,
+    "combust": true,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-11-05",
+    "planet": "Sun",
+    "longitude": 198.576956,
+    "speed": 1.002454,
+    "retrograde": false,
+    "combust": false,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-11-05",
+    "planet": "Venus",
+    "longitude": 180.201168,
+    "speed": -0.35417,
+    "retrograde": true,
+    "combust": false,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-11-06",
+    "planet": "Mercury",
+    "longitude": 195.863643,
+    "speed": -1.232064,
+    "retrograde": true,
+    "combust": true,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-11-06",
+    "planet": "Sun",
+    "longitude": 199.57969,
+    "speed": 1.003011,
+    "retrograde": false,
+    "combust": false,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-11-06",
+    "planet": "Venus",
+    "longitude": 179.865997,
+    "speed": -0.315963,
+    "retrograde": true,
+    "combust": false,
+    "sign_name": "Virgo"
+  },
+  {
+    "date": "2026-11-07",
+    "planet": "Mercury",
+    "longitude": 194.677635,
+    "speed": -1.133751,
+    "retrograde": true,
+    "combust": true,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-11-07",
+    "planet": "Sun",
+    "longitude": 200.582971,
+    "speed": 1.003548,
+    "retrograde": false,
+    "combust": false,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-11-07",
+    "planet": "Venus",
+    "longitude": 179.569609,
+    "speed": -0.276654,
+    "retrograde": true,
+    "combust": false,
+    "sign_name": "Virgo"
+  },
+  {
+    "date": "2026-11-08",
+    "planet": "Mercury",
+    "longitude": 193.607618,
+    "speed": -1.001084,
+    "retrograde": true,
+    "combust": true,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-11-08",
+    "planet": "Sun",
+    "longitude": 201.586779,
+    "speed": 1.004066,
+    "retrograde": false,
+    "combust": false,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-11-08",
+    "planet": "Venus",
+    "longitude": 179.312962,
+    "speed": -0.236526,
+    "retrograde": true,
+    "combust": false,
+    "sign_name": "Virgo"
+  },
+  {
+    "date": "2026-11-09",
+    "planet": "Mercury",
+    "longitude": 192.684654,
+    "speed": -0.840901,
+    "retrograde": true,
+    "combust": true,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-11-09",
+    "planet": "Sun",
+    "longitude": 202.591095,
+    "speed": 1.004563,
+    "retrograde": false,
+    "combust": false,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-11-09",
+    "planet": "Venus",
+    "longitude": 179.096742,
+    "speed": -0.195842,
+    "retrograde": true,
+    "combust": false,
+    "sign_name": "Virgo"
+  },
+  {
+    "date": "2026-11-10",
+    "planet": "Mercury",
+    "longitude": 191.932353,
+    "speed": -0.661118,
+    "retrograde": true,
+    "combust": true,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-11-10",
+    "planet": "Sun",
+    "longitude": 203.595898,
+    "speed": 1.005039,
+    "retrograde": false,
+    "combust": false,
+    "sign_name": "Libra"
+  },
+  {
+    "date": "2026-11-10",
+    "planet": "Venus",
+    "longitude": 178.921384,
+    "speed": -0.154839,
+    "retrograde": true,
+    "combust": false,
+    "sign_name": "Virgo"
+  }
+]

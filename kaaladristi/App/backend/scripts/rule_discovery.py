@@ -8,6 +8,7 @@ import time
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from lib.config import DATABASE_URL
+from lib.venus_identity import OWNED_RULE_CODES, refresh_venus_data
 
 
 def get_conn():
@@ -1252,6 +1253,11 @@ def discover_rule(conn, rule, vedh_map, panchak_naks, vocab):
     if rc in {'TRN-MER-MAN-TRN', 'TRN-MER-RIS-W-BUL', 'TR-MER-CMB-E-BEA', 'TR-MER-RET'}:
         return []
 
+    # Canonical Venus/conjunction windows are refreshed once by main; no daily
+    # signals or alternate weekend-filtered windows may be generated here.
+    if rc in OWNED_RULE_CODES:
+        return []
+
     # Phase 2 rules — not yet implemented, skip cleanly
     if rc in NOT_IMPLEMENTED_RULE_CODES:
         return []
@@ -1363,6 +1369,12 @@ def main(year_filter=None, rule_code_filter=None):
             print(f"Rule not found: {rule_code_filter}")
             return
         print(f"Running discovery for single rule: {rule_code_filter}")
+
+    if any(r["rule_code"] in OWNED_RULE_CODES for r in rules):
+        with conn:
+            with conn.cursor() as venus_cur:
+                changed = refresh_venus_data(venus_cur)
+                print(f"Canonical Venus/conjunction windows changed: {changed}")
 
     total_inserted = 0
     total_transits = 0

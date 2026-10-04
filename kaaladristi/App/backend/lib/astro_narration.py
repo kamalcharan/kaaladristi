@@ -1,5 +1,9 @@
 """
-Deterministic Mercury readiness narration — NO LLM.
+Deterministic Mercury and canonical Venus narration — NO LLM.
+
+The combined entry point retains the Mercury reader and appends Venus facts
+from migrations 235/236. The legacy client Mercury story below is unchanged;
+clients must adopt the canonical Venus API to display the new overlay data.
 
 Powers the 'index.astro_now' VaNi intent. Mirrors the client-side
 services/mercuryStory.ts + services/ruleInterpretation.ts logic (same
@@ -17,6 +21,14 @@ registry entry has a valid (never-reached) system_prompt.
 """
 
 from datetime import date, timedelta
+from lib.venus_calendar import build_venus_readiness_text
+
+
+def build_astro_readiness_text(db, date_str: str) -> str | None:
+    """Mercury and canonical Venus; no LLM or implicit event substitutions."""
+    parts = [build_mercury_readiness_text(db, date_str),
+             build_venus_readiness_text(db, date_str)]
+    return '\n\n'.join(part for part in parts if part) or None
 
 RULE_JOURNEY = 'TRN-MER-MAN-TRN'
 RULE_MOTION = 'TR-MER-RET'

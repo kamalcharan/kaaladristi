@@ -1292,7 +1292,7 @@ INTENTS: dict[str, VaNiIntent] = {
     # ── 22. Mercury Readiness ─────────────────────────────────────────────────
     "index.astro_now": VaNiIntent(
         page="index_vp",
-        label="What's Mercury doing right now?",
+        label="What's happening with Mercury and Venus?",
         required_context=["date"],
         system_prompt=(
             _VANI_IDENTITY
