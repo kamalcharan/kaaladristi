@@ -4,7 +4,6 @@ import { CSS } from '@dnd-kit/utilities'
 import { useQuery } from '@tanstack/react-query'
 import type { FrameworkBlock, GridPosition, InstrumentRef } from '@/types/framework'
 import { getCatalogItem } from '@/constants/catalogItems'
-import RuleInsightCard from '@/components/domain/VaNi/RuleInsightCard'
 import MagicRsWidget from '@/components/domain/Catalog/widgets/MagicRsWidget'
 import OrderFlowWidget from '@/components/domain/Catalog/widgets/OrderFlowWidget'
 import SmartMoneyWidget from '@/components/domain/Catalog/widgets/SmartMoneyWidget'
@@ -156,99 +155,6 @@ function ScannerBlockContent({ catalogItemId }: { catalogItemId: string }) {
 }
 
 // ── Astro rule panel block content ────────────────────────────
-
-interface RuleRow {
-  id: number
-  display_name: string
-  is_active: boolean
-  probability_label: string | null
-}
-
-interface SignalRow {
-  date: string
-  signal: string
-}
-
-function AstroRuleBlockContent({ ruleCode }: { ruleCode: string }) {
-  const { data: ruleData } = useQuery({
-    queryKey: ['astro-rule-meta', ruleCode],
-    queryFn: async () => {
-      const { data } = await from('km_astro_rule_master')
-        .select('id,display_name,is_active,probability_label')
-        .eq('rule_code', ruleCode)
-        .execute()
-      return (data as RuleRow[] | null)?.[0] ?? null
-    },
-    staleTime: 10 * 60_000,
-  })
-
-  const ruleId = ruleData?.id
-  const today = dashboardDate()
-  const { data: nextSignal } = useQuery({
-    // today in the key — without it, a tab open across midnight never
-    // refetches, so a stale-but-cached "next signal" keeps citing a date
-    // that's now in the past.
-    queryKey: ['astro-rule-next', ruleId, today],
-    enabled: ruleId != null,
-    queryFn: async () => {
-      const { data } = await from('km_rule_signals')
-        .select('date,signal')
-        .eq('rule_id', String(ruleId!))
-        .gte('date', today)
-        .order('date', { ascending: true })
-        .limit(1)
-        .execute()
-      return (data as SignalRow[] | null)?.[0] ?? null
-    },
-    staleTime: 5 * 60_000,
-  })
-
-  const isActive = ruleData?.is_active ?? false
-  const probLabel = ruleData?.probability_label
-
-  return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column',
-      justifyContent: 'center', padding: '8px 14px', gap: 8 }}>
-      {/* Active / Inactive pill */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <span style={{
-          fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em',
-          padding: '2px 8px', borderRadius: 4,
-          background: isActive ? 'var(--bull-bg)' : 'var(--bear-bg)',
-          color: isActive ? 'var(--bull)' : 'var(--bear)',
-          border: `1px solid ${isActive ? 'var(--bull-dim)' : 'var(--bear-dim)'}`,
-        }}>
-          {isActive ? '● Active' : '○ Inactive'}
-        </span>
-        {probLabel && (
-          <span style={{ fontSize: 11, color: 'var(--gold)',
-            fontFamily: 'var(--font-mono,monospace)' }}>{probLabel}</span>
-        )}
-      </div>
-      {/* Next occurrence */}
-      <div>
-        <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em',
-          color: 'color-mix(in srgb, var(--text-primary) 30%, transparent)', marginBottom: 3 }}>Next occurrence</div>
-        {nextSignal
-          ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)',
-                fontFamily: 'var(--font-mono,monospace)' }}>{nextSignal.date}</span>
-              <span style={{ fontSize: 11, color: nextSignal.signal === 'bullish' ? 'var(--bull)'
-                : nextSignal.signal === 'bearish' ? 'var(--bear)' : 'var(--gold)' }}>
-                {nextSignal.signal}
-              </span>
-            </div>
-          )
-          : <span style={{ fontSize: 12, color: 'color-mix(in srgb, var(--text-primary) 20%, transparent)',
-              fontFamily: 'var(--font-mono,monospace)' }}>none found</span>
-        }
-      </div>
-      {/* VaNi interpretation — hidden entirely when no insight */}
-      <RuleInsightCard ruleId={ruleId ?? null} />
-    </div>
-  )
-}
 
 // ── VaNi correlation placeholder ──────────────────────────────
 
@@ -493,7 +399,7 @@ function BlockContent({ block, onRemove }: { block: FrameworkBlock; onRemove: (i
 
   if (type === 'astro_rule' && placement === 'panel_block') {
     const ruleCode = cid.startsWith('astro_rule:') ? cid.slice('astro_rule:'.length) : cid
-    return <AstroRuleBlockContent ruleCode={ruleCode} />
+    return <div style={{padding:16}}>This legacy rule block is retired. Choose a Mercury or Venus event in <a href="/catalog">Catalog</a>.</div>
   }
 
   if (type === 'vani_correlation') {

@@ -11,7 +11,7 @@ import type { DeepDiveItem } from '@/components/domain/Catalog/DeepDivePanel'
 const CATALOG_SECTIONS = [
   // 'master_frameworks' removed pre-launch (was a comingSoon dead tab) —
   // returns post-launch as a real template gallery backed by FRAMEWORK_TEMPLATES.
-  { id: 'astro_rules',       label: 'Astro Rules',       comingSoon: false },
+  { id: 'astro_rules',       label: 'Astro Events',       comingSoon: false },
   { id: 'indicators',        label: 'Chart Indicators',  comingSoon: false },
   { id: 'widgets',           label: 'Intelligence Widgets', comingSoon: false },
   { id: 'scanners',          label: 'Scanners',          comingSoon: false },

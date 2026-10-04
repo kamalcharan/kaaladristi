@@ -30,7 +30,7 @@ import { useAuthStore } from '@/stores/authStore';
 import { useBookmarkStore } from '@/stores/bookmarkStore';
 import CatalogDrawer from '@/components/domain/Catalog/CatalogDrawer';
 import { useAstroOverlayBands } from '@/hooks/useAstroOverlayBands';
-import MercuryStoryRibbon from '@/components/domain/MercuryStoryRibbon';
+import AstroEventRibbon from '@/components/astro/AstroEventRibbon';
 import OverlayExplainPopover from '@/components/domain/VaNi/OverlayExplainPopover';
 import type { AstroBand } from '@/services/astroOverlayService';
 import type { ChartOverlay } from '@/types/framework';
@@ -197,7 +197,7 @@ export default function ChartView({ storyPreview = false }: { storyPreview?: boo
   // Astro is INDEX-ONLY (owner 2026-07-22): the evidence layer is measured
   // against NIFTY — on a stock chart the bands are noise, so equity charts
   // get no astro bands/ribbon even when the user's framework has the overlay.
-  const astroBands = useAstroOverlayBands(type === 'index' ? frameworkOverlays : NO_OVERLAYS);
+
   // Right-click on an astro band → the full deterministic read (same popover
   // My Space uses; was never wired on Study — owner feedback 2026-07-22).
   const [zoneExplain, setZoneExplain] = useState<{
@@ -279,6 +279,7 @@ export default function ChartView({ storyPreview = false }: { storyPreview?: boo
     staleTime: 120_000,
     enabled: !!numId && (isIndex || isEquity),
   });
+  const astroBands = useAstroOverlayBands(type === 'index' ? frameworkOverlays : NO_OVERLAYS, rows[0]?.trade_date);
 
   // Scan presence — which presets currently contain this stock. Moved up
   // from the pulse block because the story layer derives from it on
@@ -889,7 +890,7 @@ export default function ChartView({ storyPreview = false }: { storyPreview?: boo
           </div>
         ) : (
           <>
-            {isIndex && <MercuryStoryRibbon />}
+            {isIndex && <AstroEventRibbon />}
             <TradingChart
               data={rows}
               workspaceMode

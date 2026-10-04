@@ -4,6 +4,7 @@
 // History is never gated. free/quarterly see the next 1 week (today + 6);
 // annual/trial/beta see 90 days.
 
+import { astroToday } from '@/services/astroEvents'
 import { useMemo } from 'react'
 import { useAuthStore } from '@/stores/authStore'
 import { ASTRO_HORIZON_DAYS, type TierType } from '@/constants/frameworkConstants'
@@ -21,8 +22,8 @@ export function useAstroHorizon(): AstroHorizon {
   const tier = useAuthStore(s => (s.profile?.tier ?? 'free') as TierType)
   return useMemo(() => {
     const days = ASTRO_HORIZON_DAYS[tier] ?? ASTRO_HORIZON_DAYS.free
-    const cutoff = new Date()
-    cutoff.setDate(cutoff.getDate() + days - 1)
+    const cutoff = new Date(astroToday()+'T12:00:00Z')
+    cutoff.setUTCDate(cutoff.getUTCDate() + days - 1)
     return {
       days,
       cutoffIso: cutoff.toISOString().slice(0, 10),

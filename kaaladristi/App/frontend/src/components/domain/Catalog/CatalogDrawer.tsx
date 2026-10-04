@@ -7,12 +7,12 @@ import CatalogAstroSection from './CatalogAstroSection'
 const ALL_TABS = [
   { id: 'indicators',  label: 'Indicators' },
   { id: 'widgets',     label: 'Widgets' },
-  { id: 'astro_rules', label: 'Astro Rules' },
+  { id: 'astro_rules', label: 'Astro Events' },
 ] as const
 
 const OVERLAY_TABS = [
   { id: 'indicators',  label: 'Indicators' },
-  { id: 'astro_rules', label: 'Astro Rules' },
+  { id: 'astro_rules', label: 'Astro Events' },
 ] as const
 
 type DrawerTab = typeof ALL_TABS[number]['id']
@@ -63,7 +63,7 @@ export default function CatalogDrawer({ isOpen, onClose, context = 'block' }: Ca
           right: isOpen ? 0 : -540,
           top: 72,
           bottom: 0,
-          width: 520,
+          width: 'min(520px, 100vw)',
           background: 'var(--card)',
           borderLeft: '1px solid var(--border)',
           borderTop: '1px solid var(--border)',

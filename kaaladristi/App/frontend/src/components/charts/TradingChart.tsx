@@ -1,3 +1,4 @@
+import { eventCoordinate } from '@/services/astroCoordinates'
 import { DOT_LABELS } from '@/constants/signalScale'
 /**
  * TradingChart — Multi-pane financial chart using TradingView Lightweight Charts v5.
@@ -35,11 +36,8 @@ import type { IndicatorRow } from '@/services/indicatorData';
 import type { ChartOverlay } from '@/types/framework';
 import type { AstroBand } from '@/services/astroOverlayService';
 import { fmtDate, fmtDateShort } from '@/lib/dateUtils';
-import { useQuery } from '@tanstack/react-query';
 import { INDICATOR_DEFAULT_COLORS } from '@/constants/catalogItems';
 import { planetColorOfRuleCode } from '@/constants/planetColors';
-import { fetchEvidence } from '@/pages/RuleEngine/ruleService';
-import { buildRuleRead } from '@/services/ruleInterpretation';
 import { useAstroHorizon } from '@/hooks/useAstroHorizon';
 import { AnnotationOverlay, type OverlayCycleBand, type OverlayLevel, type OverlayCallout, type OverlayBigMoney, type OverlayStoryPin } from './AnnotationOverlay';
 
@@ -167,22 +165,13 @@ function dayRange(fromStr: string, toStr: string): string[] {
 }
 
 /** Short top-of-line label for a single-day point-event marker. */
-function pointMarkerLabel(ruleCode: string): string {
-  const rc = ruleCode.toUpperCase();
-  if (rc.startsWith('TRN-MER-RIS-W')) return 'Mer↑';
-  if (rc.startsWith('TRN-MER-RIS-E')) return 'Mer↓';
-  if (rc.startsWith('TRN-VEN-RIS-W')) return 'Ven↑';
-  if (rc.startsWith('TRN-VEN-RIS-E')) return 'Ven↓';
-  const bay = rc.match(/^BAY-R0*(\d+)/);
-  if (bay) return `B${bay[1]}`;
-  if (rc.startsWith('DN')) return ruleCode.replace(/^DN[-_]?/i, '').slice(0, 3) || 'DN';
-  // Planet glyphs for named-planet rules
-  if (rc.startsWith('NEP-'))     return '♆';
-  if (rc.startsWith('MAR-GAN-')) return '♂';
-  if (rc.startsWith('PLU-'))     return '♇';
-  if (rc.startsWith('JUP-'))     return '♃';
-  if (rc.startsWith('SAT-'))     return '♄';
-  return ruleCode.slice(0, 3);
+function pointMarkerLabel(event: string): string {
+  const planet = event.startsWith('venus') ? '♀' : '☿';
+  if (event.includes('crossing')) return '☿♀';
+  if (event.includes('retrograde')) return `${planet} R`;
+  if (event.includes('direct')) return `${planet} D`;
+  if (event.includes('udaya') || event.includes('rise')) return `${planet} ↑`;
+  return `${planet} ↓`;
 }
 
 // ── Chart colors — read from CSS custom properties at render time ──
@@ -313,17 +302,6 @@ export default function TradingChart({ data, height = 900, compact = false, work
   // Observational evidence (migration 161) — base-rate-anchored texture for
   // THE PATTERN line. Copy is threshold-driven: an effect is only claimed
   // when it clears NIFTY's unconditional base rate by a margin.
-  const { data: evidenceRows } = useQuery({
-    queryKey: ['rule-engine', 'evidence'],
-    queryFn: fetchEvidence,
-    enabled: astroBands.length > 0,
-    staleTime: 5 * 60 * 1000,
-    retry: 1,
-  });
-  const evidenceByRule = useMemo(
-    () => new Map((evidenceRows ?? []).map(e => [e.rule_id, e])),
-    [evidenceRows],
-  );
 
   // Phase 2 of the benchmark gap (owner 2026-07-07): the NIFTY verdict stays,
   // but the tooltip also states what THE VIEWED INSTRUMENT did over the
@@ -954,7 +932,7 @@ export default function TradingChart({ data, height = 900, compact = false, work
                            ...mergedBands.map(b => ({ ...b, _merged: true, isPanchak: false, panchakTier: undefined }))]
 
       for (const band of allDrawBands) {
-        const x1 = ts.timeToCoordinate(band.from as Time);
+        const x1 = eventCoordinate(band.from, data, d => ts.timeToCoordinate(d as Time));
         const x2 = ts.timeToCoordinate(band.to   as Time);
         if (x1 == null || x2 == null) continue;
 
@@ -1055,7 +1033,7 @@ export default function TradingChart({ data, height = 900, compact = false, work
           ctx.setLineDash([])
 
           // Glyph at top-left of band — shows which planet/rule this zone is
-          const glyph = BAND_GLYPHS[band.groupTag]
+          const glyph = (BAND_GLYPHS[band.groupTag] ?? (band.groupTag.startsWith('mercury') ? '☿' : '♀'))
           if (glyph && bw > 8) {
             ctx.save()
             ctx.font      = '16px serif'
@@ -1071,7 +1049,7 @@ export default function TradingChart({ data, height = 900, compact = false, work
       // (BAY-R06/R27, planet rise/station, single-day DN rules). Zones above are
       // untouched; these never merge and never fill.
       for (const pb of pointBands) {
-        const x = ts.timeToCoordinate(pb.from as Time);
+        const x = eventCoordinate(pb.from, data, d => ts.timeToCoordinate(d as Time));
         if (x == null) continue;
         // Overlap Visibility Phase 1: point markers color by SOURCE PLANET
         // (Mercury blue, Mars red, Venus pink, Neptune sky…) so coincident
@@ -1090,39 +1068,8 @@ export default function TradingChart({ data, height = 900, compact = false, work
         ctx.fillStyle  = hexToRgba(pColor, 0.9);
         ctx.font       = '14px serif';
         ctx.textAlign  = 'center';
-        ctx.fillText(pointMarkerLabel(pb.ruleCode), x, 26);
+        ctx.fillText(pointMarkerLabel(pb.groupTag), x, 26);
         ctx.restore();
-      }
-
-      // ── Watch-day ticks (readiness — POA §Phase A item 1) ────────────────
-      // The bands say "you were in a window"; these ticks say "this exact
-      // day was a watch day". ONLY sign-ingress days qualify — confirmed
-      // 2026-07-22 against km_rule_evidence (TRN-MER-MAN-TRN 'start' 56.1%
-      // vs 48.9% base). TR-MER-RET's own boundaries sit at 50.9%/47.1% —
-      // inside the honesty threshold, i.e. ordinary days — so retrograde/
-      // station ticks were removed (they overclaimed before this fix).
-      // Bottom stubs + ◈ so a year of ingress days reads as a rhythm.
-      const watchTicks = new Map<string, string>()   // date → color
-      for (const b of nonPanchak) {
-        if (b.ruleCode === 'TRN-MER-MAN-TRN') {
-          watchTicks.set(b.from, planetColorOfRuleCode(b.ruleCode) ?? b.color)
-        }
-      }
-      for (const [d, c] of watchTicks) {
-        const x = ts.timeToCoordinate(d as Time)
-        if (x == null) continue
-        ctx.save()
-        ctx.strokeStyle = hexToRgba(c, 0.55)
-        ctx.lineWidth = 1
-        ctx.beginPath()
-        ctx.moveTo(x, h - 24)
-        ctx.lineTo(x, h)
-        ctx.stroke()
-        ctx.fillStyle = hexToRgba(c, 0.95)
-        ctx.font = '10px sans-serif'
-        ctx.textAlign = 'center'
-        ctx.fillText('◈', x, h - 27)
-        ctx.restore()
       }
 
       // ── Future-event pins — band starts within the next 15 days ─────────
@@ -1147,10 +1094,10 @@ export default function TradingChart({ data, height = 900, compact = false, work
       }
 
       for (const band of nearestFuture.values()) {
-        const x = ts.timeToCoordinate(band.from as Time)
+        const x = eventCoordinate(band.from, data, d => ts.timeToCoordinate(d as Time))
         if (x == null) continue
         const daysUntil = Math.round((new Date(band.from).getTime() - Date.now()) / 86400000)
-        const glyph  = BAND_GLYPHS[band.groupTag] ?? '◉'
+        const glyph  = (BAND_GLYPHS[band.groupTag] ?? (band.groupTag.startsWith('mercury') ? '☿' : '♀')) ?? '◉'
         const pillW  = 34, pillH = 17, pillR = 4
         const px     = x - pillW / 2
         const py     = 30 + bob                           // below filter icon, bobs gently
@@ -1235,7 +1182,7 @@ export default function TradingChart({ data, height = 900, compact = false, work
           // the popover leads with what the cursor is aimed at.
           const found: AstroBand[] = [];
           for (const band of horizonBands) {
-            const x1 = ts.timeToCoordinate(band.from as Time);
+            const x1 = eventCoordinate(band.from, data, d => ts.timeToCoordinate(d as Time));
             const x2 = ts.timeToCoordinate(band.to   as Time);
             if (x1 == null || x2 == null) continue;
             // Point markers are 1px lines — give them a small hit tolerance.
@@ -1266,7 +1213,7 @@ export default function TradingChart({ data, height = 900, compact = false, work
           // line was effectively un-hoverable before.
           const found: AstroBand[] = [];
           for (const band of horizonBands) {
-            const x1 = ts.timeToCoordinate(band.from as Time);
+            const x1 = eventCoordinate(band.from, data, d => ts.timeToCoordinate(d as Time));
             const x2 = ts.timeToCoordinate(band.to   as Time);
             if (x1 == null || x2 == null) continue;
             const pad   = band.isPoint ? 4 : 0;
@@ -1437,14 +1384,14 @@ export default function TradingChart({ data, height = 900, compact = false, work
               {shown.map((b, i) => {
                 const c    = accent(b);
                 return (
-                  <div key={`${b.ruleCode}-${b.from}-${i}`} style={i > 0 ? {
+                  <div key={`${b.precision?.replaceAll("_", " ")}-${b.from}-${i}`} style={i > 0 ? {
                     marginTop: 7, paddingTop: 7, borderTop: '1px solid color-mix(in srgb, var(--text-primary) 8%, transparent)',
                   } : undefined}>
                     <div style={{ fontSize: 12, fontWeight: 600, color: c, marginBottom: 3, lineHeight: 1.3 }}>
                       {b.displayName}
                     </div>
                     <div style={{ fontSize: 12, fontFamily: 'var(--font-mono, monospace)', color: 'color-mix(in srgb, var(--text-primary) 45%, transparent)', marginBottom: 4 }}>
-                      {b.ruleCode}
+                      {b.precision?.replaceAll("_", " ")}
                     </div>
                     <div style={{ fontSize: 12, color: 'color-mix(in srgb, var(--text-primary) 60%, transparent)', display: 'flex', gap: 4, alignItems: 'center' }}>
                       {b.isPoint ? (
@@ -1475,6 +1422,7 @@ export default function TradingChart({ data, height = 900, compact = false, work
                     {/* Phase 2: the viewed instrument's own move over this
                         window — the fact this chart can actually attest to. */}
                     {(() => {
+                      if (b.isPoint) return null;
                       const r = chartWindowReturn(b.from, b.to);
                       if (r == null) return null;
                       return (
@@ -1491,21 +1439,7 @@ export default function TradingChart({ data, height = 900, compact = false, work
                     {/* One glanceable line — the full read lives on right-click
                         (owner feedback 2026-07-22: hover was an unreadable
                         stat dump). */}
-                    {(() => {
-                      const ev = evidenceByRule.get(b.ruleId);
-                      if (!ev) return null;
-                      const read = buildRuleRead(ev);
-                      return (
-                        <div style={{ marginTop: 4, fontSize: 12, display: 'flex', gap: 5, alignItems: 'baseline' }}>
-                          <span style={{ flexShrink: 0, color: read.role === 'watch' ? 'var(--accent)' : 'color-mix(in srgb, var(--text-primary) 40%, transparent)' }}>
-                            {read.role === 'watch' ? '\u25c8' : '\u25cb'}
-                          </span>
-                          <span style={{ color: 'color-mix(in srgb, var(--text-primary) 62%, transparent)' }}>
-                            {read.hover}
-                          </span>
-                        </div>
-                      );
-                    })()}
+
                   </div>
                 );
               })}

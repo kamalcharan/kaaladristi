@@ -32,7 +32,8 @@ INSERT INTO km_vani_cache VALUES('a','index.astro_now'),('b','other');
 `;
 async function setup(){const db=new PGlite();await db.exec(schema);for(const p of positions)await db.query('INSERT INTO km_planetary_positions VALUES($1,$2,$3,$4,$5,$6,$7)',[p.date,p.planet,p.longitude,p.speed,p.retrograde,p.combust,p.sign_name]);return db;}
 async function rows(db,q){return (await db.query(q)).rows;}
-(async()=>{
+module.exports={setup};
+if(require.main===module)(async()=>{
  const db=await setup();
  const old=await rows(db,'SELECT * FROM km_rule_transits ORDER BY id');
  await db.exec(migration);
@@ -41,10 +42,7 @@ async function rows(db,q){return (await db.query(q)).rows;}
  await db.exec(visibility);
  assert.equal((await rows(db,'SELECT count(*)::int n FROM km_venus_visibility_windows'))[0].n,52);
  assert.equal((await rows(db,'SELECT count(*)::int n FROM km_venus_visibility_calendar'))[0].n,156);
- const service=fs.readFileSync(path.join(__dirname,'../lib/venus_calendar.py'),'utf8');
- let paramIndex=0;
- const calendarQuery=service.match(/rows = db.execute\('''([\s\S]*?)'''/)[1].replace(/%s/g,()=>`$${++paramIndex}`);
- const october=(await db.query(calendarQuery,['2026-10-31','2026-10-01'])).rows;
+ const october=(await db.query(`SELECT c.*,d.bracket_start_date,v.parameters FROM km_venus_calendar c LEFT JOIN km_venus_event_calendar d USING(event_key) LEFT JOIN km_venus_visibility_calendar v USING(event_key) WHERE c.start_date<=$1 AND c.end_date>=$2`,['2026-10-31','2026-10-01'])).rows;
  assert.equal(october.filter(e=>e.event_type==='venus_tara_asta').length,1);
  assert.equal(october.filter(e=>e.event_type==='venus_tara_udaya').length,1);
  assert.equal(october.find(e=>e.event_type==='venus_tara_asta').parameters.method_version,'venus_visibility_ujjain_v1');

@@ -15,7 +15,6 @@ import MarketsView from '@/views/MarketsView';
 import SettingsView from '@/views/SettingsView';
 import InferenceView from '@/views/InferenceView';
 import RuleEvalView from '@/views/RuleEvalView';
-import CalendarView from '@/views/CalendarView';
 import AlmanacPage from '@/views/AlmanacPage';
 import ChartView from '@/views/ChartView';
 import StockStoryPage, { StockStoryRedirect } from '@/views/StockStoryPage';
@@ -30,10 +29,9 @@ import DataPipelinePage from '@/pages/DataPipeline';
 import PanchangView from '@/views/PanchangView';
 import AdminPanchangView from '@/views/AdminPanchangView';
 import UsersView from '@/views/UsersView';
-import { RuleList, RuleDetail } from '@/pages/RuleEngine';
+import { RuleList } from '@/pages/RuleEngine';
 import MarketStructureView from '@/views/MarketStructureView';
 import FilingsView from '@/views/FilingsView';
-import PlanetaryIntelView from '@/views/PlanetaryIntelView';
 import WorkspacePage from '@/views/WorkspacePage'
 import GuidePage from '@/views/GuidePage'
 import CatalogPage from '@/views/CatalogPage';
@@ -126,7 +124,7 @@ function AppRoutes() {
           <Route path="/markets" element={<MarketsView />} />
           <Route path="/inference" element={<InferenceView />} />
           <Route path="/rule-eval" element={<RuleEvalView />} />
-          <Route path="/astro-calendar" element={<CalendarView />} />
+          <Route path="/astro-calendar" element={<Navigate to="/almanac" replace />} />
           <Route path="/almanac" element={<AlmanacPage />} />
           <Route path="/chart/equity/:id" element={<StockStoryPage />} />
           <Route path="/chart/:type/:id" element={<ChartView />} />
@@ -159,9 +157,9 @@ function AppRoutes() {
           <Route path="/users" element={<UsersView />} />
           <Route path="/market-structure" element={<MarketStructureView />} />
           <Route path="/filings" element={<FilingsView />} />
-          <Route path="/planetary-intel" element={<PlanetaryIntelView />} />
+          <Route path="/planetary-intel" element={<Navigate to="/almanac" replace />} />
           <Route path="/rules" element={<RuleList />} />
-          <Route path="/rules/:id" element={<RuleDetail />} />
+          <Route path="/rules/:id" element={<RuleList />} />
           <Route path="/custom-index" element={<CustomIndexPage />} />
           <Route path="/custom-index/create" element={<CustomIndexCreatePage />} />
           <Route path="/custom-index/discover" element={<CustomIndexDiscoverPage />} />

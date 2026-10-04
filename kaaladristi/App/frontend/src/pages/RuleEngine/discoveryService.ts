@@ -24,49 +24,10 @@ export interface DiscoveryStatus {
   };
 }
 
-export interface SignalCount {
-  rule_id: number;
-  count: number;
-}
-
-// ── API calls ─────────────────────────────────────────────────────────────────
-
-export async function runFullDiscovery(): Promise<{ job_id: string }> {
-  return api.post<{ job_id: string }>('/api/discovery/run-all', {});
-}
-
-export async function runMissingDiscovery(): Promise<{ job_id: string; rules_to_process: number }> {
-  return api.post<{ job_id: string; rules_to_process: number }>('/api/discovery/run-missing', {});
-}
-
-export async function runRuleDiscovery(ruleId: number): Promise<{ job_id: string }> {
-  return api.post<{ job_id: string }>(`/api/discovery/run-rule/${ruleId}`, {});
-}
-
+// Retained for the operational Job Monitor, including cancellation of old jobs.
 export async function fetchDiscoveryStatus(): Promise<DiscoveryStatus> {
-  return api.get<DiscoveryStatus>('/api/discovery/status');
+ return api.get<DiscoveryStatus>('/api/discovery/status');
 }
-
-export async function fetchSignalCounts(): Promise<SignalCount[]> {
-  return api.get<SignalCount[]>('/api/discovery/signal-counts');
-}
-
-export async function cancelDiscovery(): Promise<{ status: string }> {
-  return api.post<{ status: string }>('/api/discovery/cancel', {});
-}
-
-export async function runCleanDiscovery(): Promise<{ job_id: string; signals_deleted: number }> {
-  return api.post<{ job_id: string; signals_deleted: number }>('/api/discovery/run-clean', {});
-}
-
-export async function computeConfidence(): Promise<{ job_id: string }> {
-  return api.post<{ job_id: string }>('/api/confidence/compute', {});
-}
-
-export async function dropRuleSignals(ruleId: number): Promise<{ signals_deleted: number; transits_deleted: number }> {
-  return api.post<{ signals_deleted: number; transits_deleted: number }>(`/api/discovery/rule/${ruleId}/drop-signals`, {});
-}
-
-export async function runDiagnose(): Promise<Record<string, unknown>> {
-  return api.get<Record<string, unknown>>('/api/discovery/diagnose');
+export async function cancelDiscovery(): Promise<{status:string}> {
+ return api.post<{status:string}>('/api/discovery/cancel',{});
 }
