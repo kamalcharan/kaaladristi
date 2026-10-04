@@ -10,8 +10,8 @@ const {migrateAstroSelections:migrate}=load('astroSelection',{'./astroEvents':ev
 const make=(id,visible=true)=>({catalog_item_id:id,type:'astro_zone',visible});
 const input=[make('astro_group:Mercury'),make('astro_rule:TR-MER-RET'),make('astro_group:Venus'),make('astro_rule:TR-VEN-CMB-W-BUL')];
 const output=migrate(input);
-assert.equal(output.length,8); // seven families and one retired angular-combustion selection
-assert.equal(output.filter(x=>x.catalog_item_id==='astro_event:mercury-venus-conjunction').length,1);
+assert.equal(output.length,3); // two planets and a retired angular-combustion selection
+assert.equal(output.filter(x=>x.catalog_item_id==='astro_group:Mercury').length,1);
 assert.equal(output.at(-1).visible,false);
 assert.equal(output.at(-1).config.retired,true);
 assert.deepEqual(JSON.parse(JSON.stringify(migrate(output))),JSON.parse(JSON.stringify(output)));
@@ -30,5 +30,13 @@ assert.equal(eventCoordinate('2026-10-01',rows,coords),null);
  const bands=await fetchAstroBands(new Map([['astro_event:venus-visibility','#123456']]),new Map(),'2026-01-01','2026-12-31');
  assert.equal(bands.length,1);assert.equal(bands[0].isPoint,true);assert.equal(bands[0].startTs,'2026-10-14T18:00:27+05:30');
  assert.equal((await fetchAstroBands(new Map([['astro_rule:UNSUPPORTED','#123456']]),new Map(),'2026-01-01')).length,0);
+ const groupBands=await fetchAstroBands(new Map([['astro_group:Venus','#123456'],['astro_event:venus-visibility','#123456']]),new Map(),'2026-01-01');
+ assert.equal(groupBands.length,1);
+ const crossing={family_id:'mercury-venus-conjunction',rule_id:101,event_type:'mercury_venus_crossing',display_name:'Mercury–Venus Crossing',shape:'point',start_date:'2026-10-07',end_date:'2026-10-07',bracket_start_date:'2026-10-06',bracket_end_date:'2026-10-07',details:{contra_directional:true}};
+ const conjunctionLoader=load('astroOverlayService',{'./astroEvents':{...events,fetchAstroFamilies:async()=>[{id:crossing.family_id,planets:['Mercury','Venus']}],fetchAstroEvents:async()=>[crossing]}});
+ for(const selection of [new Map([['astro_group:Mercury','#123456']]),new Map([['astro_group:Mercury','#123456'],['astro_group:Venus','#654321']])]){
+  const result=await conjunctionLoader.fetchAstroBands(selection,new Map(),'2026-10-01','2026-10-31');
+  assert.equal(result.length,1);assert.equal(result[0].from,'2026-10-07');assert(result[0].displayName.includes('2026-10-06–2026-10-07'));assert.equal(result[0].isPoint,true);
+ }
  console.log('PASS astro: saved-selection migration, deduplication, idempotency, retirement, weekend coordinates, canonical overlay dates');
 })().catch(e=>{console.error(e);process.exit(1)});

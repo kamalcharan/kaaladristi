@@ -268,8 +268,7 @@ export default function TradingChart({ data, height = 900, compact = false, work
   // bands canvas instead). The ±90-day axis padding is only worth its wasted
   // whitespace when astro zones (which can sit in the future) are present, so
   // buildCharts consults this ref to decide whether to pad or fit-to-data.
-  const astroBandsRef = useRef(horizonBands);
-  useEffect(() => { astroBandsRef.current = horizonBands; }, [horizonBands]);
+  const hasAstroBands = horizonBands.length > 0;
 
   const chartsRef = useRef<IChartApi[]>([]);
 
@@ -415,7 +414,7 @@ export default function TradingChart({ data, height = 900, compact = false, work
     // manual zoom-out (owner feedback) — so we fit the candles to the width
     // instead, which also lines the chart's right edge up with the scrubber's
     // NOW.
-    const padAxis = workspaceMode && astroBandsRef.current.length > 0;
+    const padAxis = workspaceMode && hasAstroBands;
     if (padAxis) {
       const firstDate = data[0].trade_date;
       const lastDate  = data[data.length - 1].trade_date;
@@ -802,7 +801,7 @@ export default function TradingChart({ data, height = 900, compact = false, work
     // Redraw bands immediately after chart rebuild (covers indicator overlay changes)
     requestAnimationFrame(() => { drawBandsRef.current?.(); });
   // eslint-disable-next-line react-hooks/exhaustive-deps -- `overlay` is read only for presence (hasOverlay); depending on `!!overlay` avoids chart rebuilds on overlay identity churn
-  }, [data, height, compact, workspaceMode, indicatorOverlays, bigMoneyEvents, setupLevels, setupEntries, !!overlay, onVisibleRangeChange, onCrosshairMove]);
+  }, [data, height, compact, workspaceMode, hasAstroBands, indicatorOverlays, bigMoneyEvents, setupLevels, setupEntries, !!overlay, onVisibleRangeChange, onCrosshairMove]);
 
   // Scroll to highlighted date when slider moves
   useEffect(() => {

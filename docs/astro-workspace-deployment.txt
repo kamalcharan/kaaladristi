@@ -13,10 +13,11 @@ Review in the application
 - Hide Venus Visibility. It must disappear from Catalog, Almanac, new overlay
   requests and a freshly requested VaNi astro reading. Show it again and repeat.
 - Conjunction appears under both planet tabs with one shared switch. Selecting
-  it from both tabs must produce one overlay selection.
+  Mercury and Venus in Catalog must render shared conjunctions only once.
 - October 2026 Venus Tara Asta must retain 14 October 18:00:27 IST and the period
   must end 28 October 06:10:13 IST. Crossing dates remain daily-sample brackets.
-- Existing supported Mercury/Venus selections migrate once. Unsupported saved
+- Catalog has two planet selections. Supported saved family selections migrate
+  into Mercury/Venus groups on reload. Unsupported saved
   overlays remain labelled Retired and switched off; remove them using existing
   overlay controls. Old panel blocks show a retirement notice and Catalog link.
 - Check an index and a curated index chart, including a weekend station marker.

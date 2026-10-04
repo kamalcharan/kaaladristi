@@ -47,7 +47,9 @@ export const fetchAstroFamilies = (admin = false) => get<AstroFamily[]>(`/api/${
 export const fetchAstroEvents = (start: string, end: string, admin = false) => get<AstroOccurrence[]>(`/api/${admin ? 'admin/' : ''}astro/events?from_date=${start}&to_date=${end}`);
 export async function publishAstroFamily(id: string, visible: boolean) { const r = await api.fetch(`/api/admin/astro/families/${encodeURIComponent(id)}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ catalog_visible: visible }) }); if (!r.ok)
     throw new Error('Publication failed. Your saved setting has not changed.'); }
-export function eventCatalogItem(f: AstroFamily): CatalogItem { return { id: `astro_event:${f.id}`, display_name: `${f.planets.join('–')} · ${f.name}`, description: f.description, block_type: 'astro_rule', placement: 'chart_overlay', overlay_type: 'astro_zone', data_source: 'rule_engine', applicable_to: ['index'], tier_required: 'free', color: '#c9a84c' }; }
+export function planetCatalogItem(planet: 'Mercury'|'Venus'): CatalogItem {
+ return {id:`astro_group:${planet}`,display_name:planet,description:`All published ${planet} events, including shared conjunctions.`,block_type:'astro_rule',placement:'chart_overlay',overlay_type:'astro_zone',data_source:'rule_engine',applicable_to:['index'],tier_required:'free',color:planet==='Mercury'?'#60a5fa':'#e879f9'};
+}
 // Explicit identity migration. Angular Venus combustion is deliberately NOT
 // translated into Tara Asta; unresolved/unsupported items remain retired.
 export const LEGACY_ASTRO_FAMILIES: Record<string, string> = {
