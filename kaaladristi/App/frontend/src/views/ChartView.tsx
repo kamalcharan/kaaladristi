@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom';
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
@@ -170,8 +171,10 @@ export default function ChartView({ storyPreview = false }: { storyPreview?: boo
   useEffect(() => {
     if (!isFull) return;
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setIsFull(false); };
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    return () => { document.body.style.overflow = previousOverflow; window.removeEventListener('keydown', onKey); };
   }, [isFull]);
   const [selectedStyle] = useState<TradingStyle>('Balanced');
   // Timeline scrubber (the Player, pulled in from Pulse). null = pin to latest bar.
@@ -799,20 +802,13 @@ export default function ChartView({ storyPreview = false }: { storyPreview?: boo
   const chartArea = (
     <>
       <div
-        className={cn('glass-card rounded-2xl p-3', isFull && 'fixed inset-2 z-[300] overflow-auto')}
-        style={isFull ? { background: 'var(--kd-bg, #0b0f17)' } : undefined}
+        className="glass-card rounded-2xl p-3"
+        role={isFull ? 'dialog' : undefined}
+        aria-modal={isFull || undefined}
+        aria-label={isFull ? 'Fullscreen chart' : undefined}
+        style={isFull ? { background: 'var(--bg)', height: '100%', overflow: 'auto' } : undefined}
       >
-        {/* Always-visible exit in fullscreen — the toolbar ✕ can scroll
-            out of view; this one is pinned to the viewport corner. */}
-        {isFull && (
-          <button
-            onClick={() => setIsFull(false)}
-            title="Exit fullscreen (Esc)"
-            className="fixed top-5 right-6 z-[320] px-3 py-1.5 rounded-lg text-xs font-bold border border-kd-border bg-kd-elevated text-[var(--text-primary)] hover:border-[var(--accent)] transition-colors shadow-lg"
-          >
-            ✕ Exit
-          </button>
-        )}
+        <div style={isFull ? {position:'sticky',top:-12,zIndex:30,background:'var(--card)',padding:'12px 0 4px'} : undefined}>
         {!isLoading && !isError && rows.length > 0 && (
           <div className="flex flex-wrap items-center gap-1 mb-3 px-1">
             <div className="flex items-center gap-0.5 mr-2 p-0.5 rounded-lg border border-kd-border bg-kd-elevated">
@@ -852,7 +848,7 @@ export default function ChartView({ storyPreview = false }: { storyPreview?: boo
               title={isFull ? 'Exit fullscreen' : 'Fullscreen chart'}
               className="ml-auto px-2.5 py-1 rounded-lg text-[12px] text-[var(--text-muted)] hover:text-[var(--text-secondary)] hover:bg-kd-elevated border border-kd-border transition-all"
             >
-              {isFull ? '✕' : '⛶'}
+              {isFull ? '✕ Exit fullscreen' : '⛶'}
             </button>
           </div>
         )}
@@ -861,6 +857,12 @@ export default function ChartView({ storyPreview = false }: { storyPreview?: boo
           <CockpitOverlayStrip onAdd={() => setOverlayDrawerOpen(true)} />
         )}
 
+        <div className="flex flex-wrap items-center gap-3 text-xs text-secondary mb-2">
+          <span>Price history: D → 5Y / MAX · W / M → available history</span>
+          {isIndex && <button className="underline text-[var(--accent)]" onClick={() => navigate('/almanac')}>Event history →</button>}
+          {isFull && (isLoading || isError || !rows.length) && <button onClick={() => setIsFull(false)}>✕ Exit fullscreen</button>}
+        </div>
+        </div>
         {isLoading ? (
           <div className="space-y-4 p-2">
             <Skeleton className="h-[400px] w-full rounded-2xl" />
@@ -970,7 +972,7 @@ export default function ChartView({ storyPreview = false }: { storyPreview?: boo
         </div>
       )}
       <div id="study-chart" style={{ scrollMarginTop: 118 }} className="grid grid-cols-1 lg:grid-cols-[7fr_3fr] gap-3 mb-3">
-        <div className="min-w-0">{chartArea}</div>
+        <div className="min-w-0">{isFull ? createPortal(<div style={{position:'fixed',inset:0,zIndex:350,padding:8,background:'var(--bg)'}}>{chartArea}<CatalogDrawer isOpen={overlayDrawerOpen} onClose={() => setOverlayDrawerOpen(false)} context="overlay" /></div>, document.body) : chartArea}</div>
         <div className="flex flex-col gap-3 min-w-0">
           {!isLoading && !isError && rows.length > 0 && tf === 'daily' && (
             <CockpitIndicatorPanels rows={rows} />
@@ -1203,7 +1205,7 @@ export default function ChartView({ storyPreview = false }: { storyPreview?: boo
         participation={<>{pumpDumpResult && <PumpDumpBanner result={pumpDumpResult} />}{participationSection}{!snapshot && <p className="text-sm text-muted">Participation widgets are waiting for their source data. No participation confirmation is inferred.</p>}</>}
         chart={replayTab}
       />
-      <CatalogDrawer isOpen={overlayDrawerOpen} onClose={() => setOverlayDrawerOpen(false)} context="overlay" />
+      <CatalogDrawer isOpen={!isFull && overlayDrawerOpen} onClose={() => setOverlayDrawerOpen(false)} context="overlay" />
     </ErrorBoundary>
   );
 
@@ -1499,7 +1501,7 @@ export default function ChartView({ storyPreview = false }: { storyPreview?: boo
 
       {/* Overlay picker — the same Workspace-launched drawer (z-200) */}
       <CatalogDrawer
-        isOpen={overlayDrawerOpen}
+        isOpen={!isFull && overlayDrawerOpen}
         onClose={() => setOverlayDrawerOpen(false)}
         context="overlay"
       />
