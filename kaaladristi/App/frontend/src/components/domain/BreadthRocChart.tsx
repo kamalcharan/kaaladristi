@@ -26,6 +26,7 @@ const MAX_PERIOD_DAYS = Math.max(...PERIODS.map(p => p.days));
 export type RocBadge = 'expanding' | 'slowing' | 'turning' | 'contracting' | 'warming_up';
 
 export interface BreadthRocChartProps {
+  scope?: 'market' | 'index';
   focusedDate?: string | null;
   onDateFocus?: (date: string | null) => void;
   onInspectDate?: (date: string | null) => void;
@@ -128,6 +129,7 @@ export default function BreadthRocChart({
   isLoading: isLoadingProp,
   isError: isErrorProp,
   indexName,
+  scope,
   stockCount: stockCountProp,
   rocBadge: rocBadgeProp,
   periodDays, onPeriodChange, researchMode = false,
@@ -149,7 +151,8 @@ export default function BreadthRocChart({
   const isLoading = isLoadingProp ?? internal.isLoading;
   const isError   = isErrorProp   ?? internal.isError;
 
-  const latest = data[data.length - 1];
+  const readingIndex = researchMode && focusedDate ? data.findIndex(r=>r.trade_date===focusedDate) : data.length-1;
+  const latest = data[readingIndex];
 
   const displayStockCount = stockCountProp ?? latest?.stock_count ?? null;
 
@@ -163,7 +166,7 @@ export default function BreadthRocChart({
   const yMax = allVals.length ? Math.max(0.001, ...allVals.map(Math.abs)) * 1.2 : 0.02;
   const yDomain: [number, number] = [-yMax, yMax];
 
-  const title = indexName ? 'Index breadth momentum (ROC)' : 'Breadth Momentum (ROC)';
+  const title = indexName && scope!=='market' ? 'Index breadth momentum (ROC)' : 'Breadth Momentum (ROC)';
 
   return (
     <div className="glass-card rounded-2xl p-4">
@@ -175,7 +178,7 @@ export default function BreadthRocChart({
           {indexName && <p className="text-xs text-muted mt-1">{indexName}</p>}
           {displayStockCount != null && (
             <p className="text-[12px] text-muted mt-0.5">
-              {displayStockCount.toLocaleString()}{indexName ? ' constituents · average ROC' : '+ stocks · GroupAvg ROC oscillator'}
+              {displayStockCount.toLocaleString()}{indexName && scope!=='market' ? ' constituents · average ROC' : ' stocks · GroupAvg ROC oscillator'}
             </p>
           )}
         </div>

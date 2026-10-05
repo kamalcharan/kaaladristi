@@ -33,6 +33,7 @@ import CatalogDrawer from '@/components/domain/Catalog/CatalogDrawer';
 import { useAstroOverlayBands } from '@/hooks/useAstroOverlayBands';
 import AstroEventRibbon from '@/components/astro/AstroEventRibbon';
 import ChartAstroControls from '@/components/astro/ChartAstroControls';
+import AstroMarketStory from '@/components/astro/AstroMarketStory';
 import { useChartAstroContext } from '@/hooks/useChartAstroContext';
 import { astroToday } from '@/services/astroEvents';
 import { shiftStudyDate, studySession, studyEventBand, validStudyDate } from '@/services/astroStudy';
@@ -281,8 +282,12 @@ export default function ChartView({ storyPreview = false }: { storyPreview?: boo
   const astroWindowEnd = astroCutoff ?? astroToday();
   useEffect(() => { if (astroContextEnabled) { setDvTab('chart'); setActiveIndex(null); } }, [astroContextEnabled, searchParams.get('event'), astroAnchor]);
   const [inspectedDate,setInspectedDate] = useState<string|null>(null);
-  useEffect(() => { setInspectedDate(null); }, [numId,astroAnchor,astroBefore]);
-  const inspectSession = useCallback((_index:number,date:string) => { setInspectedDate(date); setActiveIndex(null); },[]);
+  const [chartInspectionDate,setChartInspectionDate] = useState<string|null>(null);
+  const [storyRequested,setStoryRequested] = useState(false);
+  const inspectionPinned = useRef(false);
+  const [sessionPinned,setSessionPinned] = useState(false);
+  useEffect(() => { setInspectedDate(null); setChartInspectionDate(null); inspectionPinned.current=false; setSessionPinned(false); }, [numId,astroAnchor,astroBefore]);
+  const inspectSession = useCallback((_index:number,date:string) => { if(inspectionPinned.current)return; setInspectedDate(date); setActiveIndex(null); },[]);
 
 
   // ── Chart data (full history for TradingChart) — declared BEFORE the
@@ -290,11 +295,11 @@ export default function ChartView({ storyPreview = false }: { storyPreview?: boo
   // bar's stage. dateKey: the page is commonly left open through a
   // session; a day change refetches automatically (same as useScan.ts).
   const { latestDataDate: chartDateKey } = usePipelineStatus();
-  const { data: initialRows = [], isLoading, isError, error, refetch } = useQuery({
-    queryKey: ['chart', type, numId, range, tf, chartDateKey ?? 'unknown', astroContextEnabled ? astroWindowStart : null, astroContextEnabled ? astroWindowEnd : null],
+  const { data: sourceRows = [], isLoading, isError, error, refetch } = useQuery({
+    queryKey: ['chart', type, numId, range, astroContextEnabled ? 'daily' : tf, chartDateKey ?? 'unknown', astroContextEnabled ? astroWindowStart : null, astroContextEnabled ? astroWindowEnd : null],
     queryFn: () =>
       astroContextEnabled
-        ? fetchIndexStudyWindow(numId,astroWindowStart,astroWindowEnd).then(r => tf==='daily' ? r : resampleRows(r,tf))
+        ? fetchIndexStudyWindow(numId,astroWindowStart,astroWindowEnd)
         : isEquity
         ? (tf === 'daily' ? fetchEquityEodById(numId, range) : fetchEquityTimeframeById(numId, tf))
         // Index W/M: no aggregate tables exist — resample full daily history
@@ -305,6 +310,7 @@ export default function ChartView({ storyPreview = false }: { storyPreview?: boo
     staleTime: 120_000,
     enabled: !!numId && (isIndex || isEquity),
   });
+  const initialRows = useMemo(() => astroContextEnabled && tf !== 'daily' ? resampleRows(sourceRows,tf) : sourceRows,[sourceRows,astroContextEnabled,tf]);
   const history = useInfiniteQuery({
     queryKey: ['chart-history',type,numId,range,tf,chartDateKey,initialRows[0]?.trade_date],
     initialPageParam: initialRows[0]?.trade_date ?? '',
@@ -325,7 +331,27 @@ export default function ChartView({ storyPreview = false }: { storyPreview?: boo
   const requestedSession = searchParams.get('session');
   const inspectionDate = inspectedDate ?? (astroContextEnabled && validStudyDate(requestedSession) ? requestedSession : astroContextEnabled ? astroAnchor : rows.at(-1)?.trade_date ?? astroToday());
   const inspectedSession = studySession(rows,astroCutoff && inspectionDate>astroCutoff ? astroCutoff : inspectionDate);
-  const chartFocusDate = astroContextEnabled ? studySession(rows,astroAnchor)?.trade_date : null;
+  const chartFocusDate = chartInspectionDate ?? (astroContextEnabled ? studySession(rows,astroAnchor)?.trade_date : null);
+  const focusedAstroBand = astroContextEnabled ? astroBands.find(b=>b.eventKey===astroContext.event?.event_key) : undefined;
+  const focusAstro = useCallback((band:AstroBand) => {
+    if(!band.eventKey || !isIndex)return;
+    const next=new URLSearchParams(searchParams);
+    next.set('astro','1');next.set('tab','chart');next.set('event',band.eventKey);next.set('type',band.groupTag);next.set('date',band.from);next.delete('session');
+    setSearchParams(next);setStoryRequested(true);
+  },[isIndex,searchParams,setSearchParams]);
+  useEffect(()=>{
+    if(storyRequested && focusedAstroBand && !isLoading){
+      document.getElementById('astro-market-story')?.scrollIntoView({behavior:'smooth',block:'start'});
+      setStoryRequested(false);
+    }
+  },[storyRequested,focusedAstroBand,isLoading]);
+  const inspectStoryDate = useCallback((date:string)=>{
+    setTf('daily');
+    inspectionPinned.current=true;setSessionPinned(true);
+    setInspectedDate(date);setChartInspectionDate(date);setActiveIndex(null);
+    document.getElementById('chart-price-area')?.scrollIntoView({behavior:'smooth',block:'start'});
+  },[]);
+
 
 
   // Scan presence — which presets currently contain this stock. Moved up
@@ -732,6 +758,10 @@ export default function ChartView({ storyPreview = false }: { storyPreview?: boo
     [isEquity, isIndex, tf, rows, warmupBars, bigMoneyDates, sectorByDate, journeys],
   );
 
+  // Event evidence always counts daily market sessions, even on a W/M price chart.
+  const astroStoryRows = astroContextEnabled && tf !== 'daily' ? sourceRows : rows;
+  const astroStoryEvents = useMemo(() => astroContextEnabled && tf !== 'daily' ? buildStoryEvents(sourceRows) : storyEvents,[astroContextEnabled,tf,sourceRows,storyEvents]);
+
   /** Full editorial overlay bundle passed to TradingChart. Combines the
    *  setup-derived layers (cycle bands + callouts, from setupOverlayCore)
    *  with the daily-event layers (Big Money badges + storyEvent pins).
@@ -960,6 +990,7 @@ export default function ChartView({ storyPreview = false }: { storyPreview?: boo
               workspaceMode
               height={isFull ? Math.max(700, window.innerHeight - 120) : 480}
               selectedAstroEventKey={astroContextEnabled ? astroContext.event?.event_key : undefined}
+              onAstroFocus={isIndex ? focusAstro : undefined}
               onCrosshairMove={astroContextEnabled ? inspectSession : undefined}
               highlightDate={chartFocusDate ?? (storyPreview && selectedStoryEvent ? selectedStoryEvent.date : activeIndex != null && pulseBars[effectiveIdx] ? pulseBars[effectiveIdx].trade_date : null)}
               overlays={frameworkOverlays}
@@ -1009,7 +1040,7 @@ export default function ChartView({ storyPreview = false }: { storyPreview?: boo
     <>
       {astroContextEnabled && <>
         <ChartAstroControls events={astroContext.events} matches={astroContext.matches} event={astroContext.event} indexId={numId} loading={astroContext.isLoading} failed={astroContext.isError} onRetry={()=>void astroContext.refetch()} onEarlier={astroContext.loadEarlier}/>
-        {inspectedSession && <p aria-label="Historical session readings" className="text-sm text-secondary mb-3">Selected session · {inspectedSession.trade_date} · Close {inspectedSession.close} · MagicRS {inspectedSession.magic_rs ?? 'Unavailable'} · MagicMA {inspectedSession.magic_ma ?? 'Unavailable'} · RSI {inspectedSession.rsi_14 ?? 'Unavailable'}. Stored end-of-day readings.</p>}
+        {inspectedSession && <p aria-label="Historical session readings" className="text-sm text-secondary mb-3">Selected session · {inspectedSession.trade_date} · Close {inspectedSession.close} · MagicRS {inspectedSession.magic_rs ?? 'Unavailable'} · MagicMA {inspectedSession.magic_ma ?? 'Unavailable'} · RSI {inspectedSession.rsi_14 ?? 'Unavailable'}. Stored end-of-day readings. {sessionPinned && <button className="underline" onClick={()=>{inspectionPinned.current=false;setSessionPinned(false)}}>Session pinned · follow chart cursor</button>}</p>}
       </>}
 
       {storyEvents.length > 0 && (
@@ -1043,7 +1074,7 @@ export default function ChartView({ storyPreview = false }: { storyPreview?: boo
         </div>
       )}
       <div id="study-chart" style={{ scrollMarginTop: 118 }} className="grid grid-cols-1 lg:grid-cols-[7fr_3fr] gap-3 mb-3">
-        <div className="min-w-0">{isFull ? createPortal(<div style={{position:'fixed',inset:0,zIndex:350,padding:8,background:'var(--bg)'}}>{chartArea}<CatalogDrawer isOpen={overlayDrawerOpen} onClose={() => setOverlayDrawerOpen(false)} context="overlay" /></div>, document.body) : chartArea}</div>
+        <div id="chart-price-area" style={{scrollMarginTop:120}} className="min-w-0">{isFull ? createPortal(<div style={{position:'fixed',inset:0,zIndex:350,padding:8,background:'var(--bg)'}}>{chartArea}<CatalogDrawer isOpen={overlayDrawerOpen} onClose={() => setOverlayDrawerOpen(false)} context="overlay" /></div>, document.body) : chartArea}</div>
         <div className="flex flex-col gap-3 min-w-0">
           {!isLoading && !isError && rows.length > 0 && tf === 'daily' && (
             <CockpitIndicatorPanels rows={astroContextEnabled && visibleRange ? rows.filter(r=>r.trade_date>=visibleRange.from && r.trade_date<=visibleRange.to) : rows} activeDate={astroContextEnabled ? inspectedSession?.trade_date : undefined} onSessionChange={astroContextEnabled ? date=>inspectSession(0,date) : undefined} />
@@ -1057,6 +1088,8 @@ export default function ChartView({ storyPreview = false }: { storyPreview?: boo
           )}
         </div>
       </div>
+
+      {focusedAstroBand && !isLoading && !isError && <AstroMarketStory key={`${numId}-${focusedAstroBand.eventKey}-${astroBefore}`} band={focusedAstroBand} rows={astroStoryRows} events={astroStoryEvents} indexId={numId} cutoff={astroCutoff} activeDate={inspectedSession?.trade_date} onInspect={inspectStoryDate}/>}
 
       {/* ═══ Magic RS — directly under the price chart, in the SAME grid
           template so its width matches the chart exactly. Spanning the page
@@ -1110,7 +1143,7 @@ export default function ChartView({ storyPreview = false }: { storyPreview?: boo
             activeIndex={effectiveIdx}
             bars={pulseBars}
             corrHistory={corrHistory}
-            onChange={idx => { setSelectedStoryEvent(null); setActiveIndex(idx); if(astroContextEnabled)setInspectedDate(pulseBars[idx]?.trade_date ?? null); }}
+            onChange={idx => { inspectionPinned.current=false;setSessionPinned(false);setSelectedStoryEvent(null); setActiveIndex(idx); if(astroContextEnabled)setInspectedDate(pulseBars[idx]?.trade_date ?? null); }}
           />
         </div>
       )}

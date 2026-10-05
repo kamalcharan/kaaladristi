@@ -91,6 +91,7 @@ interface TradingChartProps {
   workspaceMode?: boolean; // framework-driven: no hardcoded overlays/subpanes
   highlightDate?: string | null;
   selectedAstroEventKey?: string;
+  onAstroFocus?: (band:AstroBand) => void;
   overlays?: ChartOverlay[];
   astroBands?: AstroBand[];
   /** Big Money days (Phase 3): gold dashed price line at each event's zone
@@ -242,7 +243,7 @@ const DEFAULT_BM_EVENTS: NonNullable<TradingChartProps['bigMoneyEvents']> = [];
 const DEFAULT_SETUP_LEVELS: NonNullable<TradingChartProps['setupLevels']> = [];
 const DEFAULT_SETUP_ENTRIES: NonNullable<TradingChartProps['setupEntries']> = [];
 
-export default function TradingChart({ data, height = 900, studyMode = false, preserveViewport = false, initialCandles, showSignalMarkers = true, selectedSession = null, onHistoryEdge, onStorySession, onStorySessions, compact = false, workspaceMode = false, highlightDate = null, selectedAstroEventKey, overlays = DEFAULT_OVERLAYS, astroBands = DEFAULT_BANDS, bigMoneyEvents = DEFAULT_BM_EVENTS, setupLevels = DEFAULT_SETUP_LEVELS, setupEntries = DEFAULT_SETUP_ENTRIES, overlay, onVisibleRangeChange, onCrosshairMove, onZoneClick, benchmarkIndexId = null, benchmarkName = null, storyBubble = null }: TradingChartProps) {
+export default function TradingChart({ data, height = 900, studyMode = false, preserveViewport = false, initialCandles, showSignalMarkers = true, selectedSession = null, onHistoryEdge, onStorySession, onStorySessions, compact = false, workspaceMode = false, highlightDate = null, selectedAstroEventKey, onAstroFocus, overlays = DEFAULT_OVERLAYS, astroBands = DEFAULT_BANDS, bigMoneyEvents = DEFAULT_BM_EVENTS, setupLevels = DEFAULT_SETUP_LEVELS, setupEntries = DEFAULT_SETUP_ENTRIES, overlay, onVisibleRangeChange, onCrosshairMove, onZoneClick, benchmarkIndexId = null, benchmarkName = null, storyBubble = null }: TradingChartProps) {
   const historyArmed = useRef(false);
   const lastHighlight = useRef<string|null>(null);
   const studyViewport = useRef<{ from: Time; to: Time } | null>(null);
@@ -1290,7 +1291,7 @@ export default function TradingChart({ data, height = 900, studyMode = false, pr
       >
         <div ref={mainRef} className="rounded-xl overflow-hidden" />
 
-        {overlayApi && horizonBands.length>0 && <AstroChartEvents chart={overlayApi.chart} container={overlayApi.container} bands={horizonBands} data={data} selectedEventKey={selectedAstroEventKey} onSelect={(band,x,y)=>onZoneClick?.(band,x,y,horizonBands.filter(b=>b.from<=band.from && b.to>=band.from))}/>}
+        {overlayApi && horizonBands.length>0 && <AstroChartEvents chart={overlayApi.chart} container={overlayApi.container} bands={horizonBands} data={data} selectedEventKey={selectedAstroEventKey} onFocus={onAstroFocus} onSelect={(band,x,y)=>onZoneClick?.(band,x,y,horizonBands.filter(b=>b.from<=band.from && b.to>=band.from))}/>}
 
         {/* Editorial AnnotationOverlay — cycle bands + persona callouts +
             Big Money badges + storyEvent pins. Same overlay used by both
