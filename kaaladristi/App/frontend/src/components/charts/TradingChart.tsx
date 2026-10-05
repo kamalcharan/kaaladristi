@@ -907,7 +907,7 @@ export default function TradingChart({ data, height = 900, studyMode = false, pr
       }
 
       // Single-day events render as marker lines (handled separately below), never zones.
-      const selectedBands = horizonBands.filter(b=>b.eventKey===selectedAstroEventKey);
+      const selectedBands = dateSelectRef.current ? horizonBands.filter(b=>b.eventKey===selectedAstroEventKey) : horizonBands;
       const pointBands   = selectedBands.filter(b => b.isPoint)
       const panchakBands = selectedBands.filter(b => b.isPanchak && !b.isPoint)
       const nonPanchak   = selectedBands.filter(b => !b.isPanchak && !b.isPoint)
@@ -1222,7 +1222,7 @@ export default function TradingChart({ data, height = 900, studyMode = false, pr
       >
         <div ref={mainRef} className="rounded-xl overflow-hidden" />
 
-        {overlayApi && horizonBands.length>0 && <AstroChartEvents chart={overlayApi.chart} container={overlayApi.container} bands={horizonBands} data={data} selectedEventKey={selectedAstroEventKey} onFocus={onAstroFocus} onDateSelect={onDateSelect}/>}
+        {overlayApi && horizonBands.length>0 && <AstroChartEvents chart={overlayApi.chart} container={overlayApi.container} bands={horizonBands} data={data} selectedEventKey={selectedAstroEventKey} onFocus={onAstroFocus ?? (band=>{const rect=overlayApi.container.getBoundingClientRect();onZoneClick?.(band,rect.left,rect.top+32)})} onDateSelect={onDateSelect}/>}
 
         {/* Editorial AnnotationOverlay — cycle bands + persona callouts +
             Big Money badges + storyEvent pins. Same overlay used by both
