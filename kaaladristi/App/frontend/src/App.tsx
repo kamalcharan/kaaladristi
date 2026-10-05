@@ -16,6 +16,7 @@ import SettingsView from '@/views/SettingsView';
 import InferenceView from '@/views/InferenceView';
 import RuleEvalView from '@/views/RuleEvalView';
 import AlmanacPage from '@/views/AlmanacPage';
+import AstroStudyPage from '@/views/AstroStudyPage';
 import ChartView from '@/views/ChartView';
 import StockStoryPage, { StockStoryRedirect } from '@/views/StockStoryPage';
 import { VisualPulsePage } from '@/components/domain/VisualPulse';
@@ -126,6 +127,8 @@ function AppRoutes() {
           <Route path="/rule-eval" element={<RuleEvalView />} />
           <Route path="/astro-calendar" element={<Navigate to="/almanac" replace />} />
           <Route path="/almanac" element={<AlmanacPage />} />
+          <Route path="/astro" element={<AlmanacPage />} />
+          <Route path="/astro/study" element={<AstroStudyPage />} />
           <Route path="/chart/equity/:id" element={<StockStoryPage />} />
           <Route path="/chart/:type/:id" element={<ChartView />} />
           <Route path="/story/equity/:id" element={<StockStoryRedirect />} />

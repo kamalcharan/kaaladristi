@@ -204,7 +204,7 @@ export default function ChartView({ storyPreview = false }: { storyPreview?: boo
   // Right-click on an astro band → the full deterministic read (same popover
   // My Space uses; was never wired on Study — owner feedback 2026-07-22).
   const [zoneExplain, setZoneExplain] = useState<{
-    tag: string; ruleId: number; ruleLabel: string; x: number; y: number;
+    tag: string; ruleId: number; ruleLabel: string; x: number; y: number; studyUrl?: string;
     coincident?: { ruleId: number; label: string }[];
   } | null>(null);
   const handleZoneClick = (band: AstroBand, clientX: number, clientY: number, coincident?: AstroBand[]) => {
@@ -214,6 +214,7 @@ export default function ChartView({ storyPreview = false }: { storyPreview?: boo
     }
     setZoneExplain({
       tag: band.groupTag, ruleId: band.ruleId, ruleLabel: band.displayName,
+      studyUrl: band.eventKey && isIndex ? '/astro/study?' + new URLSearchParams({event:band.eventKey, type:band.groupTag, date:band.from, index:String(numId)}) : undefined,
       x: clientX, y: clientY,
       coincident: [...others.entries()].map(([ruleId, label]) => ({ ruleId, label })),
     });
@@ -915,6 +916,7 @@ export default function ChartView({ storyPreview = false }: { storyPreview?: boo
             {zoneExplain && (
               <OverlayExplainPopover
                 tag={zoneExplain.tag}
+                studyUrl={zoneExplain.studyUrl}
                 focusRuleId={zoneExplain.ruleId}
                 focusRuleLabel={zoneExplain.ruleLabel}
                 coincident={zoneExplain.coincident}

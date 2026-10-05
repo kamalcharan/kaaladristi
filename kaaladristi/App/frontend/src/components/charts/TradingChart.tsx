@@ -77,6 +77,10 @@ const BAND_GLYPHS: Record<string, string> = {
 interface TradingChartProps {
   data: IndicatorRow[];
   height?: number;
+  /** Opt-in event study: existing RSI/MagicRS panes, no Sniper pane. */
+  studyMode?: boolean;
+  selectedSession?: string | null;
+  onHistoryEdge?: () => void;
   compact?: boolean;       // hide RSI + Sniper panes (Visual Pulse mode)
   workspaceMode?: boolean; // framework-driven: no hardcoded overlays/subpanes
   highlightDate?: string | null;
@@ -241,7 +245,13 @@ const DEFAULT_BM_EVENTS: NonNullable<TradingChartProps['bigMoneyEvents']> = [];
 const DEFAULT_SETUP_LEVELS: NonNullable<TradingChartProps['setupLevels']> = [];
 const DEFAULT_SETUP_ENTRIES: NonNullable<TradingChartProps['setupEntries']> = [];
 
-export default function TradingChart({ data, height = 900, compact = false, workspaceMode = false, highlightDate = null, overlays = DEFAULT_OVERLAYS, astroBands = DEFAULT_BANDS, bigMoneyEvents = DEFAULT_BM_EVENTS, setupLevels = DEFAULT_SETUP_LEVELS, setupEntries = DEFAULT_SETUP_ENTRIES, overlay, onVisibleRangeChange, onCrosshairMove, onZoneClick, benchmarkIndexId = null, benchmarkName = null, storyBubble = null }: TradingChartProps) {
+export default function TradingChart({ data, height = 900, studyMode = false, selectedSession = null, onHistoryEdge, compact = false, workspaceMode = false, highlightDate = null, overlays = DEFAULT_OVERLAYS, astroBands = DEFAULT_BANDS, bigMoneyEvents = DEFAULT_BM_EVENTS, setupLevels = DEFAULT_SETUP_LEVELS, setupEntries = DEFAULT_SETUP_ENTRIES, overlay, onVisibleRangeChange, onCrosshairMove, onZoneClick, benchmarkIndexId = null, benchmarkName = null, storyBubble = null }: TradingChartProps) {
+  const historyArmed = useRef(false);
+  const studyViewport = useRef<{ from: Time; to: Time } | null>(null);
+  const studySelectedDate = useRef(selectedSession);
+  studySelectedDate.current = selectedSession;
+  const studySelect = useRef<((date: string) => void) | null>(null);
+  useEffect(() => { if (studyMode && selectedSession) studySelect.current?.(selectedSession); }, [studyMode, selectedSession]);
   // Chart + series exposed to the AnnotationOverlay after mount. React state
   // (not just refs) so the overlay re-renders as soon as they exist.
   const [overlayApi, setOverlayApi] = useState<{ chart: IChartApi; series: ISeriesApi<'Candlestick'>; container: HTMLDivElement } | null>(null);
@@ -351,7 +361,7 @@ export default function TradingChart({ data, height = 900, compact = false, work
   const buildCharts = useCallback(() => {
     if (!mainRef.current) return;
     if (!workspaceMode && !magicRef.current) return;
-    if (!workspaceMode && !compact && (!rsiRef.current || !sniperRef.current)) return;
+    if (!workspaceMode && !compact && (!rsiRef.current || (!studyMode && !sniperRef.current))) return;
     if (data.length === 0) return;
 
     // Read theme colors from CSS vars
@@ -389,6 +399,9 @@ export default function TradingChart({ data, height = 900, compact = false, work
       wickDownColor: C.riskRed + '80',
     });
 
+    const studySync: { chart: IChartApi; set: (row: IndicatorRow) => void }[] = [
+      { chart: mainChart, set: row => mainChart.setCrosshairPosition(row.close, toTime(row.trade_date), candleSeries) },
+    ];
     const candleData: CandlestickData<Time>[] = data
       .filter((d) => d.open != null && d.high != null && d.low != null && d.close != null)
       .map((d) => ({
@@ -579,6 +592,7 @@ export default function TradingChart({ data, height = 900, compact = false, work
       if (rsiLine.length > 0) {
         const rsiSeries = rsiChart.addSeries(LineSeries, { color: C.violet, lineWidth: 2 as LineWidth, priceLineVisible: false, lastValueVisible: true });
         rsiSeries.setData(rsiLine);
+        studySync.push({ chart: rsiChart, set: row => { if (row.rsi_14 != null) rsiChart!.setCrosshairPosition(row.rsi_14, toTime(row.trade_date), rsiSeries); else rsiChart!.clearCrosshairPosition(); } });
       }
 
       const mfiLine: LineData<Time>[] = [];
@@ -588,7 +602,7 @@ export default function TradingChart({ data, height = 900, compact = false, work
         mfiSeries.setData(mfiLine);
       }
 
-      const refOpts = { color: 'color-mix(in srgb, var(--text-primary) 12%, transparent)', lineWidth: 1 as LineWidth, lineStyle: LineStyle.Dashed, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false };
+      const refOpts = { color: C.grid, lineWidth: 1 as LineWidth, lineStyle: LineStyle.Dashed, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false };
       const obLine = rsiChart.addSeries(LineSeries, refOpts);
       obLine.setData(data.map((d) => ({ time: toTime(d.trade_date), value: 70 })));
       const osLine = rsiChart.addSeries(LineSeries, refOpts);
@@ -599,7 +613,7 @@ export default function TradingChart({ data, height = 900, compact = false, work
     // PANE 3: Sniper Dragon Histogram — hidden in compact mode
     // ═══════════════════════════════════════════════════════════════════
 
-    if (!workspaceMode && !compact && sniperRef.current) {
+    if (!workspaceMode && !compact && !studyMode && sniperRef.current) {
       sniperChart = createChart(sniperRef.current, {
         ...createChartOptions(sniperRef.current, subHeight, C),
         rightPriceScale: { borderColor: C.grid, scaleMargins: { top: 0.05, bottom: 0.05 } },
@@ -649,6 +663,7 @@ export default function TradingChart({ data, height = 900, compact = false, work
       if (rsLine.length > 0) {
         const rsSeries = magicChart.addSeries(LineSeries, { color: C.riskGreen, lineWidth: 2 as LineWidth, priceLineVisible: false, lastValueVisible: true });
         rsSeries.setData(rsLine);
+        studySync.push({ chart: magicChart, set: row => { if (row.magic_rs != null) magicChart!.setCrosshairPosition(row.magic_rs, toTime(row.trade_date), rsSeries); else magicChart!.clearCrosshairPosition(); } });
       }
 
       const maLine: LineData<Time>[] = [];
@@ -659,7 +674,7 @@ export default function TradingChart({ data, height = 900, compact = false, work
       }
 
       const zeroLine = magicChart.addSeries(LineSeries, {
-        color: 'color-mix(in srgb, var(--text-primary) 15%, transparent)', lineWidth: 1 as LineWidth, lineStyle: LineStyle.Dashed,
+        color: C.grid, lineWidth: 1 as LineWidth, lineStyle: LineStyle.Dashed,
         priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false,
       });
       zeroLine.setData(data.map((d) => ({ time: toTime(d.trade_date), value: 0 })));
@@ -741,12 +756,25 @@ export default function TradingChart({ data, height = 900, compact = false, work
     // ═══════════════════════════════════════════════════════════════════
 
     const allCharts = [mainChart, rsiChart, sniperChart, magicChart].filter((c): c is IChartApi => c != null);
+    if (studyMode) {
+      // Identical whitespace calendars on every pane preserve real weekend/event
+      // coordinates without inventing prices or shifting the astronomical date.
+      const dates = [...new Set([...data.map(r => r.trade_date), ...astroBands.flatMap(b => [b.from,b.to])])].sort();
+      allCharts.forEach(chart => chart.addSeries(LineSeries, { visible: false, priceLineVisible: false, lastValueVisible: false }).setData(dates.map(date => ({time: toTime(date)}))));
+    }
+    let requestedHistory = false;
+    if (studyMode && onHistoryEdge) mainChart.timeScale().subscribeVisibleLogicalRangeChange(range => {
+      if (range && range.from < -5 && historyArmed.current && !requestedHistory) { requestedHistory = true; historyArmed.current = false; onHistoryEdge(); }
+    });
+    let syncingRange = false;
     allCharts.forEach((chart, i) => {
       chart.timeScale().subscribeVisibleLogicalRangeChange((range) => {
-        if (range) {
+        if (range && !syncingRange) {
+          syncingRange = true;
           allCharts.forEach((other, j) => {
             if (i !== j) other.timeScale().setVisibleLogicalRange(range);
           });
+          syncingRange = false;
         }
       });
     });
@@ -764,13 +792,35 @@ export default function TradingChart({ data, height = 900, compact = false, work
       });
     }
 
+    let syncingStudy = false;
+    if (studyMode) {
+      studySelect.current = date => {
+        if (syncingStudy) return;
+        const row = data.find(r => r.trade_date === date);
+        if (!row) return;
+        syncingStudy = true;
+        studySync.forEach(s => s.set(row));
+        syncingStudy = false;
+      };
+      allCharts.forEach(chart => {
+        const inspect = (param: { time?: Time }) => {
+          if (syncingStudy || !param.time) return;
+          const date = String(param.time), idx = data.findIndex(r => r.trade_date === date);
+          if (idx < 0) return;
+          studySelect.current?.(date);
+          onCrosshairMove?.(idx, date);
+        };
+        chart.subscribeCrosshairMove(inspect);
+        chart.subscribeClick(inspect);
+      });
+    }
     mainChart.subscribeCrosshairMove((param) => {
       if (!param.time) { setHoverBar(null); return; }
       const date = param.time as string;
       const idx  = data.findIndex(d => d.trade_date === date);
       if (idx >= 0) {
         setHoverBar(data[idx] as unknown as Record<string, unknown>);
-        if (onCrosshairMove) onCrosshairMove(idx, date);
+        if (onCrosshairMove && !studyMode) onCrosshairMove(idx, date);
       } else {
         setHoverBar(null);
       }
@@ -780,7 +830,9 @@ export default function TradingChart({ data, height = 900, compact = false, work
     // window so future/pre-data overlay zones are visible. Otherwise fit the
     // candles to the width — a relaxed default that fills the pane and aligns
     // the right edge with the scrubber's NOW.
-    if (padAxis && padFrom && padTo) {
+    if (studyMode && studyViewport.current && String(studyViewport.current.to) >= data[0].trade_date && String(studyViewport.current.from) <= data[data.length - 1].trade_date) {
+      mainChart.timeScale().setVisibleRange({ from: (String(studyViewport.current.from) < data[0].trade_date ? data[0].trade_date : studyViewport.current.from) as Time, to: (String(studyViewport.current.to) > data[data.length-1].trade_date ? data[data.length-1].trade_date : studyViewport.current.to) as Time });
+    } else if (padAxis && padFrom && padTo) {
       mainChart.timeScale().setVisibleRange({ from: padFrom as Time, to: padTo as Time });
     } else {
       mainChart.timeScale().fitContent();
@@ -799,12 +851,13 @@ export default function TradingChart({ data, height = 900, compact = false, work
       drawBandsRef.current?.();
     });
     // Redraw bands immediately after chart rebuild (covers indicator overlay changes)
-    requestAnimationFrame(() => { drawBandsRef.current?.(); });
+    requestAnimationFrame(() => { drawBandsRef.current?.(); if (studyMode && studySelectedDate.current) studySelect.current?.(studySelectedDate.current); });
   // eslint-disable-next-line react-hooks/exhaustive-deps -- `overlay` is read only for presence (hasOverlay); depending on `!!overlay` avoids chart rebuilds on overlay identity churn
-  }, [data, height, compact, workspaceMode, hasAstroBands, indicatorOverlays, bigMoneyEvents, setupLevels, setupEntries, !!overlay, onVisibleRangeChange, onCrosshairMove]);
+  }, [data, height, compact, workspaceMode, studyMode, onHistoryEdge, hasAstroBands, indicatorOverlays, bigMoneyEvents, setupLevels, setupEntries, !!overlay, onVisibleRangeChange, onCrosshairMove]);
 
   // Scroll to highlighted date when slider moves
   useEffect(() => {
+    if (studyMode && studyViewport.current) return;
     if (!highlightDate || chartsRef.current.length === 0 || data.length === 0) return;
     const idx = data.findIndex((d) => d.trade_date === highlightDate);
     if (idx < 0) return;
@@ -818,7 +871,7 @@ export default function TradingChart({ data, height = 900, compact = false, work
     chartsRef.current.forEach((chart) => {
       chart.timeScale().setVisibleLogicalRange({ from: from + offset, to: to + offset });
     });
-  }, [highlightDate, data, overlayApi]);
+  }, [highlightDate, data, overlayApi, studyMode]);
 
   useEffect(() => {
     buildCharts();
@@ -835,6 +888,8 @@ export default function TradingChart({ data, height = 900, compact = false, work
     const ro = new ResizeObserver(() => handleResize());
     if (mainRef.current) ro.observe(mainRef.current);
     return () => {
+      if (studyMode) studyViewport.current = mainChartRef.current?.timeScale().getVisibleRange() ?? null;
+      studySelect.current = null;
       ro.disconnect();
       window.removeEventListener('resize', handleResize);
       chartsRef.current.forEach((c) => c.remove());
@@ -1152,9 +1207,9 @@ export default function TradingChart({ data, height = 900, compact = false, work
   }, [horizonBands]);
 
   return (
-    <div className="space-y-0.5">
+    <div className="space-y-0.5" onPointerDown={() => { if(studyMode)historyArmed.current=true; }} onWheel={() => { if(studyMode)historyArmed.current=true; }}>
       {/* Legend — legacy mode only */}
-      {!workspaceMode && (
+      {!workspaceMode && !studyMode && (
         <div className="flex items-center gap-4 mb-2 text-[12px] text-muted">
           {SMA_LINES.map((s) => (
             <span key={s.key} className="flex items-center gap-1">
@@ -1464,7 +1519,7 @@ export default function TradingChart({ data, height = 900, compact = false, work
         </div>
       )}
 
-      {!workspaceMode && !compact && (
+      {!workspaceMode && !compact && !studyMode && (
         <div className="relative">
           <span className="absolute top-1 left-2 text-[12px] text-muted z-10 pointer-events-none">
             Sniper Dragon — <span style={{ color: 'var(--risk-red)' }}>Inst</span> / <span style={{ color: 'var(--risk-amber)' }}>Hot$</span> / <span style={{ color: 'var(--risk-green)' }}>Retail</span>

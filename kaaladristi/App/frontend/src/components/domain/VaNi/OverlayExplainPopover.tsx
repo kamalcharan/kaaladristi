@@ -2,7 +2,8 @@ import { useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { fetchAstroFamilies } from '@/services/astroEvents';
-export default function OverlayExplainPopover({ tag, anchorX, anchorY, onClose, focusRuleId, focusRuleLabel, coincident }: {
+export default function OverlayExplainPopover({ tag, anchorX, anchorY, onClose, focusRuleId, focusRuleLabel, coincident, studyUrl }: {
+    studyUrl?: string;
     tag: string;
     anchorX: number;
     anchorY: number;
@@ -25,6 +26,7 @@ export default function OverlayExplainPopover({ tag, anchorX, anchorY, onClose, 
  <p>{family?.description ?? 'This chart marker uses the published planetary calendar.'}</p>
  <p>Dates include weekends and holidays. A daily-sample bracket is not an exact event time.</p>
  {coincident?.map(e => <p key={e.ruleId}>{e.label}</p>)}
+ {studyUrl && <p><Link to={studyUrl} onClick={onClose}>Study this event →</Link></p>}
  <Link to={`/almanac${family ? '?family=' + family.id : ''}`} onClick={onClose}>View dates and calculation →</Link>
  </div>;
 }

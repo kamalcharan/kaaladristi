@@ -1,0 +1,43 @@
+# Astro Study: first review boundary
+
+Implemented on codex/astro-study. No database migration or backend deployment needed for this stage; existing published-event APIs must be deployed.
+
+## Reuse audit
+- Almanac remains EventWorkspace in calendar mode; /almanac URLs and query parameters remain valid. /astro adds the menu entry, /astro/study is separate from ChartView.
+- Published occurrences: services/astroEvents.ts, /api/astro/events, same visibility and client calendar horizon as Almanac. No fallback legacy events or synthetic production dates.
+- TradingChart uses TradingView Lightweight Charts, not the hosted TradingView widget. Study opts into existing RSI/MFI and MagicRS/MagicMA panes; Sniper is omitted for this page. Existing defaults remain.
+- MagicRS is stored versus CNX500 (ChartView documents this). It is not a new sector/NIFTY ratio calculation.
+- km_index_eod via the existing authenticated PostgREST adapter supplies the same indicator columns as ChartView. Bounded paginated reads avoid the server row limit and use historical dates instead of today-relative ranges. No auth, schema or grants changed.
+- Existing chart popovers now carry canonical event identity/index/date to Study. Opening Study does not change saved Workspace overlays or framework configuration.
+
+## Historical contract
+- Astronomical dates/timestamps remain untouched, including weekends and sample brackets.
+- Initial market snapshot is the last recorded trading session on/before the event date. It is explicitly EOD, not intraday knowledge at event time.
+- As-of mode excludes rows after the event date in the request AND renderer. Switching back while a query loads cannot expose later cached rows.
+- Missing stored indicators are unavailable, never filled from current values. Data may reflect later historical corrections; this is not a versioned point-in-time archive.
+- Event selection and session/index/replay mode use URL parameters. Viewport is preserved when earlier data arrives. A new occurrence/index resets chart state.
+- White-space dates on all chart panes preserve event coordinates without inventing market observations.
+
+## Remaining stages (TODO)
+- Breadth/ROC story: prior condition, selected-session change, persistence/divergence after the event; compact price context plus synchronized existing breadth/ROC components. VIX and universe labels; show true historical coverage.
+- Historical sector leadership and up-to-three normalized ratio comparisons. Audit benchmark identity, adjusted price series and curated membership history first. Distinguish flows, relative returns and participation.
+- VaNi contextual intents, QWEN/Haiku routing, cache keys by event/session/index/data version, loader, feedback and analytics integration. This page does not yet call an LLM.
+- Calendar's upcoming/active/past UX refinement after the technical study review.
+
+## Verification
+- npm run typecheck
+- npm run build (Windows scripts need Git Bash for their grep expressions)
+- node scripts/qa/check-astro-workspace.cjs
+- node scripts/qa/check-astro-study.cjs
+- node scripts/qa/check-astro-study-browser.mjs (headless Edge by default; ASTRO_QA_BROWSER may override)
+
+Browser test uses controlled fixtures, not production data. It renders the real chart and tests EOD weekend alignment, replay cutoff, session stepping, fullscreen escape, earlier occurrences/history and mobile width. Live historical values still require user comparison with deployed records.
+
+## User review
+1. Astro > Calendar > Dates > Study market context; repeat from a ChartView event popover.
+2. Confirm event date/index survive navigation and refresh; use sign filter and previous occurrence.
+3. Compare close, MagicRS/MagicMA and RSI with ChartView on exactly the same session/index.
+4. Reveal later sessions, step forward, then return to As of event: no later candle/indicator should remain.
+5. Test a weekend and a missing-history event; inspect explicit EOD/source labels.
+6. Pan left or load an earlier year; verify stable viewport. Test fullscreen/Escape and mobile.
+7. Confirm Workspace selections and normal ChartView behavior remain intact.

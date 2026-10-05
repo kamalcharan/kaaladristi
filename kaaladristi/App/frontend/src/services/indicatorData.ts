@@ -235,6 +235,22 @@ export async function fetchIndicatorDataById(
   return (data ?? []) as IndicatorRow[];
 }
 
+/** Historical study: bounded, paginated reads of the SAME stored indicators as ChartView. */
+export async function fetchIndexStudyWindow(indexId: number, start: string, end: string): Promise<IndicatorRow[]> {
+  if (start > end) return [];
+  const rows: IndicatorRow[] = [];
+  for (let offset = 0; ; offset += 500) {
+    const { data, error } = await from('km_index_eod')
+      .select(`trade_date,open,high,low,close,volume,${INDICATOR_COLS},ret_5d,ret_22d,ret_66d`)
+      .eq('index_id', indexId).gte('trade_date', start).lte('trade_date', end)
+      .order('trade_date', { ascending: true }).range(offset, offset + 499).execute();
+    if (error) throw new Error(error.message);
+    const page = (data ?? []) as IndicatorRow[];
+    rows.push(...page);
+    if (page.length < 500) return rows;
+  }
+}
+
 export type EquityTimeframe = 'daily' | 'weekly' | 'monthly';
 
 /** Weekly/monthly bars for the Study cockpit's D/W/M toggle (Phase 2.3).
