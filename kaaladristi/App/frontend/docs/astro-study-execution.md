@@ -47,3 +47,12 @@ Browser test uses controlled fixtures, not production data. It renders the real 
 - Multiple published Mercury/Venus records are loaded through useAstroOverlayBands for the study dates. Explicit study focus can be unpinned; it is deduplicated against active planet overlays by canonical event key.
 - Framework overlay changes use the existing shared preferences. Merely opening Study does not mutate them.
 - Momentum and MagicRS Chart-face now accept optional historical selection callbacks/date guides; default ChartView callers keep their existing behavior. MagicRS Widget receives the historical active index and stored momentum/zone columns.
+
+
+## ChartView history and event clarity
+
+ChartView daily history loads adjacent 500-session pages when the user pans to the left edge, or selects Earlier history. Pages include stored indicators and extend the astro overlay query automatically. Zoom and visible dates are preserved; range, timeframe or instrument changes start a fresh viewport. Weekly/monthly retain their existing full-history behavior. Initial and older-history loads have visible status; failures offer retry and exhausted history is identified.
+
+Technical events default to five major labelled events within the visible window. Users can filter categories, show all events grouped by session, or hide story annotations. Clicking a grouped marker opens the session's explanations. Signal dots and swing pivots are independently opt-in; replay continues using the full event sequence. Index story annotations no longer require an equity setup to render. This removes a rendering gate; it does not invent missing index scanner or journey data.
+
+Verification: check-chart-history.cjs covers stock/index boundaries, chronological ordering, missing indicators and failures. check-chart-history-browser.mjs covers grouped-marker interaction, preserved viewport and actual left-edge panning; Astro Study browser regression verifies existing overlays/widgets continue working.

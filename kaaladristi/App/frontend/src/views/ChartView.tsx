@@ -1,10 +1,10 @@
 import { createPortal } from 'react-dom';
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useInfiniteQuery } from '@tanstack/react-query';
 import { TrendingUp, TrendingDown, BarChart3, AlertCircle, RefreshCw, ArrowLeft } from 'lucide-react';
 import { ZONE_LABELS } from '@/constants/signalScale';
-import { fetchIndicatorDataById, fetchEquityEodById, fetchEquityWarmupBars, fetchEquityTimeframeById, resampleRows, type EquityTimeframe, fetchStockJourneys, currentJourney, type IndicatorRow } from '@/services/indicatorData';
+import { fetchIndicatorDataById, fetchChartHistoryBefore, fetchEquityEodById, fetchEquityWarmupBars, fetchEquityTimeframeById, resampleRows, type EquityTimeframe, fetchStockJourneys, currentJourney, type IndicatorRow } from '@/services/indicatorData';
 import TradingChart from '@/components/charts/TradingChart';
 import VaNiInsight from '@/components/domain/VaNiInsight';
 import StockStoryWorkspace from '@/components/domain/StockStory/StockStoryWorkspace';
@@ -161,6 +161,10 @@ export default function ChartView({ storyPreview = false }: { storyPreview?: boo
   const type = storyPreview ? 'equity' : routeType;
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
+  const [signalMarkers, setSignalMarkers] = useState(false);
+  const [eventSession, setEventSession] = useState<string|null>(null);
+  const [eventKind, setEventKind] = useState<StoryKind|'all'>('all');
+  const [eventDetail, setEventDetail] = useState<'major' | 'all' | 'none'>('major');
   const [range, setRange] = useState<TimeRange>('1Y');
   const [selectedStoryEvent, setSelectedStoryEvent] = useState<StoryEvent | null>(null);
   useEffect(() => { setSelectedStoryEvent(null); }, [range, id]);
@@ -270,7 +274,7 @@ export default function ChartView({ storyPreview = false }: { storyPreview?: boo
   // bar's stage. dateKey: the page is commonly left open through a
   // session; a day change refetches automatically (same as useScan.ts).
   const { latestDataDate: chartDateKey } = usePipelineStatus();
-  const { data: rows = [], isLoading, isError, error, refetch } = useQuery({
+  const { data: initialRows = [], isLoading, isError, error, refetch } = useQuery({
     queryKey: ['chart', type, numId, range, tf, chartDateKey ?? 'unknown'],
     queryFn: () =>
       isEquity
@@ -283,6 +287,17 @@ export default function ChartView({ storyPreview = false }: { storyPreview?: boo
     staleTime: 120_000,
     enabled: !!numId && (isIndex || isEquity),
   });
+  const history = useInfiniteQuery({
+    queryKey: ['chart-history',type,numId,range,tf,chartDateKey,initialRows[0]?.trade_date],
+    initialPageParam: initialRows[0]?.trade_date ?? '',
+    queryFn: ({pageParam}) => fetchChartHistoryBefore(numId,isEquity?'equity':'index',pageParam),
+    getNextPageParam: (page) => page.length === 500 ? page[0].trade_date : undefined,
+    enabled: false,
+  });
+  const rows = useMemo(() => [...(history.data?.pages.slice().reverse().flat() ?? []),...initialRows], [history.data,initialRows]);
+  const loadEarlier = useCallback(() => {
+    if(tf==='daily' && initialRows.length && !history.isFetching && (!history.data || history.hasNextPage)) void history.fetchNextPage();
+  },[tf,initialRows.length,history.isFetching,history.data,history.hasNextPage,history.fetchNextPage]);
   const astroBands = useAstroOverlayBands(type === 'index' ? frameworkOverlays : NO_OVERLAYS, rows[0]?.trade_date);
 
   // Scan presence — which presets currently contain this stock. Moved up
@@ -693,7 +708,7 @@ export default function ChartView({ storyPreview = false }: { storyPreview?: boo
    *  Same object drives Story View and Story Play — the toggle only
    *  controls what sits BELOW the chart, never what's on it. */
   const setupOverlayFull = useMemo(() => {
-    if (!setupOverlayCore && !storyPreview) return undefined;
+    if (!setupOverlayCore && !storyPreview && !storyEvents.length) return undefined;
     // Anchor each callout at the LAST bar whose range touched the zone
     // price — the reference-deck grammar (breakout callout points at the
     // breakout bar, support-test callout at the last test). Falls back
@@ -721,6 +736,7 @@ export default function ChartView({ storyPreview = false }: { storyPreview?: boo
     // dots. Story Play animates through the SAME events one at a time.
     const promotedDates = new Set(
       [...storyEvents]
+        .filter(e => (eventKind === 'all' || e.kind === eventKind) && (!visibleRange || (e.date >= visibleRange.from && e.date <= visibleRange.to)))
         .sort((a, b) => b.priority - a.priority || b.barIndex - a.barIndex)
         .slice(0, 5)
         .map((e) => `${e.date}|${e.kind}`),
@@ -744,8 +760,8 @@ export default function ChartView({ storyPreview = false }: { storyPreview?: boo
       price: rows.find((r) => r.trade_date === e.date)?.close ?? 0,
       promote: promotedDates.has(`${e.date}|${e.kind}`),
     })).filter((p) => p.price > 0);
-    return { ...setupOverlayCore, callouts, levels: setupLevelsForPlay, bigMoney, storyPins };
-  }, [setupOverlayCore, setupLevelsForPlay, bigMoneyChartLines, storyEvents, rows, storyPreview]);
+    return { ...setupOverlayCore, callouts, levels: setupLevelsForPlay, bigMoney, storyPins: eventDetail === 'none' ? [] : eventDetail === 'major' ? storyPins.filter(p => p.promote && (eventKind === 'all' || p.kind === eventKind)) : storyPins.filter(p => eventKind === 'all' || p.kind === eventKind) };
+  }, [setupOverlayCore, setupLevelsForPlay, bigMoneyChartLines, storyEvents, rows, storyPreview, eventDetail, eventKind, visibleRange]);
   // Latest Clean Breakaway/Breakdown within the rotation's plotted window —
   // storyEvents is indexed against `rows`, rotationPoints against `pulseBars`;
   // join by date (same pattern used for the story/playhead bridge below).
@@ -859,13 +875,20 @@ export default function ChartView({ storyPreview = false }: { storyPreview?: boo
         )}
 
         <div className="flex flex-wrap items-center gap-3 text-xs text-secondary mb-2">
-          <span>Price history: D → 5Y / MAX · W / M → available history</span>
+          <span>Pan left to load earlier daily history · W / M show available history</span>
+          <label>Technical events <select aria-label="Technical event detail" value={eventDetail} onChange={e=>setEventDetail(e.target.value as typeof eventDetail)} className="bg-[var(--card)] text-primary border border-kd-border rounded px-2 py-1"><option value="major">Major only</option><option value="all">All · grouped by session</option><option value="none">Hidden</option></select></label>
+          {eventDetail!=='none' && <label>Category <select aria-label="Technical event category" value={eventKind} onChange={e=>setEventKind(e.target.value as typeof eventKind)} className="bg-[var(--card)] text-primary border border-kd-border rounded px-2 py-1"><option value="all">All categories</option>{([...new Set(storyEvents.map(e=>e.kind))]).map(kind=><option key={kind} value={kind}>{kind.replaceAll('_',' ')}</option>)}</select></label>}
+          <label><input type="checkbox" checked={signalMarkers} onChange={e=>setSignalMarkers(e.target.checked)}/> Signal dots and swing pivots</label>
+          {history.isFetching && <span role="status">Loading earlier prices and indicators…</span>}
+          {tf==='daily' && <button disabled={history.isFetching || (!!history.data && !history.hasNextPage)} onClick={loadEarlier}>{history.isFetching?'Loading earlier history…':history.data && !history.hasNextPage?'Start of recorded history':'← Earlier history'}</button>}
+          {history.isError && <span role="alert">Earlier history could not load. Use Earlier history to retry.</span>}
           {isIndex && <button className="underline text-[var(--accent)]" onClick={() => navigate('/almanac')}>Event history →</button>}
           {isFull && (isLoading || isError || !rows.length) && <button onClick={() => setIsFull(false)}>✕ Exit fullscreen</button>}
         </div>
         </div>
         {isLoading ? (
           <div className="space-y-4 p-2">
+            <p role="status">Loading prices and indicators…</p>
             <Skeleton className="h-[400px] w-full rounded-2xl" />
             <Skeleton className="h-[100px] w-full rounded-2xl" />
           </div>
@@ -895,7 +918,12 @@ export default function ChartView({ storyPreview = false }: { storyPreview?: boo
           <>
             {isIndex && <AstroEventRibbon />}
             <TradingChart
+              key={`${type}-${numId}-${range}-${tf}`}
               data={rows}
+              preserveViewport
+              showSignalMarkers={signalMarkers}
+              onStorySession={setEventSession}
+              onHistoryEdge={tf==='daily' ? loadEarlier : undefined}
               workspaceMode
               height={isFull ? Math.max(700, window.innerHeight - 120) : 480}
               highlightDate={storyPreview && selectedStoryEvent ? selectedStoryEvent.date : activeIndex != null && pulseBars[effectiveIdx] ? pulseBars[effectiveIdx].trade_date : null}
@@ -913,6 +941,7 @@ export default function ChartView({ storyPreview = false }: { storyPreview?: boo
               onVisibleRangeChange={handleVisibleRange}
               onZoneClick={handleZoneClick}
             />
+            {eventSession && <section className="p-3 my-2 rounded-lg border border-kd-border bg-[var(--card)]"><div className="flex justify-between"><strong>Technical events · {eventSession}</strong><button onClick={()=>setEventSession(null)}>Close</button></div>{storyEvents.filter(e=>e.date===eventSession).map(e=><p key={e.kind+e.title} className="text-sm mt-2"><strong>{e.title}</strong> · {e.detail}</p>)}</section>}
             {zoneExplain && (
               <OverlayExplainPopover
                 tag={zoneExplain.tag}

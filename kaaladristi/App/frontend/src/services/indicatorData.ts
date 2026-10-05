@@ -596,3 +596,13 @@ export async function fetchJourneyBaseRates(): Promise<JourneyBaseRates | null> 
     newest_close: (r.newest_close as string) ?? null,
   };
 }
+
+/** An adjacent page of daily history, newest first in SQL, oldest first to render. */
+export async function fetchChartHistoryBefore(id: number, type: 'index' | 'equity', before: string): Promise<IndicatorRow[]> {
+  if (type === 'equity') return fetchEquityWarmupBars(id, before, 500);
+  const {data,error} = await from('km_index_eod')
+    .select(`trade_date,open,high,low,close,volume,${INDICATOR_COLS},ret_5d,ret_22d,ret_66d`)
+    .eq('index_id',id).lt('trade_date',before).order('trade_date',{ascending:false}).limit(500).execute();
+  if(error)throw new Error(error.message);
+  return ((data ?? []) as IndicatorRow[]).slice().reverse();
+}

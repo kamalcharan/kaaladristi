@@ -83,6 +83,7 @@ interface Props {
   callouts?: OverlayCallout[];
   bigMoney?: OverlayBigMoney[];
   storyPins?: OverlayStoryPin[];
+  onStorySession?: (date:string) => void;
 }
 
 // ── Design tokens (resolved from Kāla-Drishti CSS vars) ─────────────────
@@ -146,7 +147,7 @@ function shortLevel(label: string): string {
 
 interface Rect { x0: number; y0: number; x1: number; y1: number }
 
-export function AnnotationOverlay({ chart, series, container, cycleBands = [], levels = [], callouts = [], bigMoney = [], storyPins = [] }: Props) {
+export function AnnotationOverlay({ chart, series, container, cycleBands = [], levels = [], callouts = [], bigMoney = [], storyPins = [], onStorySession }: Props) {
   const [size, setSize] = useState(() => ({
     width: container.clientWidth || 0,
     height: container.clientHeight || 0,
@@ -248,12 +249,15 @@ export function AnnotationOverlay({ chart, series, container, cycleBands = [], l
   }
 
   // ── Layer 3: story pins ──────────────────────────────────────────────
-  const plainPins = storyPins.filter((p) => !p.promote).map((p) => {
+  const groupedPins = new Map<string, OverlayStoryPin[]>();
+  storyPins.filter(p => !p.promote).forEach(p => groupedPins.set(p.trade_date, [...(groupedPins.get(p.trade_date) ?? []), p]));
+  const plainPins = [...groupedPins.values()].map((pins) => {
+    const p = pins[0];
     const x = timeToX(p.trade_date);
     const y = priceToY(p.price);
     if (x == null || y == null) return null;
     if (x < 0 || x > size.width || y < 0 || y > size.height) return null;
-    return { x, y, color: PIN_COLOR[p.kind] ?? TOK.gold };
+    return { x, y, date: p.trade_date, count: pins.length, title: pins.map(p => p.title).join(" · "), color: PIN_COLOR[p.kind] ?? TOK.gold };
   }).filter((v): v is NonNullable<typeof v> => v !== null);
 
   // ── Layer 4: Big Money badges (top rail, staggered rows) ─────────────
@@ -426,8 +430,8 @@ export function AnnotationOverlay({ chart, series, container, cycleBands = [], l
 
         {/* plain story pins */}
         {plainPins.map((p, i) => (
-          <circle key={`pin-${i}`} cx={p.x} cy={p.y} r={4} fill={p.color} opacity={0.9}
-            stroke={`color-mix(in srgb, ${TOK.ground} 60%, transparent)`} strokeWidth={0.7} />
+          <g key={`pin-${i}`} style={{pointerEvents:'auto',cursor:'pointer'}} onClick={()=>onStorySession?.(p.date)} role="button" aria-label={p.title} tabIndex={0} onKeyDown={e=>{if(e.key==='Enter' || e.key===' ')onStorySession?.(p.date)}}><title>{p.title}</title><circle cx={p.x} cy={p.y} r={p.count > 1 ? 8 : 4} fill={p.color} opacity={0.9}
+            stroke={`color-mix(in srgb, ${TOK.ground} 60%, transparent)`} strokeWidth={0.7} />{p.count > 1 && <text x={p.x} y={p.y+3} textAnchor="middle" fontSize={10} fill={TOK.ground}>{p.count}</text>}</g>
         ))}
 
         {/* Big Money badges */}
