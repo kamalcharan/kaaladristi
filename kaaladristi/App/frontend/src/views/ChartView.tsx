@@ -161,10 +161,10 @@ export default function ChartView({ storyPreview = false }: { storyPreview?: boo
   const type = storyPreview ? 'equity' : routeType;
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
-  const [signalMarkers, setSignalMarkers] = useState(false);
+  const [signalMarkers, setSignalMarkers] = useState(true);
   const [eventSession, setEventSession] = useState<string|null>(null);
   const [eventKind, setEventKind] = useState<StoryKind|'all'>('all');
-  const [eventDetail, setEventDetail] = useState<'major' | 'all' | 'none'>('major');
+  const [eventDetail, setEventDetail] = useState<'all' | 'none'>('all');
   const [range, setRange] = useState<TimeRange>('1Y');
   const [selectedStoryEvent, setSelectedStoryEvent] = useState<StoryEvent | null>(null);
   useEffect(() => { setSelectedStoryEvent(null); }, [range, id]);
@@ -760,7 +760,7 @@ export default function ChartView({ storyPreview = false }: { storyPreview?: boo
       price: rows.find((r) => r.trade_date === e.date)?.close ?? 0,
       promote: promotedDates.has(`${e.date}|${e.kind}`),
     })).filter((p) => p.price > 0);
-    return { ...setupOverlayCore, callouts, levels: setupLevelsForPlay, bigMoney, storyPins: eventDetail === 'none' ? [] : eventDetail === 'major' ? storyPins.filter(p => p.promote && (eventKind === 'all' || p.kind === eventKind)) : storyPins.filter(p => eventKind === 'all' || p.kind === eventKind) };
+    return { ...setupOverlayCore, callouts, levels: setupLevelsForPlay, bigMoney, storyPins: eventDetail === 'none' ? [] : storyPins.filter(p => eventKind === 'all' || p.kind === eventKind) };
   }, [setupOverlayCore, setupLevelsForPlay, bigMoneyChartLines, storyEvents, rows, storyPreview, eventDetail, eventKind, visibleRange]);
   // Latest Clean Breakaway/Breakdown within the rotation's plotted window —
   // storyEvents is indexed against `rows`, rotationPoints against `pulseBars`;
@@ -876,7 +876,7 @@ export default function ChartView({ storyPreview = false }: { storyPreview?: boo
 
         <div className="flex flex-wrap items-center gap-3 text-xs text-secondary mb-2">
           <span>Pan left to load earlier daily history · W / M show available history</span>
-          <label>Technical events <select aria-label="Technical event detail" value={eventDetail} onChange={e=>setEventDetail(e.target.value as typeof eventDetail)} className="bg-[var(--card)] text-primary border border-kd-border rounded px-2 py-1"><option value="major">Major only</option><option value="all">All · grouped by session</option><option value="none">Hidden</option></select></label>
+          <label>Technical events <select aria-label="Technical event detail" value={eventDetail} onChange={e=>setEventDetail(e.target.value as typeof eventDetail)} className="bg-[var(--card)] text-primary border border-kd-border rounded px-2 py-1"><option value="all">All · grouped by session</option><option value="none">Hidden</option></select></label>
           {eventDetail!=='none' && <label>Category <select aria-label="Technical event category" value={eventKind} onChange={e=>setEventKind(e.target.value as typeof eventKind)} className="bg-[var(--card)] text-primary border border-kd-border rounded px-2 py-1"><option value="all">All categories</option>{([...new Set(storyEvents.map(e=>e.kind))]).map(kind=><option key={kind} value={kind}>{kind.replaceAll('_',' ')}</option>)}</select></label>}
           <label><input type="checkbox" checked={signalMarkers} onChange={e=>setSignalMarkers(e.target.checked)}/> Signal dots and swing pivots</label>
           {history.isFetching && <span role="status">Loading earlier prices and indicators…</span>}

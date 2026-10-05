@@ -56,3 +56,8 @@ ChartView daily history loads adjacent 500-session pages when the user pans to t
 Technical events default to five major labelled events within the visible window. Users can filter categories, show all events grouped by session, or hide story annotations. Clicking a grouped marker opens the session's explanations. Signal dots and swing pivots are independently opt-in; replay continues using the full event sequence. Index story annotations no longer require an equity setup to render. This removes a rendering gate; it does not invent missing index scanner or journey data.
 
 Verification: check-chart-history.cjs covers stock/index boundaries, chronological ordering, missing indicators and failures. check-chart-history-browser.mjs covers grouped-marker interaction, preserved viewport and actual left-edge panning; Astro Study browser regression verifies existing overlays/widgets continue working.
+
+
+## Restore technical visibility (owner correction)
+
+All story-event categories and candle signal markers are visible by default again. The Major only mode and its event suppression were removed. Existing callout promotion still chooses a small set of labels; every other story event remains represented by the session markers. Optional user filters, grouped-session explanations and continuous history remain. SVD/SBD/SYD, swing pivots and Big Money candle markers are restored without an icon redesign.
