@@ -256,14 +256,17 @@ export function AnnotationOverlay({ chart, series, container, cycleBands = [], l
   const railGroups = [...groupedPins.entries()].map(([date,pins]) => {
     const x = timeToX(date);
     if (x == null || x < 10 || x > size.width - AXIS_W) return null;
-    return {date,pins,x};
+    const candle=series.data().find(r=>String(r.time)===date) as {low?:number}|undefined;
+    const low=priceToY(candle?.low ?? pins[0].price);
+    if(low==null)return null;
+    return {date,pins,x,y:low+50};
   }).filter((v):v is NonNullable<typeof v>=>v!==null);
   // At narrow widths, cluster adjacent dates without dropping their events.
-  const railCells: {dates:string[];pins:OverlayStoryPin[];x:number}[] = [];
+  const railCells: {dates:string[];pins:OverlayStoryPin[];x:number;y:number}[] = [];
   for(const g of railGroups.sort((a,b)=>a.x-b.x)){
     const existing=railCells.at(-1);
-    if(existing && g.x-existing.x<22){existing.dates.push(g.date);existing.pins.push(...g.pins)}
-    else railCells.push({dates:[g.date],pins:[...g.pins],x:g.x});
+    if(existing && g.x-existing.x<22){existing.dates.push(g.date);existing.pins.push(...g.pins);existing.y=Math.max(existing.y,g.y)}
+    else railCells.push({dates:[g.date],pins:[...g.pins],x:g.x,y:g.y});
   }
   const eventIcon = (p:OverlayStoryPin) => {
     if(p.kind==='flow') return /short covering/i.test(p.title) ? Undo2 : /fresh longs/i.test(p.title) ? ArrowDownToLine : ArrowUpFromLine;
@@ -387,7 +390,7 @@ export function AnnotationOverlay({ chart, series, container, cycleBands = [], l
         top: 0,
         left: 0,
         width: '100%',
-        height: size.height + (storyPins.length ? 96 : 0),
+        height: size.height,
         pointerEvents: 'none',
         overflow: 'hidden',
         // lightweight-charts' internal canvases carry explicit z-index
@@ -512,16 +515,14 @@ export function AnnotationOverlay({ chart, series, container, cycleBands = [], l
         </div>
       ))}
 
-      {!!storyPins.length && <div aria-label="Technical event rail" style={{position:'absolute',top:size.height+2,left:0,width:Math.max(0,size.width-AXIS_W),height:88,borderTop:`1px solid ${TOK.rule}`,background:TOK.ground,pointerEvents:'auto'}}>
-        <div style={{position:'absolute',top:3,left:4,fontSize:11,color:TOK.ink2}}>Technical events · hover or tap an icon for its name</div>
-        {!railGroups.length && <div role="status" style={{position:'absolute',top:29,left:4,fontSize:12,color:TOK.ink2}}>No detected technical events in the visible dates.</div>}
+      {!!storyPins.length && <div aria-label="Technical event markers" style={{position:'absolute',inset:0,pointerEvents:'none'}}>
         {railCells.map(g=>{
           const stacked = g.pins.length>3 || g.dates.length>1;
           const entries = stacked ? [g.pins[0]] : g.pins;
           return entries.map((p,i)=>{
             const Icon=stacked ? Layers : eventIcon(p);
             const name=stacked ? `${g.pins.length} events: ${g.pins.map(p=>p.trade_date+' · '+p.title).join(' / ')}` : `${p.trade_date} · ${p.title}`;
-            return <button key={g.dates.join(',')+'-'+i} title={name} aria-label={name} onClick={()=>onStorySessions ? onStorySessions(g.dates) : onStorySession?.(p.trade_date)} style={{position:'absolute',left:g.x-10,top:stacked?30:i*20+26,width:20,height:stacked?40:20,padding:1,border:0,background:'transparent',color:stacked?TOK.ink2:PIN_COLOR[p.kind],cursor:'pointer',display:'flex',alignItems:'center',flexDirection:'column',justifyContent:'center'}}><Icon size={15}/>{stacked && <span style={{fontSize:10}}>{g.pins.length}</span>}</button>;
+            return <button key={g.dates.join(',')+'-'+i} title={name} aria-label={name} onClick={()=>onStorySessions ? onStorySessions(g.dates) : onStorySession?.(p.trade_date)} style={{position:'absolute',left:g.x-10,top:g.y+(stacked?0:i*20),width:20,height:stacked?40:20,padding:1,border:0,background:TOK.ground,pointerEvents:'auto',borderRadius:4,color:stacked?TOK.ink2:PIN_COLOR[p.kind],cursor:'pointer',display:'flex',alignItems:'center',flexDirection:'column',justifyContent:'center'}}><Icon size={15}/>{stacked && <span style={{fontSize:10}}>{g.pins.length}</span>}</button>;
           });
         })}
       </div>}

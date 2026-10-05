@@ -75,3 +75,12 @@ Browser QA covers the 40-candle initial range, separate category icons, mobile n
 ## Event rail visibility follow-up
 
 The event annotation layer now has an explicit pixel height including its rail, rather than relying on a percentage height inside a padded chart wrapper. The wrapper reserves 96 pixels below the chart; the rail has a visible heading and reports when no detected events fall in the visible dates. SVD/SBD/SYD rendering is unchanged. Browser verification checks that the rail fits inside both the annotation layer and reserved wrapper space, in addition to icon/stack interaction.
+
+
+## Candle-aligned events and selected astro context
+
+Technical icons now sit below candle lows with 50 pixels reserved for native dot markers. The standalone event rail and its reserved padding are removed. Neutral dense clusters retain every event and session. Existing solid dots are unchanged. The chart reserves vertical price-scale space for these markers.
+
+AstroChartEvents is a shared presentational addition to TradingChart's existing overlay renderer: named point/period buttons, selectable overlap lists, an exact-date point line and a selected ±2-calendar-day study window, or selected actual period shading. The study window is explicitly distinguished from event duration. Event details use the existing explanation callback. Obsolete glyph-only point labels are removed. Names and dates remain canonical.
+
+SMA150 audit: the initial and adjacent history reads request the stored sma_150 column; the DB indicator RPC computes a 150-session close average after sufficient history. This checkout has no configured reachable database URL, so live historical coverage remains unverified. No replacement calculation is introduced. backend/scripts/audit_chart_sma_150.sql provides a read-only coverage/sample query for SOLARA and NIFTY 50.

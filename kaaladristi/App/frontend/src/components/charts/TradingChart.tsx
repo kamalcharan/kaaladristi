@@ -1,3 +1,4 @@
+import AstroChartEvents from './AstroChartEvents';
 import { eventCoordinate } from '@/services/astroCoordinates'
 import { DOT_LABELS } from '@/constants/signalScale'
 /**
@@ -171,16 +172,6 @@ function dayRange(fromStr: string, toStr: string): string[] {
   let cur = fromStr;
   while (cur < toStr) { out.push(cur); cur = addDays(cur, 1); }
   return out;
-}
-
-/** Short top-of-line label for a single-day point-event marker. */
-function pointMarkerLabel(event: string): string {
-  const planet = event.startsWith('venus') ? '♀' : '☿';
-  if (event.includes('crossing')) return '☿♀';
-  if (event.includes('retrograde')) return `${planet} R`;
-  if (event.includes('direct')) return `${planet} D`;
-  if (event.includes('udaya') || event.includes('rise')) return `${planet} ↑`;
-  return `${planet} ↓`;
 }
 
 // ── Chart colors — read from CSS custom properties at render time ──
@@ -390,7 +381,7 @@ export default function TradingChart({ data, height = 900, studyMode = false, pr
       ...createChartOptions(mainRef.current, mainHeight, C),
       rightPriceScale: {
         borderColor: C.grid,
-        scaleMargins: { top: 0.05, bottom: 0.25 },
+        scaleMargins: { top: 0.14, bottom: 0.38 },
       },
     });
     chartsRef.current.push(mainChart);
@@ -1133,7 +1124,6 @@ export default function TradingChart({ data, height = 900, studyMode = false, pr
         ctx.fillStyle  = hexToRgba(pColor, 0.9);
         ctx.font       = '14px serif';
         ctx.textAlign  = 'center';
-        ctx.fillText(pointMarkerLabel(pb.groupTag), x, 26);
         ctx.restore();
       }
 
@@ -1237,7 +1227,7 @@ export default function TradingChart({ data, height = 900, studyMode = false, pr
       )}
 
       <div
-        style={{ position: 'relative', paddingBottom: overlay?.storyPins?.length ? 96 : 0 }}
+        style={{ position: 'relative' }}
         onContextMenu={e => {
           if (!onZoneClick || horizonBands.length === 0 || !mainChartRef.current) return;
           const rect   = (e.currentTarget as HTMLElement).getBoundingClientRect();
@@ -1298,6 +1288,8 @@ export default function TradingChart({ data, height = 900, studyMode = false, pr
         onMouseLeave={() => { setBandTooltip(null); setHoverBar(null); }}
       >
         <div ref={mainRef} className="rounded-xl overflow-hidden" />
+
+        {overlayApi && horizonBands.length>0 && <AstroChartEvents chart={overlayApi.chart} container={overlayApi.container} bands={horizonBands} data={data} onSelect={(band,x,y)=>onZoneClick?.(band,x,y,horizonBands.filter(b=>b.from<=band.from && b.to>=band.from))}/>}
 
         {/* Editorial AnnotationOverlay — cycle bands + persona callouts +
             Big Money badges + storyEvent pins. Same overlay used by both
