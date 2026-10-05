@@ -26,6 +26,7 @@
  * Pointer events: none. The chart underneath handles all interactions.
  */
 
+import { WandSparkles, Zap, ArrowDownToLine, ArrowUpFromLine, Undo2, Layers, TrendingUp, Flag, IndianRupee, Sprout, Crosshair, Compass, Activity } from 'lucide-react';
 import type { StoryKind } from '@/services/storyEvents';
 import { useEffect, useRef, useState } from 'react';
 import type { IChartApi, ISeriesApi, Time } from 'lightweight-charts';
@@ -84,6 +85,7 @@ interface Props {
   bigMoney?: OverlayBigMoney[];
   storyPins?: OverlayStoryPin[];
   onStorySession?: (date:string) => void;
+  onStorySessions?: (dates:string[]) => void;
 }
 
 // ── Design tokens (resolved from Kāla-Drishti CSS vars) ─────────────────
@@ -147,7 +149,7 @@ function shortLevel(label: string): string {
 
 interface Rect { x0: number; y0: number; x1: number; y1: number }
 
-export function AnnotationOverlay({ chart, series, container, cycleBands = [], levels = [], callouts = [], bigMoney = [], storyPins = [], onStorySession }: Props) {
+export function AnnotationOverlay({ chart, series, container, cycleBands = [], levels = [], callouts = [], bigMoney = [], storyPins = [], onStorySession, onStorySessions }: Props) {
   const [size, setSize] = useState(() => ({
     width: container.clientWidth || 0,
     height: container.clientHeight || 0,
@@ -248,17 +250,25 @@ export function AnnotationOverlay({ chart, series, container, cycleBands = [], l
     }
   }
 
-  // ── Layer 3: story pins ──────────────────────────────────────────────
+  // Every story event is represented in the date-aligned rail, including callouts.
   const groupedPins = new Map<string, OverlayStoryPin[]>();
-  storyPins.filter(p => !p.promote).forEach(p => groupedPins.set(p.trade_date, [...(groupedPins.get(p.trade_date) ?? []), p]));
-  const plainPins = [...groupedPins.values()].map((pins) => {
-    const p = pins[0];
-    const x = timeToX(p.trade_date);
-    const y = priceToY(p.price);
-    if (x == null || y == null) return null;
-    if (x < 0 || x > size.width || y < 0 || y > size.height) return null;
-    return { x, y, date: p.trade_date, count: pins.length, title: pins.map(p => p.title).join(" · "), color: PIN_COLOR[p.kind] ?? TOK.gold };
-  }).filter((v): v is NonNullable<typeof v> => v !== null);
+  storyPins.forEach(p => groupedPins.set(p.trade_date, [...(groupedPins.get(p.trade_date) ?? []), p]));
+  const railGroups = [...groupedPins.entries()].map(([date,pins]) => {
+    const x = timeToX(date);
+    if (x == null || x < 10 || x > size.width - AXIS_W) return null;
+    return {date,pins,x};
+  }).filter((v):v is NonNullable<typeof v>=>v!==null);
+  // At narrow widths, cluster adjacent dates without dropping their events.
+  const railCells: {dates:string[];pins:OverlayStoryPin[];x:number}[] = [];
+  for(const g of railGroups.sort((a,b)=>a.x-b.x)){
+    const existing=railCells.at(-1);
+    if(existing && g.x-existing.x<22){existing.dates.push(g.date);existing.pins.push(...g.pins)}
+    else railCells.push({dates:[g.date],pins:[...g.pins],x:g.x});
+  }
+  const eventIcon = (p:OverlayStoryPin) => {
+    if(p.kind==='flow') return /short covering/i.test(p.title) ? Undo2 : /fresh longs/i.test(p.title) ? ArrowDownToLine : ArrowUpFromLine;
+    return ({magic_rs:WandSparkles,price_action:Zap,stage:Flag,big_money:IndianRupee,rs_breakaway:TrendingUp,fpb:Sprout,scan:Crosshair,sector:Compass,gl:TrendingUp,discovery:Sprout,conviction:Activity} as const)[p.kind];
+  };
 
   // ── Layer 4: Big Money badges (top rail, staggered rows) ─────────────
   const bmBadges = bigMoney.map((b) => {
@@ -346,7 +356,7 @@ export function AnnotationOverlay({ chart, series, container, cycleBands = [], l
   }
 
   // ── Promoted story events through the same engine ────────────────────
-  const laidEvents: Array<LaidBox & { title: string; glyph: string; glyphColor: string }> = [];
+  const laidEvents: Array<LaidBox & { title: string; trade_date: string; glyph: string; glyphColor: string }> = [];
   {
     const promoted = storyPins
       .filter((p) => p.promote)
@@ -363,7 +373,7 @@ export function AnnotationOverlay({ chart, series, container, cycleBands = [], l
       const spot = placeBox(p.ax, p.ay, EBOX_W, EBOX_H);
       laidEvents.push({
         ax: p.ax, ay: p.ay, bx: spot.bx, by: spot.by, color: p.color,
-        title: p.title,
+        title: p.title, trade_date: p.trade_date,
         glyph: p.tone === 'bull' ? '▲' : p.tone === 'bear' ? '▼' : '•',
         glyphColor: p.tone === 'bull' ? TOK.bull : p.tone === 'bear' ? TOK.bear : TOK.ink3,
       });
@@ -426,12 +436,6 @@ export function AnnotationOverlay({ chart, series, container, cycleBands = [], l
               </tspan>
             </text>
           </g>
-        ))}
-
-        {/* plain story pins */}
-        {plainPins.map((p, i) => (
-          <g key={`pin-${i}`} style={{pointerEvents:'auto',cursor:'pointer'}} onClick={()=>onStorySession?.(p.date)} role="button" aria-label={p.title} tabIndex={0} onKeyDown={e=>{if(e.key==='Enter' || e.key===' ')onStorySession?.(p.date)}}><title>{p.title}</title><circle cx={p.x} cy={p.y} r={p.count > 1 ? 8 : 4} fill={p.color} opacity={0.9}
-            stroke={`color-mix(in srgb, ${TOK.ground} 60%, transparent)`} strokeWidth={0.7} />{p.count > 1 && <text x={p.x} y={p.y+3} textAnchor="middle" fontSize={10} fill={TOK.ground}>{p.count}</text>}</g>
         ))}
 
         {/* Big Money badges */}
@@ -508,9 +512,22 @@ export function AnnotationOverlay({ chart, series, container, cycleBands = [], l
         </div>
       ))}
 
+      {!!railGroups.length && <div aria-label="Technical event rail" style={{position:'absolute',top:size.height+2,left:0,width:Math.max(0,size.width-AXIS_W),height:64,borderTop:`1px solid ${TOK.rule}`,background:TOK.ground,pointerEvents:'auto'}}>
+        {railCells.map(g=>{
+          const stacked = g.pins.length>3 || g.dates.length>1;
+          const entries = stacked ? [g.pins[0]] : g.pins;
+          return entries.map((p,i)=>{
+            const Icon=stacked ? Layers : eventIcon(p);
+            const name=stacked ? `${g.pins.length} events: ${g.pins.map(p=>p.trade_date+' · '+p.title).join(' / ')}` : `${p.trade_date} · ${p.title}`;
+            return <button key={g.dates.join(',')+'-'+i} title={name} aria-label={name} onClick={()=>onStorySessions ? onStorySessions(g.dates) : onStorySession?.(p.trade_date)} style={{position:'absolute',left:g.x-10,top:stacked?8:i*20+2,width:20,height:stacked?40:20,padding:1,border:0,background:'transparent',color:stacked?TOK.ink2:PIN_COLOR[p.kind],cursor:'pointer',display:'flex',alignItems:'center',flexDirection:'column',justifyContent:'center'}}><Icon size={15}/>{stacked && <span style={{fontSize:10}}>{g.pins.length}</span>}</button>;
+          });
+        })}
+      </div>}
+
       {/* HTML promoted story-event boxes — slim single row */}
       {laidEvents.map((m, i) => (
-        <div key={`ebox-${i}`} style={{
+        <div key={`ebox-${i}`} title={m.title} role="button" tabIndex={0} onClick={()=>onStorySession?.(m.trade_date)} onKeyDown={e=>{if(e.key==='Enter')onStorySession?.(m.trade_date)}} style={{
+          pointerEvents: 'auto', cursor: 'pointer',
           position: 'absolute', left: m.bx, top: m.by, width: EBOX_W, height: EBOX_H,
           background: TOK.bubbleBg, color: TOK.bubbleText,
           border: `1px solid color-mix(in srgb, ${m.color} 50%, transparent)`,

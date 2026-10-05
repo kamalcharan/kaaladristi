@@ -80,10 +80,12 @@ interface TradingChartProps {
   /** Opt-in event study: existing RSI/MagicRS panes, no Sniper pane. */
   studyMode?: boolean;
   preserveViewport?: boolean;
+  initialCandles?: number;
   showSignalMarkers?: boolean;
   selectedSession?: string | null;
   onHistoryEdge?: () => void;
   onStorySession?: (date:string) => void;
+  onStorySessions?: (dates:string[]) => void;
   compact?: boolean;       // hide RSI + Sniper panes (Visual Pulse mode)
   workspaceMode?: boolean; // framework-driven: no hardcoded overlays/subpanes
   highlightDate?: string | null;
@@ -248,7 +250,7 @@ const DEFAULT_BM_EVENTS: NonNullable<TradingChartProps['bigMoneyEvents']> = [];
 const DEFAULT_SETUP_LEVELS: NonNullable<TradingChartProps['setupLevels']> = [];
 const DEFAULT_SETUP_ENTRIES: NonNullable<TradingChartProps['setupEntries']> = [];
 
-export default function TradingChart({ data, height = 900, studyMode = false, preserveViewport = false, showSignalMarkers = true, selectedSession = null, onHistoryEdge, onStorySession, compact = false, workspaceMode = false, highlightDate = null, overlays = DEFAULT_OVERLAYS, astroBands = DEFAULT_BANDS, bigMoneyEvents = DEFAULT_BM_EVENTS, setupLevels = DEFAULT_SETUP_LEVELS, setupEntries = DEFAULT_SETUP_ENTRIES, overlay, onVisibleRangeChange, onCrosshairMove, onZoneClick, benchmarkIndexId = null, benchmarkName = null, storyBubble = null }: TradingChartProps) {
+export default function TradingChart({ data, height = 900, studyMode = false, preserveViewport = false, initialCandles, showSignalMarkers = true, selectedSession = null, onHistoryEdge, onStorySession, onStorySessions, compact = false, workspaceMode = false, highlightDate = null, overlays = DEFAULT_OVERLAYS, astroBands = DEFAULT_BANDS, bigMoneyEvents = DEFAULT_BM_EVENTS, setupLevels = DEFAULT_SETUP_LEVELS, setupEntries = DEFAULT_SETUP_ENTRIES, overlay, onVisibleRangeChange, onCrosshairMove, onZoneClick, benchmarkIndexId = null, benchmarkName = null, storyBubble = null }: TradingChartProps) {
   const historyArmed = useRef(false);
   const lastHighlight = useRef<string|null>(null);
   const studyViewport = useRef<{ from: Time; to: Time } | null>(null);
@@ -568,8 +570,8 @@ export default function TradingChart({ data, height = 900, studyMode = false, pr
       if (d.dot_svd) markers.push({ time: toTime(d.trade_date), position: 'belowBar', color: DOT_LABELS.SVD.color, shape: 'circle' });
       if (d.dot_sbd) markers.push({ time: toTime(d.trade_date), position: 'belowBar', color: DOT_LABELS.SBD.color, shape: 'circle' });
       if (d.dot_syd) markers.push({ time: toTime(d.trade_date), position: 'aboveBar', color: DOT_LABELS.SYD.color, shape: 'circle' });
-      if (d.swing_high) markers.push({ time: toTime(d.trade_date), position: 'aboveBar', color: C.riskRed, shape: 'arrowDown' });
-      if (d.swing_low) markers.push({ time: toTime(d.trade_date), position: 'belowBar', color: C.riskGreen, shape: 'arrowUp' });
+      if (d.swing_high) markers.push({ time: toTime(d.trade_date), position: 'aboveBar', color: C.riskRed, shape: 'square', text: '⚑ H' });
+      if (d.swing_low) markers.push({ time: toTime(d.trade_date), position: 'belowBar', color: C.riskGreen, shape: 'square', text: '⚑ L' });
       if (bmColorByDate.has(d.trade_date)) markers.push({ time: toTime(d.trade_date), position: 'aboveBar', color: bmColorByDate.get(d.trade_date)!, shape: 'circle', text: '₹' });
     }
     if (markers.length > 0) {
@@ -836,6 +838,9 @@ export default function TradingChart({ data, height = 900, studyMode = false, pr
     // the right edge with the scrubber's NOW.
     if ((studyMode || preserveViewport) && studyViewport.current && String(studyViewport.current.to) >= data[0].trade_date && String(studyViewport.current.from) <= data[data.length - 1].trade_date) {
       mainChart.timeScale().setVisibleRange({ from: (String(studyViewport.current.from) < data[0].trade_date ? data[0].trade_date : studyViewport.current.from) as Time, to: (String(studyViewport.current.to) > data[data.length-1].trade_date ? data[data.length-1].trade_date : studyViewport.current.to) as Time });
+    } else if (initialCandles) {
+      const last = leadOffsetRef.current + data.length - 1;
+      mainChart.timeScale().setVisibleLogicalRange({from:Math.max(0,last-initialCandles+1),to:last+2});
     } else if (padAxis && padFrom && padTo) {
       mainChart.timeScale().setVisibleRange({ from: padFrom as Time, to: padTo as Time });
     } else {
@@ -857,7 +862,7 @@ export default function TradingChart({ data, height = 900, studyMode = false, pr
     // Redraw bands immediately after chart rebuild (covers indicator overlay changes)
     requestAnimationFrame(() => { drawBandsRef.current?.(); if (studyMode && studySelectedDate.current) studySelect.current?.(studySelectedDate.current); });
   // eslint-disable-next-line react-hooks/exhaustive-deps -- `overlay` is read only for presence (hasOverlay); depending on `!!overlay` avoids chart rebuilds on overlay identity churn
-  }, [data, height, compact, workspaceMode, studyMode, preserveViewport, showSignalMarkers, onHistoryEdge, hasAstroBands, indicatorOverlays, bigMoneyEvents, setupLevels, setupEntries, !!overlay, onVisibleRangeChange, onCrosshairMove]);
+  }, [data, height, compact, workspaceMode, studyMode, preserveViewport, initialCandles, showSignalMarkers, onHistoryEdge, hasAstroBands, indicatorOverlays, bigMoneyEvents, setupLevels, setupEntries, !!overlay, onVisibleRangeChange, onCrosshairMove]);
 
   // Scroll to highlighted date when slider moves
   useEffect(() => {
@@ -1232,7 +1237,7 @@ export default function TradingChart({ data, height = 900, studyMode = false, pr
       )}
 
       <div
-        style={{ position: 'relative' }}
+        style={{ position: 'relative', paddingBottom: overlay?.storyPins?.length ? 72 : 0 }}
         onContextMenu={e => {
           if (!onZoneClick || horizonBands.length === 0 || !mainChartRef.current) return;
           const rect   = (e.currentTarget as HTMLElement).getBoundingClientRect();
@@ -1308,6 +1313,7 @@ export default function TradingChart({ data, height = 900, studyMode = false, pr
             bigMoney={overlay.bigMoney}
             storyPins={overlay.storyPins}
             onStorySession={onStorySession}
+            onStorySessions={onStorySessions}
           />
         ) : null}
 

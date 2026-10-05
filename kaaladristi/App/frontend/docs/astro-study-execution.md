@@ -61,3 +61,12 @@ Verification: check-chart-history.cjs covers stock/index boundaries, chronologic
 ## Restore technical visibility (owner correction)
 
 All story-event categories and candle signal markers are visible by default again. The Major only mode and its event suppression were removed. Existing callout promotion still chooses a small set of labels; every other story event remains represented by the session markers. Optional user filters, grouped-session explanations and continuous history remain. SVD/SBD/SYD, swing pivots and Big Money candle markers are restored without an icon redesign.
+
+
+## Recognisable technical events and relaxed viewport
+
+ChartView starts with the last 40 candles and two bars of right-side space, including when astro overlays are enabled. Rebuilds and history prepends preserve the inspected dates. SVD/SBD/SYD retain their solid violet/blue/yellow markers; swing pivots use H/L flag labels.
+
+The annotation layer replaces technical story dots on candles with a date-aligned event rail: wand for MagicRS, lightning for price action, inward/outward/return arrows for flow, and named category icons for remaining events. Every story event, including events with callouts, is represented. Up to three events on one date have separate icons; larger or spatially crowded groups use neutral stacks. Hover labels identify events and dates, and selecting a stack opens every included session. Callouts retain connectors and reveal their full name on hover; they are clickable. Existing overlay selection and event computation are unchanged.
+
+Browser QA covers the 40-candle initial range, separate category icons, mobile neutral stacks containing multiple dates, history viewport preservation and left-edge paging. TypeScript and the required production build gates pass.

@@ -878,7 +878,8 @@ export default function ChartView({ storyPreview = false }: { storyPreview?: boo
           <span>Pan left to load earlier daily history · W / M show available history</span>
           <label>Technical events <select aria-label="Technical event detail" value={eventDetail} onChange={e=>setEventDetail(e.target.value as typeof eventDetail)} className="bg-[var(--card)] text-primary border border-kd-border rounded px-2 py-1"><option value="all">All · grouped by session</option><option value="none">Hidden</option></select></label>
           {eventDetail!=='none' && <label>Category <select aria-label="Technical event category" value={eventKind} onChange={e=>setEventKind(e.target.value as typeof eventKind)} className="bg-[var(--card)] text-primary border border-kd-border rounded px-2 py-1"><option value="all">All categories</option>{([...new Set(storyEvents.map(e=>e.kind))]).map(kind=><option key={kind} value={kind}>{kind.replaceAll('_',' ')}</option>)}</select></label>}
-          <label><input type="checkbox" checked={signalMarkers} onChange={e=>setSignalMarkers(e.target.checked)}/> Signal dots and swing pivots</label>
+          <label><input type="checkbox" checked={signalMarkers} onChange={e=>setSignalMarkers(e.target.checked)}/> SVD / SBD / SYD dots and H/L pivots</label>
+          <span>Event rail: wand = MagicRS · lightning = price action · inward/outward arrow = flow · stack = multiple events. Hover or tap for names.</span>
           {history.isFetching && <span role="status">Loading earlier prices and indicators…</span>}
           {tf==='daily' && <button disabled={history.isFetching || (!!history.data && !history.hasNextPage)} onClick={loadEarlier}>{history.isFetching?'Loading earlier history…':history.data && !history.hasNextPage?'Start of recorded history':'← Earlier history'}</button>}
           {history.isError && <span role="alert">Earlier history could not load. Use Earlier history to retry.</span>}
@@ -921,8 +922,10 @@ export default function ChartView({ storyPreview = false }: { storyPreview?: boo
               key={`${type}-${numId}-${range}-${tf}`}
               data={rows}
               preserveViewport
+              initialCandles={40}
               showSignalMarkers={signalMarkers}
               onStorySession={setEventSession}
+              onStorySessions={dates=>setEventSession(dates.join(','))}
               onHistoryEdge={tf==='daily' ? loadEarlier : undefined}
               workspaceMode
               height={isFull ? Math.max(700, window.innerHeight - 120) : 480}
@@ -941,7 +944,7 @@ export default function ChartView({ storyPreview = false }: { storyPreview?: boo
               onVisibleRangeChange={handleVisibleRange}
               onZoneClick={handleZoneClick}
             />
-            {eventSession && <section className="p-3 my-2 rounded-lg border border-kd-border bg-[var(--card)]"><div className="flex justify-between"><strong>Technical events · {eventSession}</strong><button onClick={()=>setEventSession(null)}>Close</button></div>{storyEvents.filter(e=>e.date===eventSession).map(e=><p key={e.kind+e.title} className="text-sm mt-2"><strong>{e.title}</strong> · {e.detail}</p>)}</section>}
+            {eventSession && <section className="p-3 my-2 rounded-lg border border-kd-border bg-[var(--card)]"><div className="flex justify-between"><strong>Technical events · {eventSession.split(',').join(' / ')}</strong><button onClick={()=>setEventSession(null)}>Close</button></div>{storyEvents.filter(e=>eventSession.split(',').includes(e.date)).map(e=><p key={e.kind+e.title} className="text-sm mt-2"><strong>{e.date} · {e.title}</strong> · {e.detail}</p>)}</section>}
             {zoneExplain && (
               <OverlayExplainPopover
                 tag={zoneExplain.tag}
