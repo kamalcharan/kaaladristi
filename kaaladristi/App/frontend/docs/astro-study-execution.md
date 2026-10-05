@@ -70,3 +70,8 @@ ChartView starts with the last 40 candles and two bars of right-side space, incl
 The annotation layer replaces technical story dots on candles with a date-aligned event rail: wand for MagicRS, lightning for price action, inward/outward/return arrows for flow, and named category icons for remaining events. Every story event, including events with callouts, is represented. Up to three events on one date have separate icons; larger or spatially crowded groups use neutral stacks. Hover labels identify events and dates, and selecting a stack opens every included session. Callouts retain connectors and reveal their full name on hover; they are clickable. Existing overlay selection and event computation are unchanged.
 
 Browser QA covers the 40-candle initial range, separate category icons, mobile neutral stacks containing multiple dates, history viewport preservation and left-edge paging. TypeScript and the required production build gates pass.
+
+
+## Event rail visibility follow-up
+
+The event annotation layer now has an explicit pixel height including its rail, rather than relying on a percentage height inside a padded chart wrapper. The wrapper reserves 96 pixels below the chart; the rail has a visible heading and reports when no detected events fall in the visible dates. SVD/SBD/SYD rendering is unchanged. Browser verification checks that the rail fits inside both the annotation layer and reserved wrapper space, in addition to icon/stack interaction.

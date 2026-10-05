@@ -1237,7 +1237,7 @@ export default function TradingChart({ data, height = 900, studyMode = false, pr
       )}
 
       <div
-        style={{ position: 'relative', paddingBottom: overlay?.storyPins?.length ? 72 : 0 }}
+        style={{ position: 'relative', paddingBottom: overlay?.storyPins?.length ? 96 : 0 }}
         onContextMenu={e => {
           if (!onZoneClick || horizonBands.length === 0 || !mainChartRef.current) return;
           const rect   = (e.currentTarget as HTMLElement).getBoundingClientRect();
