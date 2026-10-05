@@ -282,6 +282,7 @@ export default function ChartView({ storyPreview = false }: { storyPreview?: boo
   const astroWindowEnd = astroCutoff ?? astroToday();
   useEffect(() => { if (astroContextEnabled) { setDvTab('chart'); setActiveIndex(null); } }, [astroContextEnabled, searchParams.get('event'), astroAnchor]);
   const [inspectedDate,setInspectedDate] = useState<string|null>(null);
+  const [focusRevision,setFocusRevision] = useState(0);
   const [chartInspectionDate,setChartInspectionDate] = useState<string|null>(null);
   const inspectionPinned = useRef(false);
   const [sessionPinned,setSessionPinned] = useState(false);
@@ -340,7 +341,7 @@ export default function ChartView({ storyPreview = false }: { storyPreview?: boo
     if(!band.eventKey || !isIndex)return;
     const next=new URLSearchParams(searchParams);
     next.set('astro','1');next.set('tab','chart');next.set('event',band.eventKey);next.set('type',band.groupTag);next.set('date',band.from);next.set('session',band.from);
-    setSearchParams(next);inspectionPinned.current=true;setSessionPinned(true);setInspectedDate(band.from);setChartInspectionDate(band.from);
+    setSearchParams(next);inspectionPinned.current=true;setSessionPinned(true);setInspectedDate(band.from);setChartInspectionDate(band.from);setFocusRevision(n=>n+1);
   },[isIndex,searchParams,setSearchParams]);
   const openStudyDate = useCallback((date:string)=>{
     if(!validStudyDate(date))return;
@@ -348,12 +349,12 @@ export default function ChartView({ storyPreview = false }: { storyPreview?: boo
     next.set('astro','1');next.set('tab','chart');next.set('date',date);next.set('session',date);
     for(const key of ['event','type','sign'])next.delete(key);
     setSearchParams(next);setTf('daily');
-    inspectionPinned.current=true;setSessionPinned(true);setInspectedDate(date);setChartInspectionDate(date);setActiveIndex(null);
+    inspectionPinned.current=true;setSessionPinned(true);setInspectedDate(date);setChartInspectionDate(date);setFocusRevision(n=>n+1);setActiveIndex(null);
   },[searchParams,setSearchParams]);
   const inspectStoryDate = useCallback((date:string)=>{
     setTf('daily');
     inspectionPinned.current=true;setSessionPinned(true);
-    setInspectedDate(date);setChartInspectionDate(date);setActiveIndex(null);
+    setInspectedDate(date);setChartInspectionDate(date);setFocusRevision(n=>n+1);setActiveIndex(null);
     document.getElementById('chart-price-area')?.scrollIntoView({behavior:'smooth',block:'start'});
   },[]);
 
@@ -998,6 +999,7 @@ export default function ChartView({ storyPreview = false }: { storyPreview?: boo
               onAstroFocus={isIndex ? focusAstro : undefined}
               onCrosshairMove={astroContextEnabled ? inspectSession : undefined}
               onDateSelect={isIndex ? openStudyDate : undefined}
+              focusRevision={focusRevision}
               highlightDate={chartFocusDate ?? (storyPreview && selectedStoryEvent ? selectedStoryEvent.date : activeIndex != null && pulseBars[effectiveIdx] ? pulseBars[effectiveIdx].trade_date : null)}
               overlays={frameworkOverlays}
               astroBands={astroBands}

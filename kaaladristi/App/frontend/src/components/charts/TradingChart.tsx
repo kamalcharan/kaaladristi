@@ -90,6 +90,7 @@ interface TradingChartProps {
   compact?: boolean;       // hide RSI + Sniper panes (Visual Pulse mode)
   workspaceMode?: boolean; // framework-driven: no hardcoded overlays/subpanes
   highlightDate?: string | null;
+  focusRevision?: number;
   selectedAstroEventKey?: string;
   onAstroFocus?: (band:AstroBand) => void;
   onDateSelect?: (date:string) => void;
@@ -244,7 +245,7 @@ const DEFAULT_BM_EVENTS: NonNullable<TradingChartProps['bigMoneyEvents']> = [];
 const DEFAULT_SETUP_LEVELS: NonNullable<TradingChartProps['setupLevels']> = [];
 const DEFAULT_SETUP_ENTRIES: NonNullable<TradingChartProps['setupEntries']> = [];
 
-export default function TradingChart({ data, height = 900, studyMode = false, preserveViewport = false, initialCandles, showSignalMarkers = true, selectedSession = null, onHistoryEdge, onStorySession, onStorySessions, compact = false, workspaceMode = false, highlightDate = null, selectedAstroEventKey, onAstroFocus, onDateSelect, overlays = DEFAULT_OVERLAYS, astroBands = DEFAULT_BANDS, bigMoneyEvents = DEFAULT_BM_EVENTS, setupLevels = DEFAULT_SETUP_LEVELS, setupEntries = DEFAULT_SETUP_ENTRIES, overlay, onVisibleRangeChange, onCrosshairMove, onZoneClick, benchmarkIndexId = null, benchmarkName = null, storyBubble = null }: TradingChartProps) {
+export default function TradingChart({ data, height = 900, studyMode = false, preserveViewport = false, initialCandles, showSignalMarkers = true, selectedSession = null, onHistoryEdge, onStorySession, onStorySessions, compact = false, workspaceMode = false, highlightDate = null, focusRevision = 0, selectedAstroEventKey, onAstroFocus, onDateSelect, overlays = DEFAULT_OVERLAYS, astroBands = DEFAULT_BANDS, bigMoneyEvents = DEFAULT_BM_EVENTS, setupLevels = DEFAULT_SETUP_LEVELS, setupEntries = DEFAULT_SETUP_ENTRIES, overlay, onVisibleRangeChange, onCrosshairMove, onZoneClick, benchmarkIndexId = null, benchmarkName = null, storyBubble = null }: TradingChartProps) {
   const historyArmed = useRef(false);
   const lastHighlight = useRef<string|null>(null);
   const studyViewport = useRef<{ from: Time; to: Time } | null>(null);
@@ -820,11 +821,12 @@ export default function TradingChart({ data, height = 900, studyMode = false, pr
   // Scroll to highlighted date when slider moves
   useEffect(() => {
     if (studyMode && studyViewport.current) return;
-    if (preserveViewport && highlightDate === lastHighlight.current) return;
-    lastHighlight.current = highlightDate;
-    if (!highlightDate || chartsRef.current.length === 0 || data.length === 0) return;
+    if (!highlightDate || !overlayApi || chartsRef.current.length === 0 || data.length === 0) return;
+    const focusKey=highlightDate+':'+focusRevision;
+    if (preserveViewport && focusKey === lastHighlight.current) return;
     const idx = data.findIndex((d) => d.trade_date === highlightDate);
     if (idx < 0) return;
+    lastHighlight.current = focusKey;
 
     // Center the highlighted bar in view with some padding. idx is a `data`
     // index — shift into the padded logical space via the lead offset.
@@ -835,7 +837,7 @@ export default function TradingChart({ data, height = 900, studyMode = false, pr
     chartsRef.current.forEach((chart) => {
       chart.timeScale().setVisibleLogicalRange({ from: from + offset, to: to + offset });
     });
-  }, [highlightDate, data, overlayApi, studyMode, initialCandles]);
+  }, [highlightDate, focusRevision, data, overlayApi, studyMode, initialCandles]);
 
   useEffect(() => {
     buildCharts();
