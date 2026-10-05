@@ -90,6 +90,7 @@ interface TradingChartProps {
   compact?: boolean;       // hide RSI + Sniper panes (Visual Pulse mode)
   workspaceMode?: boolean; // framework-driven: no hardcoded overlays/subpanes
   highlightDate?: string | null;
+  selectedAstroEventKey?: string;
   overlays?: ChartOverlay[];
   astroBands?: AstroBand[];
   /** Big Money days (Phase 3): gold dashed price line at each event's zone
@@ -241,7 +242,7 @@ const DEFAULT_BM_EVENTS: NonNullable<TradingChartProps['bigMoneyEvents']> = [];
 const DEFAULT_SETUP_LEVELS: NonNullable<TradingChartProps['setupLevels']> = [];
 const DEFAULT_SETUP_ENTRIES: NonNullable<TradingChartProps['setupEntries']> = [];
 
-export default function TradingChart({ data, height = 900, studyMode = false, preserveViewport = false, initialCandles, showSignalMarkers = true, selectedSession = null, onHistoryEdge, onStorySession, onStorySessions, compact = false, workspaceMode = false, highlightDate = null, overlays = DEFAULT_OVERLAYS, astroBands = DEFAULT_BANDS, bigMoneyEvents = DEFAULT_BM_EVENTS, setupLevels = DEFAULT_SETUP_LEVELS, setupEntries = DEFAULT_SETUP_ENTRIES, overlay, onVisibleRangeChange, onCrosshairMove, onZoneClick, benchmarkIndexId = null, benchmarkName = null, storyBubble = null }: TradingChartProps) {
+export default function TradingChart({ data, height = 900, studyMode = false, preserveViewport = false, initialCandles, showSignalMarkers = true, selectedSession = null, onHistoryEdge, onStorySession, onStorySessions, compact = false, workspaceMode = false, highlightDate = null, selectedAstroEventKey, overlays = DEFAULT_OVERLAYS, astroBands = DEFAULT_BANDS, bigMoneyEvents = DEFAULT_BM_EVENTS, setupLevels = DEFAULT_SETUP_LEVELS, setupEntries = DEFAULT_SETUP_ENTRIES, overlay, onVisibleRangeChange, onCrosshairMove, onZoneClick, benchmarkIndexId = null, benchmarkName = null, storyBubble = null }: TradingChartProps) {
   const historyArmed = useRef(false);
   const lastHighlight = useRef<string|null>(null);
   const studyViewport = useRef<{ from: Time; to: Time } | null>(null);
@@ -867,13 +868,13 @@ export default function TradingChart({ data, height = 900, studyMode = false, pr
     // Center the highlighted bar in view with some padding. idx is a `data`
     // index — shift into the padded logical space via the lead offset.
     const offset = leadOffsetRef.current;
-    const barsToShow = 60;
+    const barsToShow = initialCandles ?? 60;
     const from = Math.max(0, idx - barsToShow / 2);
     const to = Math.min(data.length - 1, from + barsToShow);
     chartsRef.current.forEach((chart) => {
       chart.timeScale().setVisibleLogicalRange({ from: from + offset, to: to + offset });
     });
-  }, [highlightDate, data, overlayApi, studyMode]);
+  }, [highlightDate, data, overlayApi, studyMode, initialCandles]);
 
   useEffect(() => {
     buildCharts();
@@ -1289,7 +1290,7 @@ export default function TradingChart({ data, height = 900, studyMode = false, pr
       >
         <div ref={mainRef} className="rounded-xl overflow-hidden" />
 
-        {overlayApi && horizonBands.length>0 && <AstroChartEvents chart={overlayApi.chart} container={overlayApi.container} bands={horizonBands} data={data} onSelect={(band,x,y)=>onZoneClick?.(band,x,y,horizonBands.filter(b=>b.from<=band.from && b.to>=band.from))}/>}
+        {overlayApi && horizonBands.length>0 && <AstroChartEvents chart={overlayApi.chart} container={overlayApi.container} bands={horizonBands} data={data} selectedEventKey={selectedAstroEventKey} onSelect={(band,x,y)=>onZoneClick?.(band,x,y,horizonBands.filter(b=>b.from<=band.from && b.to>=band.from))}/>}
 
         {/* Editorial AnnotationOverlay — cycle bands + persona callouts +
             Big Money badges + storyEvent pins. Same overlay used by both

@@ -4,7 +4,7 @@ import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import { useQuery, useInfiniteQuery } from '@tanstack/react-query';
 import { TrendingUp, TrendingDown, BarChart3, AlertCircle, RefreshCw, ArrowLeft } from 'lucide-react';
 import { ZONE_LABELS } from '@/constants/signalScale';
-import { fetchIndicatorDataById, fetchChartHistoryBefore, fetchEquityEodById, fetchEquityWarmupBars, fetchEquityTimeframeById, resampleRows, type EquityTimeframe, fetchStockJourneys, currentJourney, type IndicatorRow } from '@/services/indicatorData';
+import { fetchIndicatorDataById, fetchIndexStudyWindow, fetchChartHistoryBefore, fetchEquityEodById, fetchEquityWarmupBars, fetchEquityTimeframeById, resampleRows, type EquityTimeframe, fetchStockJourneys, currentJourney, type IndicatorRow } from '@/services/indicatorData';
 import TradingChart from '@/components/charts/TradingChart';
 import VaNiInsight from '@/components/domain/VaNiInsight';
 import StockStoryWorkspace from '@/components/domain/StockStory/StockStoryWorkspace';
@@ -32,6 +32,10 @@ import { useBookmarkStore } from '@/stores/bookmarkStore';
 import CatalogDrawer from '@/components/domain/Catalog/CatalogDrawer';
 import { useAstroOverlayBands } from '@/hooks/useAstroOverlayBands';
 import AstroEventRibbon from '@/components/astro/AstroEventRibbon';
+import ChartAstroControls from '@/components/astro/ChartAstroControls';
+import { useChartAstroContext } from '@/hooks/useChartAstroContext';
+import { astroToday } from '@/services/astroEvents';
+import { shiftStudyDate, studySession, studyEventBand, validStudyDate } from '@/services/astroStudy';
 import OverlayExplainPopover from '@/components/domain/VaNi/OverlayExplainPopover';
 import type { AstroBand } from '@/services/astroOverlayService';
 import type { ChartOverlay } from '@/types/framework';
@@ -218,7 +222,7 @@ export default function ChartView({ storyPreview = false }: { storyPreview?: boo
     }
     setZoneExplain({
       tag: band.groupTag, ruleId: band.ruleId, ruleLabel: band.displayName,
-      studyUrl: band.eventKey && isIndex ? '/astro/study?' + new URLSearchParams({event:band.eventKey, type:band.groupTag, date:band.from, index:String(numId)}) : undefined,
+      studyUrl: band.eventKey && isIndex ? `/chart/index/${numId}?` + new URLSearchParams({tab:'chart', astro:'1', event:band.eventKey, type:band.groupTag, date:band.from, name:rawName}) : undefined,
       x: clientX, y: clientY,
       coincident: [...others.entries()].map(([ruleId, label]) => ({ ruleId, label })),
     });
@@ -268,6 +272,18 @@ export default function ChartView({ storyPreview = false }: { storyPreview?: boo
   const rawName = searchParams.get('name') ?? `${type} #${id}`;
   const isIndex = type === 'index';
   const isEquity = type === 'equity';
+  const astroContextEnabled = isIndex && (searchParams.get('astro') === '1' || searchParams.has('event'));
+  const astroContext = useChartAstroContext(searchParams, astroContextEnabled);
+  const astroAnchor = astroContext.event?.start_date ?? astroContext.anchor;
+  const astroBefore = astroContextEnabled && searchParams.get('mode') === 'before';
+  const astroCutoff = astroBefore ? [astroAnchor,astroToday()].sort()[0] : undefined;
+  const astroWindowStart = shiftStudyDate(astroAnchor, range==='MAX' ? -20000 : range==='5Y' ? -1900 : range==='1Y' ? -400 : range==='6M' ? -200 : range==='3M' ? -100 : -45);
+  const astroWindowEnd = astroCutoff ?? astroToday();
+  useEffect(() => { if (astroContextEnabled) { setDvTab('chart'); setActiveIndex(null); } }, [astroContextEnabled, searchParams.get('event'), astroAnchor]);
+  const [inspectedDate,setInspectedDate] = useState<string|null>(null);
+  useEffect(() => { setInspectedDate(null); }, [numId,astroAnchor,astroBefore]);
+  const inspectSession = useCallback((_index:number,date:string) => { setInspectedDate(date); setActiveIndex(null); },[]);
+
 
   // ── Chart data (full history for TradingChart) — declared BEFORE the
   // story block because the stage-based story fallback reads the latest
@@ -275,9 +291,11 @@ export default function ChartView({ storyPreview = false }: { storyPreview?: boo
   // session; a day change refetches automatically (same as useScan.ts).
   const { latestDataDate: chartDateKey } = usePipelineStatus();
   const { data: initialRows = [], isLoading, isError, error, refetch } = useQuery({
-    queryKey: ['chart', type, numId, range, tf, chartDateKey ?? 'unknown'],
+    queryKey: ['chart', type, numId, range, tf, chartDateKey ?? 'unknown', astroContextEnabled ? astroWindowStart : null, astroContextEnabled ? astroWindowEnd : null],
     queryFn: () =>
-      isEquity
+      astroContextEnabled
+        ? fetchIndexStudyWindow(numId,astroWindowStart,astroWindowEnd).then(r => tf==='daily' ? r : resampleRows(r,tf))
+        : isEquity
         ? (tf === 'daily' ? fetchEquityEodById(numId, range) : fetchEquityTimeframeById(numId, tf))
         // Index W/M: no aggregate tables exist — resample full daily history
         // client-side (indices carry no delivery data, so nothing is lost)
@@ -298,7 +316,17 @@ export default function ChartView({ storyPreview = false }: { storyPreview?: boo
   const loadEarlier = useCallback(() => {
     if(tf==='daily' && initialRows.length && !history.isFetching && (!history.data || history.hasNextPage)) void history.fetchNextPage();
   },[tf,initialRows.length,history.isFetching,history.data,history.hasNextPage,history.fetchNextPage]);
-  const astroBands = useAstroOverlayBands(type === 'index' ? frameworkOverlays : NO_OVERLAYS, rows[0]?.trade_date);
+  const savedAstroBands = useAstroOverlayBands(type === 'index' ? frameworkOverlays : NO_OVERLAYS, rows[0]?.trade_date, astroCutoff);
+  const astroBands = useMemo(() => {
+    if (!astroContextEnabled || !astroContext.event) return savedAstroBands;
+    const focus = studyEventBand(astroContext.event);
+    return savedAstroBands.some(b => b.eventKey === focus.eventKey) ? savedAstroBands : [...savedAstroBands,focus];
+  },[savedAstroBands,astroContextEnabled,astroContext.event]);
+  const requestedSession = searchParams.get('session');
+  const inspectionDate = inspectedDate ?? (astroContextEnabled && validStudyDate(requestedSession) ? requestedSession : astroContextEnabled ? astroAnchor : rows.at(-1)?.trade_date ?? astroToday());
+  const inspectedSession = studySession(rows,astroCutoff && inspectionDate>astroCutoff ? astroCutoff : inspectionDate);
+  const chartFocusDate = astroContextEnabled ? studySession(rows,astroAnchor)?.trade_date : null;
+
 
   // Scan presence — which presets currently contain this stock. Moved up
   // from the pulse block because the story layer derives from it on
@@ -414,8 +442,8 @@ export default function ChartView({ storyPreview = false }: { storyPreview?: boo
   // constituents participating). Equities read Liquidity instead.
   const { data: indexBreadth, isLoading: breadthLoading } = useIndexBreadth(isIndex ? numId : null, 66);
   const breadthPct = useMemo(
-    () => (isIndex ? indexBreadth?.data?.at(-1)?.breadth_score ?? null : null),
-    [isIndex, indexBreadth],
+    () => (isIndex ? (astroContextEnabled ? indexBreadth?.data?.find(b=>b.trade_date===inspectedSession?.trade_date)?.breadth_score : indexBreadth?.data?.at(-1)?.breadth_score) ?? null : null),
+    [isIndex, indexBreadth,astroContextEnabled,inspectedSession],
   );
   // Breadth-over-time → the index story's thermometer (the index-native analog
   // of a stock's sector thermometer). percentile = breadth score; "broad" (top
@@ -434,7 +462,7 @@ export default function ChartView({ storyPreview = false }: { storyPreview?: boo
   const { data: aiData, isLoading: aiLoading } = useInstrumentInsight(numId, type ?? 'index');
 
   // Unify pulse bars + dc inferences for shared signal computation
-  const pulseBars: PulseBar[] = isIndex ? indexPulse.bars : (equityPulse.bars as PulseBar[]);
+  const pulseBars: PulseBar[] = useMemo(() => astroContextEnabled ? rows as unknown as PulseBar[] : isIndex ? indexPulse.bars : equityPulse.bars as PulseBar[],[astroContextEnabled,rows,isIndex,indexPulse.bars,equityPulse.bars]);
   const dcInferences = isIndex ? indexPulse.dcInferences : equityPulse.dcInferences;
 
   // Resolve display name — for BSE numeric symbols, prefer company_name from metadata
@@ -451,8 +479,9 @@ export default function ChartView({ storyPreview = false }: { storyPreview?: boo
   }, [isEquity, equityPulse.meta, rawName]);
 
   // Stats from latest row
-  const latest = rows.length > 0 ? rows[rows.length - 1] : null;
-  const prev = rows.length > 1 ? rows[rows.length - 2] : null;
+  const latest = astroContextEnabled ? inspectedSession ?? null : rows.at(-1) ?? null;
+  const latestIdx = rows.findIndex(r=>r.trade_date===latest?.trade_date);
+  const prev = latestIdx>0 ? rows[latestIdx-1] : null;
   const currentClose = latest?.close ?? 0;
   const prevClose = prev?.close ?? currentClose;
   const change = currentClose - prevClose;
@@ -481,7 +510,8 @@ export default function ChartView({ storyPreview = false }: { storyPreview?: boo
 
   // ── Pulse computations (Study workbench) — the scrubber drives snapshot +
   //     every card. activeIndex === null pins to the latest bar. ──
-  const effectiveIdx = activeIndex ?? (pulseBars.length > 0 ? pulseBars.length - 1 : 0);
+  const inspectedPulseIdx = astroContextEnabled ? pulseBars.findIndex(b=>b.trade_date===inspectedSession?.trade_date) : -1;
+  const effectiveIdx = Math.min(Math.max(0, activeIndex ?? (inspectedPulseIdx>=0 ? inspectedPulseIdx : pulseBars.length-1)),Math.max(0,pulseBars.length-1));
 
   const dotsHistory: DotSignals[] = useMemo(
     () => pulseBars.map((b, i) => computeDots(b, i > 0 ? pulseBars[i - 1] : null)),
@@ -581,11 +611,11 @@ export default function ChartView({ storyPreview = false }: { storyPreview?: boo
   // bar is matched by DATE rather than by position. Falls back to the latest
   // bar, which is what an unscrubbed chart is showing anyway.
   const magicRsActiveIdx = useMemo(() => {
-    const d = pulseBars[effectiveIdx]?.trade_date;
+    const d = inspectedDate ?? (astroContextEnabled ? inspectedSession?.trade_date : pulseBars[effectiveIdx]?.trade_date);
     if (!d) return Math.max(0, magicRsData.length - 1);
     const i = magicRsVisible.findIndex((x) => x.trade_date === d);
-    return i >= 0 ? i : Math.max(0, magicRsVisible.length - 1);
-  }, [pulseBars, effectiveIdx, magicRsVisible]);
+    return i >= 0 ? i : astroContextEnabled ? -1 : Math.max(0, magicRsVisible.length - 1);
+  }, [pulseBars, effectiveIdx, magicRsVisible, inspectedDate,astroContextEnabled,inspectedSession]);
   // Magic RS is a pipeline column vs CNX500 — null for many BSE/thin stocks.
   const hasRsData = useMemo(() => magicRsData.some((b) => b.magic_rs != null), [magicRsData]);
 
@@ -919,7 +949,7 @@ export default function ChartView({ storyPreview = false }: { storyPreview?: boo
           <>
             {isIndex && <AstroEventRibbon />}
             <TradingChart
-              key={`${type}-${numId}-${range}-${tf}`}
+              key={`${type}-${numId}-${range}-${tf}-${astroContextEnabled ? astroAnchor : ''}-${astroBefore}`}
               data={rows}
               preserveViewport
               initialCandles={40}
@@ -929,7 +959,9 @@ export default function ChartView({ storyPreview = false }: { storyPreview?: boo
               onHistoryEdge={tf==='daily' ? loadEarlier : undefined}
               workspaceMode
               height={isFull ? Math.max(700, window.innerHeight - 120) : 480}
-              highlightDate={storyPreview && selectedStoryEvent ? selectedStoryEvent.date : activeIndex != null && pulseBars[effectiveIdx] ? pulseBars[effectiveIdx].trade_date : null}
+              selectedAstroEventKey={astroContextEnabled ? astroContext.event?.event_key : undefined}
+              onCrosshairMove={astroContextEnabled ? inspectSession : undefined}
+              highlightDate={chartFocusDate ?? (storyPreview && selectedStoryEvent ? selectedStoryEvent.date : activeIndex != null && pulseBars[effectiveIdx] ? pulseBars[effectiveIdx].trade_date : null)}
               overlays={frameworkOverlays}
               astroBands={astroBands}
               bigMoneyEvents={bigMoneyChartLines}
@@ -975,6 +1007,11 @@ export default function ChartView({ storyPreview = false }: { storyPreview?: boo
   // single block — no per-type duplication.
   const replayTab = (
     <>
+      {astroContextEnabled && <>
+        <ChartAstroControls events={astroContext.events} matches={astroContext.matches} event={astroContext.event} indexId={numId} loading={astroContext.isLoading} failed={astroContext.isError} onRetry={()=>void astroContext.refetch()} onEarlier={astroContext.loadEarlier}/>
+        {inspectedSession && <p aria-label="Historical session readings" className="text-sm text-secondary mb-3">Selected session · {inspectedSession.trade_date} · Close {inspectedSession.close} · MagicRS {inspectedSession.magic_rs ?? 'Unavailable'} · MagicMA {inspectedSession.magic_ma ?? 'Unavailable'} · RSI {inspectedSession.rsi_14 ?? 'Unavailable'}. Stored end-of-day readings.</p>}
+      </>}
+
       {storyEvents.length > 0 && (
         <div className="flex items-center gap-3 mb-2">
           <button
@@ -1009,7 +1046,7 @@ export default function ChartView({ storyPreview = false }: { storyPreview?: boo
         <div className="min-w-0">{isFull ? createPortal(<div style={{position:'fixed',inset:0,zIndex:350,padding:8,background:'var(--bg)'}}>{chartArea}<CatalogDrawer isOpen={overlayDrawerOpen} onClose={() => setOverlayDrawerOpen(false)} context="overlay" /></div>, document.body) : chartArea}</div>
         <div className="flex flex-col gap-3 min-w-0">
           {!isLoading && !isError && rows.length > 0 && tf === 'daily' && (
-            <CockpitIndicatorPanels rows={rows} />
+            <CockpitIndicatorPanels rows={astroContextEnabled && visibleRange ? rows.filter(r=>r.trade_date>=visibleRange.from && r.trade_date<=visibleRange.to) : rows} activeDate={astroContextEnabled ? inspectedSession?.trade_date : undefined} onSessionChange={astroContextEnabled ? date=>inspectSession(0,date) : undefined} />
           )}
           {snapshot && (
             <DivergenceCard
@@ -1027,12 +1064,13 @@ export default function ChartView({ storyPreview = false }: { storyPreview?: boo
           it came from: the x-axis no longer lines up with anything. ═══ */}
       <div className="grid grid-cols-1 lg:grid-cols-[7fr_3fr] gap-3 mb-3">
         <div className="min-w-0">
-    {snapshot && (hasRsData ? (
+    {(snapshot || astroContextEnabled) && (hasRsData ? (
             <SignalFlipCard
               title="Magic RS"
               widget={<MagicRsSubchart
                   data={magicRsVisible}
                   activeIndex={magicRsActiveIdx}
+                  activeDate={astroContextEnabled ? inspectedSession?.trade_date : undefined}
                   benchmarkLabel="NIFTY 500"
                   variant={usingShortRs ? 'short' : 'long'}
                   // magicRsVisible is clipped to the zoom; the backward-looking
@@ -1072,7 +1110,7 @@ export default function ChartView({ storyPreview = false }: { storyPreview?: boo
             activeIndex={effectiveIdx}
             bars={pulseBars}
             corrHistory={corrHistory}
-            onChange={idx => { setSelectedStoryEvent(null); setActiveIndex(idx); }}
+            onChange={idx => { setSelectedStoryEvent(null); setActiveIndex(idx); if(astroContextEnabled)setInspectedDate(pulseBars[idx]?.trade_date ?? null); }}
           />
         </div>
       )}
@@ -1350,7 +1388,7 @@ export default function ChartView({ storyPreview = false }: { storyPreview?: boo
               )}
 
               {/* VaNi Read — now in the hero's left column */}
-              {!isLoading && !isError && rows.length > 0 && (aiLoading || aiData?.insight) && (
+              {!astroContextEnabled && !isLoading && !isError && rows.length > 0 && (aiLoading || aiData?.insight) && (
                 <div id="study-read" style={{ scrollMarginTop: 118 }}>
                   {!isEquity && snapshot?.corrState.tagline && (
                     <div className="text-[12px] mb-1.5" style={{ color: snapshot.corrState.color }}>

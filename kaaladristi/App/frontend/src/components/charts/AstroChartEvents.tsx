@@ -8,8 +8,9 @@ import {shiftStudyDate} from '@/services/astroStudy';
 const shortDate=(date:string)=>new Date(date+'T12:00:00Z').toLocaleDateString('en-GB',{day:'numeric',month:'short',timeZone:'Asia/Kolkata'});
 
 /** Names and selected study context over the existing astro overlay renderer. */
-export default function AstroChartEvents({chart,container,bands,data,onSelect}:{chart:IChartApi;container:HTMLDivElement;bands:AstroBand[];data:IndicatorRow[];onSelect?:(band:AstroBand,x:number,y:number)=>void}){
+export default function AstroChartEvents({chart,container,bands,data,onSelect,selectedEventKey}:{chart:IChartApi;container:HTMLDivElement;bands:AstroBand[];data:IndicatorRow[];onSelect?:(band:AstroBand,x:number,y:number)=>void;selectedEventKey?:string}){
   const [,redraw]=useState(0),[selected,setSelected]=useState<AstroBand|null>(null),[expanded,setExpanded]=useState<AstroBand[]>([]);
+  useEffect(()=>{if(selectedEventKey)setSelected(bands.find(b=>b.eventKey===selectedEventKey) ?? null)},[selectedEventKey,bands]);
   useEffect(()=>{const bump=()=>redraw(n=>n+1);chart.timeScale().subscribeVisibleLogicalRangeChange(bump);const observer=new ResizeObserver(bump);observer.observe(container);return()=>{observer.disconnect();chart.timeScale().unsubscribeVisibleLogicalRangeChange(bump)}},[chart,container]);
   const width=container.clientWidth,height=container.clientHeight;
   const coordinate=(date:string)=>eventCoordinate(date,data,d=>chart.timeScale().timeToCoordinate(d as Time));

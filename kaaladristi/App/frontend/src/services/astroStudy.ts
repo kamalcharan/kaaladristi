@@ -22,5 +22,7 @@ export function studyEventBand(e: AstroOccurrence): AstroBand {
     opacity: 0.05, isPanchak: false, groupTag: e.event_type };
 }
 export function astroStudyLink(e: AstroOccurrence, index = 1): string {
-  return '/astro/study?' + new URLSearchParams({ event: e.event_key, family: e.family_id, type: e.event_type, date: e.start_date, index: String(index) });
+  const params = new URLSearchParams({ tab: 'chart', astro: '1', event: e.event_key, family: e.family_id, type: e.event_type, date: e.start_date });
+  if (index === 1) params.set('name','NIFTY 50');
+  return `/chart/index/${index}?${params}`;
 }

@@ -8,19 +8,89 @@ const venus={...event,event_key:'venus-period',family_id:'venus-motion',rule_id:
 const samples=[event,venus,{...event,event_key:'mercury-rise-2025-07-25',start_date:'2025-07-25',end_date:'2025-07-25'}];
 let browser,server,testPage;
 try{
-await build({stdin:{contents:`import React from 'react';import {createRoot} from 'react-dom/client';import {BrowserRouter} from 'react-router-dom';import {QueryClient,QueryClientProvider} from '@tanstack/react-query';import {useFrameworkStore} from './src/stores/frameworkStore';useFrameworkStore.setState({framework:{id:'test',user_id:'test',name:'Test',chart_overlays:[{catalog_item_id:'astro_group:Mercury',type:'astro_zone',visible:true,label:'Mercury'},{catalog_item_id:'astro_group:Venus',type:'astro_zone',visible:true,label:'Venus'}],blocks:[],instruments:[],version:1}});import Page from './src/views/AstroStudyPage';import './src/styles/globals.css';createRoot(document.getElementById('root')).render(<BrowserRouter><QueryClientProvider client={new QueryClient({defaultOptions:{queries:{retry:false}}})}><Page/></QueryClientProvider></BrowserRouter>);`,resolveDir:root,loader:'tsx'},bundle:true,format:'esm',jsx:'automatic',outfile:path.join(temp,'app.js'),alias:{'@':path.join(root,'src')},define:{'import.meta.env':JSON.stringify({DEV:true,VITE_PIPELINE_API_URL:'/pipeline-api'})},logLevel:'silent'});
-server=http.createServer((req,res)=>{const name=req.url.split('?')[0];if(name==='/app.js'||name==='/app.css'){res.setHeader('Content-Type',name.endsWith('.js')?'text/javascript':'text/css');res.end(fs.readFileSync(path.join(temp,name.slice(1))));return}res.setHeader('Content-Type','text/html');res.end('<html><head><link rel="stylesheet" href="/app.css"></head><body><div id="root"></div><script type="module" src="/app.js"></script></body></html>')});await new Promise(r=>server.listen(0,'127.0.0.1',r));
+await build({stdin:{contents:`import React from 'react';import {createRoot} from 'react-dom/client';import {BrowserRouter,Routes,Route,Link} from 'react-router-dom';import {QueryClient,QueryClientProvider} from '@tanstack/react-query';import {useFrameworkStore} from './src/stores/frameworkStore';import {useBookmarkStore} from './src/stores/bookmarkStore';useBookmarkStore.setState({hasLoaded:true});useFrameworkStore.setState({framework:{id:'test',user_id:'test',name:'Test',chart_overlays:[{catalog_item_id:'astro_group:Mercury',type:'astro_zone',visible:true,label:'Mercury'},{catalog_item_id:'astro_group:Venus',type:'astro_zone',visible:true,label:'Venus'},{catalog_item_id:'indicator:sma_150',type:'indicator',visible:true,label:'SMA 150'}],blocks:[],instruments:[],version:1}});import ChartView from './src/views/ChartView';import Redirect from './src/views/AstroStudyRedirect';import {astroStudyLink} from './src/services/astroStudy';import './src/styles/globals.css';createRoot(document.getElementById('root')).render(<BrowserRouter><QueryClientProvider client={new QueryClient({defaultOptions:{queries:{retry:false}}})}><Routes><Route path='/astro/study' element={<Redirect/>}/><Route path='/chart/:type/:id' element={<ChartView/>}/><Route path='/calendar-entry' element={<Link to={astroStudyLink(${JSON.stringify(event)})}>Study market context</Link>}/></Routes></QueryClientProvider></BrowserRouter>);`,resolveDir:root,loader:'tsx'},bundle:true,format:'esm',jsx:'automatic',outfile:path.join(temp,'app.js'),alias:{'@':path.join(root,'src')},define:{'import.meta.env':JSON.stringify({DEV:true,VITE_PIPELINE_API_URL:'/pipeline-api'})},logLevel:'silent'});
+server=http.createServer((req,res)=>{const name=req.url.split('?')[0];if(name==='/app.js'||name==='/app.css'){res.setHeader('Content-Type',name.endsWith('.js')?'text/javascript':'text/css');const builtCss=fs.existsSync(path.join(root,'dist/assets')) ? fs.readdirSync(path.join(root,'dist/assets')).find(n=>n.endsWith('.css')) : null;res.end(fs.readFileSync(name==='/app.css'&&builtCss ? path.join(root,'dist/assets',builtCss) : path.join(temp,name.slice(1))));return}res.setHeader('Content-Type','text/html');res.end('<html><head><link rel="stylesheet" href="/app.css"></head><body><div id="root"></div><script type="module" src="/app.js"></script></body></html>')});await new Promise(r=>server.listen(0,'127.0.0.1',r));
 browser=await chromium.launch({executablePath:process.env.ASTRO_QA_BROWSER||'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',headless:true});
 const page=testPage=await browser.newPage({viewport:{width:1440,height:1000}});const errors=[];page.on('pageerror',e=>errors.push(e.message));const requests=[];
 await page.route('**/pipeline-api/**',route=>{const u=new URL(route.request().url());if(u.pathname.endsWith('/astro/families'))return route.fulfill({json:[{id:'mercury-visibility',rule_id:102,planets:['Mercury'],name:'Mercury Visibility',catalog_visible:true},{id:'venus-motion',rule_id:221,planets:['Venus'],name:'Venus Motion',catalog_visible:true}]});if(u.pathname.endsWith('/astro/events')){const start=u.searchParams.get('from_date'),end=u.searchParams.get('to_date');return route.fulfill({json:samples.filter(e=>e.start_date>=start&&e.start_date<=end)})}return route.fulfill({json:[]})});
-await page.route('**/db/**',route=>{const u=new URL(route.request().url());if(u.pathname.endsWith('km_index_symbols'))return route.fulfill({json:[{id:1,name:'NIFTY 50'},{id:97,name:'Curated Basket'}]});if(u.pathname.endsWith('km_index_eod')){const dates=u.searchParams.getAll('trade_date'),start=dates.find(x=>x.startsWith('gte.'))?.slice(4),end=dates.find(x=>x.startsWith('lte.'))?.slice(4);requests.push({start,end});const rows=[];for(let d=new Date(start+'T12:00:00Z');d.toISOString().slice(0,10)<=end;d.setUTCDate(d.getUTCDate()+1)){if([0,6].includes(d.getUTCDay()))continue;const i=rows.length,c=23000+i*3;rows.push({trade_date:d.toISOString().slice(0,10),open:c-5,high:c+20,low:c-20,close:c,volume:1000,rsi_14:45+i%10,mfi_14:40,magic_rs:i%7,magic_ma:2})}const off=Number(u.searchParams.get('offset')||0),limit=Number(u.searchParams.get('limit')||500);return route.fulfill({json:rows.slice(off,off+limit)})}return route.fulfill({json:[]})});
-await page.goto(`http://127.0.0.1:${server.address().port}/astro/study?event=${event.event_key}&date=${event.start_date}&type=mercury_rise&index=1`);
-await page.getByText('24 Jul 2026',{exact:true}).waitFor();assert(requests.every(r=>r.end<='2026-07-26'));assert(await page.locator('canvas').count()>=2);await page.getByText('2 event records in this window.',{exact:false}).waitFor();await page.getByText('Momentum · RSI / MFI',{exact:true}).waitFor();await page.locator('.as-widget-grid').getByRole('button',{name:'Widget',exact:true}).waitFor();await page.getByRole('button',{name:'Study focus marker: shown',exact:true}).click();await page.getByRole('button',{name:'+ Overlay',exact:true}).click();await page.getByRole('switch',{name:'Mercury chart overlay'}).waitFor();await page.getByRole('switch',{name:'Venus chart overlay'}).waitFor();await page.getByRole('switch',{name:'Mercury chart overlay'}).click();await page.getByText('1 event records in this window.',{exact:false}).waitFor();await page.getByRole('switch',{name:'Mercury chart overlay'}).click();await page.getByText('2 event records in this window.',{exact:false}).waitFor();await page.getByRole('button',{name:'Close overlay catalog'}).click();
-await page.getByRole('button',{name:'Explore what followed',exact:true}).click();await page.waitForFunction(()=>document.querySelector('button[aria-pressed="true"]') && !document.body.textContent.includes('Loading historical prices'));
-await page.getByRole('button',{name:'Session →',exact:true}).click();await page.getByText('27 Jul 2026',{exact:true}).waitFor();
-await page.getByRole('button',{name:'As of event',exact:true}).click();await page.getByText('24 Jul 2026',{exact:true}).waitFor();assert(await page.getByRole('button',{name:'Session →',exact:true}).isDisabled());
-await page.getByRole('button',{name:'Fullscreen',exact:true}).click();await page.getByRole('button',{name:'Exit fullscreen',exact:true}).waitFor();const box=await page.getByRole('button',{name:'Exit fullscreen',exact:true}).boundingBox();assert(box.y>=0&&box.y<150);await page.keyboard.press('Escape');
-await page.getByRole('button',{name:'← Previous',exact:true}).click();await page.getByText('25 Jul 2025',{exact:true}).first().waitFor();await page.locator('.as-readings').getByText('25 Jul 2025',{exact:true}).waitFor();assert.equal(await page.getByRole('button',{name:'Next →',exact:true}).isDisabled(),false);
-await page.getByRole('button',{name:'Load an earlier year',exact:false}).click();await page.waitForFunction(()=>!document.body.textContent.includes('Loading historical prices'));
-await page.setViewportSize({width:390,height:844});await page.waitForTimeout(100);assert(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth+2),JSON.stringify(await page.evaluate(()=>[...document.querySelectorAll('body *')].map(e=>({tag:e.tagName,cls:e.className,width:e.getBoundingClientRect().width,right:e.getBoundingClientRect().right})).filter(e=>e.right>window.innerWidth+2).slice(0,16))));assert.equal(errors.length,0,errors.join('\n'));if(process.env.ASTRO_QA_SCREENSHOT)await page.screenshot({path:process.env.ASTRO_QA_SCREENSHOT,fullPage:true});console.log('PASS browser: reused MagicRS/RSI widgets, shared overlay drawer, simultaneous planets and visibility toggles, weekend snapshot, replay cutoff, synchronized session stepping, fullscreen, earlier occurrence/history and mobile width');
-}catch(error){if(testPage)console.error('STUDY STATE',testPage.url(),await testPage.locator('.as-readings').innerText().catch(()=>''));throw error;}finally{await browser?.close();if(server){server.closeAllConnections();await new Promise(r=>server.close(r));}for(const f of ['app.js','app.css']){const target=path.join(temp,f);if(fs.existsSync(target))fs.unlinkSync(target)}fs.rmdirSync(temp)}
+const allRows=[];
+for(let d=new Date('2023-01-01T12:00:00Z');d.toISOString().slice(0,10)<='2026-10-01';d.setUTCDate(d.getUTCDate()+1)){
+ if([0,6].includes(d.getUTCDay()))continue;
+ const i=allRows.length,c=23000+i*3;
+ allRows.push({trade_date:d.toISOString().slice(0,10),open:c-5,high:c+20,low:c-20,close:c,volume:1000,rsi_14:45+i%10,mfi_14:40,magic_rs:i%7,magic_ma:2,magic_rs_zone:'neutral',sma_150:c-100,dot_svd:i%17===0,dot_sbd:i%19===0,dot_syd:i%13===0,flow_type:i%5===0?'FRESH_LONGS':null});
+}
+let delayPrices=false;
+await page.route('**/db/**',async route=>{
+ const u=new URL(route.request().url());
+ if(u.pathname.endsWith('km_industry_eod'))return route.fulfill({json:[{trade_date:'2026-10-01'}]});
+ if(u.pathname.endsWith('km_index_symbols'))return route.fulfill({json:[{id:1,name:'NIFTY 50'},{id:97,name:'Curated Basket'}]});
+ if(u.pathname.endsWith('km_index_eod')){
+ const dates=u.searchParams.getAll('trade_date'),start=dates.find(x=>x.startsWith('gte.'))?.slice(4),end=dates.find(x=>x.startsWith('lte.'))?.slice(4),before=dates.find(x=>x.startsWith('lt.'))?.slice(3);
+ requests.push({start,end,before});
+ let rows=allRows.filter(r=>(!start||r.trade_date>=start)&&(!end||r.trade_date<=end)&&(!before||r.trade_date<before));
+ if(u.searchParams.get('order')?.includes('desc'))rows=rows.slice().reverse();
+ const off=Number(u.searchParams.get('offset')||0),limit=Number(u.searchParams.get('limit')||500);
+ if(delayPrices&&end)await new Promise(r=>setTimeout(r,800));
+ return route.fulfill({json:rows.slice(off,off+limit)});
+ }
+ return route.fulfill({json:[]});
+});
+const base=`http://127.0.0.1:${server.address().port}`;
+await page.goto(`${base}/astro/study?event=${event.event_key}&date=${event.start_date}&type=mercury_rise&index=1&mode=before`);
+await page.waitForURL('**/chart/index/1?**');
+const readings=page.getByLabel('Historical session readings');
+await readings.filter({hasText:'2026-07-24'}).waitFor();
+await page.getByText('Momentum · RSI / MFI',{exact:true}).waitFor();
+await page.getByLabel('Named astro events').waitFor();
+await page.getByRole('button',{name:'As of event',exact:true}).waitFor();
+assert(requests.filter(r=>r.end).every(r=>r.end<='2026-07-26'));
+assert(await page.locator('canvas').count()>=2);
+assert.equal(await page.getByRole('checkbox',{name:'SVD / SBD / SYD dots and H/L pivots'}).isChecked(),true);
+await page.getByLabel('Technical event markers').waitFor();
+assert(await page.getByRole('button',{name:/Fresh longs/}).count()>0,'Fresh longs must be represented on the same chart');
+const legacyReading=await readings.innerText();
+const canvasCount=await page.locator('canvas').count();
+assert(await page.getByLabel('Selected astro event').innerText().then(t=>t.includes('2026-07-26')));
+await page.getByRole('button',{name:'+ Overlay',exact:true}).click();
+await page.getByRole('switch',{name:'Mercury chart overlay'}).waitFor();
+await page.getByRole('switch',{name:'Venus chart overlay'}).waitFor();
+await page.getByRole('button',{name:'Close overlay catalog'}).click();
+await page.getByRole('button',{name:'Explore what followed',exact:true}).click();
+await readings.waitFor();await page.waitForFunction(()=>!document.body.textContent.includes('Loading prices and indicators'));
+assert(requests.some(r=>r.end>'2026-07-26'));
+assert(await page.getByText(/to 2026-10-01/).count()>0,'Explore must include recorded rows through latest data, not a short event window');
+await page.getByRole('button',{name:'← Previous occurrence',exact:true}).click();
+await readings.filter({hasText:'2025-07-25'}).waitFor();
+await page.getByRole('button',{name:'Next occurrence →',exact:true}).click();
+await readings.filter({hasText:'2026-07-24'}).waitFor();
+// Real calendar-link helper and compatibility route must resolve to the same screen.
+await page.goto(`${base}/calendar-entry`);
+await page.getByRole('link',{name:'Study market context',exact:true}).click();
+await page.waitForURL('**/chart/index/1?**');
+await page.getByRole('button',{name:'As of event',exact:true}).click();
+await readings.filter({hasText:'2026-07-24'}).waitFor();
+assert.equal(await readings.innerText(),legacyReading);
+assert.equal(await page.locator('canvas').count(),canvasCount);
+assert.equal(await page.getByRole('checkbox',{name:'SVD / SBD / SYD dots and H/L pivots'}).isChecked(),true);
+await page.getByRole('button',{name:'Close astro context',exact:true}).click();
+await page.getByLabel('Astro study context').waitFor({state:'detached'});
+await page.getByRole('checkbox',{name:'SVD / SBD / SYD dots and H/L pivots'}).waitFor();
+assert(!page.url().includes('astro='));
+await page.getByLabel('Technical event markers').waitFor();
+assert(await page.getByRole('button',{name:/Fresh longs/}).count()>0);
+// Loading feedback on uncached historical data.
+delayPrices=true;
+await page.goto(`${base}/chart/index/97?tab=chart&astro=1&event=${event.event_key}&date=${event.start_date}&type=mercury_rise&mode=before`);
+await page.getByRole('status').filter({hasText:'Loading prices and indicators'}).waitFor();
+await readings.filter({hasText:'2026-07-24'}).waitFor();
+await page.getByRole('combobox',{name:'Astro study index'}).selectOption('1');
+await page.waitForURL('**/chart/index/1?**');
+assert(new URL(page.url()).searchParams.get('event')===event.event_key);
+await readings.filter({hasText:'2026-07-24'}).waitFor();
+await page.setViewportSize({width:390,height:844});
+await page.waitForTimeout(150);
+assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+2),'ChartView must fit mobile width');
+assert.equal(errors.length,0,errors.join('\n'));
+if(process.env.ASTRO_QA_SCREENSHOT)await page.screenshot({path:process.env.ASTRO_QA_SCREENSHOT,fullPage:true});
+console.log('PASS actual ChartView: legacy redirect and calendar entry equivalence, canonical weekend date, shared overlays/RSI/MagicRS/signals, cutoff, later observations, occurrence navigation and loading feedback');
+}catch(error){if(testPage)console.error('STUDY STATE',testPage.url(),await testPage.getByLabel('Historical session readings').innerText().catch(()=>''),await testPage.locator('body').innerText().catch(()=>''));throw error;}finally{await browser?.close();if(server){server.closeAllConnections();await new Promise(r=>server.close(r));}for(const f of ['app.js','app.css']){const target=path.join(temp,f);if(fs.existsSync(target))fs.unlinkSync(target)}fs.rmdirSync(temp)}
