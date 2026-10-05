@@ -17,10 +17,11 @@ const change = (n: number | null | undefined) => n == null ? 'Unavailable' : `${
 const exact = <T extends {trade_date:string}>(data:T[]|undefined,date:string|undefined) => date ? data?.find(r=>r.trade_date===date) : undefined;
 
 /** Evidence around an event, composed inside ChartView; never another price chart. */
-export default function AstroMarketStory({ band, rows, events, indexId, cutoff, activeDate, onInspect }: {
+export default function AstroMarketStory({ band, rows, events, indexId, cutoff, activeDate, onInspect, compact = false }: {
   band: AstroBand; rows: IndicatorRow[]; events: StoryEvent[]; indexId: number;
-  cutoff?: string; activeDate?: string; onInspect: (date:string) => void;
+  cutoff?: string; activeDate?: string; onInspect: (date:string) => void; compact?: boolean;
 }) {
+  const [evidenceOpen,setEvidenceOpen] = useState(!compact);
   const observedThrough = cutoff ?? astroToday();
   const sequence = astroMarketSequence(band,rows,observedThrough);
   const { anchor, checkpoints, firstBreak, direction, boundary, failure } = sequence;
@@ -30,12 +31,12 @@ export default function AstroMarketStory({ band, rows, events, indexId, cutoff, 
   const breadth = useQuery({queryKey:['market-breadth','event-window',start,end],queryFn:()=>fetchMarketBreadth(400,window),staleTime:300_000});
   const roc = useQuery({queryKey:['breadth-roc','event-window',start,end],queryFn:()=>fetchBreadthRoc(400,window),staleTime:300_000});
   const vix = useQuery({queryKey:['index-window',94,start,end],queryFn:()=>fetchIndexStudyWindow(94,start,end),staleTime:300_000});
-  const nifty = useQuery({queryKey:['index-window',1,start,end],queryFn:()=>fetchIndexStudyWindow(1,start,end),enabled:indexId!==1,staleTime:300_000});
+  const nifty = useQuery({queryKey:['index-window',1,start,end],queryFn:()=>fetchIndexStudyWindow(1,start,end),enabled:evidenceOpen && indexId!==1,staleTime:300_000});
   const benchmark = indexId===1 ? rows : nifty.data;
   const [ratioHorizon,setRatioHorizon] = useState(5);
   const ratioEnd = sequence.upcoming ? undefined : ratioHorizon===-1 ? sequence.periodEnd : rows.filter(r=>r.trade_date<=observedThrough)[sequence.at+ratioHorizon];
-  const sectorStart = useQuery({queryKey:['sector-indices','sectoral',anchor?.trade_date],queryFn:()=>fetchSectorIndices(SECTOR_TAB_CATEGORIES.sectoral,anchor!.trade_date),enabled:!!anchor && !sequence.upcoming,staleTime:300_000});
-  const sectorEnd = useQuery({queryKey:['sector-indices','sectoral',ratioEnd?.trade_date],queryFn:()=>fetchSectorIndices(SECTOR_TAB_CATEGORIES.sectoral,ratioEnd!.trade_date),enabled:!!ratioEnd,staleTime:300_000});
+  const sectorStart = useQuery({queryKey:['sector-indices','sectoral',anchor?.trade_date],queryFn:()=>fetchSectorIndices(SECTOR_TAB_CATEGORIES.sectoral,anchor!.trade_date),enabled:evidenceOpen && !!anchor && !sequence.upcoming,staleTime:300_000});
+  const sectorEnd = useQuery({queryKey:['sector-indices','sectoral',ratioEnd?.trade_date],queryFn:()=>fetchSectorIndices(SECTOR_TAB_CATEGORIES.sectoral,ratioEnd!.trade_date),enabled:evidenceOpen && !!ratioEnd,staleTime:300_000});
   const rankings = useMemo(()=>{
     const b0=exact(benchmark,anchor?.trade_date),b1=exact(benchmark,ratioEnd?.trade_date);
     if(!b0||!b1)return [];
@@ -51,7 +52,7 @@ export default function AstroMarketStory({ band, rows, events, indexId, cutoff, 
   const ratios = useQuery({
     queryKey:['astro-sector-ratio-series',start,ratioEnd?.trade_date,selectedIds.join(',')],
     queryFn:()=>Promise.all(selectedIds.map(async id=>({id,rows:await fetchIndexStudyWindow(id,start,ratioEnd!.trade_date)}))),
-    enabled:!!ratioEnd && selectedIds.length>0, staleTime:300_000,
+    enabled:evidenceOpen && !!ratioEnd && selectedIds.length>0, staleTime:300_000,
   });
   const ratioData = useMemo(()=>{
     if(!anchor||!ratioEnd)return [];
@@ -97,12 +98,19 @@ export default function AstroMarketStory({ band, rows, events, indexId, cutoff, 
     <p className="text-sm text-secondary mt-1">{band.startTs ?? band.from}{!band.isPoint && ` → ${band.endTs ?? band.to}`} · {cutoff?'As of event: later observations excluded.':'Retrospective evidence.'} The date is a reference; this sequence does not establish that the planet caused the move.</p>
     {!anchor ? <p role="status" className="mt-3">Waiting for recorded market sessions around this date.</p> : <>
       {sequence.upcoming && <p className="mt-3 text-secondary">Event pending. The latest completed session is {anchor.trade_date}; event-day and following-session evidence are not available yet.</p>}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 my-3 text-sm">
+      {compact && <div className="my-3 text-sm text-secondary space-y-2">
+        <p><strong className="text-primary">Before:</strong> Price {change(sequence.beforeReturn)} over the preceding five sessions; {anchor.sma_150==null?'SMA150 unavailable':anchor.close>=anchor.sma_150?'above SMA150':'below SMA150'}.</p>
+        <p><strong className="text-primary">At the event:</strong> <button className="underline" onClick={()=>onInspect(anchor.trade_date)}>{anchor.trade_date}</button> · RSI {value(anchor.rsi_14)} · MagicRS {value(anchor.magic_rs)} / MA {value(anchor.magic_ma)}.</p>
+        <p><strong className="text-primary">Following:</strong> +5 sessions {change(sequence.after5Return)}; +10 sessions {change(sequence.after10Return)}. {firstBreak?`${firstBreak.trade_date} closed ${direction==='up'?'above the event high':'below the event low'}.`:'No confirmed reference break yet.'} {failure?`Returned through that level on ${failure.trade_date}.`:''}</p>
+        <p>Click a dated reading to inspect its candle. Full evidence includes technical events, breadth, ROC and sector ratios.</p>
+      </div>}
+      <p className="text-xs text-muted mb-2">Evidence uses daily market sessions. Click a dated reading to inspect its daily candle in the existing ChartView widgets. “Unavailable” is a data gap, not zero. +1/+2/+5/+10 count recorded trading sessions; astro dates include weekends. {!band.isPoint && 'Confirmation is measured from the period start; period-end and after-period readings are listed separately.'}</p>
+      <details open={evidenceOpen} onToggle={e=>setEvidenceOpen(e.currentTarget.open)}><summary className="cursor-pointer text-sm text-primary mb-2">Full historical evidence</summary>
+      <div className={`grid grid-cols-1 ${compact?'':'lg:grid-cols-3'} gap-3 my-3 text-sm`}>
         <article className="border border-kd-border rounded-lg p-3"><h3 className="font-semibold text-primary">Before · condition</h3><p className="mt-1 text-secondary">Price {sequence.beforeReturn==null?'change is unavailable':sequence.beforeReturn>0?'was rising':sequence.beforeReturn<0?'was falling':'was unchanged'}: {change(sequence.beforeReturn)} over the five preceding sessions{before && ` (${before.trade_date} → ${anchor.trade_date})`}. {anchor.sma_150==null?'SMA150 unavailable.':`At ${anchor.trade_date}, close ${value(anchor.close)} was ${anchor.close>=anchor.sma_150?'above':'below'} SMA150 ${value(anchor.sma_150)}.`}</p><p className="mt-2 text-secondary">All NSE breadth: {value(b0?.breadth_score)} → {value(ba?.breadth_score)}. ROC13: {value(r0?.roc_13,4)} → {value(ra?.roc_13,4)}; signal {value(ra?.sma_breadth,4)}. VIX: {value(v0?.close)} → {value(va?.close)}.</p></article>
         <article className="border border-kd-border rounded-lg p-3"><h3 className="font-semibold text-primary">Event · confirmation</h3><p className="mt-1 text-secondary">{anchor.trade_date===band.from?`Event-day EOD: ${anchor.trade_date}.`:`Calendar event ${band.from}; last recorded market session ${anchor.trade_date}.`} Reference high {value(anchor.high)} / low {value(anchor.low)}. {firstBreak?`${firstBreak.trade_date} closed ${direction==='up'?'above the reference high':'below the reference low'} at ${value(firstBreak.close)}.`:sequence.upcoming?'Confirmation pending.':checkpoints[3].row?'Neither following session closed outside this reference range.':'Two following sessions are not yet available.'}</p><p className="mt-2 text-secondary">RSI14 {value(anchor.rsi_14)}. MagicRS {value(anchor.magic_rs)} / MA {value(anchor.magic_ma)}{anchor.magic_rs!=null&&anchor.magic_ma!=null ? `: ${anchor.magic_rs>anchor.magic_ma?'above':'at or below'} its relative-strength trend${anchor.magic_rs<0?', while still below zero':''}.` : '.'} {cross?`ROC13 crossed above its signal on ${cross.trade_date}.`:ra?.roc_13==null||ra.sma_breadth==null?'ROC confirmation unavailable.':`Event-session ROC13 was ${ra.roc_13>ra.sma_breadth?'above':'at or below'} its signal.`} {cross?.roc_13!=null&&cross.roc_13<0?'The cross was still below zero.':''}</p></article>
         <article className="border border-kd-border rounded-lg p-3"><h3 className="font-semibold text-primary">Following · did it hold?</h3><p className="mt-1 text-secondary">From the reference close: +5 sessions {change(sequence.after5Return)}; +10 sessions {change(sequence.after10Return)}. {firstBreak?failure?`The initial ${direction==='up'?'upward':'downward'} break lost its reference level (${value(boundary)}) on ${failure.trade_date}.`:sequence.complete10?'The following closes stayed beyond the broken reference level through +10 sessions.':'The break has held in the available following sessions; the full ten-session window is pending.':'There is no confirmed range break to assess.'}</p><p className="mt-2 text-secondary">{breadthChange==null?'Following-session breadth confirmation is unavailable.':`At +5 sessions (${after5?.trade_date}), breadth ${breadthChange>0?'improved':breadthChange<0?'weakened':'was unchanged'} by ${value(Math.abs(breadthChange))} points.`} {vixChange==null?'Following-session VIX change is unavailable.':`VIX ${vixChange>0?'rose':vixChange<0?'fell':'was unchanged'} (${change(vixChange)}).`}</p></article>
       </div>
-      <p className="text-xs text-muted mb-2">Evidence uses daily market sessions. Click a dated reading to inspect its daily candle in the existing ChartView widgets. “Unavailable” is a data gap, not zero. +1/+2/+5/+10 count recorded trading sessions; astro dates include weekends. {!band.isPoint && 'Confirmation is measured from the period start; period-end and after-period readings are listed separately.'}</p>
       <div className="overflow-x-auto"><table className="w-full text-xs text-secondary"><thead><tr>{['Stage / session','Close / from reference','RSI14','MagicRS / MA','All NSE breadth / above 20 EMA','ROC13 / signal','India VIX'].map(h=><th key={h} className="text-left p-2 border-b border-kd-border whitespace-nowrap">{h}</th>)}</tr></thead><tbody>{allCheckpoints.map(p=>{
         const b=exact(breadth.data,p.row?.trade_date),r=exact(roc.data,p.row?.trade_date),v=exact(vix.data,p.row?.trade_date);
         return <tr key={p.label}><td className="p-2"><button className="text-left underline" disabled={!p.row} onClick={()=>p.row&&onInspect(p.row.trade_date)}>{p.label}<br/>{p.row?.trade_date ?? 'Not yet available'}</button></td><td className="p-2 whitespace-nowrap">{value(p.row?.close)} / {change(percentChange(anchor.close,p.row?.close))}</td><td className="p-2">{value(p.row?.rsi_14)}</td><td className="p-2 whitespace-nowrap">{value(p.row?.magic_rs)} / {value(p.row?.magic_ma)}</td><td className="p-2 whitespace-nowrap">{value(b?.breadth_score)} / {b?.pct_above_20==null?'Unavailable':`${value(b.pct_above_20)}%`}{b?.stock_count!=null && <small className="block">{b.stock_count} stocks</small>}</td><td className="p-2 whitespace-nowrap">{value(r?.roc_13,4)} / {value(r?.sma_breadth,4)}</td><td className="p-2">{value(v?.close)}</td></tr>;
@@ -121,6 +129,7 @@ export default function AstroMarketStory({ band, rows, events, indexId, cutoff, 
           {ratios.isError && <p role="alert">Ratio history could not load. <button onClick={()=>void ratios.refetch()}>Retry ratios</button></p>}
           {ratioData.length>1 && selectedIds.length>0 && <><p className="text-xs text-secondary my-2">Sector/NIFTY ratio indexed to 100 at {anchor.trade_date}. Gaps remain gaps.</p><SignalLineChart data={ratioData} height={160} activeDate={focused} onSessionChange={onInspect} refLines={[{y:100}]} series={selectedIds.map((id,i)=>({key:`ratio_${id}`,label:rankings.find(r=>r.id===id)?.name ?? `Index ${id}`,color:['var(--accent)','var(--bull)','var(--accent-cyan)'][i]}))}/></>}
         </>}
+      </details>
       </details>
     </>}
   </section>;

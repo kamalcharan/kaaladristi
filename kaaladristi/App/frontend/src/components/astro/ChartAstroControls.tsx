@@ -1,48 +1,49 @@
 import { useQuery } from '@tanstack/react-query';
-import { fetchActiveIndices } from '@/services/indexPickerService';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { boundary, type AstroOccurrence } from '@/services/astroEvents';
-import { astroStudyLink } from '@/services/astroStudy';
+import { fetchActiveIndices } from '@/services/indexPickerService';
+import { useEffect, useState } from 'react';
+import type { AstroOccurrence } from '@/services/astroEvents';
+import { boundary, astroToday } from '@/services/astroEvents';
 
-/** Selection controls only; deliberately has no chart, price query or widgets. */
-export default function ChartAstroControls({ events, matches, event, indexId, loading, failed, onRetry, onEarlier }: {
-  events: AstroOccurrence[]; matches: AstroOccurrence[]; event?: AstroOccurrence;
-  indexId: number; loading: boolean; failed: boolean; onRetry: () => void; onEarlier: () => void;
+/** Date selection and named occurrences, beside the shared price chart. */
+export default function ChartAstroControls({ events, event, date, loading, failed, onRetry, onDate, onEvent, before, onMode, indexId, onClose, onEarlier }: {
+  events: AstroOccurrence[]; event?: AstroOccurrence; date: string;
+  loading: boolean; failed: boolean; onRetry: () => void;
+  onDate: (date:string) => void; onEvent: (event:AstroOccurrence) => void; before?: boolean; onMode: (mode:'before'|'after')=>void; indexId:number; onClose:()=>void; onEarlier:()=>void;
 }) {
-  const navigate = useNavigate();
-  const [params, setParams] = useSearchParams();
-  const indices = useQuery({queryKey:['active-indices'],queryFn:fetchActiveIndices,staleTime:300_000});
-  const choose = (e: AstroOccurrence) => {
-    const next = new URLSearchParams(astroStudyLink(e,indexId).split('?')[1]);
-    if (params.has('sign')) next.set('sign',params.get('sign')!);
-    if (params.has('mode')) next.set('mode',params.get('mode')!);
-    if (params.has('name')) next.set('name',params.get('name')!);
-    navigate(`/chart/index/${indexId}?${next}`);
-  };
-  const update = (key: string, value: string) => {
-    const next = new URLSearchParams(params);
-    value ? next.set(key,value) : next.delete(key);
-    if (key === 'sign') { next.delete('event'); next.delete('session'); }
-    setParams(next);
-  };
-  const at = matches.findIndex(e => e.event_key === event?.event_key);
-  const types = [...new Map(events.map(e => [e.event_type,e.display_name])).entries()];
-  return <section aria-label="Astro study context" className="rounded-lg border border-kd-border bg-kd-card p-3 mb-3 text-sm text-secondary">
-    <div className="flex flex-wrap items-center gap-3">
-      <strong className="text-primary">Astro · Chart & Replay</strong>
-      <label className="min-w-0 max-w-full">Event <select aria-label="Astro event type" className="bg-kd-card border border-kd-border rounded p-1 max-w-full" value={params.get('type') ?? event?.event_type ?? ''} onChange={e => {const first=events.find(v=>v.event_type===e.target.value);if(first)choose(first)}}><option value="">Choose event</option>{types.map(([type,name])=><option key={type} value={type}>{name}</option>)}</select></label>
-      <label className="min-w-0 max-w-full">Index <select aria-label="Astro study index" className="bg-kd-card border border-kd-border rounded p-1 max-w-full" value={indexId} onChange={e=>{const next=new URLSearchParams(params);const index=indices.data?.find(i=>i.id===Number(e.target.value));if(!index)return;next.set('name',index.display_name);navigate(`/chart/index/${index.id}?${next}`)}}>{!indices.data?.some(i=>i.id===indexId) && <option value={indexId}>{params.get('name') ?? `Index #${indexId}`}</option>}{indices.data?.map(i=><option key={i.id} value={i.id}>{i.display_name}</option>)}</select></label>
-      <label>Sign <select aria-label="Sign at astro event" className="bg-kd-card border border-kd-border rounded p-1 max-w-full" value={params.get('sign') ?? ''} onChange={e=>update('sign',e.target.value)}><option value="">All recorded signs</option>{[...new Set(events.map(e=>e.details.sign).filter((s):s is string=>typeof s==='string'))].sort().map(s=><option key={s}>{s}</option>)}</select></label>
-      <button disabled={at<0 || at>=matches.length-1} onClick={()=>choose(matches[at+1])}>← Previous occurrence</button>
-      <button disabled={at<=0} onClick={()=>choose(matches[at-1])}>Next occurrence →</button>
-      <button onClick={onEarlier}>Load earlier occurrences</button>
-      <button aria-pressed={params.get('mode')==='before'} onClick={()=>update('mode','before')}>As of event</button>
-      <button aria-pressed={params.get('mode')!=='before'} onClick={()=>update('mode','after')}>Explore what followed</button>
-      <button onClick={()=>{const next=new URLSearchParams(params);for(const key of ['astro','event','type','family','date','mode','session','sign'])next.delete(key);setParams(next)}}>Close astro context</button>
-    </div>
-    {loading && <p role="status" className="mt-2">Loading published astro events…</p>}
-    {failed && <p role="alert">Event data could not load. <button onClick={onRetry}>Retry events</button></p>}
-    {event && <p className="mt-2"><strong>{event.display_name}</strong> · {boundary(event,'start')}{event.shape==='period' && ` → ${boundary(event,'end')}`}{event.details.sign ? ` · ${String(event.details.sign)}` : ''}. {params.get('mode')==='before'?'Market observations stop at the event date (EOD).':'Retrospective view includes later market observations.'} Weekends stay on the astronomical date.</p>}
-    {!loading && !failed && !event && <p>No matching published occurrence. Choose another event or load earlier occurrences.</p>}
+  const navigate=useNavigate(), [params]=useSearchParams();
+  const indices=useQuery({queryKey:['active-indices'],queryFn:fetchActiveIndices,staleTime:300_000});
+  const occurrences=events.filter(e=>e.event_type===event?.event_type && e.details.sign===event?.details.sign).sort((a,b)=>a.start_date.localeCompare(b.start_date));
+  const at=occurrences.findIndex(e=>e.event_key===event?.event_key);
+  const [draft,setDraft] = useState(date), [search,setSearch] = useState('');
+  useEffect(()=>setDraft(date),[date]);
+  const matches = events.filter(e=>`${e.display_name} ${e.details.sign ?? ''}`.toLowerCase().includes(search.toLowerCase()));
+  const onDay = matches.filter(e=>e.start_date===date || (e.shape==='period' && e.end_date===date));
+  const ongoing = matches.filter(e=>e.shape==='period' && e.start_date<date && e.end_date>date);
+  const list = (items:AstroOccurrence[]) => items.map(e=><button key={e.event_key} aria-pressed={event?.event_key===e.event_key} onClick={()=>onEvent(e)} className="block w-full text-left border border-kd-border rounded p-2 my-1 text-sm hover:border-[var(--accent)]" style={event?.event_key===e.event_key?{borderColor:'var(--accent)'}:undefined}>
+    <strong className="block text-primary">{e.display_name}{e.details.sign ? ` · ${String(e.details.sign)}` : ''}</strong>
+    <span className="text-secondary text-xs">{e.shape==='period' ? `${e.start_date} → ${e.end_date}${e.start_date===date?' · Starts today':e.end_date===date?' · Ends today':''}` : boundary(e,'start')}</span>
+  </button>);
+  return <section aria-label="Events on selected date" className="rounded-lg border border-kd-border bg-kd-card p-3 text-sm text-secondary">
+    <form className="flex flex-wrap items-end gap-2" onSubmit={e=>{e.preventDefault();if(draft)onDate(draft)}}>
+      <label className="flex-1">Go to date<input aria-label="Study date" type="date" min="1990-01-01" value={draft} onChange={e=>setDraft(e.target.value)} className="block w-full bg-kd-card border border-kd-border rounded p-2 text-primary" required/></label>
+      <button type="submit" className="border border-kd-border rounded p-2 text-primary">Go</button>
+      <button type="button" onClick={()=>onDate(astroToday())} className="underline">Today</button>
+    </form>
+    <label className="block mt-2">Index <select aria-label="Astro study index" className="w-full bg-kd-card border border-kd-border rounded p-1" value={indexId} onChange={e=>{const index=indices.data?.find(i=>i.id===Number(e.target.value));if(index){const next=new URLSearchParams(params);next.set('name',index.display_name);navigate(`/chart/index/${index.id}?${next}`)}}}>{!indices.data?.some(i=>i.id===indexId)&&<option value={indexId}>{params.get('name') ?? `Index #${indexId}`}</option>}{indices.data?.map(i=><option key={i.id} value={i.id}>{i.display_name}</option>)}</select></label>
+    <p className="mt-2">{date} · Select a candle or enter a date. Market readings stay pinned until you select another session.</p>
+    {event && <div className="flex gap-2 mt-2"><button disabled={at<=0} onClick={()=>onEvent(occurrences[at-1])}>← Previous occurrence</button><button disabled={at<0||at>=occurrences.length-1} onClick={()=>onEvent(occurrences[at+1])}>Next occurrence →</button></div>}
+    {event && at===0 && <button className="underline mt-2" onClick={onEarlier}>Load earlier occurrences</button>}
+    {params.get('astro')==='1' && <button className="underline mt-2" onClick={onClose}>Close astro context</button>}
+    {event && <div className="flex gap-2 mt-2"><button aria-pressed={before} onClick={()=>onMode('before')}>As of event</button><button aria-pressed={!before} onClick={()=>onMode('after')}>Explore what followed</button></div>}
+    <input aria-label="Search events on selected date" placeholder="Search event or sign…" value={search} onChange={e=>setSearch(e.target.value)} className="mt-3 w-full bg-kd-card border border-kd-border rounded p-2"/>
+    {loading && <p role="status" className="mt-2">Loading events for this date…</p>}
+    {failed && <p role="alert">Events could not load. <button onClick={onRetry}>Retry events</button></p>}
+    {!loading && !failed && <div className="max-h-72 overflow-auto mt-3">
+      <h3 className="font-semibold text-primary">On this date</h3>
+      {list(onDay)}{!onDay.length && <p className="py-2">No matching published event starts or ends on this date.</p>}
+      <h3 className="font-semibold text-primary mt-3">Ongoing periods</h3>
+      {list(ongoing)}{!ongoing.length && <p className="py-2">No matching ongoing periods.</p>}
+    </div>}
   </section>;
 }

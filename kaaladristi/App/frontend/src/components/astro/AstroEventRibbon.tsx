@@ -12,6 +12,6 @@ export default function AstroEventRibbon({ overlay = false }: {
         return null;
     const planets = [...new Set(data.flatMap(f => f.planets))].join(' · ');
     return <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap', padding: '6px 10px', background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 6, fontSize: 12, ...(overlay ? { position: 'absolute', top: 6, left: 8, right: 8, zIndex: 15 } as const : { marginBottom: 6 }) }}>
-   <span>{planets}</span><button onClick={() => open('index.astro_now')}>Ask VaNi about these events</button><Link to="/almanac">Calendar →</Link><span className="text-muted">Click an astro label to choose an event · Read market story for the evidence</span>
+   <span>{planets}</span><button onClick={() => open('index.astro_now')}>Ask VaNi about these events</button><Link to="/almanac">Calendar →</Link><span className="text-muted">Select a date, then a named event in the panel beside the chart</span>
  </div>;
 }

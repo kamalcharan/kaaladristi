@@ -22,9 +22,6 @@ export function useChartAstroContext(params: URLSearchParams, enabled: boolean) 
   });
   const events = [...(query.data ?? [])].sort((a,b) => b.start_date.localeCompare(a.start_date) || a.event_key.localeCompare(b.event_key));
   const requested = events.find(e => e.event_key === params.get('event'));
-  const kind = params.get('type') ?? requested?.event_type;
-  const sign = params.get('sign');
-  const matches = events.filter(e => (!kind || e.event_type === kind) && (!sign || e.details.sign === sign));
-  const event = params.get('event') ? requested : matches.find(e => e.start_date <= today) ?? matches[0];
-  return { ...query, events, matches, event, anchor, start, end, loadEarlier: () => setYearsBack(n => n + 3) };
+  const event = requested;
+  return { ...query, events, event, anchor, start, end, loadEarlier: () => setYearsBack(n => n + 3) };
 }
