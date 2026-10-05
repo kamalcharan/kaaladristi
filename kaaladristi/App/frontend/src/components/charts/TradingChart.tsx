@@ -36,7 +36,7 @@ import {
 import type { IndicatorRow } from '@/services/indicatorData';
 import type { ChartOverlay } from '@/types/framework';
 import type { AstroBand } from '@/services/astroOverlayService';
-import { fmtDate, fmtDateShort } from '@/lib/dateUtils';
+import { fmtDateShort } from '@/lib/dateUtils';
 import { INDICATOR_DEFAULT_COLORS } from '@/constants/catalogItems';
 import { planetColorOfRuleCode } from '@/constants/planetColors';
 import { useAstroHorizon } from '@/hooks/useAstroHorizon';
@@ -297,53 +297,6 @@ export default function TradingChart({ data, height = 900, studyMode = false, pr
     return () => ts.unsubscribeVisibleLogicalRangeChange(compute);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [storyBubble?.date]);
-
-  // Tooltip state for astro band hover — bands: ALL events under the cursor
-  // (coincident point markers list together instead of only the topmost).
-  const [bandTooltip, setBandTooltip] = useState<{
-    x: number; y: number; bands: AstroBand[]
-  } | null>(null);
-
-  // (Confidence queries removed 2026-07-22 — the hover card now carries only
-  // the one-line evidence read; the full read lives on right-click.)
-
-  // Observational evidence (migration 161) — base-rate-anchored texture for
-  // THE PATTERN line. Copy is threshold-driven: an effect is only claimed
-  // when it clears NIFTY's unconditional base rate by a margin.
-
-  // Phase 2 of the benchmark gap (owner 2026-07-07): the NIFTY verdict stays,
-  // but the tooltip also states what THE VIEWED INSTRUMENT did over the
-  // hovered window — computed from the bars already on this chart. Mirrors
-  // discovery's formula: close(start)→close(end), forward-walking up to 5
-  // calendar days to the next trading day (confidence_scoring.py).
-  const closeByDate = useMemo(() => {
-    const m = new Map<string, number>();
-    for (const d of data) if (d.close != null) m.set(d.trade_date, d.close);
-    return m;
-  }, [data]);
-  const lastBarDate = data.length > 0 ? data[data.length - 1].trade_date : null;
-
-  const chartWindowReturn = (from: string, to: string): { pct: number; ongoing: boolean } | null => {
-    if (!lastBarDate || from > lastBarDate) return null;   // upcoming / off-chart
-    const addDays = (iso: string, n: number) => {
-      const d = new Date(`${iso}T00:00:00Z`);
-      d.setUTCDate(d.getUTCDate() + n);
-      return d.toISOString().slice(0, 10);
-    };
-    const closeOnOrAfter = (iso: string): number | null => {
-      for (let k = 0; k <= 5; k++) {
-        const c = closeByDate.get(addDays(iso, k));
-        if (c != null) return c;
-      }
-      return null;
-    };
-    const start = closeOnOrAfter(from);
-    if (start == null || start === 0) return null;
-    const ongoing = to >= lastBarDate;
-    const end = ongoing ? (closeByDate.get(lastBarDate) ?? null) : closeOnOrAfter(to);
-    if (end == null) return null;
-    return { pct: ((end - start) / start) * 100, ongoing };
-  };
 
   // Crosshair hover readout (Phase 2.1): the hovered bar's OHLC + volume +
   // delivery% render as a floating legend — no more guessing values by eye.
@@ -1255,39 +1208,7 @@ export default function TradingChart({ data, height = 900, studyMode = false, pr
             onZoneClick(found[0], e.clientX, e.clientY, found);
           }
         }}
-        onMouseMove={e => {
-          if (horizonBands.length === 0 || !mainChartRef.current) {
-            if (bandTooltip) setBandTooltip(null);
-            return;
-          }
-          const rect   = (e.currentTarget as HTMLElement).getBoundingClientRect();
-          const mouseX = e.clientX - rect.left;
-          const mouseY = e.clientY - rect.top;
-          const ts     = mainChartRef.current.timeScale();
-          // Collect EVERY band under the cursor (Overlap Visibility Phase 2):
-          // coincident events tooltip together. Point markers get the same
-          // ±4px hit tolerance hover that right-click always had — a 1px
-          // line was effectively un-hoverable before.
-          const found: AstroBand[] = [];
-          for (const band of horizonBands) {
-            const x1 = eventCoordinate(band.from, data, d => ts.timeToCoordinate(d as Time));
-            const x2 = ts.timeToCoordinate(band.to   as Time);
-            if (x1 == null || x2 == null) continue;
-            const pad   = band.isPoint ? 4 : 0;
-            const left  = Math.min(x1, x2) - pad;
-            const right = Math.max(x1, x2) + pad;
-            if (mouseX >= left && mouseX <= right) found.push(band);
-          }
-          if (found.length > 0) {
-            // Points first (they're what the cursor is aimed at when both
-            // a wide zone and a thin marker overlap), then narrower zones.
-            found.sort((a, b) => Number(b.isPoint) - Number(a.isPoint));
-            setBandTooltip({ x: mouseX, y: mouseY, bands: found });
-          } else if (bandTooltip) {
-            setBandTooltip(null);
-          }
-        }}
-        onMouseLeave={() => { setBandTooltip(null); setHoverBar(null); }}
+        onMouseLeave={() => setHoverBar(null)}
       >
         <div ref={mainRef} className="rounded-xl overflow-hidden" />
 
@@ -1416,105 +1337,7 @@ export default function TradingChart({ data, height = 900, studyMode = false, pr
             borderRadius: 12,
           }}
         />
-        {bandTooltip && bandTooltip.bands.length > 0 && (() => {
-          const MAX_SHOWN = 3;
-          const shown  = bandTooltip.bands.slice(0, MAX_SHOWN);
-          const extra  = bandTooltip.bands.length - shown.length;
-          const first  = shown[0];
-          const accent = (b: AstroBand) =>
-            (b.isPoint && planetColorOfRuleCode(b.ruleCode)) || b.color;
-          const today  = new Date().toISOString().slice(0, 10);
-          return (
-            <div style={{
-              position: 'absolute',
-              left: bandTooltip.x + 14,
-              // Clamp so the card never runs off the bottom of the pane
-              // (owner feedback 2026-07-22: "all data is not visible").
-              top: `min(${Math.max(8, bandTooltip.y - 60)}px, calc(100% - 220px))`,
-              zIndex: 20,
-              background: 'rgba(13,17,23,0.95)',
-              border: `1px solid ${accent(first)}55`,
-              borderLeft: `3px solid ${accent(first)}`,
-              borderRadius: 6,
-              padding: '7px 11px',
-              pointerEvents: 'none',
-              minWidth: 180,
-              maxWidth: 280,
-              boxShadow: '0 4px 16px rgba(0,0,0,0.5)',
-            }}>
-              {shown.map((b, i) => {
-                const c    = accent(b);
-                return (
-                  <div key={`${b.precision?.replaceAll("_", " ")}-${b.from}-${i}`} style={i > 0 ? {
-                    marginTop: 7, paddingTop: 7, borderTop: '1px solid color-mix(in srgb, var(--text-primary) 8%, transparent)',
-                  } : undefined}>
-                    <div style={{ fontSize: 12, fontWeight: 600, color: c, marginBottom: 3, lineHeight: 1.3 }}>
-                      {b.displayName}
-                    </div>
-                    <div style={{ fontSize: 12, fontFamily: 'var(--font-mono, monospace)', color: 'color-mix(in srgb, var(--text-primary) 45%, transparent)', marginBottom: 4 }}>
-                      {b.precision?.replaceAll("_", " ")}
-                    </div>
-                    <div style={{ fontSize: 12, color: 'color-mix(in srgb, var(--text-primary) 60%, transparent)', display: 'flex', gap: 4, alignItems: 'center' }}>
-                      {b.isPoint ? (
-                        <span>{fmtDate(b.from)}</span>
-                      ) : (
-                        <>
-                          <span>{fmtDate(b.from)}</span>
-                          <span style={{ opacity: 0.35 }}>→</span>
-                          <span>{fmtDate(b.to)}</span>
-                        </>
-                      )}
-                    </div>
-                    {/* Astro-story §2: the card orients, it does not grade.
-                        The old THIS WINDOW ✓/✗/"not scored yet" line issued a
-                        directional verdict (or narrated unfinished homework) —
-                        replaced by THE PATTERN below. Upcoming windows still
-                        get their opening date. */}
-                    {b.from > today && (
-                      <div style={{ marginTop: 5, fontSize: 12, display: 'flex', gap: 5, alignItems: 'baseline' }}>
-                        <span style={{ fontSize: 10, letterSpacing: '0.1em', color: 'color-mix(in srgb, var(--text-primary) 35%, transparent)', fontFamily: 'var(--font-mono, monospace)' }}>
-                          THIS WINDOW
-                        </span>
-                        <span style={{ color: 'color-mix(in srgb, var(--text-primary) 40%, transparent)' }}>
-                          ◦ upcoming — opens {fmtDate(b.from)}
-                        </span>
-                      </div>
-                    )}
-                    {/* Phase 2: the viewed instrument's own move over this
-                        window — the fact this chart can actually attest to. */}
-                    {(() => {
-                      if (b.isPoint) return null;
-                      const r = chartWindowReturn(b.from, b.to);
-                      if (r == null) return null;
-                      return (
-                        <div style={{ marginTop: 3, fontSize: 12, display: 'flex', gap: 5, alignItems: 'baseline' }}>
-                          <span style={{ fontSize: 10, letterSpacing: '0.1em', color: 'color-mix(in srgb, var(--text-primary) 35%, transparent)', fontFamily: 'var(--font-mono, monospace)' }}>
-                            THIS CHART
-                          </span>
-                          <span style={{ fontFamily: 'var(--font-mono, monospace)', color: r.pct >= 0 ? 'var(--bull)' : 'var(--bear)' }}>
-                            {r.pct >= 0 ? '+' : ''}{r.pct.toFixed(1)}% over this window{r.ongoing ? ' so far' : ''}
-                          </span>
-                        </div>
-                      );
-                    })()}
-                    {/* One glanceable line — the full read lives on right-click
-                        (owner feedback 2026-07-22: hover was an unreadable
-                        stat dump). */}
 
-                  </div>
-                );
-              })}
-              {extra > 0 && (
-                <div style={{ marginTop: 6, fontSize: 11, fontFamily: 'var(--font-mono, monospace)', color: 'color-mix(in srgb, var(--text-primary) 35%, transparent)' }}>
-                  +{extra} more event{extra > 1 ? 's' : ''} here
-                </div>
-              )}
-              <div style={{ marginTop: 6, fontSize: 11, fontFamily: 'var(--font-mono, monospace)', color: 'color-mix(in srgb, var(--text-primary) 35%, transparent)' }}>
-                right-click for the full read
-              </div>
-            </div>
-          );
-        })()}
       </div>
 
       {!workspaceMode && !compact && (
