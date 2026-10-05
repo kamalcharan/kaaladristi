@@ -15,7 +15,7 @@ export function studySession(rows: IndicatorRow[], date: string): IndicatorRow |
   return rows.filter(r => r.trade_date <= date).at(-1);
 }
 export function studyEventBand(e: AstroOccurrence): AstroBand {
-  return { ruleCode: `astro_event:${e.family_id}`, ruleId: e.rule_id, displayName: e.display_name,
+  return { eventKey: e.event_key, ruleCode: `astro_event:${e.family_id}`, ruleId: e.rule_id, displayName: e.display_name,
     from: e.start_date, to: e.end_date, isPoint: e.shape === 'point',
     startTs: e.start_ts, endTs: e.end_ts, precision: e.precision,
     matched: null, baseBias: null, color: planetCatalogItem(e.planets[0] === 'Venus' ? 'Venus' : 'Mercury').color!,

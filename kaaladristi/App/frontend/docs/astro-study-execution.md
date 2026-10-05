@@ -5,7 +5,7 @@ Implemented on codex/astro-study. No database migration or backend deployment ne
 ## Reuse audit
 - Almanac remains EventWorkspace in calendar mode; /almanac URLs and query parameters remain valid. /astro adds the menu entry, /astro/study is separate from ChartView.
 - Published occurrences: services/astroEvents.ts, /api/astro/events, same visibility and client calendar horizon as Almanac. No fallback legacy events or synthetic production dates.
-- TradingChart uses TradingView Lightweight Charts, not the hosted TradingView widget. Study opts into existing RSI/MFI and MagicRS/MagicMA panes; Sniper is omitted for this page. Existing defaults remain.
+- TradingChart uses TradingView Lightweight Charts, not the hosted TradingView widget. Study uses the same workspace-mode price chart, CockpitOverlayStrip and CatalogDrawer as ChartView. MagicRsSubchart inside SignalFlipCard and CockpitIndicatorPanels supply the current MagicRS and momentum widgets; legacy fused subpanes are not used.
 - MagicRS is stored versus CNX500 (ChartView documents this). It is not a new sector/NIFTY ratio calculation.
 - km_index_eod via the existing authenticated PostgREST adapter supplies the same indicator columns as ChartView. Bounded paginated reads avoid the server row limit and use historical dates instead of today-relative ranges. No auth, schema or grants changed.
 - Existing chart popovers now carry canonical event identity/index/date to Study. Opening Study does not change saved Workspace overlays or framework configuration.
@@ -41,3 +41,9 @@ Browser test uses controlled fixtures, not production data. It renders the real 
 5. Test a weekend and a missing-history event; inspect explicit EOD/source labels.
 6. Pan left or load an earlier year; verify stable viewport. Test fullscreen/Escape and mobile.
 7. Confirm Workspace selections and normal ChartView behavior remain intact.
+
+## Review corrections
+- The initial branch used legacy TradingChart indicator panes and one fixed occurrence band. Replaced with the actual current ChartView widgets and shared Catalog/overlay strip.
+- Multiple published Mercury/Venus records are loaded through useAstroOverlayBands for the study dates. Explicit study focus can be unpinned; it is deduplicated against active planet overlays by canonical event key.
+- Framework overlay changes use the existing shared preferences. Merely opening Study does not mutate them.
+- Momentum and MagicRS Chart-face now accept optional historical selection callbacks/date guides; default ChartView callers keep their existing behavior. MagicRS Widget receives the historical active index and stored momentum/zone columns.

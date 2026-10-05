@@ -11,7 +11,7 @@
 
 import { useState } from 'react';
 import {
-  LineChart, Line, ReferenceLine, ResponsiveContainer, Tooltip, YAxis,
+  LineChart, Line, ReferenceLine, ResponsiveContainer, Tooltip, YAxis, XAxis,
 } from 'recharts';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import type { IndicatorRow } from '@/services/indicatorData';
@@ -49,10 +49,11 @@ const PANELS: PanelDef[] = [
   },
 ];
 
-function Panel({ def, rows }: { def: PanelDef; rows: IndicatorRow[] }) {
+interface SessionProps { activeDate?: string; onSessionChange?: (date:string) => void }
+function Panel({ def, rows, activeDate, onSessionChange }: { def: PanelDef; rows: IndicatorRow[] } & SessionProps) {
   const [open, setOpen] = useState(def.id === 'momentum');
 
-  const data = rows.slice(-WINDOW).map((r) => {
+  const data = (onSessionChange ? rows : rows.slice(-WINDOW)).map((r) => {
     const point: Record<string, unknown> = { trade_date: r.trade_date };
     for (const sr of def.series) point[sr.key as string] = r[sr.key];
     return point;
@@ -85,7 +86,9 @@ function Panel({ def, rows }: { def: PanelDef; rows: IndicatorRow[] }) {
       {open && (
         <div className="mt-1">
           <ResponsiveContainer width="100%" height={PANEL_H}>
-            <LineChart data={data} margin={{ top: 6, right: 4, bottom: 2, left: 4 }}>
+            <LineChart data={data} margin={{ top: 6, right: 4, bottom: 2, left: 4 }} onMouseMove={state => { if(state.activeTooltipIndex == null)return; const i=Number(state.activeTooltipIndex); if(onSessionChange && Number.isInteger(i) && data[i])onSessionChange(String(data[i].trade_date)); }}>
+              {(activeDate || onSessionChange) && <XAxis dataKey="trade_date" hide />}
+              {activeDate && <ReferenceLine x={activeDate} stroke="var(--accent)" strokeDasharray="3 3"/>}
               <YAxis
                 domain={def.domain}
                 width={30}
@@ -118,7 +121,7 @@ function Panel({ def, rows }: { def: PanelDef; rows: IndicatorRow[] }) {
                   strokeWidth={1.5}
                   strokeDasharray={sr.dashed ? '4 3' : undefined}
                   dot={false}
-                  connectNulls
+                  // Preserve missing historical readings as gaps.
                 />
               ))}
             </LineChart>
@@ -129,11 +132,11 @@ function Panel({ def, rows }: { def: PanelDef; rows: IndicatorRow[] }) {
   );
 }
 
-export default function CockpitIndicatorPanels({ rows }: { rows: IndicatorRow[] }) {
+export default function CockpitIndicatorPanels({ rows, activeDate, onSessionChange }: { rows: IndicatorRow[] } & SessionProps) {
   return (
     <div className="flex flex-col gap-2 mt-2">
       {PANELS.map((def) => (
-        <Panel key={def.id} def={def} rows={rows} />
+        <Panel key={def.id} def={def} rows={rows} activeDate={activeDate} onSessionChange={onSessionChange} />
       ))}
     </div>
   );

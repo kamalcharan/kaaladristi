@@ -2,6 +2,16 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { createPortal } from 'react-dom';
+import { useFrameworkStore } from '@/stores/frameworkStore';
+import { useAuthStore } from '@/stores/authStore';
+import { useAstroOverlayBands } from '@/hooks/useAstroOverlayBands';
+import CockpitOverlayStrip from '@/components/domain/StockCockpit/CockpitOverlayStrip';
+import CatalogDrawer from '@/components/domain/Catalog/CatalogDrawer';
+import CockpitIndicatorPanels from '@/components/domain/StockCockpit/CockpitIndicatorPanels';
+import MagicRsSubchart from '@/components/domain/VisualPulse/MagicRsSubchart';
+import SignalFlipCard from '@/components/domain/StockCockpit/SignalFlipCard';
+import SignalLineChart from '@/components/domain/StockCockpit/SignalLineChart';
+import type { ChartOverlay } from '@/types/framework';
 import TradingChart from '@/components/charts/TradingChart';
 import { astroToday, astroDate, boundary, fetchAstroEvents, type AstroOccurrence } from '@/services/astroEvents';
 import { astroStudyLink, shiftStudyDate, studySession, studyEventBand, validStudyDate } from '@/services/astroStudy';
@@ -11,8 +21,16 @@ import { useAstroHorizon } from '@/hooks/useAstroHorizon';
 import { trackEvent } from '@/lib/analytics';
 import '@/components/astro/astroStudy.css';
 
+const EMPTY_OVERLAYS: ChartOverlay[] = [];
 const fmt = (n: number | null | undefined) => n == null ? 'Unavailable' : Number(n).toLocaleString('en-IN', { maximumFractionDigits: 2 });
 export default function AstroStudyPage() {
+  const framework = useFrameworkStore(s => s.framework);
+  const loadFramework = useFrameworkStore(s => s.loadFramework);
+  const userId = useAuthStore(s => s.profile?.id);
+  const overlays = framework?.chart_overlays ?? EMPTY_OVERLAYS;
+  const [drawerOpen, setDrawerOpen] = useState(false), [showFocus, setShowFocus] = useState(true);
+  const [visibleRange, setVisibleRange] = useState<{from:string;to:string}|null>(null);
+  useEffect(() => { if (!framework && userId) loadFramework(userId); }, [framework,userId,loadFramework]);
   const [url, setUrl] = useSearchParams();
   const setUrlRef = useRef(setUrl);
   setUrlRef.current = setUrl;
@@ -50,7 +68,17 @@ export default function AstroStudyPage() {
   const reading = studySession(rows, validStudyDate(sessionParam) ? (sessionParam > end ? end : sessionParam) : anchor);
   const selectedDate = reading?.trade_date;
   const cursor = rows.findIndex(r => r.trade_date === selectedDate);
-  const bands = useMemo(() => event ? [studyEventBand(event)] : [], [event]);
+  const overlayBands = useAstroOverlayBands(overlays,start,end);
+  const bands = useMemo(() => {
+    const inWindow = overlayBands.filter(b => b.from <= end && b.to >= start);
+    if (showFocus && event && !inWindow.some(b => b.eventKey === event.event_key)) inWindow.push(studyEventBand(event));
+    return inWindow;
+  }, [overlayBands,start,end,showFocus,event]);
+  const widgetRows = useMemo(() => visibleRange ? rows.filter(r => r.trade_date >= visibleRange.from && r.trade_date <= visibleRange.to) : rows, [rows,visibleRange]);
+  const magicRows = useMemo(() => rows.map(r => ({trade_date:r.trade_date,magic_rs:r.magic_rs ?? null,magic_ma:r.magic_ma ?? null,magic_rs_zone:r.magic_rs_zone ?? null,chg5:r.magic_rs_chg_5d ?? null,chg22:r.magic_rs_chg_22d ?? null,chg66:r.magic_rs_chg_66d ?? null,align:r.magic_rs_align ?? null})), [rows]);
+  const magicVisible = useMemo(() => visibleRange ? magicRows.filter(r => r.trade_date >= visibleRange.from && r.trade_date <= visibleRange.to) : magicRows,[magicRows,visibleRange]);
+  const magicActiveIndex = magicVisible.findIndex(r => r.trade_date === selectedDate);
+  const handleVisibleRange = useCallback((from:string,to:string) => setVisibleRange(prev => prev?.from===from && prev.to===to ? prev : {from,to}),[]);
   const update = useCallback((values: Record<string,string|null>) => setUrlRef.current(prev => { const next = new URLSearchParams(prev); Object.entries(values).forEach(([key,value])=>value === null ? next.delete(key) : next.set(key,value)); return next; }, {replace:true}), []);
   useEffect(() => {
     if (!requestedKey && event && selectedIndex) update({event:event.event_key,type:event.event_type,date:event.start_date,index:String(selectedIndex.id)});
@@ -58,7 +86,7 @@ export default function AstroStudyPage() {
   const inspect = useCallback((_index: number, date: string) => update({session:date}),[update]);
   const choose = (e: AstroOccurrence) => { setOlderDays(0); const next = new URLSearchParams(astroStudyLink(e,selectedIndex?.id ?? 1).split('?')[1]); if(sign)next.set('sign',sign); next.set('mode',replay?'before':'after'); setUrl(next); trackEvent('astro_study_occurrence_selected',{event_type:e.event_type,index_id:selectedIndex?.id}); };
   useEffect(() => { trackEvent('astro_study_opened'); }, []);
-  useEffect(() => { setOlderDays(0); }, [event?.event_key,selectedIndex?.id]);
+  useEffect(() => { setOlderDays(0); setVisibleRange(null); }, [event?.event_key,selectedIndex?.id]);
   useEffect(() => { if (!full) return; const before = document.body.style.overflow; document.body.style.overflow = 'hidden'; const escape = (e: KeyboardEvent) => { if(e.key==='Escape')setFull(false); }; document.addEventListener('keydown',escape); return()=>{document.body.style.overflow=before;document.removeEventListener('keydown',escape);}; },[full]);
   const chart = <section className="as-card"><div className="as-controls"><strong>{selectedIndex?.display_name ?? 'Choose an index'} · daily</strong><span className="as-grow"/><button onClick={()=>setFull(v=>!v)}>{full?'Exit fullscreen':'Fullscreen'}</button></div>
     <div className="as-controls"><button aria-pressed={replay} onClick={()=>update({mode:'before',session:null})}>As of event</button><button aria-pressed={!replay} onClick={()=>update({mode:'after',session:null})}>Explore what followed</button><span className="as-grow"/><button disabled={cursor<=0} onClick={()=>update({session:rows[cursor-1].trade_date})}>← Session</button><button disabled={cursor<0 || cursor>=rows.length-1} onClick={()=>update({session:rows[cursor+1].trade_date})}>Session →</button></div>
@@ -67,9 +95,12 @@ export default function AstroStudyPage() {
     {prices.isFetching && <p role="status" className="as-note">Loading historical prices and stored indicators…</p>}
     {prices.isError && <p role="alert" className="as-note">Historical prices could not be loaded. <button onClick={()=>prices.refetch()}>Retry</button></p>}
     {!prices.isFetching && !prices.isError && !rows.length && <p className="as-note">No price history in this window. Load earlier history or choose another occurrence.</p>}
-    {!!rows.length && <TradingChart key={`${event?.event_key}-${selectedIndex?.id}`} data={rows} studyMode selectedSession={selectedDate} height={820} astroBands={bands} onCrosshairMove={inspect} onHistoryEdge={loadHistory} />}
+    <div className="as-overlay-controls"><CockpitOverlayStrip onAdd={()=>setDrawerOpen(true)} /><button aria-pressed={showFocus} onClick={()=>setShowFocus(v=>!v)}>Study focus marker: {showFocus?'shown':'hidden'}</button><small>{bands.length} event records in this window. A line marks a point event; a shaded interval marks a period. Use + Overlay to combine planets and indicators.</small></div>
+    {!!rows.length && <TradingChart key={`${event?.event_key}-${selectedIndex?.id}`} data={rows} workspaceMode studyMode selectedSession={selectedDate} height={480} overlays={overlays} astroBands={bands} onCrosshairMove={inspect} onHistoryEdge={loadHistory} onVisibleRangeChange={handleVisibleRange} />}
+    {!!rows.length && <div className="as-widget-grid"><div><SignalFlipCard title="Magic RS" widget={magicActiveIndex>=0 ? <MagicRsSubchart data={magicVisible} activeIndex={magicActiveIndex} benchmarkLabel="NIFTY 500" variant="long" lookbackData={magicRows} cadence="D"/> : <p className="as-note">Selected session is outside the visible chart window. Pan to that date to read the widget.</p>} chart={<SignalLineChart data={magicVisible} series={[{key:'magic_rs',color:'var(--accent)',label:'Magic RS'},{key:'magic_ma',color:'var(--text-secondary)',label:'MA',dashed:true}]} refLines={[{y:0}]} activeDate={selectedDate} onSessionChange={date=>inspect(0,date)} />} /></div><div><CockpitIndicatorPanels rows={widgetRows} activeDate={selectedDate} onSessionChange={date=>inspect(0,date)} />{!widgetRows.some(r=>r.rsi_14 != null) && <p className="as-note">RSI is unavailable in this window.</p>}</div></div>}
+    <CatalogDrawer isOpen={drawerOpen} onClose={()=>setDrawerOpen(false)} context="overlay" layer={full?500:200} />
     <div className="as-controls"><button disabled={prices.isFetching || olderDays>=14600} onClick={loadHistory}>← Load an earlier year</button><small>{rows.length ? `${astroDate(rows[0].trade_date)} – ${astroDate(rows.at(-1)!.trade_date)} · ${rows.length} recorded sessions` : 'Coverage is shown when records are available.'}</small></div>
-    <p className="as-note">Hover or tap any pane to inspect a session. Pan past the left edge to load older history. RSI and MagicRS share the price timeline. Missing stored indicators remain unavailable.</p>
+    <p className="as-note">Hover or tap any pane to inspect a session. Pan past the left edge to load older history. The existing RSI panel and MagicRS widget follow the visible price window and selected session. Missing stored indicators remain unavailable.</p>
   </section>;
   return <div className="astro-study"><nav className="as-controls"><Link to="/astro">Calendar</Link><strong>Event Study</strong><span className="as-grow"/><Link to="/workspace">Back to Workspace</Link></nav><header><small>Astro · historical technical study</small><h1>{event?.display_name ?? 'Choose an event to study'}</h1>{event && <p>{boundary(event,'start')}{event.shape==='period' ? ` → ${boundary(event,'end')}` : ''}{event.details.sign ? ` · ${String(event.details.sign)}` : ''} · {event.precision}</p>}<p>Study what price and technical strength were doing around a published planetary event.</p></header>
     {(events.isPending || catalog.isPending) && <p role="status">Loading published events and indices…</p>}

@@ -10,7 +10,7 @@ import { ITEM_DEFAULT_COLOR, TYPE_DEFAULT_COLOR } from '@/components/domain/Work
 const EMPTY_BANDS: AstroBand[] = []
 
 /** Returns AstroBand[] for all visible astro_zone overlays. */
-export function useAstroOverlayBands(overlays: ChartOverlay[], startDate?:string): AstroBand[] {
+export function useAstroOverlayBands(overlays: ChartOverlay[], startDate?:string, endDate?:string): AstroBand[] {
   // Only visible astro_zone overlays
   const activeAstro = useMemo(
     () => overlays.filter(o => o.type === 'astro_zone' && o.visible),
@@ -46,6 +46,7 @@ export function useAstroOverlayBands(overlays: ChartOverlay[], startDate?:string
   const horizon=useAstroHorizon()
   const since=startDate ?? `${Number(astroToday().slice(0,4))-2}-01-01`
 
+  const until = endDate && endDate < horizon.cutoffIso ? endDate : horizon.cutoffIso
   const queryKey = useMemo(
     () => [
       'astro-bands',
@@ -53,14 +54,14 @@ export function useAstroOverlayBands(overlays: ChartOverlay[], startDate?:string
       // cache — bands bake in the color, so stale cache = stale color.
       Array.from(overlayColors.entries()).map(([k, v]) => `${k}:${v}`).sort().join(','),
       Array.from(overlayOpacities.entries()).map(([k, v]) => `${k}:${v}`).sort().join(','),
-      since, horizon.cutoffIso,
+      since, until,
     ],
-    [overlayColors, overlayOpacities, since, horizon.cutoffIso],
+    [overlayColors, overlayOpacities, since, until],
   )
 
   const { data } = useQuery({
     queryKey,
-    queryFn:  () => fetchAstroBands(overlayColors, overlayOpacities, since, horizon.cutoffIso),
+    queryFn:  () => fetchAstroBands(overlayColors, overlayOpacities, since, until),
     staleTime: 5 * 60_000,
     enabled:  overlayColors.size > 0,
   })
