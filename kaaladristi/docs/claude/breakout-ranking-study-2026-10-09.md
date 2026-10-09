@@ -316,3 +316,33 @@ median excess:
 worse in H1. BBOX was the exception, not a missed rule. Loosening the gate to
 catch it would add a group that loses on average. Keep both legs (22d AND
 66d). Nothing built.
+
+## Addendum 5 — owner's four-condition rule
+
+Rule: `close > sma_21` AND leader vs NIFTY 50 (`rel_22d > 0 AND rel_66d > 0`)
+AND `rsi_14 > 71` AND `close > prev_week_close`. Same universe, cliffs and
+same-date median as Addendum 3. Excess medians:
+
+| group | half | n | next day | 5d | 20d | 20d mean | 20d %pos |
+|---|---|---|---|---|---|---|---|
+| all four, FIRST day | H1 | 1,739 | +0.08 | −0.12 | +0.53 | +2.60 | 52.0 |
+| | H2 | 1,844 | +0.18 | +0.50 | +1.62 | +4.11 | 55.4 |
+| **all four, already in it** | H1 | 2,773 | +0.09 | +0.34 | **+2.04** | +4.42 | 56.9 |
+| | H2 | 3,628 | +0.16 | +0.56 | **+1.98** | +4.59 | 56.8 |
+| three, RSI ≤ 71 | H1 | 17,161 | −0.06 | −0.23 | +0.09 | +2.00 | 50.3 |
+| | H2 | 17,409 | −0.04 | +0.15 | +0.84 | +3.22 | 53.3 |
+| everything else | H1 | 64,280 | +0.01 | +0.04 | −0.08 | +1.75 | 49.5 |
+| | H2 | 88,752 | 0.00 | −0.03 | −0.19 | +2.09 | 48.9 |
+
+1. **The best result in this study so far** — ~+2 pts over 20 sessions, the
+   SAME in both halves (+2.04 / +1.98). Nothing else held that steady.
+2. **RSI > 71 is what does the work.** Without it the other three are ~flat
+   (+0.09 / +0.84). High RSI here is strength, not "overbought".
+3. **Staying in the state beats entering it.** Day 2+ beats the first day in
+   both halves. Persistence is the signal.
+4. Next-day +5% movers: 6.45% of rule days vs 3.34% of the rest (1.9×), but
+   the rule held only 744 of ~8,450 such moves (~9%). ~107 names a day.
+   It is a trend list, not a next-day-pop catcher.
+
+⚠ 20-session windows overlap (~6 independent periods); one market phase.
+Re-run in November. Nothing built.
