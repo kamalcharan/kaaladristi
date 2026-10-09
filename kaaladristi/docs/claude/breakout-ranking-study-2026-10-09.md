@@ -239,3 +239,44 @@ universe median.
 decided in the first part of the next session, which end-of-day data cannot
 see. These rules are a WATCH list for the next open, not a hold list.
 Nothing built.
+
+## Addendum 3 — NIFTY 50 RS = strength, MagicRS = timing
+
+Owner: *"rs against nifty 50 becomes strength and magicrs becomes time to
+pounce?"* The NIFTY 50 RS in the product is the **Rel N50** set
+(`rel_*_n50` = stock return − NIFTY 50 return, derived in the matview; its
+tooltip still says "Not currently populated", which looks stale). Rebuilt here
+from `km_equity_eod.ret_22d/ret_66d` and `km_index_eod` (index_id 1).
+
+- **Strength** = beating NIFTY 50 over BOTH 22 and 66 days.
+- **Timing** = MagicRS crosses above its MagicMA that day (`magic_rs > magic_ma`,
+  yesterday `<=`).
+- NSE active non-ETF, mcap ≥ ₹100 Cr, setups 1 May → 9 Sep (so every event has
+  a full 20-session window), excess vs same-date universe median, cliffs
+  dropped. H1 = May–Jun, H2 = Jul → 9 Sep. ⚠ 20-session windows overlap: only
+  ~6 independent periods.
+
+| strength | timing | half | n | 5d median | 20d median | 20d mean | 20d %pos |
+|---|---|---|---|---|---|---|---|
+| **leader vs N50** | **MagicRS crossed up** | H1 | 833 | +0.15 | **+0.39** | +1.97 | 51.7 |
+| | | H2 | 1,448 | +0.23 | **+1.27** | +4.47 | 55.5 |
+| leader vs N50 | no cross | H1 | 39,650 | −0.06 | +0.27 | +2.32 | 51.2 |
+| | | H2 | 37,125 | +0.20 | +0.70 | +3.05 | 53.0 |
+| not leader | **MagicRS crossed up** | H1 | 1,317 | −0.34 | **−1.09** | +0.94 | 44.3 |
+| | | H2 | 2,256 | −0.48 | **−0.88** | +1.41 | 45.1 |
+| not leader | no cross | H1 | 37,399 | +0.06 | −0.18 | +1.57 | 49.0 |
+| | | H2 | 65,528 | −0.07 | −0.38 | +1.82 | 47.9 |
+
+**Findings (both halves agree on sign):**
+1. **NIFTY 50 RS is real strength.** Leaders beat non-leaders by ~0.5–1.1
+   pts over 20 sessions.
+2. **A MagicRS cross on a NON-leader is a trap** — the worst cell, −1.09 /
+   −0.88, 44–45% positive, WORSE than doing nothing (−0.18 / −0.38). This is
+   the documented MagicRS weakness: a laggard crosses its own depressed mean
+   without beating anything.
+3. **Inside leaders the cross is a mild timing boost** (+0.12 H1, +0.57 H2 over
+   leaders without it). Same sign twice, small, and H1 barely registers.
+4. Best vs worst cell: ~1.5–2.1 pts over 20 sessions.
+
+**So:** strength gates, timing refines — never the reverse. Re-run in
+November for more independent periods. Nothing built.
