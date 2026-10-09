@@ -121,3 +121,61 @@ Measure from `gl_days_above = 1` plus PRIOR dots, as above.
   halves (+0.68 / +0.95). Check it is not one IPO cohort before using it.
 - Effect sizes are small: Breakout Surge as a whole sits at +0.16 / +0.40
   median excess. None of these would have reliably picked BBOX or MOBIKWIK.
+
+## Addendum, same day — starting from the +5% days themselves
+
+Owner: *"I miss most running 5% and above, there is something I am missing."*
+
+**Recall.** 20 Aug → 8 Oct, NSE active non-ETF, mcap ≥ ₹100 Cr: **2,833** days of
++5% or more (~86 a session). **455 (16%)** were on a signal screen the evening
+before — 435 of them Breakout Surge, 34 Golden Line Breakout. (The saved
+daily lists cover the matview presets only, so Stage / Discovery / Flow
+membership is not counted; true recall is somewhat higher.)
+
+**Lift of day-before signals for a next-day ≥ +5%** (May → 7 Oct, next-day
+moves beyond ±25% dropped as data errors):
+
+| signal (evening before) | H1 n / P(≥+5%) / lift | H2 n / P(≥+5%) / lift |
+|---|---|---|
+| base rate | 145,107 / 4.05% / 1.00 | 106,254 / 3.80% / 1.00 |
+| SVD dot | 430 / 14.4% / 3.56 | 315 / 19.7% / 5.18 |
+| today ≥ +5% | 5,889 / 13.4% / 3.30 | 4,198 / 14.6% / 3.85 |
+| SBD dot | 2,376 / 12.9% / 3.18 | 2,009 / 13.9% / 3.66 |
+| rvol ≥ 2 | 12,651 / 7.8% / 1.93 | 10,326 / 8.2% / 2.17 |
+| Breakout Surge | 16,161 / 7.1% / 1.75 | 10,162 / 8.2% / 2.17 |
+| 8+ volume spurts in 22 sessions | 2,891 / 6.7% / 1.65 | 3,868 / 6.6% / 1.74 |
+| within 5% of 52-week high | 11,159 / 5.4% / 1.34 | 8,954 / 6.3% / 1.65 |
+| Stage S2 | — | 21,146 / 5.4% / 1.43 |
+| rvol < 0.9 | 97,931 / 3.3% / 0.82 | 71,570 / 2.9% / 0.76 |
+| MagicRS falling 5d | 68,792 / 3.4% / 0.84 | 51,454 / 3.1% / 0.81 |
+
+Stable in both halves. **But the same signals raise the next-day ≤ −5% rate
+almost as much** — they predict a BIG move, not an UP move. Ratio of
+P(≥+5%) to P(≤−5%), by company size, pooled:
+
+| signal | <₹500 Cr | 500–2k | 2k–10k | 10k+ |
+|---|---|---|---|---|
+| base | 1.63 | 2.24 | 2.48 | 2.32 |
+| Breakout Surge | 1.82 | 1.99 | 2.08 | 2.11 |
+| rvol ≥ 2 | 1.56 | 1.57 | 1.70 | 1.76 |
+| SBD dot | 2.43 | 1.77 | 2.34 | 2.00 |
+| SVD dot | 1.41 | 1.13 | 1.59 | 2.67 |
+| near 52-week high | 1.67 | 1.96 | 2.42 | 1.91 |
+| **today ≥ +5%** | 1.88 | **2.66** | **2.67** | **3.10** |
+
+Only "today ≥ +5%" tilts the odds toward UP beyond the base ratio, and only
+above ₹500 Cr (continuation). Everything else moves both tails together.
+
+**What is missing is not a signal we failed to combine:**
+1. **Direction is not in the end-of-day data.** The evening before, a +5%
+   runner and a −5% faller look the same. Our screens find the
+   about-to-move; the runners remembered are the winning half.
+2. **Most +5% days come from nowhere** — 84% were on no signal screen the day
+   before. The move starts and ends inside one session, and we see the day
+   after the close (filings: a mid-session filing is a tomorrow fact for us).
+   OPTIEMUS was caught at 09:45 by a 15-minute MagicRS/SVD turn, not by EOD.
+   `km_equity_15m` is schema-only.
+3. **One real tilt:** after a +5% day, a stock above ₹500 Cr is ~2.7–3.1×
+   more likely to add another +5% than to give back 5%, against ~2.3× base.
+
+Nothing built.
