@@ -280,3 +280,39 @@ from `km_equity_eod.ret_22d/ret_66d` and `km_index_eod` (index_id 1).
 
 **So:** strength gates, timing refines — never the reverse. Re-run in
 November for more independent periods. Nothing built.
+
+## Addendum 4 — do BBOX and MOBIKWIK support "N50 strength, MagicRS timing"?
+
+Same setup as Addendum 3. "Leader" = `rel_22d > 0 AND rel_66d > 0` vs NIFTY 50.
+
+**The two stocks, 15 Sep → 8 Oct:**
+
+- **MOBIKWIK — supports it.** Leader vs NIFTY 50 the whole time (rel22
+  +1.9…+12.6, rel66 +3.4…+9.6 before the run). MagicRS was already above its
+  MagicMA (5.7 vs −0.5 on 5 Oct), so there was no fresh cross. Strength said
+  yes; there was no new "pounce" bar.
+- **BBOX — does not.** rel22 turned positive on 16 Sep (rising to +28 by
+  7 Oct) but rel66 stayed negative (−24.4 → −4.2), so the rule did not call it
+  a leader. MagicRS crossed up on 29 Sep. By Addendum 3 that sat in the worst
+  cell. It is an "emerging" leader: strong for a month, weak over three.
+
+**Does "emerging" (22d only) deserve its own rule?** Split by strength, 20d
+median excess:
+
+| strength | MagicRS cross | H1 | H2 |
+|---|---|---|---|
+| leader (22d + 66d) | yes | **+0.39** | **+1.27** |
+| leader | no | +0.27 | +0.70 |
+| emerging (22d only) | yes | **−1.83** | **−0.59** |
+| emerging | no | −0.89 | −0.77 |
+| fading (66d only) | yes | −0.81 | −1.06 |
+| fading | no | −0.33 | +0.10 |
+| laggard | yes | −1.07 | −0.88 |
+| laggard | no | +0.23 | −0.54 |
+
+(n: leader+cross 833 / 1,448; emerging+cross 305 / 788.)
+
+**No.** Emerging stocks lose in both halves, and a MagicRS cross makes it
+worse in H1. BBOX was the exception, not a missed rule. Loosening the gate to
+catch it would add a group that loses on average. Keep both legs (22d AND
+66d). Nothing built.
