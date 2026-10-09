@@ -309,7 +309,7 @@ def current_reader(conn):
         # down the MEDIUM route (LLM_ROUTE_MEDIUM), so where it is read is an
         # .env decision, not this thread's. FILING_READ_BACKLOG_IN_API=0 puts
         # the backlog back on the worker's ingest passes only.
-        # Within that, the high tier always goes first (migration 234): current
+        # Within that, the high tier always goes first (migration 238): current
         # high, older high, current low, older low.
         row = None
         for tier in ('high', 'low'):

@@ -8,7 +8,7 @@
  *   ReadCell      — the column: a status pill, or the verdict in five words.
  *   ReadDetail    — on expand: headline, reasoning, what it touches / what the
  *                   company says / when it lands / what to watch next (reader
- *                   v2, migration 234), quoted evidence, the second opinion
+ *                   v2, migration 238), quoted evidence, the second opinion
  *                   side by side, and Restart for admin on a failed row.
  *                   A routine row (model 'rule') says "routine by filing
  *                   type" — it was never read by a model and must not look it.

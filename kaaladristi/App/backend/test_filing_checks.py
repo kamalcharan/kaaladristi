@@ -27,7 +27,7 @@ MIGRATIONS = ('km_migration_212_filings_ingest.sql',
               'km_migration_230_filing_reads_triage.sql',
               'km_migration_231_filing_reads_ocr_source.sql',
               'km_migration_233_filing_read_checks.sql',
-              'km_migration_234_filing_reads_tiers.sql')
+              'km_migration_238_filing_reads_tiers.sql')
 
 
 class _Usage:
@@ -294,7 +294,7 @@ class Checks(unittest.TestCase):
             self.assertEqual(order, [new])
 
     def test_the_runner_reads_every_high_tier_filing_before_any_low_one(self):
-        # Migration 234: current high, older high, current low, older low.
+        # Migration 238: current high, older high, current low, older low.
         from unittest import mock
         ids = {n: self._read(n) for n in ('HIGH_OLD', 'HIGH_NEW', 'LOW_OLD', 'LOW_NEW')}
         with self.conn.cursor() as c:

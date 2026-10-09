@@ -1,5 +1,5 @@
 -- ============================================================================
--- Migration 234 — every filing gets a verdict: tiers + four decision fields
+-- Migration 238 — every filing gets a verdict: tiers + four decision fields
 -- ============================================================================
 -- Target: kaala_dristi_db. Adds columns to km_filing_reads; holds no data.
 --

@@ -14,7 +14,7 @@ export type ReadMagnitude = 'major' | 'notable' | 'minor' | 'unknown';
 /** km_filing_reads.status — the row's own clock. */
 export type ReadStatus = 'pending' | 'reading' | 'done' | 'failed' | 'unreadable' | 'skipped';
 export type CheckBackend = 'anthropic' | 'local';
-/** km_filing_reads.tier (migration 234): routine = settled by the exchange label, no model. */
+/** km_filing_reads.tier (migration 238): routine = settled by the exchange label, no model. */
 export type ReadTier = 'high' | 'low' | 'routine';
 
 /** The `model` a routine verdict carries: written by rule, never read by a model. */

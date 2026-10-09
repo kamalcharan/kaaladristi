@@ -50,7 +50,7 @@ MIGRATIONS = ('km_migration_212_filings_ingest.sql',
               'km_migration_229_filing_reads.sql',
               'km_migration_230_filing_reads_triage.sql',
               'km_migration_231_filing_reads_ocr_source.sql',
-              'km_migration_234_filing_reads_tiers.sql')
+              'km_migration_238_filing_reads_tiers.sql')
 
 
 # ── PDFs built by hand: pypdf reads them, no other library is needed ──────
@@ -624,7 +624,7 @@ class Reads(unittest.TestCase):
         esop = self._event('esop', '2026-09-28 10:00+05:30', 'OWNERSHIP', event_type='ESOP')
         done = self._event('done', '2026-09-28 10:01+05:30', 'OWNERSHIP', event_type='ESOP')
         keep = self._event('keep', '2026-09-28 10:02+05:30', 'SPARK', event_type='LARGE_ORDER')
-        with self.conn.cursor() as c:     # queued before 234: every row defaulted to 'high'
+        with self.conn.cursor() as c:     # queued before 238: every row defaulted to 'high'
             c.execute("INSERT INTO km_filing_reads (event_id) VALUES (%s), (%s), (%s)", (esop, done, keep))
             c.execute("UPDATE km_filing_reads SET status='done', impact='neutral' WHERE event_id=%s", (done,))
         self.conn.commit()

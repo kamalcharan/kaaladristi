@@ -65,7 +65,7 @@ from lib import llm_lanes
 
 log = logging.getLogger('filing_reader')
 
-READER_VERSION = 'v2'   # v2: touches / company_view / timeframe / watch_next (migration 234)
+READER_VERSION = 'v2'   # v2: touches / company_view / timeframe / watch_next (migration 238)
 MATERIAL_FAMILIES = ('SPARK', 'NEGATIVE_SPARK', 'OWNERSHIP', 'CORPORATE_ACTION')
 
 # ── which model reads ────────────────────────────────────────────────────
@@ -190,7 +190,7 @@ PRICES = {
 #     table (8 notable negatives in the first 11 reads).
 #   * AUDITOR_CHANGE — a term completing is routine, a resignation or a
 #     casual vacancy is the read.
-# ── tiers (migration 234; owner, 2026-10-09: "all filings needs inference —
+# ── tiers (migration 238; owner, 2026-10-09: "all filings needs inference —
 # definitely some are low priority") ──────────────────────────────────────
 #
 # Gate 0 used to EXCLUDE everything outside four families, so board outcomes
@@ -337,7 +337,7 @@ class FilingVerdict(BaseModel):
     evidence_quote: str = Field(description="The sentence or sentences from the document, verbatim, that the verdict rests on")
     confidence: float = Field(description="0 to 1")
     role: Optional[str] = Field(default=None, description="acquirer | target | promoter | non_promoter | new_client | repeat_client")
-    # Reader v2 (migration 234; owner, 2026-10-09: "can we also know why they
+    # Reader v2 (migration 238; owner, 2026-10-09: "can we also know why they
     # are +ve or -ve … how will it help the users take decision"). All four
     # come FROM the filing — a word or the filing's own phrase, never a number
     # the model worked out. Defaults so an older or smaller model that omits
@@ -829,7 +829,7 @@ def settle_routine(conn) -> int:
 def prepare_queue(conn, since=None) -> dict:
     """The queue step of every pass: enqueue new filings, move pending rows
     to their current tier, settle the routine ones. Does nothing before
-    migration 234 is applied (the columns it writes would not exist)."""
+    migration 238 is applied (the columns it writes would not exist)."""
     missing = schema_missing(conn)
     if missing:
         log.error(f'[filing_reader] {missing} — queue not prepared')
@@ -845,7 +845,7 @@ STATUSES = ('pending', 'reading', 'done', 'failed', 'unreadable', 'skipped')
 # first gate-1 skip crashed the whole backfill mid-row (the row stuck in
 # `reading`). A missing column is the same honest state as a missing API key
 # — nothing claimed, rows stay pending, the pass completes and says why.
-REQUIRED_COLUMNS = {'triage_reason': 'migration 230', 'tier': 'migration 234', 'watch_next': 'migration 234'}
+REQUIRED_COLUMNS = {'triage_reason': 'migration 230', 'tier': 'migration 238', 'watch_next': 'migration 238'}
 
 
 def schema_missing(conn) -> Optional[str]:

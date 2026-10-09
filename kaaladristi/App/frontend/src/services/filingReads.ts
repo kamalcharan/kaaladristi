@@ -7,7 +7,7 @@
  * (50 at most), joined in the browser by event id. Never a table scan: the
  * reads table holds one row per material event and grows several times a day.
  *
- * Since migration 234 every filing gets a row with a tier: routine (settled
+ * Since migration 238 every filing gets a row with a tier: routine (settled
  * by its exchange label, model 'rule', no model call), high, or low. Filings
  * before FILING_READ_FROM that were never read are `skipped`, "not analysed".
  * An event with no row at all has simply not been queued yet.
@@ -36,7 +36,7 @@ export interface FilingRead {
   pagesRead: number | null;
   pageCount: number | null;
   finishedAt: string | null;
-  /** Migration 234 — null until it is applied. */
+  /** Migration 238 — null until it is applied. */
   tier: ReadTier | null;
   touches: string | null;
   companyView: string | null;
@@ -70,7 +70,7 @@ export interface FilingReadsResult {
 const READ_COLS =
   'event_id,status,attempts,last_error,triage_reason,impact,magnitude,headline,reasoning,evidence_quote,' +
   'confidence,amount_value,amount_unit,role,model,read_source,pages_read,page_count,finished_at';
-// Migration 234's columns, asked for separately so a database without them
+// Migration 238's columns, asked for separately so a database without them
 // still shows every verdict (the select falls back to READ_COLS).
 const READ_COLS_V2 = READ_COLS + ',tier,touches,company_view,timeframe,watch_next';
 const CHECK_COLS =
