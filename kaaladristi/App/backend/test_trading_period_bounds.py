@@ -61,6 +61,49 @@ class HealthGridTests(unittest.TestCase):
         self.assertNotIn('missing', st.values())
 
 
+class TodayNotLandedTests(unittest.TestCase):
+    """Friday 9 Oct 2026, 11:47: the week ends today but today's bar lands
+    with the evening run. The grid painted Mon-Fri red (2026-10-09)."""
+
+    def _row(self, dim, last_bar, have_week=False, rows_today=0):
+        days = [date(2026, 10, 5), date(2026, 10, 6), date(2026, 10, 8), date(2026, 10, 9)]
+
+        class Conn(FakeConn):
+            def __init__(self):
+                self.answers = [('FROM km_trading_calendar', []),
+                                ('max(trade_date) FROM km_equity_eod', [(last_bar,)]),
+                                ('DISTINCT week_start', [(date(2026, 10, 5),)] if have_week else []),
+                                ('GROUP BY', [(date(2026, 10, 9), rows_today)] if rows_today else [])]
+
+        class D(date):
+            @classmethod
+            def today(cls):
+                return date(2026, 10, 9)
+        with mock.patch.object(health, 'date', D):
+            row = health._health_row(Conn(), dim, days, {})
+        return {d.trade_date: d.status for d in row.days}
+
+    def test_the_week_is_not_due_before_todays_bar_lands(self):
+        st = self._row('equity_weekly', last_bar=date(2026, 10, 8))
+        self.assertEqual(set(st.values()), {'future'})
+
+    def test_after_the_bar_lands_a_missing_weekly_bar_is_red(self):
+        st = self._row('equity_weekly', last_bar=date(2026, 10, 9))
+        self.assertEqual(st['2026-10-09'], 'missing')
+        self.assertEqual(self._row('equity_weekly', last_bar=date(2026, 10, 9),
+                                   have_week=True)['2026-10-09'], 'ok')
+
+    def test_breadth_today_waits_for_the_bar_but_yesterday_does_not(self):
+        st = self._row('index_breadth', last_bar=date(2026, 10, 8))
+        self.assertEqual(st['2026-10-09'], 'future')
+        self.assertEqual(st['2026-10-08'], 'missing')
+
+    def test_a_failed_download_today_still_reads_missing(self):
+        dim = next(iter(health.DOWNLOAD_EXPECTED))
+        st = self._row(dim, last_bar=date(2026, 10, 8))
+        self.assertEqual(st['2026-10-09'], 'missing')
+
+
 class FakeCursor:
     def __init__(self, answers):
         self.answers, self.result = answers, []

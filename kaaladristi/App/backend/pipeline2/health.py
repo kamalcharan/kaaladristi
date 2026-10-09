@@ -288,6 +288,24 @@ def weekday_range(days: int, today: date | None = None) -> list[date]:
     return out
 
 
+def _due_through(conn, today: date) -> date:
+    """The last date the grid may call due. Today's data lands with the
+    evening run, so until today's bar is in km_equity_eod the grid judges
+    through YESTERDAY: at 11:47 on a Friday the week's bar cannot exist yet,
+    and calling it 'missing' painted the whole week red (2026-10-09). Only
+    today is held back — a bar missing for an earlier day still shows."""
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT max(trade_date) FROM km_equity_eod WHERE trade_date >= %s",
+                        [today - timedelta(days=7)])
+            row = cur.fetchone()
+    except Exception:
+        conn.rollback()
+        row = None
+    last_bar = row[0] if row else None
+    return today if (last_bar is not None and last_bar >= today) else today - timedelta(days=1)
+
+
 def _period_open(d: date, weekly: bool, holidays, today: date) -> bool:
     """True while the week/month containing d has not reached its last
     trading day — its aggregate bar is not due yet."""
@@ -562,7 +580,10 @@ def _health_row(
     meta = DIMENSION_HEALTH[dimension]
     table, id_col, cols, ok_threshold = meta
     from_dt, to_dt = trading_days[0], trading_days[-1]
-    today = date.today()
+    # Download rows judge the real today: a failed download must read
+    # 'missing' at the 19:30 sweep so it is re-queued. Everything derived
+    # from the bar waits for the bar (_due_through).
+    today = date.today() if dimension in DOWNLOAD_EXPECTED else _due_through(conn, date.today())
 
     days: list[DayStatus] = []
     latest_ok: str | None = None
