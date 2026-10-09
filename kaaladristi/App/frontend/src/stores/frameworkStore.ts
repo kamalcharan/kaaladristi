@@ -1,3 +1,4 @@
+import { migrateAstroSelections } from '@/services/astroSelection'
 import { create } from 'zustand'
 import { DEFAULT_CHART_OVERLAYS } from '@/constants/frameworkConstants'
 import { useThemeStore } from '@/stores/themeStore'
@@ -208,36 +209,9 @@ export const useFrameworkStore = create<FrameworkStore>((set, get) => ({
       ]
       const needsSave = deduped.length !== data.blocks.length
 
-      // One-time migration: inject missing base overlays for sub-rule overlays.
-      // e.g. PNK-IND-BUL stored without PNK-ALL5-BUL → inject PNK-ALL5-BUL silently.
-      const BASE_RULE_MAP_STORE: Record<string, { id: string; color: string; label: string }> = {
-        'PNK-ALL5-BUL': { id: 'astro_rule:PNK-ALL5-BUL', color: '#6366f1', label: 'Panchak' },
-        'PNK-ALL5-BEA': { id: 'astro_rule:PNK-ALL5-BEA', color: '#6366f1', label: 'Panchak' },
-      }
-      const BASE_SUB_PREFIXES = ['PNK']
-      const baseOverlaysToInject: ChartOverlay[] = []
-      for (const o of data.chart_overlays) {
-        const code = o.catalog_item_id.replace('astro_rule:', '')
-        const prefix = code.split('-')[0]
-        if (!BASE_SUB_PREFIXES.includes(prefix)) continue
-        if (Object.keys(BASE_RULE_MAP_STORE).includes(code)) continue  // is already a base
-        const baseId = `astro_rule:${prefix}-ALL5-BUL`
-        const alreadyPresent = data.chart_overlays.some(x => x.catalog_item_id === baseId)
-        const alreadyQueued  = baseOverlaysToInject.some(x => x.catalog_item_id === baseId)
-        if (!alreadyPresent && !alreadyQueued) {
-          baseOverlaysToInject.push({
-            catalog_item_id: baseId,
-            type:            'astro_zone',
-            visible:         true,
-            color:           '#6366f1',
-            label:           'Panchak',
-          })
-        }
-      }
-      if (baseOverlaysToInject.length > 0) {
-        data.chart_overlays = [...baseOverlaysToInject, ...data.chart_overlays]
-      }
-      const needsBaseSave = baseOverlaysToInject.length > 0
+      const migratedOverlays = migrateAstroSelections(data.chart_overlays)
+      const needsBaseSave = JSON.stringify(migratedOverlays) !== JSON.stringify(data.chart_overlays)
+      data.chart_overlays = migratedOverlays
 
       // Default chart lens: charts draw ONLY framework overlays (no hardcoded
       // lines anywhere — owner 2026-07-07). A brand-new framework with zero

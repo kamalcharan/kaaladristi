@@ -71,12 +71,6 @@ export const PAGE_TOURS: PageTour[] = [
     ],
   },
   {
-    id: 'astro-calendar', match: eq('/astro-calendar'),
-    steps: [
-      { title: 'Astro Calendar', body: 'Upcoming panchang and planetary events on a monthly calendar, each tagged with its historically-observed market character.' },
-    ],
-  },
-  {
     id: 'study', match: pre('/chart/'),
     steps: [
       { title: 'Study', body: 'Your decision workbench for a single instrument: Read the snapshot, weigh the Evidence, and verify on the Chart with your own overlays, timeframes and zoom.' },
@@ -132,12 +126,6 @@ export const PAGE_TOURS: PageTour[] = [
     id: 'market-structure', match: eq('/market-structure'),
     steps: [
       { title: 'Market Structure', body: 'The breadth and regime view of the whole market — today’s structure and the historical confluence of breadth, momentum and time cycles.' },
-    ],
-  },
-  {
-    id: 'planetary-intel', match: eq('/planetary-intel'),
-    steps: [
-      { title: 'Planetary Intel', body: 'The current sky — live planetary positions and transits, and the market windows they historically open. Reference, not prediction.' },
     ],
   },
   {

@@ -32,6 +32,7 @@ from datetime import date
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from lib.config import DATABASE_URL
+from lib.venus_identity import refresh_venus_data
 
 
 # ── DB connection ──────────────────────────────────────────────────────────────
@@ -133,33 +134,8 @@ def generate_r02_speed_diff(cur, rule_id: int) -> tuple[int, int]:
 # ── BAY-R03: Venus Retrograde Periods ─────────────────────────────────────────
 
 def generate_r03_venus_retro(cur, rule_id: int) -> tuple[int, int]:
-    """
-    Contiguous island pattern — same approach as Panchak and Mercury retrograde.
-    """
-    cur.execute("""
-        WITH retro_days AS (
-            SELECT date,
-                   date - (ROW_NUMBER() OVER (ORDER BY date))::integer AS grp
-            FROM km_planetary_positions
-            WHERE planet = 'Venus' AND retrograde = true
-              AND date BETWEEN %s AND %s
-        )
-        SELECT MIN(date) AS start_date, MAX(date) AS end_date
-        FROM retro_days
-        GROUP BY grp
-        ORDER BY start_date
-    """, (BACKFILL_FROM, BACKFILL_TO))
-
-    rows = []
-    for start_date, end_date in cur.fetchall():
-        snap = json.dumps({
-            "planet":    "Venus",
-            "state":     "retrograde",
-            "rule":      "Bayer Rule 3",
-            "rule_type": "retrograde_period",
-        })
-        rows.append((rule_id, start_date, end_date, snap))
-    return bulk_insert(cur, rows)
+    """Compatibility entry point: migration 235 owns Venus motion dates."""
+    return refresh_venus_data(cur), 0
 
 
 # ── BAY-R06: Mars at 16°35' Any Sign ──────────────────────────────────────────

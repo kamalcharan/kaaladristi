@@ -1,3 +1,5 @@
+import AstroChartEvents from './AstroChartEvents';
+import { eventCoordinate } from '@/services/astroCoordinates'
 import { DOT_LABELS } from '@/constants/signalScale'
 /**
  * TradingChart — Multi-pane financial chart using TradingView Lightweight Charts v5.
@@ -34,12 +36,9 @@ import {
 import type { IndicatorRow } from '@/services/indicatorData';
 import type { ChartOverlay } from '@/types/framework';
 import type { AstroBand } from '@/services/astroOverlayService';
-import { fmtDate, fmtDateShort } from '@/lib/dateUtils';
-import { useQuery } from '@tanstack/react-query';
+import { fmtDateShort } from '@/lib/dateUtils';
 import { INDICATOR_DEFAULT_COLORS } from '@/constants/catalogItems';
 import { planetColorOfRuleCode } from '@/constants/planetColors';
-import { fetchEvidence } from '@/pages/RuleEngine/ruleService';
-import { buildRuleRead } from '@/services/ruleInterpretation';
 import { useAstroHorizon } from '@/hooks/useAstroHorizon';
 import { AnnotationOverlay, type OverlayCycleBand, type OverlayLevel, type OverlayCallout, type OverlayBigMoney, type OverlayStoryPin } from './AnnotationOverlay';
 
@@ -79,9 +78,22 @@ const BAND_GLYPHS: Record<string, string> = {
 interface TradingChartProps {
   data: IndicatorRow[];
   height?: number;
+  /** Opt-in event study: existing RSI/MagicRS panes, no Sniper pane. */
+  studyMode?: boolean;
+  preserveViewport?: boolean;
+  initialCandles?: number;
+  showSignalMarkers?: boolean;
+  selectedSession?: string | null;
+  onHistoryEdge?: () => void;
+  onStorySession?: (date:string) => void;
+  onStorySessions?: (dates:string[]) => void;
   compact?: boolean;       // hide RSI + Sniper panes (Visual Pulse mode)
   workspaceMode?: boolean; // framework-driven: no hardcoded overlays/subpanes
   highlightDate?: string | null;
+  focusRevision?: number;
+  selectedAstroEventKey?: string;
+  onAstroFocus?: (band:AstroBand) => void;
+  onDateSelect?: (date:string) => void;
   overlays?: ChartOverlay[];
   astroBands?: AstroBand[];
   /** Big Money days (Phase 3): gold dashed price line at each event's zone
@@ -166,25 +178,6 @@ function dayRange(fromStr: string, toStr: string): string[] {
   return out;
 }
 
-/** Short top-of-line label for a single-day point-event marker. */
-function pointMarkerLabel(ruleCode: string): string {
-  const rc = ruleCode.toUpperCase();
-  if (rc.startsWith('TRN-MER-RIS-W')) return 'Mer↑';
-  if (rc.startsWith('TRN-MER-RIS-E')) return 'Mer↓';
-  if (rc.startsWith('TRN-VEN-RIS-W')) return 'Ven↑';
-  if (rc.startsWith('TRN-VEN-RIS-E')) return 'Ven↓';
-  const bay = rc.match(/^BAY-R0*(\d+)/);
-  if (bay) return `B${bay[1]}`;
-  if (rc.startsWith('DN')) return ruleCode.replace(/^DN[-_]?/i, '').slice(0, 3) || 'DN';
-  // Planet glyphs for named-planet rules
-  if (rc.startsWith('NEP-'))     return '♆';
-  if (rc.startsWith('MAR-GAN-')) return '♂';
-  if (rc.startsWith('PLU-'))     return '♇';
-  if (rc.startsWith('JUP-'))     return '♃';
-  if (rc.startsWith('SAT-'))     return '♄';
-  return ruleCode.slice(0, 3);
-}
-
 // ── Chart colors — read from CSS custom properties at render time ──
 function getThemeColors() {
   const s = getComputedStyle(document.documentElement);
@@ -252,7 +245,14 @@ const DEFAULT_BM_EVENTS: NonNullable<TradingChartProps['bigMoneyEvents']> = [];
 const DEFAULT_SETUP_LEVELS: NonNullable<TradingChartProps['setupLevels']> = [];
 const DEFAULT_SETUP_ENTRIES: NonNullable<TradingChartProps['setupEntries']> = [];
 
-export default function TradingChart({ data, height = 900, compact = false, workspaceMode = false, highlightDate = null, overlays = DEFAULT_OVERLAYS, astroBands = DEFAULT_BANDS, bigMoneyEvents = DEFAULT_BM_EVENTS, setupLevels = DEFAULT_SETUP_LEVELS, setupEntries = DEFAULT_SETUP_ENTRIES, overlay, onVisibleRangeChange, onCrosshairMove, onZoneClick, benchmarkIndexId = null, benchmarkName = null, storyBubble = null }: TradingChartProps) {
+export default function TradingChart({ data, height = 900, studyMode = false, preserveViewport = false, initialCandles, showSignalMarkers = true, selectedSession = null, onHistoryEdge, onStorySession, onStorySessions, compact = false, workspaceMode = false, highlightDate = null, focusRevision = 0, selectedAstroEventKey, onAstroFocus, onDateSelect, overlays = DEFAULT_OVERLAYS, astroBands = DEFAULT_BANDS, bigMoneyEvents = DEFAULT_BM_EVENTS, setupLevels = DEFAULT_SETUP_LEVELS, setupEntries = DEFAULT_SETUP_ENTRIES, overlay, onVisibleRangeChange, onCrosshairMove, onZoneClick, benchmarkIndexId = null, benchmarkName = null, storyBubble = null }: TradingChartProps) {
+  const historyArmed = useRef(false);
+  const lastHighlight = useRef<string|null>(null);
+  const studyViewport = useRef<{ from: Time; to: Time } | null>(null);
+  const studySelectedDate = useRef(selectedSession);
+  studySelectedDate.current = selectedSession;
+  const studySelect = useRef<((date: string) => void) | null>(null);
+  useEffect(() => { if (studyMode && selectedSession) studySelect.current?.(selectedSession); }, [studyMode, selectedSession]);
   // Chart + series exposed to the AnnotationOverlay after mount. React state
   // (not just refs) so the overlay re-renders as soon as they exist.
   const [overlayApi, setOverlayApi] = useState<{ chart: IChartApi; series: ISeriesApi<'Candlestick'>; container: HTMLDivElement } | null>(null);
@@ -266,6 +266,9 @@ export default function TradingChart({ data, height = 900, compact = false, work
   // # of leading whitespace points prepended to the candle series (workspace
   // mode only). Logical indices are offset by this vs. the `data` array.
   const leadOffsetRef = useRef(0);
+  const dateSelectRef = useRef(onDateSelect);
+  dateSelectRef.current = onDateSelect;
+
   // Astro forward-horizon (POA §Phase C): future events beyond the tier's
   // cutoff never render — bands, pins, or tooltips. History is never gated.
   const { cutoffIso: astroCutoffIso } = useAstroHorizon();
@@ -279,8 +282,7 @@ export default function TradingChart({ data, height = 900, compact = false, work
   // bands canvas instead). The ±90-day axis padding is only worth its wasted
   // whitespace when astro zones (which can sit in the future) are present, so
   // buildCharts consults this ref to decide whether to pad or fit-to-data.
-  const astroBandsRef = useRef(horizonBands);
-  useEffect(() => { astroBandsRef.current = horizonBands; }, [horizonBands]);
+  const hasAstroBands = horizonBands.length > 0;
 
   const chartsRef = useRef<IChartApi[]>([]);
 
@@ -301,64 +303,6 @@ export default function TradingChart({ data, height = 900, compact = false, work
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [storyBubble?.date]);
 
-  // Tooltip state for astro band hover — bands: ALL events under the cursor
-  // (coincident point markers list together instead of only the topmost).
-  const [bandTooltip, setBandTooltip] = useState<{
-    x: number; y: number; bands: AstroBand[]
-  } | null>(null);
-
-  // (Confidence queries removed 2026-07-22 — the hover card now carries only
-  // the one-line evidence read; the full read lives on right-click.)
-
-  // Observational evidence (migration 161) — base-rate-anchored texture for
-  // THE PATTERN line. Copy is threshold-driven: an effect is only claimed
-  // when it clears NIFTY's unconditional base rate by a margin.
-  const { data: evidenceRows } = useQuery({
-    queryKey: ['rule-engine', 'evidence'],
-    queryFn: fetchEvidence,
-    enabled: astroBands.length > 0,
-    staleTime: 5 * 60 * 1000,
-    retry: 1,
-  });
-  const evidenceByRule = useMemo(
-    () => new Map((evidenceRows ?? []).map(e => [e.rule_id, e])),
-    [evidenceRows],
-  );
-
-  // Phase 2 of the benchmark gap (owner 2026-07-07): the NIFTY verdict stays,
-  // but the tooltip also states what THE VIEWED INSTRUMENT did over the
-  // hovered window — computed from the bars already on this chart. Mirrors
-  // discovery's formula: close(start)→close(end), forward-walking up to 5
-  // calendar days to the next trading day (confidence_scoring.py).
-  const closeByDate = useMemo(() => {
-    const m = new Map<string, number>();
-    for (const d of data) if (d.close != null) m.set(d.trade_date, d.close);
-    return m;
-  }, [data]);
-  const lastBarDate = data.length > 0 ? data[data.length - 1].trade_date : null;
-
-  const chartWindowReturn = (from: string, to: string): { pct: number; ongoing: boolean } | null => {
-    if (!lastBarDate || from > lastBarDate) return null;   // upcoming / off-chart
-    const addDays = (iso: string, n: number) => {
-      const d = new Date(`${iso}T00:00:00Z`);
-      d.setUTCDate(d.getUTCDate() + n);
-      return d.toISOString().slice(0, 10);
-    };
-    const closeOnOrAfter = (iso: string): number | null => {
-      for (let k = 0; k <= 5; k++) {
-        const c = closeByDate.get(addDays(iso, k));
-        if (c != null) return c;
-      }
-      return null;
-    };
-    const start = closeOnOrAfter(from);
-    if (start == null || start === 0) return null;
-    const ongoing = to >= lastBarDate;
-    const end = ongoing ? (closeByDate.get(lastBarDate) ?? null) : closeOnOrAfter(to);
-    if (end == null) return null;
-    return { pct: ((end - start) / start) * 100, ongoing };
-  };
-
   // Crosshair hover readout (Phase 2.1): the hovered bar's OHLC + volume +
   // delivery% render as a floating legend — no more guessing values by eye.
   const [hoverBar, setHoverBar] = useState<Record<string, unknown> | null>(null);
@@ -374,7 +318,7 @@ export default function TradingChart({ data, height = 900, compact = false, work
   const buildCharts = useCallback(() => {
     if (!mainRef.current) return;
     if (!workspaceMode && !magicRef.current) return;
-    if (!workspaceMode && !compact && (!rsiRef.current || !sniperRef.current)) return;
+    if (!workspaceMode && !compact && (!rsiRef.current || (!studyMode && !sniperRef.current))) return;
     if (data.length === 0) return;
 
     // Read theme colors from CSS vars
@@ -397,7 +341,7 @@ export default function TradingChart({ data, height = 900, compact = false, work
       ...createChartOptions(mainRef.current, mainHeight, C),
       rightPriceScale: {
         borderColor: C.grid,
-        scaleMargins: { top: 0.05, bottom: 0.25 },
+        scaleMargins: { top: 0.14, bottom: 0.38 },
       },
     });
     chartsRef.current.push(mainChart);
@@ -412,6 +356,9 @@ export default function TradingChart({ data, height = 900, compact = false, work
       wickDownColor: C.riskRed + '80',
     });
 
+    const studySync: { chart: IChartApi; set: (row: IndicatorRow) => void }[] = [
+      { chart: mainChart, set: row => mainChart.setCrosshairPosition(row.close, toTime(row.trade_date), candleSeries) },
+    ];
     const candleData: CandlestickData<Time>[] = data
       .filter((d) => d.open != null && d.high != null && d.low != null && d.close != null)
       .map((d) => ({
@@ -437,7 +384,7 @@ export default function TradingChart({ data, height = 900, compact = false, work
     // manual zoom-out (owner feedback) — so we fit the candles to the width
     // instead, which also lines the chart's right edge up with the scrubber's
     // NOW.
-    const padAxis = workspaceMode && astroBandsRef.current.length > 0;
+    const padAxis = workspaceMode && hasAstroBands;
     if (padAxis) {
       const firstDate = data[0].trade_date;
       const lastDate  = data[data.length - 1].trade_date;
@@ -565,7 +512,7 @@ export default function TradingChart({ data, height = 900, compact = false, work
     // Markers: Dot signals + Swing High/Low
     const markers: SeriesMarker<Time>[] = [];
     const bmColorByDate = new Map(bigMoneyEvents.map((e) => [e.trade_date, e.color ?? '#d4a84b']));
-    for (const d of data) {
+    for (const d of showSignalMarkers ? data : []) {
       // Signal dots — color IS the vocabulary (owner 2026-07-07: no text
       // labels): SVD violet, SBD blue, SYD yellow. Swing pivots stay as
       // bare arrows (red down = swing high, green up = swing low).
@@ -574,8 +521,8 @@ export default function TradingChart({ data, height = 900, compact = false, work
       if (d.dot_svd) markers.push({ time: toTime(d.trade_date), position: 'belowBar', color: DOT_LABELS.SVD.color, shape: 'circle' });
       if (d.dot_sbd) markers.push({ time: toTime(d.trade_date), position: 'belowBar', color: DOT_LABELS.SBD.color, shape: 'circle' });
       if (d.dot_syd) markers.push({ time: toTime(d.trade_date), position: 'aboveBar', color: DOT_LABELS.SYD.color, shape: 'circle' });
-      if (d.swing_high) markers.push({ time: toTime(d.trade_date), position: 'aboveBar', color: C.riskRed, shape: 'arrowDown' });
-      if (d.swing_low) markers.push({ time: toTime(d.trade_date), position: 'belowBar', color: C.riskGreen, shape: 'arrowUp' });
+      if (d.swing_high) markers.push({ time: toTime(d.trade_date), position: 'aboveBar', color: C.riskRed, shape: 'square', text: '⚑ H' });
+      if (d.swing_low) markers.push({ time: toTime(d.trade_date), position: 'belowBar', color: C.riskGreen, shape: 'square', text: '⚑ L' });
       if (bmColorByDate.has(d.trade_date)) markers.push({ time: toTime(d.trade_date), position: 'aboveBar', color: bmColorByDate.get(d.trade_date)!, shape: 'circle', text: '₹' });
     }
     if (markers.length > 0) {
@@ -602,6 +549,7 @@ export default function TradingChart({ data, height = 900, compact = false, work
       if (rsiLine.length > 0) {
         const rsiSeries = rsiChart.addSeries(LineSeries, { color: C.violet, lineWidth: 2 as LineWidth, priceLineVisible: false, lastValueVisible: true });
         rsiSeries.setData(rsiLine);
+        studySync.push({ chart: rsiChart, set: row => { if (row.rsi_14 != null) rsiChart!.setCrosshairPosition(row.rsi_14, toTime(row.trade_date), rsiSeries); else rsiChart!.clearCrosshairPosition(); } });
       }
 
       const mfiLine: LineData<Time>[] = [];
@@ -611,7 +559,7 @@ export default function TradingChart({ data, height = 900, compact = false, work
         mfiSeries.setData(mfiLine);
       }
 
-      const refOpts = { color: 'color-mix(in srgb, var(--text-primary) 12%, transparent)', lineWidth: 1 as LineWidth, lineStyle: LineStyle.Dashed, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false };
+      const refOpts = { color: C.grid, lineWidth: 1 as LineWidth, lineStyle: LineStyle.Dashed, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false };
       const obLine = rsiChart.addSeries(LineSeries, refOpts);
       obLine.setData(data.map((d) => ({ time: toTime(d.trade_date), value: 70 })));
       const osLine = rsiChart.addSeries(LineSeries, refOpts);
@@ -622,7 +570,7 @@ export default function TradingChart({ data, height = 900, compact = false, work
     // PANE 3: Sniper Dragon Histogram — hidden in compact mode
     // ═══════════════════════════════════════════════════════════════════
 
-    if (!workspaceMode && !compact && sniperRef.current) {
+    if (!workspaceMode && !compact && !studyMode && sniperRef.current) {
       sniperChart = createChart(sniperRef.current, {
         ...createChartOptions(sniperRef.current, subHeight, C),
         rightPriceScale: { borderColor: C.grid, scaleMargins: { top: 0.05, bottom: 0.05 } },
@@ -672,6 +620,7 @@ export default function TradingChart({ data, height = 900, compact = false, work
       if (rsLine.length > 0) {
         const rsSeries = magicChart.addSeries(LineSeries, { color: C.riskGreen, lineWidth: 2 as LineWidth, priceLineVisible: false, lastValueVisible: true });
         rsSeries.setData(rsLine);
+        studySync.push({ chart: magicChart, set: row => { if (row.magic_rs != null) magicChart!.setCrosshairPosition(row.magic_rs, toTime(row.trade_date), rsSeries); else magicChart!.clearCrosshairPosition(); } });
       }
 
       const maLine: LineData<Time>[] = [];
@@ -682,7 +631,7 @@ export default function TradingChart({ data, height = 900, compact = false, work
       }
 
       const zeroLine = magicChart.addSeries(LineSeries, {
-        color: 'color-mix(in srgb, var(--text-primary) 15%, transparent)', lineWidth: 1 as LineWidth, lineStyle: LineStyle.Dashed,
+        color: C.grid, lineWidth: 1 as LineWidth, lineStyle: LineStyle.Dashed,
         priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false,
       });
       zeroLine.setData(data.map((d) => ({ time: toTime(d.trade_date), value: 0 })));
@@ -764,12 +713,25 @@ export default function TradingChart({ data, height = 900, compact = false, work
     // ═══════════════════════════════════════════════════════════════════
 
     const allCharts = [mainChart, rsiChart, sniperChart, magicChart].filter((c): c is IChartApi => c != null);
+    if (studyMode) {
+      // Identical whitespace calendars on every pane preserve real weekend/event
+      // coordinates without inventing prices or shifting the astronomical date.
+      const dates = [...new Set([...data.map(r => r.trade_date), ...astroBands.flatMap(b => [b.from,b.to])])].sort();
+      allCharts.forEach(chart => chart.addSeries(LineSeries, { visible: false, priceLineVisible: false, lastValueVisible: false }).setData(dates.map(date => ({time: toTime(date)}))));
+    }
+    let requestedHistory = false;
+    if (onHistoryEdge) mainChart.timeScale().subscribeVisibleLogicalRangeChange(range => {
+      if (range && range.from < leadOffsetRef.current + 5 && historyArmed.current && !requestedHistory) { requestedHistory = true; historyArmed.current = false; onHistoryEdge(); }
+    });
+    let syncingRange = false;
     allCharts.forEach((chart, i) => {
       chart.timeScale().subscribeVisibleLogicalRangeChange((range) => {
-        if (range) {
+        if (range && !syncingRange) {
+          syncingRange = true;
           allCharts.forEach((other, j) => {
             if (i !== j) other.timeScale().setVisibleLogicalRange(range);
           });
+          syncingRange = false;
         }
       });
     });
@@ -787,13 +749,38 @@ export default function TradingChart({ data, height = 900, compact = false, work
       });
     }
 
+    let syncingStudy = false;
+    if (studyMode) {
+      studySelect.current = date => {
+        if (syncingStudy) return;
+        const row = data.find(r => r.trade_date === date);
+        if (!row) return;
+        syncingStudy = true;
+        studySync.forEach(s => s.set(row));
+        syncingStudy = false;
+      };
+      allCharts.forEach(chart => {
+        const inspect = (param: { time?: Time }) => {
+          if (syncingStudy || !param.time) return;
+          const date = String(param.time), idx = data.findIndex(r => r.trade_date === date);
+          if (idx < 0) return;
+          studySelect.current?.(date);
+          onCrosshairMove?.(idx, date);
+        };
+        chart.subscribeCrosshairMove(inspect);
+        chart.subscribeClick(inspect);
+      });
+    }
+    mainChart.subscribeClick(param=>{
+      if(param.time)dateSelectRef.current?.(String(param.time));
+    });
     mainChart.subscribeCrosshairMove((param) => {
       if (!param.time) { setHoverBar(null); return; }
       const date = param.time as string;
       const idx  = data.findIndex(d => d.trade_date === date);
       if (idx >= 0) {
         setHoverBar(data[idx] as unknown as Record<string, unknown>);
-        if (onCrosshairMove) onCrosshairMove(idx, date);
+        if (onCrosshairMove && !studyMode) onCrosshairMove(idx, date);
       } else {
         setHoverBar(null);
       }
@@ -803,7 +790,12 @@ export default function TradingChart({ data, height = 900, compact = false, work
     // window so future/pre-data overlay zones are visible. Otherwise fit the
     // candles to the width — a relaxed default that fills the pane and aligns
     // the right edge with the scrubber's NOW.
-    if (padAxis && padFrom && padTo) {
+    if ((studyMode || preserveViewport) && studyViewport.current && String(studyViewport.current.to) >= data[0].trade_date && String(studyViewport.current.from) <= data[data.length - 1].trade_date) {
+      mainChart.timeScale().setVisibleRange({ from: (String(studyViewport.current.from) < data[0].trade_date ? data[0].trade_date : studyViewport.current.from) as Time, to: (String(studyViewport.current.to) > data[data.length-1].trade_date ? data[data.length-1].trade_date : studyViewport.current.to) as Time });
+    } else if (initialCandles) {
+      const last = leadOffsetRef.current + data.length - 1;
+      mainChart.timeScale().setVisibleLogicalRange({from:Math.max(0,last-initialCandles+1),to:last+2});
+    } else if (padAxis && padFrom && padTo) {
       mainChart.timeScale().setVisibleRange({ from: padFrom as Time, to: padTo as Time });
     } else {
       mainChart.timeScale().fitContent();
@@ -822,26 +814,30 @@ export default function TradingChart({ data, height = 900, compact = false, work
       drawBandsRef.current?.();
     });
     // Redraw bands immediately after chart rebuild (covers indicator overlay changes)
-    requestAnimationFrame(() => { drawBandsRef.current?.(); });
+    requestAnimationFrame(() => { drawBandsRef.current?.(); if (studyMode && studySelectedDate.current) studySelect.current?.(studySelectedDate.current); });
   // eslint-disable-next-line react-hooks/exhaustive-deps -- `overlay` is read only for presence (hasOverlay); depending on `!!overlay` avoids chart rebuilds on overlay identity churn
-  }, [data, height, compact, workspaceMode, indicatorOverlays, bigMoneyEvents, setupLevels, setupEntries, !!overlay, onVisibleRangeChange, onCrosshairMove]);
+  }, [data, height, compact, workspaceMode, studyMode, preserveViewport, initialCandles, showSignalMarkers, onHistoryEdge, hasAstroBands, indicatorOverlays, bigMoneyEvents, setupLevels, setupEntries, !!overlay, onVisibleRangeChange, onCrosshairMove]);
 
   // Scroll to highlighted date when slider moves
   useEffect(() => {
-    if (!highlightDate || chartsRef.current.length === 0 || data.length === 0) return;
+    if (studyMode && studyViewport.current) return;
+    if (!highlightDate || !overlayApi || chartsRef.current.length === 0 || data.length === 0) return;
+    const focusKey=highlightDate+':'+focusRevision;
+    if (preserveViewport && focusKey === lastHighlight.current) return;
     const idx = data.findIndex((d) => d.trade_date === highlightDate);
     if (idx < 0) return;
+    lastHighlight.current = focusKey;
 
     // Center the highlighted bar in view with some padding. idx is a `data`
     // index — shift into the padded logical space via the lead offset.
     const offset = leadOffsetRef.current;
-    const barsToShow = 60;
+    const barsToShow = initialCandles ?? 60;
     const from = Math.max(0, idx - barsToShow / 2);
     const to = Math.min(data.length - 1, from + barsToShow);
     chartsRef.current.forEach((chart) => {
       chart.timeScale().setVisibleLogicalRange({ from: from + offset, to: to + offset });
     });
-  }, [highlightDate, data, overlayApi]);
+  }, [highlightDate, focusRevision, data, overlayApi, studyMode, initialCandles]);
 
   useEffect(() => {
     buildCharts();
@@ -858,6 +854,8 @@ export default function TradingChart({ data, height = 900, compact = false, work
     const ro = new ResizeObserver(() => handleResize());
     if (mainRef.current) ro.observe(mainRef.current);
     return () => {
+      if (studyMode || preserveViewport) studyViewport.current = mainChartRef.current?.timeScale().getVisibleRange() ?? null;
+      studySelect.current = null;
       ro.disconnect();
       window.removeEventListener('resize', handleResize);
       chartsRef.current.forEach((c) => c.remove());
@@ -909,9 +907,10 @@ export default function TradingChart({ data, height = 900, compact = false, work
       }
 
       // Single-day events render as marker lines (handled separately below), never zones.
-      const pointBands   = horizonBands.filter(b => b.isPoint)
-      const panchakBands = horizonBands.filter(b => b.isPanchak && !b.isPoint)
-      const nonPanchak   = horizonBands.filter(b => !b.isPanchak && !b.isPoint)
+      const selectedBands = dateSelectRef.current ? horizonBands.filter(b=>b.eventKey===selectedAstroEventKey) : horizonBands;
+      const pointBands   = selectedBands.filter(b => b.isPoint)
+      const panchakBands = selectedBands.filter(b => b.isPanchak && !b.isPoint)
+      const nonPanchak   = selectedBands.filter(b => !b.isPanchak && !b.isPoint)
 
       // Group by groupTag
       const byGroup = new Map<string, typeof nonPanchak>()
@@ -954,7 +953,7 @@ export default function TradingChart({ data, height = 900, compact = false, work
                            ...mergedBands.map(b => ({ ...b, _merged: true, isPanchak: false, panchakTier: undefined }))]
 
       for (const band of allDrawBands) {
-        const x1 = ts.timeToCoordinate(band.from as Time);
+        const x1 = eventCoordinate(band.from, data, d => ts.timeToCoordinate(d as Time));
         const x2 = ts.timeToCoordinate(band.to   as Time);
         if (x1 == null || x2 == null) continue;
 
@@ -1055,7 +1054,7 @@ export default function TradingChart({ data, height = 900, compact = false, work
           ctx.setLineDash([])
 
           // Glyph at top-left of band — shows which planet/rule this zone is
-          const glyph = BAND_GLYPHS[band.groupTag]
+          const glyph = (BAND_GLYPHS[band.groupTag] ?? (band.groupTag.startsWith('mercury') ? '☿' : '♀'))
           if (glyph && bw > 8) {
             ctx.save()
             ctx.font      = '16px serif'
@@ -1071,7 +1070,7 @@ export default function TradingChart({ data, height = 900, compact = false, work
       // (BAY-R06/R27, planet rise/station, single-day DN rules). Zones above are
       // untouched; these never merge and never fill.
       for (const pb of pointBands) {
-        const x = ts.timeToCoordinate(pb.from as Time);
+        const x = eventCoordinate(pb.from, data, d => ts.timeToCoordinate(d as Time));
         if (x == null) continue;
         // Overlap Visibility Phase 1: point markers color by SOURCE PLANET
         // (Mercury blue, Mars red, Venus pink, Neptune sky…) so coincident
@@ -1090,39 +1089,7 @@ export default function TradingChart({ data, height = 900, compact = false, work
         ctx.fillStyle  = hexToRgba(pColor, 0.9);
         ctx.font       = '14px serif';
         ctx.textAlign  = 'center';
-        ctx.fillText(pointMarkerLabel(pb.ruleCode), x, 26);
         ctx.restore();
-      }
-
-      // ── Watch-day ticks (readiness — POA §Phase A item 1) ────────────────
-      // The bands say "you were in a window"; these ticks say "this exact
-      // day was a watch day". ONLY sign-ingress days qualify — confirmed
-      // 2026-07-22 against km_rule_evidence (TRN-MER-MAN-TRN 'start' 56.1%
-      // vs 48.9% base). TR-MER-RET's own boundaries sit at 50.9%/47.1% —
-      // inside the honesty threshold, i.e. ordinary days — so retrograde/
-      // station ticks were removed (they overclaimed before this fix).
-      // Bottom stubs + ◈ so a year of ingress days reads as a rhythm.
-      const watchTicks = new Map<string, string>()   // date → color
-      for (const b of nonPanchak) {
-        if (b.ruleCode === 'TRN-MER-MAN-TRN') {
-          watchTicks.set(b.from, planetColorOfRuleCode(b.ruleCode) ?? b.color)
-        }
-      }
-      for (const [d, c] of watchTicks) {
-        const x = ts.timeToCoordinate(d as Time)
-        if (x == null) continue
-        ctx.save()
-        ctx.strokeStyle = hexToRgba(c, 0.55)
-        ctx.lineWidth = 1
-        ctx.beginPath()
-        ctx.moveTo(x, h - 24)
-        ctx.lineTo(x, h)
-        ctx.stroke()
-        ctx.fillStyle = hexToRgba(c, 0.95)
-        ctx.font = '10px sans-serif'
-        ctx.textAlign = 'center'
-        ctx.fillText('◈', x, h - 27)
-        ctx.restore()
       }
 
       // ── Future-event pins — band starts within the next 15 days ─────────
@@ -1147,10 +1114,10 @@ export default function TradingChart({ data, height = 900, compact = false, work
       }
 
       for (const band of nearestFuture.values()) {
-        const x = ts.timeToCoordinate(band.from as Time)
+        const x = eventCoordinate(band.from, data, d => ts.timeToCoordinate(d as Time))
         if (x == null) continue
         const daysUntil = Math.round((new Date(band.from).getTime() - Date.now()) / 86400000)
-        const glyph  = BAND_GLYPHS[band.groupTag] ?? '◉'
+        const glyph  = (BAND_GLYPHS[band.groupTag] ?? (band.groupTag.startsWith('mercury') ? '☿' : '♀')) ?? '◉'
         const pillW  = 34, pillH = 17, pillR = 4
         const px     = x - pillW / 2
         const py     = 30 + bob                           // below filter icon, bobs gently
@@ -1203,12 +1170,12 @@ export default function TradingChart({ data, height = 900, compact = false, work
         ctx?.clearRect(0, 0, canvas.width, canvas.height);
       }
     };
-  }, [horizonBands]);
+  }, [horizonBands,selectedAstroEventKey]);
 
   return (
-    <div className="space-y-0.5">
+    <div className="space-y-0.5" onPointerDown={() => { if(onHistoryEdge)historyArmed.current=true; }} onWheel={() => { if(onHistoryEdge)historyArmed.current=true; }}>
       {/* Legend — legacy mode only */}
-      {!workspaceMode && (
+      {!workspaceMode && !studyMode && (
         <div className="flex items-center gap-4 mb-2 text-[12px] text-muted">
           {SMA_LINES.map((s) => (
             <span key={s.key} className="flex items-center gap-1">
@@ -1235,7 +1202,7 @@ export default function TradingChart({ data, height = 900, compact = false, work
           // the popover leads with what the cursor is aimed at.
           const found: AstroBand[] = [];
           for (const band of horizonBands) {
-            const x1 = ts.timeToCoordinate(band.from as Time);
+            const x1 = eventCoordinate(band.from, data, d => ts.timeToCoordinate(d as Time));
             const x2 = ts.timeToCoordinate(band.to   as Time);
             if (x1 == null || x2 == null) continue;
             // Point markers are 1px lines — give them a small hit tolerance.
@@ -1251,41 +1218,11 @@ export default function TradingChart({ data, height = 900, compact = false, work
             onZoneClick(found[0], e.clientX, e.clientY, found);
           }
         }}
-        onMouseMove={e => {
-          if (horizonBands.length === 0 || !mainChartRef.current) {
-            if (bandTooltip) setBandTooltip(null);
-            return;
-          }
-          const rect   = (e.currentTarget as HTMLElement).getBoundingClientRect();
-          const mouseX = e.clientX - rect.left;
-          const mouseY = e.clientY - rect.top;
-          const ts     = mainChartRef.current.timeScale();
-          // Collect EVERY band under the cursor (Overlap Visibility Phase 2):
-          // coincident events tooltip together. Point markers get the same
-          // ±4px hit tolerance hover that right-click always had — a 1px
-          // line was effectively un-hoverable before.
-          const found: AstroBand[] = [];
-          for (const band of horizonBands) {
-            const x1 = ts.timeToCoordinate(band.from as Time);
-            const x2 = ts.timeToCoordinate(band.to   as Time);
-            if (x1 == null || x2 == null) continue;
-            const pad   = band.isPoint ? 4 : 0;
-            const left  = Math.min(x1, x2) - pad;
-            const right = Math.max(x1, x2) + pad;
-            if (mouseX >= left && mouseX <= right) found.push(band);
-          }
-          if (found.length > 0) {
-            // Points first (they're what the cursor is aimed at when both
-            // a wide zone and a thin marker overlap), then narrower zones.
-            found.sort((a, b) => Number(b.isPoint) - Number(a.isPoint));
-            setBandTooltip({ x: mouseX, y: mouseY, bands: found });
-          } else if (bandTooltip) {
-            setBandTooltip(null);
-          }
-        }}
-        onMouseLeave={() => { setBandTooltip(null); setHoverBar(null); }}
+        onMouseLeave={() => setHoverBar(null)}
       >
         <div ref={mainRef} className="rounded-xl overflow-hidden" />
+
+        {overlayApi && horizonBands.length>0 && <AstroChartEvents chart={overlayApi.chart} container={overlayApi.container} bands={horizonBands} data={data} selectedEventKey={selectedAstroEventKey} onFocus={onAstroFocus ?? (band=>{const rect=overlayApi.container.getBoundingClientRect();onZoneClick?.(band,rect.left,rect.top+32)})} onDateSelect={onDateSelect}/>}
 
         {/* Editorial AnnotationOverlay — cycle bands + persona callouts +
             Big Money badges + storyEvent pins. Same overlay used by both
@@ -1300,6 +1237,8 @@ export default function TradingChart({ data, height = 900, compact = false, work
             callouts={overlay.callouts}
             bigMoney={overlay.bigMoney}
             storyPins={overlay.storyPins}
+            onStorySession={onStorySession}
+            onStorySessions={onStorySessions}
           />
         ) : null}
 
@@ -1408,118 +1347,7 @@ export default function TradingChart({ data, height = 900, compact = false, work
             borderRadius: 12,
           }}
         />
-        {bandTooltip && bandTooltip.bands.length > 0 && (() => {
-          const MAX_SHOWN = 3;
-          const shown  = bandTooltip.bands.slice(0, MAX_SHOWN);
-          const extra  = bandTooltip.bands.length - shown.length;
-          const first  = shown[0];
-          const accent = (b: AstroBand) =>
-            (b.isPoint && planetColorOfRuleCode(b.ruleCode)) || b.color;
-          const today  = new Date().toISOString().slice(0, 10);
-          return (
-            <div style={{
-              position: 'absolute',
-              left: bandTooltip.x + 14,
-              // Clamp so the card never runs off the bottom of the pane
-              // (owner feedback 2026-07-22: "all data is not visible").
-              top: `min(${Math.max(8, bandTooltip.y - 60)}px, calc(100% - 220px))`,
-              zIndex: 20,
-              background: 'rgba(13,17,23,0.95)',
-              border: `1px solid ${accent(first)}55`,
-              borderLeft: `3px solid ${accent(first)}`,
-              borderRadius: 6,
-              padding: '7px 11px',
-              pointerEvents: 'none',
-              minWidth: 180,
-              maxWidth: 280,
-              boxShadow: '0 4px 16px rgba(0,0,0,0.5)',
-            }}>
-              {shown.map((b, i) => {
-                const c    = accent(b);
-                return (
-                  <div key={`${b.ruleCode}-${b.from}-${i}`} style={i > 0 ? {
-                    marginTop: 7, paddingTop: 7, borderTop: '1px solid color-mix(in srgb, var(--text-primary) 8%, transparent)',
-                  } : undefined}>
-                    <div style={{ fontSize: 12, fontWeight: 600, color: c, marginBottom: 3, lineHeight: 1.3 }}>
-                      {b.displayName}
-                    </div>
-                    <div style={{ fontSize: 12, fontFamily: 'var(--font-mono, monospace)', color: 'color-mix(in srgb, var(--text-primary) 45%, transparent)', marginBottom: 4 }}>
-                      {b.ruleCode}
-                    </div>
-                    <div style={{ fontSize: 12, color: 'color-mix(in srgb, var(--text-primary) 60%, transparent)', display: 'flex', gap: 4, alignItems: 'center' }}>
-                      {b.isPoint ? (
-                        <span>{fmtDate(b.from)}</span>
-                      ) : (
-                        <>
-                          <span>{fmtDate(b.from)}</span>
-                          <span style={{ opacity: 0.35 }}>→</span>
-                          <span>{fmtDate(b.to)}</span>
-                        </>
-                      )}
-                    </div>
-                    {/* Astro-story §2: the card orients, it does not grade.
-                        The old THIS WINDOW ✓/✗/"not scored yet" line issued a
-                        directional verdict (or narrated unfinished homework) —
-                        replaced by THE PATTERN below. Upcoming windows still
-                        get their opening date. */}
-                    {b.from > today && (
-                      <div style={{ marginTop: 5, fontSize: 12, display: 'flex', gap: 5, alignItems: 'baseline' }}>
-                        <span style={{ fontSize: 10, letterSpacing: '0.1em', color: 'color-mix(in srgb, var(--text-primary) 35%, transparent)', fontFamily: 'var(--font-mono, monospace)' }}>
-                          THIS WINDOW
-                        </span>
-                        <span style={{ color: 'color-mix(in srgb, var(--text-primary) 40%, transparent)' }}>
-                          ◦ upcoming — opens {fmtDate(b.from)}
-                        </span>
-                      </div>
-                    )}
-                    {/* Phase 2: the viewed instrument's own move over this
-                        window — the fact this chart can actually attest to. */}
-                    {(() => {
-                      const r = chartWindowReturn(b.from, b.to);
-                      if (r == null) return null;
-                      return (
-                        <div style={{ marginTop: 3, fontSize: 12, display: 'flex', gap: 5, alignItems: 'baseline' }}>
-                          <span style={{ fontSize: 10, letterSpacing: '0.1em', color: 'color-mix(in srgb, var(--text-primary) 35%, transparent)', fontFamily: 'var(--font-mono, monospace)' }}>
-                            THIS CHART
-                          </span>
-                          <span style={{ fontFamily: 'var(--font-mono, monospace)', color: r.pct >= 0 ? 'var(--bull)' : 'var(--bear)' }}>
-                            {r.pct >= 0 ? '+' : ''}{r.pct.toFixed(1)}% over this window{r.ongoing ? ' so far' : ''}
-                          </span>
-                        </div>
-                      );
-                    })()}
-                    {/* One glanceable line — the full read lives on right-click
-                        (owner feedback 2026-07-22: hover was an unreadable
-                        stat dump). */}
-                    {(() => {
-                      const ev = evidenceByRule.get(b.ruleId);
-                      if (!ev) return null;
-                      const read = buildRuleRead(ev);
-                      return (
-                        <div style={{ marginTop: 4, fontSize: 12, display: 'flex', gap: 5, alignItems: 'baseline' }}>
-                          <span style={{ flexShrink: 0, color: read.role === 'watch' ? 'var(--accent)' : 'color-mix(in srgb, var(--text-primary) 40%, transparent)' }}>
-                            {read.role === 'watch' ? '\u25c8' : '\u25cb'}
-                          </span>
-                          <span style={{ color: 'color-mix(in srgb, var(--text-primary) 62%, transparent)' }}>
-                            {read.hover}
-                          </span>
-                        </div>
-                      );
-                    })()}
-                  </div>
-                );
-              })}
-              {extra > 0 && (
-                <div style={{ marginTop: 6, fontSize: 11, fontFamily: 'var(--font-mono, monospace)', color: 'color-mix(in srgb, var(--text-primary) 35%, transparent)' }}>
-                  +{extra} more event{extra > 1 ? 's' : ''} here
-                </div>
-              )}
-              <div style={{ marginTop: 6, fontSize: 11, fontFamily: 'var(--font-mono, monospace)', color: 'color-mix(in srgb, var(--text-primary) 35%, transparent)' }}>
-                right-click for the full read
-              </div>
-            </div>
-          );
-        })()}
+
       </div>
 
       {!workspaceMode && !compact && (
@@ -1531,7 +1359,7 @@ export default function TradingChart({ data, height = 900, compact = false, work
         </div>
       )}
 
-      {!workspaceMode && !compact && (
+      {!workspaceMode && !compact && !studyMode && (
         <div className="relative">
           <span className="absolute top-1 left-2 text-[12px] text-muted z-10 pointer-events-none">
             Sniper Dragon — <span style={{ color: 'var(--risk-red)' }}>Inst</span> / <span style={{ color: 'var(--risk-amber)' }}>Hot$</span> / <span style={{ color: 'var(--risk-green)' }}>Retail</span>

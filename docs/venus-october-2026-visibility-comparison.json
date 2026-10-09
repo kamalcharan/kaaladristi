@@ -1,0 +1,79 @@
+{
+  "engine": "2.10.03",
+  "ephemeris": "Moshier",
+  "flags": 260,
+  "location": {
+    "name": "Ujjain",
+    "longitude_latitude_altitude": [
+      75.7885,
+      23.1793,
+      494.0
+    ]
+  },
+  "timezone": "Asia/Kolkata (UTC+05:30)",
+  "status": "exploratory calculations, not observationally validated",
+  "cases": [
+    {
+      "name": "standard_observer_explicit_atmosphere",
+      "atmosphere": [
+        1013.25,
+        15.0,
+        50.0,
+        0.25
+      ],
+      "observer": [
+        36.0,
+        1.0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "events": [
+        {
+          "event": "last_evening_visibility",
+          "event_type": 2,
+          "model_time_ist": "2026-10-12T18:16+05:30",
+          "julian_day_ut": 2461326.032559323
+        },
+        {
+          "event": "first_morning_visibility",
+          "event_type": 1,
+          "model_time_ist": "2026-10-30T05:57+05:30",
+          "julian_day_ut": 2461343.519356983
+        }
+      ]
+    },
+    {
+      "name": "mercury_parameters_sensitivity_only",
+      "atmosphere": [
+        1013.25,
+        25.0,
+        40.0,
+        0.24
+      ],
+      "observer": [
+        36.0,
+        3.25,
+        0,
+        0,
+        0,
+        0
+      ],
+      "events": [
+        {
+          "event": "last_evening_visibility",
+          "event_type": 2,
+          "model_time_ist": "2026-10-14T18:00+05:30",
+          "julian_day_ut": 2461328.02115466
+        },
+        {
+          "event": "first_morning_visibility",
+          "event_type": 1,
+          "model_time_ist": "2026-10-28T06:10+05:30",
+          "julian_day_ut": 2461341.5279322313
+        }
+      ]
+    }
+  ]
+}

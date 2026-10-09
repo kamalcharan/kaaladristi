@@ -9,7 +9,7 @@ import { useAuthStore } from '@/stores/authStore'
 import type { KmProfile } from '@/types'
 import { getCatalogItem } from '@/constants/catalogItems'
 import { ASTRO_GROUP_OVERLAYS } from '@/constants/astroGroupOverlays'
-import { fetchCatalogRules } from '@/pages/RuleEngine/ruleService'
+import { fetchAstroFamilies } from '@/services/astroEvents'
 import VaNiFeedback from '@/components/domain/VaNi/VaNiFeedback'
 import { api } from '@/services/apiClient'
 
@@ -396,8 +396,8 @@ function MorningModal({ items, profile, onClose }: {
   // Astro rule display names — same query key as CatalogAstroSection, served from cache.
   // No default — undefined = still loading, [] = loaded (empty). Critical for the guard below.
   const { data: astroRules } = useQuery({
-    queryKey: ['rule-engine', 'catalog-rules'],
-    queryFn: fetchCatalogRules,
+    queryKey: ['astro', 'families', false],
+    queryFn: () => fetchAstroFamilies(),
     staleTime: 10 * 60 * 1000,
   })
   const astroRulesReady = astroRules !== undefined
@@ -405,7 +405,7 @@ function MorningModal({ items, profile, onClose }: {
   const astroRuleNames = useMemo(() => {
     const map: Record<string, string> = {}
     astroRules?.forEach(r => {
-      map[`astro_rule:${r.rule_code}`] = r.display_name ?? ''
+      map[`astro_event:${r.id}`] = `${r.planets.join(" + ")} ${r.name}`
     })
     return map
   }, [astroRules])

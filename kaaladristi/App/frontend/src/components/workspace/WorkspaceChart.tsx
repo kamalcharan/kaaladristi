@@ -7,7 +7,7 @@ import TradingChart from '@/components/charts/TradingChart'
 import { useChartSyncStore } from '@/stores/chartSyncStore'
 import { useAstroOverlayBands } from '@/hooks/useAstroOverlayBands'
 import OverlayExplainPopover from '@/components/domain/VaNi/OverlayExplainPopover'
-import MercuryStoryRibbon from '@/components/domain/MercuryStoryRibbon'
+import AstroEventRibbon from '@/components/astro/AstroEventRibbon'
 import type { AstroBand } from '@/services/astroOverlayService'
 import type { InstrumentRef, ChartOverlay } from '@/types/framework'
 
@@ -52,7 +52,7 @@ export default function WorkspaceChart({ instrument, overlays: overlaysProp, sta
   const { setTotalBars, setActiveBarIndex, setVisibleRange } = useChartSyncStore.getState()
   // Astro is INDEX-ONLY (owner 2026-07-22) — equity blocks get no bands/ribbon.
   const isIndexChart = instrument.type === 'index'
-  const astroBands = useAstroOverlayBands(isIndexChart ? effectiveOverlays : NO_OVERLAYS)
+  const astroBands = useAstroOverlayBands(isIndexChart ? effectiveOverlays : NO_OVERLAYS, data[0]?.trade_date)
   const [zoneExplain, setZoneExplain] = useState<ZoneExplain | null>(null)
 
   const handleZoneClick = useCallback((band: AstroBand, clientX: number, clientY: number, coincident?: AstroBand[]) => {
@@ -100,7 +100,7 @@ export default function WorkspaceChart({ instrument, overlays: overlaysProp, sta
       {/* Mercury story chip — floats over the chart top (Study's ribbon,
           overlay-styled: the workspace block has no spare layout row).
           Index charts only — astro is index-only (owner 2026-07-22). */}
-      {!isLoading && isIndexChart && !asOf && <MercuryStoryRibbon overlay />}
+      {!isLoading && isIndexChart && !asOf && <AstroEventRibbon overlay />}
       {isLoading && (
         <div style={{
           position: 'absolute', top: HEADER_H, left: 0, right: 0,

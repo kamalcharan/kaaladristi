@@ -1,0 +1,490 @@
+{
+  "source": "kaaladristi\\App\\backend\\tests\\fixtures\\venus_october_2026.json",
+  "source_sha256": "6b3e6a81afe462fab45bb5322afbb86f5b31f0c37b1df1dafb640dabd5cca0e3",
+  "formula_source": "C:\\Users\\kamal\\Documents\\New project\\kaaladristi\\kaaladristi\\App\\backend\\generate_ephemeris.py",
+  "formula": "def is_combust(sun_long, planet_long, planet_name):\n    \"\"\"Check if planet is combust (too close to Sun).\"\"\"\n    diff = abs(sun_long - planet_long)\n    if diff > 180:\n        diff = 360 - diff\n    \n    combustion_degrees = {\n        'Moon': 12,\n        'Mars': 17,\n        'Mercury': 14,\n        'Jupiter': 11,\n        'Venus': 10,\n        'Saturn': 15,\n    }\n    \n    threshold = combustion_degrees.get(planet_name, 0)\n    return diff <= threshold",
+  "precision": "exported daily samples; sample timestamps not provided",
+  "stored_windows": [
+    {
+      "start": "2026-10-18",
+      "end": "2026-10-30"
+    }
+  ],
+  "repository_formula_windows": [
+    {
+      "start": "2026-10-18",
+      "end": "2026-10-30"
+    }
+  ],
+  "flag_mismatches": [],
+  "daily_comparison": [
+    {
+      "date": "2026-09-20",
+      "sun_venus_signed_deg": 38.183157,
+      "sun_venus_separation_deg": 38.183157,
+      "stored_combust": false,
+      "repository_combust": false,
+      "venus_retrograde": false,
+      "venus_speed": 0.435571
+    },
+    {
+      "date": "2026-09-21",
+      "sun_venus_signed_deg": 37.628041,
+      "sun_venus_separation_deg": 37.628041,
+      "stored_combust": false,
+      "repository_combust": false,
+      "venus_retrograde": false,
+      "venus_speed": 0.408144
+    },
+    {
+      "date": "2026-09-22",
+      "sun_venus_signed_deg": 37.044517,
+      "sun_venus_separation_deg": 37.044517,
+      "stored_combust": false,
+      "repository_combust": false,
+      "venus_retrograde": false,
+      "venus_speed": 0.379693
+    },
+    {
+      "date": "2026-09-23",
+      "sun_venus_signed_deg": 36.431547,
+      "sun_venus_separation_deg": 36.431547,
+      "stored_combust": false,
+      "repository_combust": false,
+      "venus_retrograde": false,
+      "venus_speed": 0.350212
+    },
+    {
+      "date": "2026-09-24",
+      "sun_venus_signed_deg": 35.788087,
+      "sun_venus_separation_deg": 35.788087,
+      "stored_combust": false,
+      "repository_combust": false,
+      "venus_retrograde": false,
+      "venus_speed": 0.319698
+    },
+    {
+      "date": "2026-09-25",
+      "sun_venus_signed_deg": 35.113093,
+      "sun_venus_separation_deg": 35.113093,
+      "stored_combust": false,
+      "repository_combust": false,
+      "venus_retrograde": false,
+      "venus_speed": 0.288159
+    },
+    {
+      "date": "2026-09-26",
+      "sun_venus_signed_deg": 34.405531,
+      "sun_venus_separation_deg": 34.405531,
+      "stored_combust": false,
+      "repository_combust": false,
+      "venus_retrograde": false,
+      "venus_speed": 0.25561
+    },
+    {
+      "date": "2026-09-27",
+      "sun_venus_signed_deg": 33.664385,
+      "sun_venus_separation_deg": 33.664385,
+      "stored_combust": false,
+      "repository_combust": false,
+      "venus_retrograde": false,
+      "venus_speed": 0.222076
+    },
+    {
+      "date": "2026-09-28",
+      "sun_venus_signed_deg": 32.888664,
+      "sun_venus_separation_deg": 32.888664,
+      "stored_combust": false,
+      "repository_combust": false,
+      "venus_retrograde": false,
+      "venus_speed": 0.187592
+    },
+    {
+      "date": "2026-09-29",
+      "sun_venus_signed_deg": 32.07742,
+      "sun_venus_separation_deg": 32.07742,
+      "stored_combust": false,
+      "repository_combust": false,
+      "venus_retrograde": false,
+      "venus_speed": 0.152203
+    },
+    {
+      "date": "2026-09-30",
+      "sun_venus_signed_deg": 31.229752,
+      "sun_venus_separation_deg": 31.229752,
+      "stored_combust": false,
+      "repository_combust": false,
+      "venus_retrograde": false,
+      "venus_speed": 0.11596
+    },
+    {
+      "date": "2026-10-01",
+      "sun_venus_signed_deg": 30.344819,
+      "sun_venus_separation_deg": 30.344819,
+      "stored_combust": false,
+      "repository_combust": false,
+      "venus_retrograde": false,
+      "venus_speed": 0.078925
+    },
+    {
+      "date": "2026-10-02",
+      "sun_venus_signed_deg": 29.421849,
+      "sun_venus_separation_deg": 29.421849,
+      "stored_combust": false,
+      "repository_combust": false,
+      "venus_retrograde": false,
+      "venus_speed": 0.04117
+    },
+    {
+      "date": "2026-10-03",
+      "sun_venus_signed_deg": 28.460154,
+      "sun_venus_separation_deg": 28.460154,
+      "stored_combust": false,
+      "repository_combust": false,
+      "venus_retrograde": false,
+      "venus_speed": 0.002776
+    },
+    {
+      "date": "2026-10-04",
+      "sun_venus_signed_deg": 27.459134,
+      "sun_venus_separation_deg": 27.459134,
+      "stored_combust": false,
+      "repository_combust": false,
+      "venus_retrograde": true,
+      "venus_speed": -0.036158
+    },
+    {
+      "date": "2026-10-05",
+      "sun_venus_signed_deg": 26.418305,
+      "sun_venus_separation_deg": 26.418305,
+      "stored_combust": false,
+      "repository_combust": false,
+      "venus_retrograde": true,
+      "venus_speed": -0.075523
+    },
+    {
+      "date": "2026-10-06",
+      "sun_venus_signed_deg": 25.337305,
+      "sun_venus_separation_deg": 25.337305,
+      "stored_combust": false,
+      "repository_combust": false,
+      "venus_retrograde": true,
+      "venus_speed": -0.115188
+    },
+    {
+      "date": "2026-10-07",
+      "sun_venus_signed_deg": 24.215916,
+      "sun_venus_separation_deg": 24.215916,
+      "stored_combust": false,
+      "repository_combust": false,
+      "venus_retrograde": true,
+      "venus_speed": -0.155003
+    },
+    {
+      "date": "2026-10-08",
+      "sun_venus_signed_deg": 23.054086,
+      "sun_venus_separation_deg": 23.054086,
+      "stored_combust": false,
+      "repository_combust": false,
+      "venus_retrograde": true,
+      "venus_speed": -0.194794
+    },
+    {
+      "date": "2026-10-09",
+      "sun_venus_signed_deg": 21.85195,
+      "sun_venus_separation_deg": 21.85195,
+      "stored_combust": false,
+      "repository_combust": false,
+      "venus_retrograde": true,
+      "venus_speed": -0.234364
+    },
+    {
+      "date": "2026-10-10",
+      "sun_venus_signed_deg": 20.609857,
+      "sun_venus_separation_deg": 20.609857,
+      "stored_combust": false,
+      "repository_combust": false,
+      "venus_retrograde": true,
+      "venus_speed": -0.273491
+    },
+    {
+      "date": "2026-10-11",
+      "sun_venus_signed_deg": 19.328388,
+      "sun_venus_separation_deg": 19.328388,
+      "stored_combust": false,
+      "repository_combust": false,
+      "venus_retrograde": true,
+      "venus_speed": -0.311926
+    },
+    {
+      "date": "2026-10-12",
+      "sun_venus_signed_deg": 18.008387,
+      "sun_venus_separation_deg": 18.008387,
+      "stored_combust": false,
+      "repository_combust": false,
+      "venus_retrograde": true,
+      "venus_speed": -0.349396
+    },
+    {
+      "date": "2026-10-13",
+      "sun_venus_signed_deg": 16.650979,
+      "sun_venus_separation_deg": 16.650979,
+      "stored_combust": false,
+      "repository_combust": false,
+      "venus_retrograde": true,
+      "venus_speed": -0.38561
+    },
+    {
+      "date": "2026-10-14",
+      "sun_venus_signed_deg": 15.257588,
+      "sun_venus_separation_deg": 15.257588,
+      "stored_combust": false,
+      "repository_combust": false,
+      "venus_retrograde": true,
+      "venus_speed": -0.420257
+    },
+    {
+      "date": "2026-10-15",
+      "sun_venus_signed_deg": 13.829951,
+      "sun_venus_separation_deg": 13.829951,
+      "stored_combust": false,
+      "repository_combust": false,
+      "venus_retrograde": true,
+      "venus_speed": -0.453015
+    },
+    {
+      "date": "2026-10-16",
+      "sun_venus_signed_deg": 12.370133,
+      "sun_venus_separation_deg": 12.370133,
+      "stored_combust": false,
+      "repository_combust": false,
+      "venus_retrograde": true,
+      "venus_speed": -0.483559
+    },
+    {
+      "date": "2026-10-17",
+      "sun_venus_signed_deg": 10.880516,
+      "sun_venus_separation_deg": 10.880516,
+      "stored_combust": false,
+      "repository_combust": false,
+      "venus_retrograde": true,
+      "venus_speed": -0.511563
+    },
+    {
+      "date": "2026-10-18",
+      "sun_venus_signed_deg": 9.363808,
+      "sun_venus_separation_deg": 9.363808,
+      "stored_combust": true,
+      "repository_combust": true,
+      "venus_retrograde": true,
+      "venus_speed": -0.536711
+    },
+    {
+      "date": "2026-10-19",
+      "sun_venus_signed_deg": 7.82302,
+      "sun_venus_separation_deg": 7.82302,
+      "stored_combust": true,
+      "repository_combust": true,
+      "venus_retrograde": true,
+      "venus_speed": -0.558701
+    },
+    {
+      "date": "2026-10-20",
+      "sun_venus_signed_deg": 6.261453,
+      "sun_venus_separation_deg": 6.261453,
+      "stored_combust": true,
+      "repository_combust": true,
+      "venus_retrograde": true,
+      "venus_speed": -0.577258
+    },
+    {
+      "date": "2026-10-21",
+      "sun_venus_signed_deg": 4.682667,
+      "sun_venus_separation_deg": 4.682667,
+      "stored_combust": true,
+      "repository_combust": true,
+      "venus_retrograde": true,
+      "venus_speed": -0.592134
+    },
+    {
+      "date": "2026-10-22",
+      "sun_venus_signed_deg": 3.09045,
+      "sun_venus_separation_deg": 3.09045,
+      "stored_combust": true,
+      "repository_combust": true,
+      "venus_retrograde": true,
+      "venus_speed": -0.603119
+    },
+    {
+      "date": "2026-10-23",
+      "sun_venus_signed_deg": 1.488773,
+      "sun_venus_separation_deg": 1.488773,
+      "stored_combust": true,
+      "repository_combust": true,
+      "venus_retrograde": true,
+      "venus_speed": -0.610047
+    },
+    {
+      "date": "2026-10-24",
+      "sun_venus_signed_deg": -0.11825,
+      "sun_venus_separation_deg": 0.11825,
+      "stored_combust": true,
+      "repository_combust": true,
+      "venus_retrograde": true,
+      "venus_speed": -0.612801
+    },
+    {
+      "date": "2026-10-25",
+      "sun_venus_signed_deg": -1.726422,
+      "sun_venus_separation_deg": 1.726422,
+      "stored_combust": true,
+      "repository_combust": true,
+      "venus_retrograde": true,
+      "venus_speed": -0.611318
+    },
+    {
+      "date": "2026-10-26",
+      "sun_venus_signed_deg": -3.331514,
+      "sun_venus_separation_deg": 3.331514,
+      "stored_combust": true,
+      "repository_combust": true,
+      "venus_retrograde": true,
+      "venus_speed": -0.605595
+    },
+    {
+      "date": "2026-10-27",
+      "sun_venus_signed_deg": -4.929329,
+      "sun_venus_separation_deg": 4.929329,
+      "stored_combust": true,
+      "repository_combust": true,
+      "venus_retrograde": true,
+      "venus_speed": -0.595693
+    },
+    {
+      "date": "2026-10-28",
+      "sun_venus_signed_deg": -6.515762,
+      "sun_venus_separation_deg": 6.515762,
+      "stored_combust": true,
+      "repository_combust": true,
+      "venus_retrograde": true,
+      "venus_speed": -0.581734
+    },
+    {
+      "date": "2026-10-29",
+      "sun_venus_signed_deg": -8.08686,
+      "sun_venus_separation_deg": 8.08686,
+      "stored_combust": true,
+      "repository_combust": true,
+      "venus_retrograde": true,
+      "venus_speed": -0.5639
+    },
+    {
+      "date": "2026-10-30",
+      "sun_venus_signed_deg": -9.638875,
+      "sun_venus_separation_deg": 9.638875,
+      "stored_combust": true,
+      "repository_combust": true,
+      "venus_retrograde": true,
+      "venus_speed": -0.542425
+    },
+    {
+      "date": "2026-10-31",
+      "sun_venus_signed_deg": -11.168312,
+      "sun_venus_separation_deg": 11.168312,
+      "stored_combust": false,
+      "repository_combust": false,
+      "venus_retrograde": true,
+      "venus_speed": -0.517586
+    },
+    {
+      "date": "2026-11-01",
+      "sun_venus_signed_deg": -12.671966,
+      "sun_venus_separation_deg": 12.671966,
+      "stored_combust": false,
+      "repository_combust": false,
+      "venus_retrograde": true,
+      "venus_speed": -0.48969
+    },
+    {
+      "date": "2026-11-02",
+      "sun_venus_signed_deg": -14.146941,
+      "sun_venus_separation_deg": 14.146941,
+      "stored_combust": false,
+      "repository_combust": false,
+      "venus_retrograde": true,
+      "venus_speed": -0.459065
+    },
+    {
+      "date": "2026-11-03",
+      "sun_venus_signed_deg": -15.590671,
+      "sun_venus_separation_deg": 15.590671,
+      "stored_combust": false,
+      "repository_combust": false,
+      "venus_retrograde": true,
+      "venus_speed": -0.426046
+    },
+    {
+      "date": "2026-11-04",
+      "sun_venus_signed_deg": -17.000921,
+      "sun_venus_separation_deg": 17.000921,
+      "stored_combust": false,
+      "repository_combust": false,
+      "venus_retrograde": true,
+      "venus_speed": -0.39097
+    },
+    {
+      "date": "2026-11-05",
+      "sun_venus_signed_deg": -18.375788,
+      "sun_venus_separation_deg": 18.375788,
+      "stored_combust": false,
+      "repository_combust": false,
+      "venus_retrograde": true,
+      "venus_speed": -0.35417
+    },
+    {
+      "date": "2026-11-06",
+      "sun_venus_signed_deg": -19.713693,
+      "sun_venus_separation_deg": 19.713693,
+      "stored_combust": false,
+      "repository_combust": false,
+      "venus_retrograde": true,
+      "venus_speed": -0.315963
+    },
+    {
+      "date": "2026-11-07",
+      "sun_venus_signed_deg": -21.013362,
+      "sun_venus_separation_deg": 21.013362,
+      "stored_combust": false,
+      "repository_combust": false,
+      "venus_retrograde": true,
+      "venus_speed": -0.276654
+    },
+    {
+      "date": "2026-11-08",
+      "sun_venus_signed_deg": -22.273817,
+      "sun_venus_separation_deg": 22.273817,
+      "stored_combust": false,
+      "repository_combust": false,
+      "venus_retrograde": true,
+      "venus_speed": -0.236526
+    },
+    {
+      "date": "2026-11-09",
+      "sun_venus_signed_deg": -23.494353,
+      "sun_venus_separation_deg": 23.494353,
+      "stored_combust": false,
+      "repository_combust": false,
+      "venus_retrograde": true,
+      "venus_speed": -0.195842
+    },
+    {
+      "date": "2026-11-10",
+      "sun_venus_signed_deg": -24.674514,
+      "sun_venus_separation_deg": 24.674514,
+      "stored_combust": false,
+      "repository_combust": false,
+      "venus_retrograde": true,
+      "venus_speed": -0.154839
+    }
+  ]
+}

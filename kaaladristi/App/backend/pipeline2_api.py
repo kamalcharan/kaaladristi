@@ -45,6 +45,7 @@ from lib.auth import (  # noqa: E402
 )
 from lib.config import DATABASE_URL  # noqa: E402
 from lib.db_client import get_db as _get_db  # noqa: E402
+from lib.astro_events import families as _astro_families, occurrences as _astro_occurrences  # noqa: E402
 
 # Optional AI / assembler modules — gracefully absent if not installed
 try:
@@ -74,7 +75,7 @@ try:
         get_cached as _vani_pcache_get,
         set_cached as _vani_pcache_set,
     )
-    from lib.astro_narration import build_mercury_readiness_text  # noqa: E402
+    from lib.astro_events import narration as build_astro_readiness_text  # noqa: E402
     _AI_OPTIONAL_OK = True
 except ImportError:
     _AI_SKILLS = {}
@@ -89,7 +90,7 @@ except ImportError:
     _vani_pcache_key = lambda intent_id, ctx: None   # noqa: E731
     _vani_pcache_get = lambda db, key: None          # noqa: E731
     _vani_pcache_set = lambda *a, **k: False         # noqa: E731
-    build_mercury_readiness_text = lambda db, date_str: None  # noqa: E731
+    build_astro_readiness_text = lambda db, date_str: None  # noqa: E731
 
 try:
     from app.middleware.interaction_logger import log_llm_interaction as _log_interaction  # noqa: E402
@@ -1810,6 +1811,67 @@ def astro_transits(from_date: str = None, to_date: str = None):
     result = [_stringify_dates(r) for r in rows]
     _astro_cache[cache_key] = result
     return result
+
+
+def _astro_today():
+    return datetime.now(tz=__import__('zoneinfo').ZoneInfo('Asia/Kolkata')).date()
+
+
+@app.get('/api/astro/families')
+def astro_families(as_of: Optional[date] = None):
+    return _astro_families(_get_db(), as_of or _astro_today())
+
+
+@app.get('/api/astro/events')
+def astro_events(from_date: date, to_date: date):
+    try:
+        return _astro_occurrences(_get_db(), from_date, to_date)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+
+def _astro_admin_check(caller_id):
+    conn = _conn()
+    try:
+        _require_admin(conn, caller_id)
+    finally:
+        conn.close()
+
+
+@app.get('/api/admin/astro/families')
+def astro_admin_families(as_of: Optional[date] = None, caller_id: str = Depends(_get_current_user_id)):
+    _astro_admin_check(caller_id)
+    return _astro_families(_get_db(), as_of or _astro_today(), admin=True)
+
+
+@app.get('/api/admin/astro/events')
+def astro_admin_events(from_date: date, to_date: date, caller_id: str = Depends(_get_current_user_id)):
+    _astro_admin_check(caller_id)
+    try:
+        return _astro_occurrences(_get_db(), from_date, to_date, admin=True)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+
+class AstroPublicationRequest(BaseModel):
+    catalog_visible: bool
+
+
+@app.patch('/api/admin/astro/families/{family_id}')
+def publish_astro_family(family_id: str, req: AstroPublicationRequest,
+                         caller_id: str = Depends(_get_current_user_id)):
+    conn = _conn()
+    try:
+        _require_admin(conn, caller_id)
+        with conn:
+            with conn.cursor() as cur:
+                cur.execute("UPDATE km_astro_rule_master r SET catalog_visible=%s FROM km_astro_family f WHERE f.rule_id=r.id AND f.id=%s RETURNING r.id", (req.catalog_visible, family_id))
+                if not cur.fetchone():
+                    raise HTTPException(status_code=404, detail='Unknown event family')
+                cur.execute("DELETE FROM km_vani_cache WHERE intent_id='index.astro_now'")
+        return {'id': family_id, 'catalog_visible': req.catalog_visible}
+    finally:
+        conn.close()
 
 
 # ── Intraday Plan Score (data-driven planetary contribution) ─────────────
@@ -5636,11 +5698,11 @@ def vani_ask(req: VaNiAskRequest):
             user_msg = format_equity_user_message(intent_id, ctx) if ctx else None
 
         elif prefix == 'index':
-            # Deterministic (astro_narration.py) — no LLM ever needed for this
+            # Deterministic (astro_events.py) — no LLM ever needed for this
             # intent; persistent cache is a performance layer only (owner
-            # 2026-07-22). Universal across indices (Mercury's sky state
+            # 2026-07-22). Universal across indices (planetary state
             # doesn't depend on which index is being viewed), so date-keyed.
-            _pcache_key = _vani_pcache_key(intent_id, {'v': 1, 'date': date_str})
+            _pcache_key = _vani_pcache_key(intent_id, {'v': 3, 'calendar': 'managed-astro-v1', 'date': date_str})
             _cached_text = _vani_pcache_get(db, _pcache_key) if _pcache_key else None
             if _cached_text:
                 return {
@@ -5648,7 +5710,7 @@ def vani_ask(req: VaNiAskRequest):
                     'response': _cached_text,
                     'ai': False, 'cached': True, 'provider': 'rule',
                 }
-            text = build_mercury_readiness_text(db, date_str)
+            text = build_astro_readiness_text(db, date_str)
             if not text:
                 return {
                     'intent_id': intent_id, 'date': date_str,

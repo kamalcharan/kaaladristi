@@ -231,8 +231,9 @@ export default function MarketBreadthChart({
   const basis: MaBasis = maBasisProp ?? (externallyFed ? 'index' : 'market');
   const ma: MaLabels   = MA_LABELS[basis];
 
-  const latest = data[data.length - 1];
-  const prev   = data[data.length - 2];
+  const readingIndex = researchMode && focusedDate ? data.findIndex(r=>r.trade_date===focusedDate) : data.length-1;
+  const latest = data[readingIndex];
+  const prev = data[readingIndex-1];
 
   const displayStockCount = stockCountProp ?? latest?.stock_count ?? null;
 
@@ -244,7 +245,7 @@ export default function MarketBreadthChart({
     : null;
 
   const relative = (zoneMode === 'percentile' || zoneMode === 'provisional') && percentileRank != null;
-  const title = indexName ? 'Index breadth' : 'Market Breadth';
+  const title = indexName && basis==='index' ? 'Index breadth' : 'Market Breadth';
 
   return (
     <div className="glass-card rounded-2xl p-4">
@@ -256,7 +257,7 @@ export default function MarketBreadthChart({
           {indexName && <p className="text-xs text-muted mt-1">{indexName}</p>}
           {displayStockCount != null && (
             <p className="text-[12px] text-muted mt-0.5">
-              {displayStockCount.toLocaleString()}{indexName ? ' constituents analysed' : '+ stocks analyzed'}
+              {displayStockCount.toLocaleString()}{basis==='index' ? ' constituents analysed' : ' stocks analysed'}
             </p>
           )}
         </div>

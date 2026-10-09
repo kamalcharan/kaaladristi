@@ -46,6 +46,8 @@ export interface MagicRsDataPoint {
 interface MagicRsSubchartProps {
   data: MagicRsDataPoint[];
   activeIndex: number;
+  /** Selected historical session can be outside the visible plotted window. */
+  activeDate?: string;
   benchmarkLabel: string;
   /** 'long' = 144-bar RS with a 60-bar average (daily). 'short' = 21-bar RS
    *  with a 10-bar average, which is all weekly and monthly can carry. The
@@ -107,7 +109,7 @@ function zoneColor(zone: string | null, green: string, red: string, neutral: str
 }
 
 export default function MagicRsSubchart({ data, activeIndex, benchmarkLabel, variant = 'long',
-  showStats = true, lookbackData, cadence = 'D' }: MagicRsSubchartProps) {
+  showStats = true, lookbackData, activeDate, cadence = 'D' }: MagicRsSubchartProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -322,7 +324,7 @@ export default function MagicRsSubchart({ data, activeIndex, benchmarkLabel, var
     <div ref={containerRef} style={{ borderRadius: 6, overflow: 'hidden' }}>
       <canvas ref={canvasRef} style={{ display: 'block', width: '100%' }} />
       {showStats && <MagicRsStats data={data} activeIndex={activeIndex} benchmarkLabel={benchmarkLabel}
-                                 variant={variant} lookbackData={lookbackData} cadence={cadence} />}
+                                 variant={variant} lookbackData={lookbackData} activeDate={activeDate} cadence={cadence} />}
     </div>
   );
 }
@@ -336,9 +338,9 @@ export default function MagicRsSubchart({ data, activeIndex, benchmarkLabel, var
  *  helping anyone decide anything.
  */
 function MagicRsStats({ data, activeIndex, benchmarkLabel, variant = 'long',
-  lookbackData, cadence = 'D' }: MagicRsSubchartProps) {
+  lookbackData, activeDate, cadence = 'D' }: MagicRsSubchartProps) {
   const idx = Math.min(activeIndex, data.length - 1);
-  const cur = data[idx];
+  const cur = activeDate ? (lookbackData ?? data).find(b=>b.trade_date===activeDate) : data[idx];
   if (!cur) return null;
 
   const rs = cur.magic_rs;

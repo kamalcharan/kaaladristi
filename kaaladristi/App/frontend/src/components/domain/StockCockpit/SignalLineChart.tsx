@@ -6,7 +6,7 @@
  */
 
 import {
-  LineChart, Line, ReferenceLine, ResponsiveContainer, Tooltip, YAxis,
+  LineChart, Line, ReferenceLine, ResponsiveContainer, Tooltip, YAxis, XAxis,
 } from 'recharts';
 
 export interface SignalSeries {
@@ -23,14 +23,18 @@ interface SignalLineChartProps {
   refLines?: { y: number }[];
   domain?: [number | 'auto', number | 'auto'];
   height?: number;
+  activeDate?: string;
+  onSessionChange?: (date:string) => void;
 }
 
 export default function SignalLineChart({
-  data, series, refLines, domain = ['auto', 'auto'], height = 110,
+  data, series, refLines, domain = ['auto', 'auto'], height = 110, activeDate, onSessionChange,
 }: SignalLineChartProps) {
   return (
     <ResponsiveContainer width="100%" height={height}>
-      <LineChart data={data} margin={{ top: 6, right: 4, bottom: 2, left: 4 }}>
+      <LineChart data={data} margin={{ top: 6, right: 4, bottom: 2, left: 4 }} onMouseMove={state => { if(state.activeTooltipIndex == null)return; const i=Number(state.activeTooltipIndex); if(onSessionChange && Number.isInteger(i) && data[i]?.trade_date)onSessionChange(data[i].trade_date); }}>
+        {(activeDate || onSessionChange) && <XAxis dataKey="trade_date" hide />}
+        {activeDate && <ReferenceLine x={activeDate} stroke="var(--accent)" strokeDasharray="3 3"/>}
         <YAxis
           domain={domain}
           width={30}

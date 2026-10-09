@@ -21,7 +21,7 @@ Rules generated:
                            docs/claude/astro-story.md §6 for why a fixed
                            arc can never reproduce the almanac)
   4. TRN-MER-MAN-TRN     — Mercury sign transit windows (Journey)
-  5. TRN-MER-RIS-W-BUL   — Mercury station-direct (rise) — single-day
+  5. TRN-MER-RIS-W-BUL   — Mercury turns direct (legacy code; NOT rise)
   6-10. DN-{MON..FRI}-MER-* — Moon in Mercury nakshatra + weekday (day rows)
 
 RECONCILING (v2): before inserting, this script DELETES all existing windows
@@ -52,7 +52,8 @@ Run:
   cd App/backend/scripts
   DB_PRIMARY=postgresql://user:pass@host:5432/kaala_dristi_db python3 generate_mercury_windows.py
 
-Requires migration 146 (event-field columns) to be applied first.
+Requires migrations 146 and 234 (canonical Mercury identities) first.
+Rule codes MAN/RIS are compatibility aliases, not astronomical definitions.
 """
 
 import os
@@ -63,6 +64,7 @@ from datetime import date, datetime, timedelta, timezone
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from lib.config import DATABASE_URL
+from lib.mercury_identity import canonical_snapshot, assert_identity_ready
 
 import swisseph as swe
 
@@ -334,7 +336,7 @@ def bulk_insert(cur, rows: list) -> tuple:
 def make_row(rule_id, start_d, end_d, snap: dict, *,
              start_ts=None, end_ts=None, sign=None, motion=None,
              direction=None, combustion_type=None, sun_sep_min=None) -> tuple:
-    return (rule_id, start_d, end_d, json.dumps(snap),
+    return (rule_id, start_d, end_d, json.dumps(canonical_snapshot(snap)),
             start_ts, end_ts, sign, motion, direction, combustion_type, sun_sep_min)
 
 
@@ -578,7 +580,7 @@ def generate_sign_transits(cur, rule_id: int) -> tuple:
     return bulk_insert(cur, rows)
 
 
-# ── Rule 5: Mercury Station Direct (Rise) — single-day ────────────────────────
+# ── Rule 5: Mercury Turns Direct — not a visibility/rise calculation ─────────
 
 def generate_station_direct(cur, rule_id: int) -> tuple:
     cur.execute("""
@@ -602,7 +604,7 @@ def generate_station_direct(cur, rule_id: int) -> tuple:
             start_date = ist_date_of(ts)
         jd = utc_to_jd(ts) if ts else jd_of(start_date)
         direction = 'east' if signed_sun_offset(jd) > 0 else 'west'
-        snap = {"event": "mercury_station_direct", "rule_type": "manifestation"}
+        snap = {"event": "mercury_station_direct", "rule_type": "motion_transition"}
         rows.append(make_row(
             rule_id, start_date, start_date, snap,
             start_ts=ts, end_ts=ts,
@@ -648,6 +650,7 @@ def main():
     try:
         with conn:
             with conn.cursor() as cur:
+                assert_identity_ready(cur)
 
                 all_rule_codes = [
                     "TR-MER-RET",

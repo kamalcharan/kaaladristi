@@ -17,9 +17,10 @@ export async function fetchGuestPanchang(date: string): Promise<DailyPanchang | 
   return res.json() as Promise<DailyPanchang>;
 }
 
-export async function fetchMarketBreadth(days = 66): Promise<MarketBreadthDay[]> {
-  const { data, error } = await from('km_market_breadth')
-    .select('*')
+export async function fetchMarketBreadth(days = 66, window?: { start: string; end: string }): Promise<MarketBreadthDay[]> {
+  const query = from('km_market_breadth').select('*');
+  if (window) query.gte('trade_date',window.start).lte('trade_date',window.end);
+  const { data, error } = await query
     .order('trade_date', { ascending: false })
     .limit(days)
     .execute();
@@ -27,9 +28,10 @@ export async function fetchMarketBreadth(days = 66): Promise<MarketBreadthDay[]>
   return ((data ?? []) as MarketBreadthDay[]).reverse();
 }
 
-export async function fetchBreadthRoc(days = 66): Promise<BreadthRocDay[]> {
-  const { data, error } = await from('km_breadth_roc')
-    .select('*')
+export async function fetchBreadthRoc(days = 66, window?: { start: string; end: string }): Promise<BreadthRocDay[]> {
+  const query = from('km_breadth_roc').select('*');
+  if (window) query.gte('trade_date',window.start).lte('trade_date',window.end);
+  const { data, error } = await query
     .order('trade_date', { ascending: false })
     .limit(days)
     .execute();

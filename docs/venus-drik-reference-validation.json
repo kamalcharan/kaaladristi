@@ -1,0 +1,88 @@
+{
+  "reference_source": "owner-supplied Drik Panchang screenshots",
+  "location": "Ujjain; assumed for 2027 screenshot",
+  "geopos": [
+    75.7885,
+    23.1793,
+    494.0
+  ],
+  "engine": "2.10.03",
+  "ephemeris": "Moshier",
+  "atmosphere": [
+    1013.25,
+    25.0,
+    40.0,
+    0.24
+  ],
+  "observer": [
+    36.0,
+    3.25,
+    0,
+    0,
+    0,
+    0
+  ],
+  "parameter_changes": false,
+  "rows": [
+    {
+      "period": "2025-12 / 2026-01",
+      "event": "disappearance",
+      "event_type": 4,
+      "reference_ist": "2025-12-12T06:32:00+05:30",
+      "model_ist": "2025-12-12T06:41+05:30",
+      "model_jd_ut": 2461021.5495236535,
+      "difference_minutes_at_display_precision": 9,
+      "calendar_day_difference": 0
+    },
+    {
+      "period": "2025-12 / 2026-01",
+      "event": "reappearance",
+      "event_type": 3,
+      "reference_ist": "2026-01-31T18:39:00+05:30",
+      "model_ist": "2026-02-01T18:21+05:30",
+      "model_jd_ut": 2461073.0356373326,
+      "difference_minutes_at_display_precision": 1422,
+      "calendar_day_difference": 1
+    },
+    {
+      "period": "2026-10",
+      "event": "disappearance",
+      "event_type": 2,
+      "reference_ist": "2026-10-14T18:24:00+05:30",
+      "model_ist": "2026-10-14T18:00+05:30",
+      "model_jd_ut": 2461328.02115466,
+      "difference_minutes_at_display_precision": -24,
+      "calendar_day_difference": 0
+    },
+    {
+      "period": "2026-10",
+      "event": "reappearance",
+      "event_type": 1,
+      "reference_ist": "2026-10-28T06:05:00+05:30",
+      "model_ist": "2026-10-28T06:10+05:30",
+      "model_jd_ut": 2461341.5279322313,
+      "difference_minutes_at_display_precision": 5,
+      "calendar_day_difference": 0
+    },
+    {
+      "period": "2027-07 / 2027-09",
+      "event": "disappearance",
+      "event_type": 4,
+      "reference_ist": "2027-07-22T05:27:00+05:30",
+      "model_ist": "2027-07-21T05:34+05:30",
+      "model_jd_ut": 2461607.5027920534,
+      "difference_minutes_at_display_precision": -1433,
+      "calendar_day_difference": -1
+    },
+    {
+      "period": "2027-07 / 2027-09",
+      "event": "reappearance",
+      "event_type": 3,
+      "reference_ist": "2027-09-06T19:04:00+05:30",
+      "model_ist": "2027-09-05T18:50+05:30",
+      "model_jd_ut": 2461654.055758784,
+      "difference_minutes_at_display_precision": -1454,
+      "calendar_day_difference": -1
+    }
+  ]
+}

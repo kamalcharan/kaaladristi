@@ -1,14 +1,7 @@
-// OVERLAY ARCHITECTURE:
-// Each rule renders its own transit windows independently.
-// Rules within the same group (e.g. PNK-*) stack as layers.
-// Base rules show all occurrences (PNK-ALL5-BUL = all 549 windows).
-// Refinement rules show sub-conditions on top (yoga, vara).
-// NEVER redirect one rule_code to another — preserve identity.
-// This pattern applies to all future rule groups (Mercury, Venus etc.)
-
 import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { subYears, format } from 'date-fns'
+import { useAstroHorizon } from './useAstroHorizon'
+import { astroToday } from '@/services/astroEvents'
 import type { ChartOverlay } from '@/types/framework'
 import { fetchAstroBands, type AstroBand } from '@/services/astroOverlayService'
 import { ITEM_DEFAULT_COLOR, TYPE_DEFAULT_COLOR } from '@/components/domain/Workspace/overlayColors'
@@ -17,7 +10,7 @@ import { ITEM_DEFAULT_COLOR, TYPE_DEFAULT_COLOR } from '@/components/domain/Work
 const EMPTY_BANDS: AstroBand[] = []
 
 /** Returns AstroBand[] for all visible astro_zone overlays. */
-export function useAstroOverlayBands(overlays: ChartOverlay[]): AstroBand[] {
+export function useAstroOverlayBands(overlays: ChartOverlay[], startDate?:string, endDate?:string): AstroBand[] {
   // Only visible astro_zone overlays
   const activeAstro = useMemo(
     () => overlays.filter(o => o.type === 'astro_zone' && o.visible),
@@ -50,13 +43,10 @@ export function useAstroOverlayBands(overlays: ChartOverlay[]): AstroBand[] {
     return map
   }, [activeAstro])
 
-  // 2-year lookback — Venus Rx ~every 18 months, Jupiter Rx ~13 months.
-  // 1 year was too narrow and missed slow-planet cycles.
-  const since = useMemo(
-    () => format(subYears(new Date(), 2), 'yyyy-MM-dd'),
-    [],
-  )
+  const horizon=useAstroHorizon()
+  const since=startDate ?? `${Number(astroToday().slice(0,4))-2}-01-01`
 
+  const until = endDate && endDate < horizon.cutoffIso ? endDate : horizon.cutoffIso
   const queryKey = useMemo(
     () => [
       'astro-bands',
@@ -64,14 +54,14 @@ export function useAstroOverlayBands(overlays: ChartOverlay[]): AstroBand[] {
       // cache — bands bake in the color, so stale cache = stale color.
       Array.from(overlayColors.entries()).map(([k, v]) => `${k}:${v}`).sort().join(','),
       Array.from(overlayOpacities.entries()).map(([k, v]) => `${k}:${v}`).sort().join(','),
-      since,
+      since, until,
     ],
-    [overlayColors, overlayOpacities, since],
+    [overlayColors, overlayOpacities, since, until],
   )
 
   const { data } = useQuery({
     queryKey,
-    queryFn:  () => fetchAstroBands(overlayColors, overlayOpacities, since),
+    queryFn:  () => fetchAstroBands(overlayColors, overlayOpacities, since, until),
     staleTime: 5 * 60_000,
     enabled:  overlayColors.size > 0,
   })

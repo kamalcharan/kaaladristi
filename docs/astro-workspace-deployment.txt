@@ -1,0 +1,51 @@
+Astro workspace deployment — migration 237
+
+Deploy in order
+1. Confirm migrations 234, 235 and 236 are already applied.
+2. Apply kaaladristi/App/DBscripts/km_migration_237_astro_event_workspace.sql.
+3. Run verify_237_astro_event_workspace.sql. Expect seven families, zero active
+   legacy definitions, and no duplicate occurrence keys.
+4. Deploy this branch's backend and frontend together. No Python backfill is
+   required: this migration reads the existing canonical calendars.
+
+Review in the application
+- /rules: Mercury and Venus tabs, search, Overview/Dates/Calculation, year filter.
+- Hide Venus Visibility. It must disappear from Catalog, Almanac, new overlay
+  requests and a freshly requested VaNi astro reading. Show it again and repeat.
+- Conjunction appears under both planet tabs with one shared switch. Selecting
+  Mercury and Venus in Catalog must render shared conjunctions only once.
+- October 2026 Venus Tara Asta must retain 14 October 18:00:27 IST and the period
+  must end 28 October 06:10:13 IST. Crossing dates remain daily-sample brackets.
+- Catalog has two planet selections. Supported saved family selections migrate
+  into Mercury/Venus groups on reload. Unsupported saved
+  overlays remain labelled Retired and switched off; remove them using existing
+  overlay controls. Old panel blocks show a retirement notice and Catalog link.
+- Check an index and a curated index chart, including a weekend station marker.
+  Equity charts must continue to omit astro overlays.
+- /astro-calendar and /planetary-intel redirect to /almanac. A legacy /rules/:id
+  link resolves to its supported family or displays an archive notice.
+- Check desktop and phone widths in light and dark themes, including the chart's
+  Catalog drawer. Browser visual acceptance remains a deployment review step.
+
+Data and cleanup boundaries
+- Publication still lives in km_astro_rule_master.catalog_visible. The new
+  km_astro_family table groups supported event types; it has no second switch.
+- Legacy rule definitions are backed up in km_astro_workspace_archive and
+  deactivated. Source transits, research tables and astronomical generators
+  remain for provenance and refreshes; do not delete them as UI cleanup.
+- Replaced Rule Engine detail/authoring/statistics components, independent
+  Almanac readers, old astro calendar screens and their exclusive helpers were
+  removed. Operational Job Monitor status/cancel calls remain in use.
+- The separate admin Inference DB / Rule Eval workflows were not deleted.
+  Externally callable research APIs and scheduler jobs need a live dependency
+  inventory before retirement; this branch does not claim to audit live jobs.
+- Do not rerun earlier identity migrations after 237 to change publication.
+  Use the new Rule Engine switch. A rerun of 237 preserves the seven switches.
+
+Local validation
+Frontend typecheck; production Vite build; theme, persona and contrast guards;
+check-astro-workspace.cjs (selection migration and chart coordinates).
+Backend test_astro_events.py (precision, validation, narration, admin mutation);
+astro_workspace_migration.cjs (actual migrations 234–237 and reader queries);
+venus_identity_migration.cjs (existing Venus regression suite).
+No production database was modified or deployment performed by these tests.

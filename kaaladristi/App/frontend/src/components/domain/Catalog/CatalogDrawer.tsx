@@ -7,12 +7,12 @@ import CatalogAstroSection from './CatalogAstroSection'
 const ALL_TABS = [
   { id: 'indicators',  label: 'Indicators' },
   { id: 'widgets',     label: 'Widgets' },
-  { id: 'astro_rules', label: 'Astro Rules' },
+  { id: 'astro_rules', label: 'Astro Events' },
 ] as const
 
 const OVERLAY_TABS = [
   { id: 'indicators',  label: 'Indicators' },
-  { id: 'astro_rules', label: 'Astro Rules' },
+  { id: 'astro_rules', label: 'Astro Events' },
 ] as const
 
 type DrawerTab = typeof ALL_TABS[number]['id']
@@ -21,9 +21,10 @@ interface CatalogDrawerProps {
   isOpen: boolean
   onClose: () => void
   context?: 'overlay' | 'block'
+  layer?: number
 }
 
-export default function CatalogDrawer({ isOpen, onClose, context = 'block' }: CatalogDrawerProps) {
+export default function CatalogDrawer({ isOpen, onClose, context = 'block', layer = 200 }: CatalogDrawerProps) {
   const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState<DrawerTab>(
     context === 'overlay' ? 'astro_rules' : 'indicators'
@@ -50,7 +51,7 @@ export default function CatalogDrawer({ isOpen, onClose, context = 'block' }: Ca
           style={{
             position: 'fixed',
             inset: 0,
-            zIndex: 190,
+            zIndex: layer - 10,
             background: 'transparent',
           }}
         />
@@ -63,13 +64,13 @@ export default function CatalogDrawer({ isOpen, onClose, context = 'block' }: Ca
           right: isOpen ? 0 : -540,
           top: 72,
           bottom: 0,
-          width: 520,
+          width: 'min(520px, 100vw)',
           background: 'var(--card)',
           borderLeft: '1px solid var(--border)',
           borderTop: '1px solid var(--border)',
           display: 'flex',
           flexDirection: 'column',
-          zIndex: 200,
+          zIndex: layer,
           transition: 'right 0.32s cubic-bezier(0.22,1,0.36,1)',
           borderRadius: '12px 0 0 0',
         }}
@@ -114,6 +115,7 @@ export default function CatalogDrawer({ isOpen, onClose, context = 'block' }: Ca
               </button>
               <button
                 onClick={onClose}
+                aria-label="Close overlay catalog"
                 style={{
                   width: 24, height: 24,
                   borderRadius: 5,

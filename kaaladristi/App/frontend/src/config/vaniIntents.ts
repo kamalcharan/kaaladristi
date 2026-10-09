@@ -129,9 +129,9 @@ export const VANI_INTENTS: Record<string, VaNiIntentDef> = {
     icon: 'list',
     displayOrder: 2,
   },
-  // ── Index Chart — Astro (deterministic, no LLM — astro_narration.py) ─────
+  // ── Index Chart — Astro (deterministic, no LLM — astro_events.py) ─────
   'index.astro_now': {
-    label: "What's Mercury doing right now?",
+    label: "What are Mercury and Venus doing?",
     page: 'index_vp',
     icon: 'moon',
     displayOrder: 1,
