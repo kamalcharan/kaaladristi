@@ -179,3 +179,63 @@ above ₹500 Cr (continuation). Everything else moves both tails together.
    more likely to add another +5% than to give back 5%, against ~2.3× base.
 
 Nothing built.
+
+## Addendum 2 — the owner's rules, with the next day as confirmation
+
+Owner: *"rs spike, tvol, just crossed 21 ema, gl cross, svd, sbd … we will know
+svd, sbd only eod, which means they already ran for the day … all these
+signals are open for interpretation for next day."*
+
+Definitions (end-of-day, no lookahead): **RS spike** = MagicRS up ≥ 4.8 points
+in one session (top 5% of one-day changes, Aug–Sep, measured); **TVOL** =
+rvol ≥ 2; **EMA cross** = close crosses above `ema_20` (21 is not stored —
+nearest available); **GL cross** = `gl_days_above = 1`; **SVD / SBD** = that
+day's dot. NSE active non-ETF, mcap ≥ ₹100 Cr, setups 1 May → 29 Sep.
+"Next day" classes: closes ABOVE the setup day's high / inside / BELOW its
+low. Outcome: the 5 sessions after the next day's close, minus the same-date
+universe median.
+
+| setup | next day | H1 n / median / %pos | H2 n / median / %pos |
+|---|---|---|---|
+| every bar | held above high | 28,861 / −0.11 / 49.0 | 16,974 / −0.11 / 49.0 |
+| | closed below low | 36,337 / +0.26 / 52.8 | 24,797 / +0.15 / 51.8 |
+| SVD | **held above high** | 129 / **−2.45** / 36.4 | 87 / **−3.15** / 37.9 |
+| | inside | 297 / −1.13 / 42.4 | 198 / −0.89 / 44.4 |
+| SBD | held above high | 839 / −0.70 / 46.5 | 659 / −0.10 / 49.2 |
+| | inside | 1,470 / −0.32 / 47.4 | 1,129 / −0.06 / 49.8 |
+| RS spike | held above high | 2,162 / −0.74 / 45.5 | 1,737 / +0.22 / 51.3 |
+| | inside | 3,605 / −0.63 / 45.5 | 2,671 / +0.02 / 50.1 |
+| TVOL ≥ 2 | held above high | 2,535 / −0.02 / 50.0 | 1,931 / +0.12 / 50.6 |
+| | inside | 7,959 / −0.18 / 48.4 | 5,920 / −0.03 / 49.7 |
+| EMA cross | held above high | 2,609 / −0.20 / 48.4 | 1,462 / −0.17 / 48.8 |
+| | inside | 5,847 / −0.30 / 46.8 | 3,931 / −0.24 / 47.3 |
+| GL cross | held above high | 1,087 / −0.45 / 46.3 | 413 / −0.75 / 46.0 |
+| | inside | 2,302 / −0.38 / 46.0 | 1,090 / −0.57 / 44.1 |
+
+(Classes with n < 70 omitted from the conclusions.)
+
+**Rules combined** (count firing the same day, capped at 3):
+
+| rules | H1 n / next-day ≥+5% / ≤−5% / 5d-after median | H2 |
+|---|---|---|
+| 0 | 120,024 / 3.5% / 1.7% / +0.03 | 77,746 / 3.2% / 1.3% / 0.00 |
+| 1 | 18,706 / 5.7% / 3.0% / −0.08 | 11,877 / 5.5% / 2.6% / +0.03 |
+| 2 | 3,757 / 8.6% / 4.1% / −0.41 | 2,695 / 8.5% / 3.7% / −0.09 |
+| 3+ | 2,503 / **11.8%** / 7.4% / **−0.76** | 1,937 / **13.9%** / 4.5% / **−0.31** |
+
+**Findings.**
+1. The rules find TOMORROW's movers: 3+ firing triples the next-day ≥+5%
+   rate (11.8–13.9% vs 3.2–3.5%), both halves. The down tail rises with it;
+   the up/down tilt is 1.6× in H1 and 3.1× in H2 — not stable.
+2. **A next-day close above the setup high is NOT confirmation.** Across
+   every bar it is followed by −0.11 against +0.15/+0.26 for a close below the
+   low (five-day mean reversion). After an SVD it is the worst outcome
+   measured: **−2.45 / −3.15, 36–38% positive** — chasing a confirmed SVD is
+   a reliable loss.
+3. Holding past the next day loses: 2+ and 3+ rules are negative 5 days after
+   the next day, both halves.
+
+**So the edge, if any, is inside day t+1** — whether the move continues is
+decided in the first part of the next session, which end-of-day data cannot
+see. These rules are a WATCH list for the next open, not a hold list.
+Nothing built.
