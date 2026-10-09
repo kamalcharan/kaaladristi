@@ -1917,6 +1917,7 @@ function wgJourneyRowToScanStock(r: any): ScanStock {
     wg_resting: truthy(r.resting),
     wake_date: r.wake_date ?? null,
     wake_close: num(r.wake_close),
+    confirm_date: r.confirm_date ?? null,
     pct_from_wake: num(r.pct_from_wake),
     turn_date: r.turn_date ?? null,
     turn_close: num(r.turn_close),
@@ -2030,9 +2031,13 @@ async function fetchWgJourneys(presetId: string, exchangeFilter: ExchangeFilter)
   if (exchangeFilter === 'BSE') return [];
   const state = WG_JOURNEY_PRESETS[presetId];
   // QueryBuilder.order() appends the direction itself — pass the bare column.
+  // The fetch order decides WHICH rows survive the preset limit, so it must
+  // be the order the tab displays (ScanTable DEFAULT_SORT). Ascent fetched by
+  // align_score and displayed by date: with 87 ascending and a limit of 60,
+  // the 27 cut were chosen by a column nobody was looking at (2026-10-09).
   const orderCol =
     state === 'WAKING'    ? 'wake_date' :      // freshest wakes first
-    state === 'ASCENDING' ? 'align_score' :    // strongest alignment first
+    state === 'ASCENDING' ? 'confirm_date' :   // freshest ascents first
                             'stir_days';       // strongest quiet building first
   const lim = getPresetMeta(presetId)?.limit ?? 60;
   let q = from('km_wg_journeys')

@@ -101,6 +101,7 @@ const PRESET_COL_OVERRIDES: Partial<Record<string, string[]>> = {
   ],
   wg_ascent: [
     'symbol', 'close', 'pct_chng', 'clocks', 'align_score',
+    'confirm_date',
     'turn_date', 'turn_close', 'pct_from_turn',
     'wake_date', 'wake_close', 'pct_from_wake', 'journey_age_days',
     'wg_resting', 'base_years', 'gl_dist_pct', 'gl_event', 'gl_event_date', 'listing_age_years',
@@ -171,8 +172,12 @@ const DEFAULT_SORT: Record<string, { key: keyof ScanStock; dir: 'asc' | 'desc' }
   // first (owner, 2026-09-25) — `wake_date` is already a rendered column on
   // both. Stirring keeps gl_acc_days: it has no wake yet, which is the whole
   // point of that tab.
+  // Ascent leads on the ASCENT date (2026-10-09): sorted by wake date, a
+  // stock that woke in early September and ascended yesterday sat below one
+  // that woke and ascended on 30 Sep, and the tab read "nothing new since
+  // 30 Sep" with PAISALO (7 Oct) on it. Keep in step with fetchWgJourneys.
   waking_giants:    { key: 'wake_date',         dir: 'desc' },
-  wg_ascent:        { key: 'wake_date',         dir: 'desc' },
+  wg_ascent:        { key: 'confirm_date',      dir: 'desc' },
   wg_stirring:      { key: 'gl_acc_days',       dir: 'desc' },
 }
 

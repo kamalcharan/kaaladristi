@@ -370,6 +370,14 @@ export const ALL_FIELDS: Record<string, FieldConfig> = {
     width: 100,
   },
 
+  confirm_date: {
+    key: 'confirm_date',
+    label: 'Ascended On',
+    tooltip: 'The session the journey confirmed — the Ascent. A stock wakes first and ascends later, so this is always on or after Woke On. Blank until the journey confirms.',
+    type: 'date',
+    width: 108,
+  },
+
   wake_close: {
     key: 'wake_close',
     label: 'Wake Price',
