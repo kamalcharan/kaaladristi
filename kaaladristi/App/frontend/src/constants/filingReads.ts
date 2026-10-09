@@ -14,6 +14,26 @@ export type ReadMagnitude = 'major' | 'notable' | 'minor' | 'unknown';
 /** km_filing_reads.status — the row's own clock. */
 export type ReadStatus = 'pending' | 'reading' | 'done' | 'failed' | 'unreadable' | 'skipped';
 export type CheckBackend = 'anthropic' | 'local';
+/** km_filing_reads.tier (migration 234): routine = settled by the exchange label, no model. */
+export type ReadTier = 'high' | 'low' | 'routine';
+
+/** The `model` a routine verdict carries: written by rule, never read by a model. */
+export const RULE_MODEL = 'rule';
+
+/** km_filing_reads.touches — the reader v2 vocabulary (lib/filing_reader.py TOUCHES). */
+export const TOUCHES_LABELS: Record<string, string> = {
+  orders: 'Order book',
+  earnings: 'Earnings',
+  costs_margins: 'Costs & margins',
+  capacity: 'Capacity',
+  funding_debt: 'Funding & debt',
+  ownership_control: 'Ownership & control',
+  management: 'Management',
+  legal_regulatory: 'Legal & regulatory',
+  shareholder_payout: 'Shareholder payout',
+  other: 'Other',
+  none: 'Nothing about the business',
+};
 
 export const IMPACT_LABELS: Record<ReadImpact, { label: string; color: string }> = {
   positive: { label: 'Positive', color: 'text-risk-green' },
@@ -62,6 +82,7 @@ const READER_NAMES: Record<string, string> = { local: 'Qwen', groq: 'Groq', open
 export function readerLabel(model: string | null | undefined): string {
   const m = model ?? '';
   if (!m) return '';
+  if (m === RULE_MODEL) return 'Routine by filing type · not read by a model';
   if (m.startsWith('claude')) return `Haiku · ${m}`;
   const i = m.indexOf(':');
   if (i > 0) {

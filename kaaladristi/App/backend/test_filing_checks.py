@@ -26,7 +26,8 @@ MIGRATIONS = ('km_migration_212_filings_ingest.sql',
               'km_migration_229_filing_reads.sql',
               'km_migration_230_filing_reads_triage.sql',
               'km_migration_231_filing_reads_ocr_source.sql',
-              'km_migration_233_filing_read_checks.sql')
+              'km_migration_233_filing_read_checks.sql',
+              'km_migration_234_filing_reads_tiers.sql')
 
 
 class _Usage:
@@ -291,6 +292,34 @@ class Checks(unittest.TestCase):
                 while reader(self.conn):
                     pass
             self.assertEqual(order, [new])
+
+    def test_the_runner_reads_every_high_tier_filing_before_any_low_one(self):
+        # Migration 234: current high, older high, current low, older low.
+        from unittest import mock
+        ids = {n: self._read(n) for n in ('HIGH_OLD', 'HIGH_NEW', 'LOW_OLD', 'LOW_NEW')}
+        with self.conn.cursor() as c:
+            c.execute("UPDATE km_filing_reads SET status='pending', finished_at=NULL")
+            c.execute("UPDATE km_filing_reads SET tier='low' WHERE event_id IN (%s, %s)",
+                      (ids['LOW_OLD'], ids['LOW_NEW']))
+            c.execute("UPDATE km_corporate_events SET disseminated_at = now() - interval '2 hours' "
+                      "WHERE id IN (%s, %s)", (ids['HIGH_NEW'], ids['LOW_NEW']))
+            c.execute("UPDATE km_corporate_events SET disseminated_at = now() - interval '9 days' "
+                      "WHERE id IN (%s, %s)", (ids['HIGH_OLD'], ids['LOW_OLD']))
+        self.conn.commit()
+        order = []
+
+        def read_one(c, row, client, session):
+            order.append(row['event_id'])
+            fr._finish(c, row['read_id'], 'skipped', None)
+            return 'done'
+        with mock.patch.object(fr, 'read_one', read_one), \
+             mock.patch.object(fr, 'client_for', lambda row: None), \
+             mock.patch.object(fr, 'backend_missing', lambda *a: None), \
+             mock.patch('pipeline.utils.nse_session.NseSession', lambda: None):
+            reader = fc.current_reader(self.conn)
+            while reader(self.conn):
+                pass
+        self.assertEqual(order, [ids['HIGH_NEW'], ids['HIGH_OLD'], ids['LOW_NEW'], ids['LOW_OLD']])
 
     def test_a_paid_check_is_priced(self):
         q = self._read('Q1')

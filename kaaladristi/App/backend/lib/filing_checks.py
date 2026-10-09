@@ -309,9 +309,16 @@ def current_reader(conn):
         # down the MEDIUM route (LLM_ROUTE_MEDIUM), so where it is read is an
         # .env decision, not this thread's. FILING_READ_BACKLOG_IN_API=0 puts
         # the backlog back on the worker's ingest passes only.
-        row = fr._claim_next(c, retry_failed=True, pass_started=started, newer_than_days=fr.HIGH_DAYS)
-        if row is None and BACKLOG_IN_API:
-            row = fr._claim_next(c, retry_failed=True, pass_started=started)
+        # Within that, the high tier always goes first (migration 234): current
+        # high, older high, current low, older low.
+        row = None
+        for tier in ('high', 'low'):
+            row = fr._claim_next(c, retry_failed=True, pass_started=started,
+                                 newer_than_days=fr.HIGH_DAYS, tier=tier)
+            if row is None and BACKLOG_IN_API:
+                row = fr._claim_next(c, retry_failed=True, pass_started=started, tier=tier)
+            if row is not None:
+                break
         if row is None:
             return None
         if 'session' not in ctx:
@@ -507,12 +514,12 @@ def pending_reads(conn, current_only: bool = False) -> int:
         if current_only:
             cur.execute("""
                 SELECT count(*) FROM km_filing_reads r JOIN km_corporate_events e ON e.id = r.event_id
-                 WHERE r.status IN ('pending', 'failed') AND r.attempts < %s
+                 WHERE r.status IN ('pending', 'failed') AND r.attempts < %s AND r.tier <> 'routine'
                    AND e.disseminated_at >= now() - make_interval(secs => %s)
             """, (fr.MAX_ATTEMPTS, fr.HIGH_DAYS * 86400))
         else:
-            cur.execute("SELECT count(*) FROM km_filing_reads "
-                        "WHERE status = 'pending' OR (status = 'failed' AND attempts < %s)",
+            cur.execute("SELECT count(*) FROM km_filing_reads WHERE tier <> 'routine' "
+                        "AND (status = 'pending' OR (status = 'failed' AND attempts < %s))",
                         (fr.MAX_ATTEMPTS,))
         n = int(cur.fetchone()[0])
     conn.rollback()

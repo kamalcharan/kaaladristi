@@ -6,8 +6,12 @@
  * Three pieces, one file, because they share one vocabulary
  * (constants/filingReads.ts):
  *   ReadCell      — the column: a status pill, or the verdict in five words.
- *   ReadDetail    — on expand: headline, reasoning, quoted evidence, the second
- *                   opinion side by side, and Restart for admin on a failed row.
+ *   ReadDetail    — on expand: headline, reasoning, what it touches / what the
+ *                   company says / when it lands / what to watch next (reader
+ *                   v2, migration 234), quoted evidence, the second opinion
+ *                   side by side, and Restart for admin on a failed row.
+ *                   A routine row (model 'rule') says "routine by filing
+ *                   type" — it was never read by a model and must not look it.
  *   CheckActionBar — the admin's selection bar: "Check with Haiku (n)".
  *
  * ⚠ A verdict is the filing's effect on the COMPANY as the document states it.
@@ -15,14 +19,15 @@
  * comes from bars, on the scanner, never from here.
  */
 
+import type { ReactNode } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, CheckCircle2, Loader2, RotateCcw, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { FilingRead, FilingReadCheck } from '@/services/filingReads';
 import { requestFilingChecks, restartFilingRead } from '@/services/pipeline2';
 import {
-  BACKEND_LABELS, IMPACT_LABELS, MAGNITUDE_LABELS, READ_STATUS_LABELS,
-  backendOfModel, otherBackend, readerLabel, type CheckBackend,
+  BACKEND_LABELS, IMPACT_LABELS, MAGNITUDE_LABELS, READ_STATUS_LABELS, RULE_MODEL, TOUCHES_LABELS,
+  otherBackend, readerLabel, type CheckBackend,
 } from '@/constants/filingReads';
 
 const READS_KEY = ['filing-reads'];
@@ -41,6 +46,9 @@ export function ReadCell({ read }: { read: FilingRead | undefined }) {
     );
   }
   const imp = IMPACT_LABELS[read.impact];
+  if (read.model === RULE_MODEL) {
+    return <span className="text-[11px] text-muted">Routine</span>;
+  }
   return (
     <span className="min-w-0 block">
       <span className={cn('text-[12px] font-medium', imp.color)}>{imp.label}</span>
@@ -51,8 +59,29 @@ export function ReadCell({ read }: { read: FilingRead | undefined }) {
   );
 }
 
+/** Reader v2's four fields — what the FILING says, in its own words. */
+function DecisionFacts({ read }: { read: FilingRead }) {
+  if (!read.touches || read.model === RULE_MODEL) return null;
+  const facts: [string, string][] = [
+    ['Touches', TOUCHES_LABELS[read.touches] ?? read.touches],
+    ['Company says', read.companyView ?? 'Not stated'],
+    ['When it lands', read.timeframe ?? 'Not stated'],
+    ['Watch next', read.watchNext ?? 'Nothing stated'],
+  ];
+  return (
+    <dl className="grid gap-1.5 grid-cols-1 sm:grid-cols-2">
+      {facts.map(([k, v]) => (
+        <div key={k} className="min-w-0 rounded-md bg-kd-elevated px-2.5 py-1.5">
+          <dt className="text-[10px] text-muted">{k}</dt>
+          <dd className="text-[12px] text-primary leading-snug break-words">{v}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
 function VerdictBlock({
-  title, impact, magnitude, headline, reasoning, evidenceQuote, confidence, model, foot,
+  title, impact, magnitude, headline, reasoning, evidenceQuote, confidence, model, foot, facts,
 }: {
   title: string;
   impact: FilingRead['impact'];
@@ -63,6 +92,7 @@ function VerdictBlock({
   confidence: number | null;
   model: string | null;
   foot?: string | null;
+  facts?: ReactNode;
 }) {
   const imp = impact ? IMPACT_LABELS[impact] : null;
   return (
@@ -79,6 +109,7 @@ function VerdictBlock({
       {reasoning && (
         <p className="text-[12px] text-[var(--text-secondary)] leading-relaxed whitespace-pre-line">{reasoning}</p>
       )}
+      {facts}
       {evidenceQuote && (
         <blockquote className="text-[11px] text-muted italic leading-relaxed border-l-2 border-kd-border pl-2 whitespace-pre-line">
           “{evidenceQuote}”
@@ -143,6 +174,16 @@ export function ReadDetail({
     );
   }
 
+  if (read.model === RULE_MODEL) {
+    return (
+      <VerdictBlock
+        title="Routine — by filing type"
+        impact={read.impact} magnitude={null} headline={read.headline}
+        reasoning={read.reasoning} evidenceQuote={null} confidence={null} model={read.model}
+      />
+    );
+  }
+
   const second = checks.find((c) => c.backend === otherBackend(read.model));
   const agree = second?.status === 'done' && second.impact === read.impact;
 
@@ -154,6 +195,7 @@ export function ReadDetail({
           impact={read.impact} magnitude={read.magnitude} headline={read.headline}
           reasoning={read.reasoning} evidenceQuote={read.evidenceQuote}
           confidence={read.confidence} model={read.model}
+          facts={<DecisionFacts read={read} />}
           foot={read.pagesRead != null && read.pageCount != null && read.pagesRead < read.pageCount
             ? `${read.pagesRead} of ${read.pageCount} pages` : null}
         />
@@ -225,7 +267,7 @@ export function CheckActionBar({
   const groups: Record<CheckBackend, number[]> = { anthropic: [], local: [] };
   for (const id of selected) {
     const r = reads.get(id);
-    if (r?.status === 'done') groups[otherBackend(r.model)].push(id);
+    if (r?.status === 'done' && r.model !== RULE_MODEL) groups[otherBackend(r.model)].push(id);
   }
   const m = useMutation({
     mutationFn: (backend: CheckBackend) => requestFilingChecks({ event_ids: groups[backend], backend }),

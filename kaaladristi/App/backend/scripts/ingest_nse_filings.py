@@ -351,20 +351,21 @@ def reclassify_events(conn) -> int:
 
 
 def read_material_filings(conn, session) -> dict | None:
-    """Queue a read row for every new material event, then read newest-first
-    up to the per-pass cap. Returns the reader's counts, or None when the
+    """Queue a read row for every new filing (routine ones settled by their
+    label, no model), then read high tier first, newest first, up to the
+    per-pass cap. Returns the reader's counts, or None when the
     reader could not run at all (its rows stay pending — the honest state)."""
     try:
         from lib import filing_reader
-        queued = filing_reader.enqueue_pending(conn)
-        pruned = filing_reader.prune_pending(conn)
+        q = filing_reader.prepare_queue(conn)
+        queued, routine = q['queued'], q['routine']
         filing_reader.release_stale_reading(conn)
         stats = filing_reader.read_pending(conn, session=session)
-        stats['queued'], stats['pruned'] = queued, pruned
+        stats['queued'], stats['routine'] = queued, routine
         if stats.get('skipped'):
-            log.warning(f'  read: {stats["skipped"]} — {queued} queued, {pruned} pruned, none read')
+            log.warning(f'  read: {stats["skipped"]} — {queued} queued, {routine} routine, none read')
         else:
-            log.info(f'  read: {queued} queued, {pruned} pruned, {stats["read"]} read '
+            log.info(f'  read: {queued} queued, {routine} routine (no model), {stats["read"]} read '
                      f'({stats["done"]} done, {stats["triaged"]} triaged out, '
                      f'{stats["failed"]} failed, {stats["unreadable"]} unreadable, '
                      f'${stats["cost_usd"]:.2f})')

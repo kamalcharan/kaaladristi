@@ -49,7 +49,8 @@ MIGRATIONS = ('km_migration_212_filings_ingest.sql',
               'km_migration_228_day_zero_calendar.sql',
               'km_migration_229_filing_reads.sql',
               'km_migration_230_filing_reads_triage.sql',
-              'km_migration_231_filing_reads_ocr_source.sql')
+              'km_migration_231_filing_reads_ocr_source.sql',
+              'km_migration_234_filing_reads_tiers.sql')
 
 
 # ── PDFs built by hand: pypdf reads them, no other library is needed ──────
@@ -229,12 +230,27 @@ class Extraction(unittest.TestCase):
         # everything else is read as-is, scanned or not
         for et in ('LARGE_ORDER', 'ACQUISITION', 'REGULATORY_ACTION', 'INSOLVENCY', 'SAST', 'QIP', None):
             self.assertIsNone(fr.triage({'event_type': et}, doc('', scanned=True)), et)
-        # gate 0's never-list: the procedural four plus MGMT_CHANGE (measured:
-        # 30 of 31 appointments neutral+minor). MGMT_EXIT is NOT on it.
-        self.assertEqual(set(fr.NEVER_READ_TYPES),
-                         {'RECORD_DATE', 'ESOP', 'ALLOTMENT', 'AUTHORISED_CAPITAL', 'MGMT_CHANGE'})
-        self.assertNotIn('MGMT_EXIT', fr.NEVER_READ_TYPES)
+        # the routine labels: the old never-list's procedural four, plus the
+        # compliance-only labels. MGMT_CHANGE is LOW (measured 30 of 31
+        # neutral), never routine, and MGMT_EXIT is neither.
+        for t in ('RECORD_DATE', 'ESOP', 'ALLOTMENT', 'AUTHORISED_CAPITAL', 'TRADING_WINDOW', 'AGM_EGM'):
+            self.assertIn(t, fr.ROUTINE_TYPES)
+        for t in ('MGMT_CHANGE', 'MGMT_EXIT', 'LARGE_ORDER'):
+            self.assertNotIn(t, fr.ROUTINE_TYPES)
+        self.assertEqual(fr.LOW_TYPES, ('MGMT_CHANGE',))
+        self.assertIn('Outcome of Board Meeting', fr.HIGH_DESCS)
         self.assertGreaterEqual(fr.MIN_MCAP_CR, 100)
+
+    def test_every_routine_label_has_its_own_reason(self):
+        for t in fr.ROUTINE_TYPES + fr.ROUTINE_DESCS:
+            self.assertNotEqual(fr.routine_reason(t, t), fr.ROUTINE_FALLBACK, t)
+        self.assertEqual(fr.routine_reason('SOMETHING_NEW', None), fr.ROUTINE_FALLBACK)
+
+    def test_a_low_tier_row_goes_down_the_low_lane(self):
+        from datetime import datetime, timezone
+        now = datetime.now(timezone.utc)
+        self.assertEqual(fr.priority_of({'tier': 'low', 'disseminated_at': now}), 'low')
+        self.assertEqual(fr.priority_of({'tier': 'high', 'disseminated_at': now}), 'high')
 
     def test_api_key_accepts_the_ai_client_pair(self):
         with mock.patch.dict(os.environ, {'ANTHROPIC_API_KEY': 'sk-ant-a', 'AI_API_KEY': 'sk-ant-b'}):
@@ -524,21 +540,37 @@ class Reads(unittest.TestCase):
             return c.fetchone()
 
     # ── the queue ────────────────────────────────────────────────────────
-    def test_a_pending_row_for_every_in_scope_material_event_and_nothing_else(self):
+    def _tiers(self):
+        with self.conn.cursor() as c:
+            c.execute('SELECT e.company_name, r.tier, r.status FROM km_filing_reads r '
+                      'JOIN km_corporate_events e ON e.id = r.event_id')
+            rows = {n: (t, st) for n, t, st in c.fetchall()}
+        self.conn.rollback()
+        return rows
+
+    def test_every_filing_gets_a_row_and_a_tier(self):
         self._event('spark', '2026-09-28 10:00+05:30', 'SPARK', event_type='LARGE_ORDER')
         self._event('neg', '2026-09-28 10:01+05:30', 'NEGATIVE_SPARK', event_type='REGULATORY_ACTION')
         self._event('own', '2026-09-28 10:02+05:30', 'OWNERSHIP', event_type='SAST')
-        self._event('mgmt', '2026-09-28 10:03+05:30', 'SPARK', event_type='MGMT_EXIT')   # gate 1 decides, not gate 0
-        self._event('gen', '2026-09-28 10:04+05:30', 'GENERAL', event_type='FUND_UTILISATION')
-        self._event('unc', '2026-09-28 10:05+05:30', 'UNCLASSIFIED', event_type=None)
-        self.assertEqual(fr.enqueue_pending(self.conn), 4)
+        self._event('mgmt', '2026-09-28 10:03+05:30', 'SPARK', event_type='MGMT_EXIT')
+        self._event('appt', '2026-09-28 10:04+05:30', 'SPARK', event_type='MGMT_CHANGE')
+        self._event('gen', '2026-09-28 10:05+05:30', 'GENERAL', event_type='FUND_UTILISATION')
+        self._event('unc', '2026-09-28 10:06+05:30', 'UNCLASSIFIED', event_type=None, desc='General Updates')
+        self._event('outcome', '2026-09-28 10:07+05:30', 'UNCLASSIFIED', event_type=None,
+                    desc='Outcome of Board Meeting')
+        self._event('press', '2026-09-28 10:08+05:30', 'UNCLASSIFIED', event_type=None, desc='Press Release')
+        self.assertEqual(fr.enqueue_pending(self.conn), 9)
         self.assertEqual(fr.enqueue_pending(self.conn), 0, 'idempotent')
-        self.assertEqual(sorted(self._rows()), ['mgmt', 'neg', 'own', 'spark'])
+        t = {k: v[0] for k, v in self._tiers().items()}
+        self.assertEqual(t, {'spark': 'high', 'neg': 'high', 'own': 'high', 'mgmt': 'high', 'appt': 'low',
+                             'gen': 'low', 'unc': 'low', 'outcome': 'high', 'press': 'high'})
 
-    def test_gate0_never_queues_the_procedural_types_or_a_tiny_listing(self):
+    def test_routine_labels_and_small_listings_are_tiered_not_dropped(self):
         self._event('esop', '2026-09-28 10:00+05:30', 'OWNERSHIP', event_type='ESOP')
-        self._event('ncd', '2026-09-28 10:01+05:30', 'OWNERSHIP', event_type='ALLOTMENT')
         self._event('rd', '2026-09-28 10:02+05:30', 'CORPORATE_ACTION', event_type='RECORD_DATE')
+        self._event('tw', '2026-09-28 10:02+05:30', 'GENERAL', event_type='TRADING_WINDOW', desc='Trading Window')
+        self._event('cert', '2026-09-28 10:02+05:30', 'UNCLASSIFIED', event_type=None,
+                    desc='Certificate under SEBI (Depositories and Participants) Regulations, 2018')
         self._event('untyped', '2026-09-28 10:03+05:30', 'SPARK', event_type=None)
         with self.conn.cursor() as c:
             c.execute("INSERT INTO km_equity_symbols (symbol, isin, exchange, is_active, industry, mcap_cr) "
@@ -547,24 +579,115 @@ class Reads(unittest.TestCase):
         self._event('tiny', '2026-09-28 10:04+05:30', 'SPARK', event_type='LARGE_ORDER', isin='INE0TINY')
         self._event('gone', '2026-09-28 10:05+05:30', 'SPARK', event_type='LARGE_ORDER', isin='INE0GONE')
         self._event('nolisting', '2026-09-28 10:06+05:30', 'SPARK', event_type='LARGE_ORDER', isin='INE0NONE')
+        self._event('tinyesop', '2026-09-28 10:06+05:30', 'OWNERSHIP', event_type='ESOP', isin='INE0TINY')
         self._event('ok', '2026-09-28 10:07+05:30', 'SPARK', event_type='LARGE_ORDER')
-        self.assertEqual(fr.enqueue_pending(self.conn), 1)
-        self.assertEqual(sorted(self._rows()), ['ok'])
+        self.assertEqual(fr.enqueue_pending(self.conn), 10)
+        t = {k: v[0] for k, v in self._tiers().items()}
+        self.assertEqual(t, {'esop': 'routine', 'rd': 'routine', 'tw': 'routine', 'cert': 'routine',
+                             'untyped': 'low', 'tiny': 'low', 'gone': 'low', 'nolisting': 'low',
+                             'tinyesop': 'routine', 'ok': 'high'})
 
-    def test_prune_removes_only_pending_rows_the_scope_no_longer_admits(self):
-        # the 229 seed queued EVERY material event; a read already paid for stays
+    def test_routine_rows_are_settled_by_type_without_a_model_call(self):
+        self._event('tw', '2026-09-28 10:00+05:30', 'GENERAL', event_type='TRADING_WINDOW', desc='Trading Window')
+        self._event('order', '2026-09-28 10:01+05:30')
+        q = fr.prepare_queue(self.conn)
+        self.assertEqual((q['queued'], q['routine'], q['skipped']), (2, 1, None))
+        with self.conn.cursor() as c:
+            c.execute("SELECT status, impact, model, read_source, reasoning, headline, cost_usd, touches "
+                      "FROM km_filing_reads r JOIN km_corporate_events e ON e.id = r.event_id "
+                      "WHERE e.company_name = 'tw'")
+            st, imp, model, src, why, head, cost, touches = c.fetchone()
+        self.conn.rollback()
+        self.assertEqual((st, imp, model, src, float(cost), touches), ('done', 'neutral', 'rule', 'rule', 0.0, 'none'))
+        self.assertEqual(why, fr.ROUTINE_REASONS['TRADING_WINDOW'])
+        self.assertEqual(head, 'Trading Window')
+        client = _Client()
+        fr.read_pending(self.conn, session=_Session({'http://x/a.pdf': _pdf([ORDER_TEXT])}), client=client)
+        self.assertEqual(len(client.messages.calls), 1, 'only the order reached a model')
+        self.assertEqual(fr.prepare_queue(self.conn)['routine'], 0, 'idempotent')
+
+    def test_before_read_from_a_filing_is_not_analysed_unless_routine(self):
+        self._event('aug_order', '2026-08-14 10:00+05:30')
+        self._event('aug_esop', '2026-08-14 10:01+05:30', 'OWNERSHIP', event_type='ESOP')
+        self._event('sep_order', '2026-09-01 09:00+05:30')
+        fr.prepare_queue(self.conn)
+        t = self._tiers()
+        self.assertEqual(t['aug_order'], ('high', 'skipped'))
+        self.assertEqual(t['aug_esop'], ('routine', 'done'))
+        self.assertEqual(t['sep_order'], ('high', 'pending'))
+        with self.conn.cursor() as c:
+            c.execute("SELECT triage_reason FROM km_filing_reads WHERE status = 'skipped'")
+            self.assertEqual(c.fetchone()[0], f'not analysed: filed before {fr.READ_FROM}')
+        self.conn.rollback()
+
+    def test_retier_moves_only_pending_rows(self):
         esop = self._event('esop', '2026-09-28 10:00+05:30', 'OWNERSHIP', event_type='ESOP')
         done = self._event('done', '2026-09-28 10:01+05:30', 'OWNERSHIP', event_type='ESOP')
         keep = self._event('keep', '2026-09-28 10:02+05:30', 'SPARK', event_type='LARGE_ORDER')
-        with self.conn.cursor() as c:
+        with self.conn.cursor() as c:     # queued before 234: every row defaulted to 'high'
             c.execute("INSERT INTO km_filing_reads (event_id) VALUES (%s), (%s), (%s)", (esop, done, keep))
-            c.execute("UPDATE km_filing_reads SET status='done', impact='neutral', magnitude='minor' WHERE event_id=%s", (done,))
+            c.execute("UPDATE km_filing_reads SET status='done', impact='neutral' WHERE event_id=%s", (done,))
         self.conn.commit()
-        self.assertEqual(fr.prune_pending(self.conn), 1)
-        self.assertEqual(fr.prune_pending(self.conn), 0, 'idempotent')
-        rows = self._rows()
-        self.assertEqual(sorted(rows), ['done', 'keep'])
-        self.assertEqual(rows['done']['status'], 'done')
+        self.assertEqual(fr.retier_pending(self.conn), 1)
+        self.assertEqual(fr.retier_pending(self.conn), 0, 'idempotent')
+        t = self._tiers()
+        self.assertEqual(t['esop'], ('routine', 'pending'))
+        self.assertEqual(t['done'], ('high', 'done'), 'a written verdict is a record')
+        self.assertEqual(t['keep'], ('high', 'pending'))
+
+    def test_high_tier_is_claimed_before_a_newer_low_tier_row(self):
+        self._event('low_new', '2026-09-30 10:00+05:30', 'UNCLASSIFIED', event_type=None, desc='General Updates')
+        self._event('high_old', '2026-09-02 10:00+05:30')
+        self._event('high_new', '2026-09-29 10:00+05:30')
+        fr.prepare_queue(self.conn)
+        order = []
+        while True:
+            r = fr._claim_next(self.conn)
+            if r is None:
+                break
+            order.append((r['company_name'], r['tier']))
+        self.assertEqual(order, [('high_new', 'high'), ('high_old', 'high'), ('low_new', 'low')])
+
+    def test_tier_and_since_bound_a_run(self):
+        self._event('low', '2026-09-30 10:00+05:30', 'UNCLASSIFIED', event_type=None, desc='General Updates')
+        self._event('early', '2026-09-02 10:00+05:30')
+        self._event('late', '2026-09-29 10:00+05:30')
+        fr.prepare_queue(self.conn)
+        client = _Client()
+        stats = fr.read_pending(self.conn, session=_Session({'http://x/a.pdf': _pdf([ORDER_TEXT])}),
+                                client=client, tier='high', since='2026-09-15 00:00+05:30')
+        self.assertEqual(stats['read'], 1)
+        t = self._tiers()
+        self.assertEqual((t['late'][1], t['early'][1], t['low'][1]), ('done', 'pending', 'pending'))
+
+    def test_the_decision_fields_are_written_and_an_off_list_touch_is_coerced(self):
+        self._event('hec', '2026-09-28 10:00+05:30')
+        fr.prepare_queue(self.conn)
+        v = fr.FilingVerdict(impact='positive', headline='h', reasoning='r', evidence_quote='q', confidence=0.8,
+                             touches='revenue_growth', company_view='No material impact on operations',
+                             timeframe='executed over 24 months', watch_next='Agreement signing by 15 November')
+        fr.read_pending(self.conn, session=_Session({'http://x/a.pdf': _pdf([ORDER_TEXT])}), client=_Client(verdict=v))
+        with self.conn.cursor() as c:
+            c.execute('SELECT touches, company_view, timeframe, watch_next, reader_version FROM km_filing_reads')
+            row = c.fetchone()
+        self.conn.rollback()
+        self.assertEqual(row, ('other', 'No material impact on operations', 'executed over 24 months',
+                               'Agreement signing by 15 November', fr.READER_VERSION))
+
+    def test_an_omitted_decision_field_reads_not_stated(self):
+        v = fr.FilingVerdict(impact='neutral', headline='h', reasoning='r', evidence_quote='q', confidence=0.5)
+        self.assertEqual((v.touches, v.company_view, v.timeframe, v.watch_next),
+                         ('other', 'Not stated', 'Not stated', 'Nothing stated'))
+        # hosted lanes answer null for a field they have nothing for
+        v = fr.FilingVerdict.model_validate({'impact': 'neutral', 'headline': 'h', 'reasoning': 'r',
+                                             'evidence_quote': 'q', 'confidence': 0.5, 'touches': None,
+                                             'company_view': None, 'timeframe': ' ', 'watch_next': None})
+        self.assertEqual((v.touches, v.company_view, v.timeframe, v.watch_next),
+                         ('other', 'Not stated', 'Not stated', 'Nothing stated'))
+
+    def test_a_results_announcement_says_so_in_the_context(self):
+        self.assertIn('financial results announcement', fr.build_context({'is_result_announcement': True}))
+        self.assertNotIn('financial results', fr.build_context({'is_result_announcement': False}))
 
     # ── gate 1: the text decides, before the model ───────────────────────
     ROUTINE_MGMT = ('Sub: Intimation under Regulation 30. We wish to inform that Mr. Ramesh Kumar, '
@@ -856,12 +979,6 @@ class Reads(unittest.TestCase):
         sent = post.calls[0]['body']['messages'][1]['content']
         self.assertIn('Page 1', sent); self.assertNotIn('Page 6', sent)
         self.assertGreaterEqual(len(self._raw('long')[0]), 6 * 2000, 'the FULL text is stored; only the prompt was trimmed')
-
-    def test_a_management_appointment_is_never_queued(self):
-        self._event('appt', '2026-09-28 10:00+05:30', 'SPARK', event_type='MGMT_CHANGE')
-        self._event('exit', '2026-09-28 10:01+05:30', 'SPARK', event_type='MGMT_EXIT')
-        self.assertEqual(fr.enqueue_pending(self.conn), 1)
-        self.assertEqual(sorted(self._rows()), ['exit'])
 
     def test_not_a_pdf_is_unreadable(self):
         self._event('html', '2026-09-28 10:00+05:30')

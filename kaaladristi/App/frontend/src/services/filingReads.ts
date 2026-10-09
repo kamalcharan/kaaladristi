@@ -7,14 +7,14 @@
  * (50 at most), joined in the browser by event id. Never a table scan: the
  * reads table holds one row per material event and grows several times a day.
  *
- * ⚠ Only SPARK / NEGATIVE_SPARK / OWNERSHIP / CORPORATE_ACTION events have a
- * reads row at all (migration 229). An event with no row is not "not read
- * yet" — it is outside the reader's scope, and the UI must say nothing rather
- * than "planned".
+ * Since migration 234 every filing gets a row with a tier: routine (settled
+ * by its exchange label, model 'rule', no model call), high, or low. Filings
+ * before FILING_READ_FROM that were never read are `skipped`, "not analysed".
+ * An event with no row at all has simply not been queued yet.
  */
 
 import { from } from './postgrest';
-import type { CheckBackend, ReadImpact, ReadMagnitude, ReadStatus } from '@/constants/filingReads';
+import type { CheckBackend, ReadImpact, ReadMagnitude, ReadStatus, ReadTier } from '@/constants/filingReads';
 
 export interface FilingRead {
   eventId: number;
@@ -36,6 +36,12 @@ export interface FilingRead {
   pagesRead: number | null;
   pageCount: number | null;
   finishedAt: string | null;
+  /** Migration 234 — null until it is applied. */
+  tier: ReadTier | null;
+  touches: string | null;
+  companyView: string | null;
+  timeframe: string | null;
+  watchNext: string | null;
 }
 
 export interface FilingReadCheck {
@@ -64,6 +70,9 @@ export interface FilingReadsResult {
 const READ_COLS =
   'event_id,status,attempts,last_error,triage_reason,impact,magnitude,headline,reasoning,evidence_quote,' +
   'confidence,amount_value,amount_unit,role,model,read_source,pages_read,page_count,finished_at';
+// Migration 234's columns, asked for separately so a database without them
+// still shows every verdict (the select falls back to READ_COLS).
+const READ_COLS_V2 = READ_COLS + ',tier,touches,company_view,timeframe,watch_next';
 const CHECK_COLS =
   'event_id,backend,status,last_error,impact,magnitude,headline,reasoning,evidence_quote,confidence,model,' +
   'cost_usd,finished_at';
@@ -77,10 +86,11 @@ export async function fetchFilingReads(eventIds: number[]): Promise<FilingReadsR
   const checks = new Map<number, FilingReadCheck[]>();
   if (!ids.length) return { reads, checks, failed: false };
 
-  const [r, c] = await Promise.all([
-    from('km_filing_reads').select(READ_COLS).in('event_id', ids).execute(),
+  const [r0, c] = await Promise.all([
+    from('km_filing_reads').select(READ_COLS_V2).in('event_id', ids).execute(),
     from('km_filing_read_checks').select(CHECK_COLS).in('event_id', ids).execute(),
   ]);
+  const r = r0.error ? await from('km_filing_reads').select(READ_COLS).in('event_id', ids).execute() : r0;
 
   // The reads table is the one that matters; a missing checks table (233 not
   // yet applied) must not blank the verdict column.
@@ -108,6 +118,11 @@ export async function fetchFilingReads(eventIds: number[]): Promise<FilingReadsR
       pagesRead: num(row.pages_read),
       pageCount: num(row.page_count),
       finishedAt: str(row.finished_at),
+      tier: (str(row.tier) as ReadTier | null),
+      touches: str(row.touches),
+      companyView: str(row.company_view),
+      timeframe: str(row.timeframe),
+      watchNext: str(row.watch_next),
     });
   }
 
