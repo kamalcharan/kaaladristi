@@ -674,6 +674,22 @@ class Reads(unittest.TestCase):
         self.assertEqual(row, ('other', 'No material impact on operations', 'executed over 24 months',
                                'Agreement signing by 15 November', fr.READER_VERSION))
 
+    def test_a_pdf_pypdf_cannot_parse_is_read_through_pdfium(self):
+        self._event('broken', '2026-09-28 10:00+05:30')
+        fr.prepare_queue(self.conn)
+        client = _Client()
+        real = fr.extract_text
+        with mock.patch.object(fr, 'extract_text', side_effect=ValueError('Invalid object in /Pages')):
+            fr.read_pending(self.conn, session=_Session({'http://x/a.pdf': _pdf([ORDER_TEXT])}), client=client)
+        self.assertEqual(self._rows()['broken']['status'], 'done')
+        self.assertIn('133.98', client.messages.calls[0]['messages'][0]['content'][0]['text'])
+        self.assertIs(fr.extract_text, real)
+
+    def test_a_nul_byte_in_the_text_never_reaches_the_database(self):
+        doc = fr._from_pages(['order\x00 worth Rs. 133.98 crore'], 1, 'text')
+        self.assertNotIn('\x00', doc.text)
+        self.assertNotIn('\x00', doc.pages[0])
+
     def test_an_omitted_decision_field_reads_not_stated(self):
         v = fr.FilingVerdict(impact='neutral', headline='h', reasoning='r', evidence_quote='q', confidence=0.5)
         self.assertEqual((v.touches, v.company_view, v.timeframe, v.watch_next),

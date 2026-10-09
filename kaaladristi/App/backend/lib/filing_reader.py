@@ -588,6 +588,9 @@ class DocumentText:
 
 
 def _from_pages(parts: list, page_count: int, source: str) -> DocumentText:
+    # A NUL byte in a PDF's text layer is legal in the PDF and illegal in a
+    # PostgreSQL text column: storing it crashed the read (2 rows, Oct 2026).
+    parts = [(p or '').replace('\x00', '') for p in parts]
     pages_read = len(parts)
     text = '\n\n'.join(p.strip() for p in parts).strip()
     cpp = (len(text) / pages_read) if pages_read else 0.0
@@ -648,6 +651,24 @@ def extract_text(pdf_bytes: bytes, max_pages: Optional[int] = None) -> DocumentT
             parts.append(reader.pages[i].extract_text() or '')
         except Exception as e:                       # one bad page is not a bad document
             log.warning(f'page {i + 1}: extract failed: {e}')
+            parts.append('')
+    return _from_pages(parts, page_count, 'text')
+
+
+def pdfium_text(pdf_bytes: bytes, max_pages: Optional[int] = None) -> DocumentText:
+    """The text layer through pdfium, for a file pypdf cannot parse. Same
+    shape and the same chars-per-page gate as extract_text."""
+    import pypdfium2 as pdfium
+    if max_pages is None:
+        max_pages = MAX_PAGES
+    pdf = pdfium.PdfDocument(pdf_bytes)
+    page_count = len(pdf)
+    parts = []
+    for i in range(min(page_count, max_pages)):
+        try:
+            parts.append(pdf[i].get_textpage().get_text_range() or '')
+        except Exception as e:
+            log.warning(f'pdfium page {i + 1}: {e}')
             parts.append('')
     return _from_pages(parts, page_count, 'text')
 
@@ -991,8 +1012,14 @@ def read_one(conn, row: dict, client, session, model: str = MODEL, backend: str 
     try:
         doc = extract_text(pdf_bytes)
     except Exception as e:
-        _finish(conn, read_id, 'failed', f'extract: {e}')
-        return 'failed'
+        # pypdf refuses some slightly broken files ("Invalid object in
+        # /Pages", 6 rows) that pdfium — the renderer the OCR path already
+        # uses — opens fine. Retrying pypdf five times never helped.
+        try:
+            doc = pdfium_text(pdf_bytes)
+        except Exception as e2:
+            _finish(conn, read_id, 'failed', f'extract: {e}; pdfium: {e2}')
+            return 'failed'
     if doc.needs_pdf and ocr_available():
         try:
             ocr = ocr_text(pdf_bytes)
