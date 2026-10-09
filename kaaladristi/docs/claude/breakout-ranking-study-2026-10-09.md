@@ -346,3 +346,35 @@ same-date median as Addendum 3. Excess medians:
 
 ⚠ 20-session windows overlap (~6 independent periods); one market phase.
 Re-run in November. Nothing built.
+
+## Addendum 6 — "just crossed 21 SMA" vs "already above"
+
+Cross = `close > sma_21` today and `close <= sma_21` yesterday. Same setup as
+Addendum 5. Excess medians; "next-day +5%" = share of rows up ≥5% next day.
+
+| group | half | n | next day | 5d | 20d | 20d %pos | next-day +5% |
+|---|---|---|---|---|---|---|---|
+| cross + CRS + week + RSI>71 | H1 | 27 | −0.44 | +0.08 | −3.14 | 44.4 | 14.8% |
+| | H2 | 31 | −1.65 | −1.38 | +0.32 | 51.6 | 12.9% |
+| cross + CRS + week, RSI≤71 | H1 | 1,800 | −0.12 | −0.35 | −0.03 | 49.9 | 6.6% |
+| | H2 | 1,624 | −0.03 | −0.11 | +0.58 | 52.1 | 5.8% |
+| cross + CRS, below week close | H1 | 585 | −0.13 | +0.08 | +0.03 | 50.4 | 3.8% |
+| | H2 | 470 | −0.04 | 0.00 | +0.82 | 52.8 | 3.8% |
+| cross, not CRS leader | H1 | 2,580 | −0.10 | −0.36 | −0.68 | 46.4 | 4.8% |
+| | H2 | 4,626 | −0.13 | −0.41 | −0.08 | 49.6 | 3.9% |
+| **already above + all three** | H1 | 4,337 | +0.10 | +0.17 | **+1.35** | 55.2 | 6.0% |
+| | H2 | 5,441 | +0.16 | +0.55 | **+1.87** | 56.3 | 6.5% |
+| rest | H1 | 75,115 | 0.00 | +0.01 | −0.03 | 49.8 | 3.6% |
+| | H2 | 99,441 | 0.00 | 0.00 | −0.07 | 49.6 | 3.0% |
+
+1. **A fresh 21 SMA cross is not an edge.** Every cross group is ~flat or
+   negative at 20 days. "Already above" beats every cross group in both halves.
+2. **A cross on a non-leader is negative** in both halves — same lesson as the
+   MagicRS cross (Addendum 3).
+3. **Cross + all four is rare (~58 in four months) and a lottery ticket**:
+   13–15% go +5% next day (4× the base), but the median next day is negative.
+   Too few to trust either way.
+4. **Use the cross as "the stock is back in the trend", not as an entry.** The
+   rule from Addendum 5 (above, not crossing) is the one that holds.
+
+Nothing built.
